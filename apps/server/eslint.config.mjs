@@ -12,7 +12,7 @@ export default [
     },
   },
   {
-    // STRUCTURE §3: the server may not call core/cycle (Cell-side policy).
+    // STRUCTURE §3: the server may not call core/cycle (Worker-side policy).
     files: ['src/**/*.ts'],
     rules: {
       'no-restricted-imports': [

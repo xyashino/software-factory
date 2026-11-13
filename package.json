@@ -17,7 +17,7 @@
     "sf:reset": "bun packages/software-factory/src/cli.ts reset",
     "factory": "bun apps/cli/src/cli.ts",
     "factory-server": "bun apps/server/src/main.ts",
-    "factory-cell": "bun apps/cell/src/main.ts",
+    "factory-worker": "bun apps/worker/src/main.ts",
     "nitpick:check": "pnpm nitpick --check",
     "nitpick:sync": "pnpm nitpick --sync",
     "prepare": "node scripts/prepare.mjs"

@@ -12,7 +12,7 @@ export default [
     },
   },
   {
-    // STRUCTURE §3, RULES §4.2: a Cell gets everything in the Job; no db, no definitions.
+    // STRUCTURE §3, RULES §4.2: a Worker gets everything in the Job; no db, no definitions.
     files: ['src/**/*.ts'],
     rules: {
       'no-restricted-imports': [
@@ -26,7 +26,7 @@ export default [
             },
             {
               group: ['@repo/factory-db', '@repo/factory-db/*'],
-              message: 'apps/cell does not import factory-db (RULES §4.2).',
+              message: 'apps/worker does not import factory-db (RULES §4.2).',
             },
             {
               group: [
@@ -34,7 +34,7 @@ export default [
                 '@repo/factory-definitions/*',
               ],
               message:
-                'apps/cell does not import factory-definitions (RULES §4.2).',
+                'apps/worker does not import factory-definitions (RULES §4.2).',
             },
           ],
         },

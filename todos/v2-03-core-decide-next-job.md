@@ -33,7 +33,7 @@ precondition and error, the `nextJob` decision table, and `resolveCycleContext`.
    - `Answer` accepts an abandoned, unanswered question.
 3. `src/order/next-job.ts`: rows 1–16 of CORE §6 in that order; budgets from §5.3
    (`maxRestarts`, `maxLostRestarts`, `onFail.max + retryGrants`).
-4. `src/order/context.ts`: `resolveCycleContext` (CORE §7) — relative `.cell/inputs/...` paths,
+4. `src/order/context.ts`: `resolveCycleContext` (CORE §7) — relative `.worker/inputs/...` paths,
    feedback whenever `pendingFeedback` targets the Station, resume / handover / restart sections,
    `priorQuestions`.
 

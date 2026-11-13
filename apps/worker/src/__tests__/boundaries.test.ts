@@ -13,7 +13,7 @@ const reportedRules = async (code: string): Promise<string[]> => {
   return (result?.messages ?? []).map((message) => message.ruleId ?? '');
 };
 
-describe('factory-cell boundaries', () => {
+describe('factory-worker boundaries', () => {
   it('rejects an import of the v1 package', async () => {
     const rules = await reportedRules(
       `import { x } from '@repo/software-factory/engine';`,

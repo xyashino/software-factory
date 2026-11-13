@@ -1,15 +1,15 @@
 ---
 status: todo
 priority: high
-depends_on: [v2-12-cell-operator-stations]
+depends_on: [v2-12-worker-operator-stations]
 workflow: feature
 ---
 
-# v2-13: Cell — delivery and first real end-to-end run
+# v2-13: Worker — delivery and first real end-to-end run
 
 ## Objective
 
-Deliver finished Work orders as one squashed PR, then prove the whole Factory + Cell stack on a real
+Deliver finished Work orders as one squashed PR, then prove the whole Factory + Worker stack on a real
 fixture repository.
 
 ## Read first

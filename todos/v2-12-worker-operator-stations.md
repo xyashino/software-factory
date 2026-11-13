@@ -1,17 +1,17 @@
 ---
 status: todo
 priority: high
-depends_on: [v2-11-cell-foundation]
+depends_on: [v2-11-worker-foundation]
 workflow: feature
 ---
 
-# v2-12: Cell — Operator stations, checkpoints, Operator socket, panes, leaving
+# v2-12: Worker — Operator stations, checkpoints, Operator socket, panes, leaving
 
 ## Objective
 
-Run Operator stations on a Cell: headless and Herdr-pane runners, the checkpoint procedure with
+Run Operator stations on a Worker: headless and Herdr-pane runners, the checkpoint procedure with
 dry run and force-with-lease, the local Operator socket, the Cycle runtime (watch, signals,
-question hold) and Handover when the Cell leaves.
+question hold) and Handover when the Worker leaves.
 
 ## Read first
 
@@ -23,7 +23,7 @@ question hold) and Handover when the Cell leaves.
 ## Scope (ROADMAP items)
 
 `factory-m5-headless-station`, `factory-m5-operator-socket`, `factory-m5-pane-runtime`,
-`factory-m5-leave`.
+`factory-m5-leave`, `factory-m5-operator-cli`.
 
 ## Deliverables
 
@@ -37,10 +37,14 @@ question hold) and Handover when the Cell leaves.
 5. `cycle/`: observe → `watch` → remind / fail / block; signals `answer` and `nudge` typed with
    `runtimePrompts`; question hold (30 min + 5 min); runtime journal.
 6. Leaving on `SIGTERM` per the PROTOCOL §9 table (`HandOverCycle` or `ReleaseJob`).
+7. `apps/operator-cli` (`factory-operator`, moved here from v2-14): `done`, `verdict pass|fail --feedback`,
+   `ask`, `tell`, `block --reason --handover`, `context`; talks only to `$FACTORY_OPERATOR_SOCKET`;
+   clear errors, non-zero exit. Startup < 100 ms.
 
 ## Acceptance criteria
 
 - With a scripted fake runner: done, verdict pass/fail, block, ask/answer, nudge, timeout, leave
-  with Handover — each a test against an in-process Factory and a local bare git remote.
+  with Handover — each a test against a `factory-server` on a temp socket and a local bare git remote.
 - A stale epoch at dry run never pushes (test).
+- `factory-operator` starts in < 100 ms (test) and talks only to its socket.
 - `pnpm turbo check-types lint test` green.

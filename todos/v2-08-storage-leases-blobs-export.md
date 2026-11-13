@@ -23,7 +23,7 @@ and the portable export/import format.
 
 ## Deliverables
 
-1. `LeaseStore` (insert, extend for a Cell's jobs, expired(now), delete, `bootGrace(now, ttl)`),
+1. `LeaseStore` (insert, extend for a Worker's jobs, expired(now), delete, `bootGrace(now, ttl)`),
    fake + SQLite, added to the contract suite.
 2. `BlobStore` (put with hash verification, get, stat), gzip above 4 KiB, size limits (2 MiB text,
    20 MiB logs with head + tail truncation marker), daily sweep of blobs unreferenced after 24 h,
