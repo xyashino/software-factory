@@ -1,7 +1,7 @@
 # Storage
 
 `packages/factory-db` implements storage. Only a `factory-runtime` composition opens the database; the
-CLI and Workers use runtime clients and never access storage directly.
+CLI and Cells use runtime clients and never access storage directly.
 
 ## 1. Engine
 
@@ -17,7 +17,7 @@ Single-writer rule:
   writer is held is OPEN-QUESTIONS Q19.
 - The in-process write mutex (§3.1) serialises writes inside the holder. The file lock is what keeps
   a second process from writing at all.
-- The server (`factory-server`) is the only process that writes; the CLI and Workers reach it over the socket.
+- The server (`factory-server`) is the only process that writes; the CLI and Cells reach it over the socket.
 
 Why not Postgres from day one: each active runtime has one writer, so SQLite's single writer is not a
 limit; `BEGIN IMMEDIATE` gives an atomic claim; backup is one file; there is nothing to operate. The
@@ -71,7 +71,7 @@ interface BlobStore {
   stat(refs): Promise<Map<BlobRef, number>>;
 }
 interface LeaseStore {
-  /* insert, extend(workerId, jobs), expired(now), delete */
+  /* insert, extend(cellId, jobs), expired(now), delete */
 }
 ```
 
@@ -157,7 +157,7 @@ CREATE TABLE orders (
   depends_on             TEXT NOT NULL,                 -- JSON array of order ids
   last_seq               INTEGER NOT NULL,
   status                 TEXT NOT NULL,                 -- board status (CORE §4.2), before dependency overlay
-  holder                 TEXT NOT NULL,                 -- 'queue' | 'worker' | 'supervisor' | 'none'
+  holder                 TEXT NOT NULL,                 -- 'queue' | 'cell' | 'supervisor' | 'none'
   next_kind              TEXT NOT NULL,                 -- CORE §6 Next.kind
   job_kind               TEXT,                          -- when next_kind = 'job'
   runner                 TEXT,                          -- when the next job is an Operator station
@@ -166,8 +166,8 @@ CREATE TABLE orders (
   station_index          INTEGER,
   progressed             INTEGER NOT NULL,              -- 0/1
   resumed                INTEGER NOT NULL,              -- 0/1, a resume or reopen waits to run
-  last_worker_id           TEXT,
-  avoid_workers            TEXT NOT NULL DEFAULT '[]',    -- JSON [{ workerId, until }]
+  last_cell_id           TEXT,
+  avoid_cells            TEXT NOT NULL DEFAULT '[]',    -- JSON [{ cellId, until }]
   andon_reason           TEXT,
   pr_url                 TEXT,
   pr_state               TEXT,
@@ -186,10 +186,10 @@ CREATE TABLE commands (
   at          INTEGER NOT NULL
 );
 
-CREATE TABLE workers (
-  worker_id       TEXT PRIMARY KEY,
+CREATE TABLE cells (
+  cell_id       TEXT PRIMARY KEY,
   name          TEXT NOT NULL,
-  token_hash    TEXT NOT NULL,                          -- hash of the Worker credential
+  token_hash    TEXT NOT NULL,                          -- hash of the Cell credential
   joined_with   TEXT REFERENCES join_tokens,
   joined_at     INTEGER NOT NULL,
   revoked_at    INTEGER,
@@ -209,7 +209,7 @@ CREATE TABLE join_tokens (
 CREATE TABLE leases (
   order_id    TEXT PRIMARY KEY,                         -- one active job per Work order (I4)
   job_id      TEXT NOT NULL UNIQUE,
-  worker_id     TEXT NOT NULL REFERENCES workers,
+  cell_id     TEXT NOT NULL REFERENCES cells,
   epoch       INTEGER NOT NULL,
   expires_at  INTEGER NOT NULL
 );
@@ -302,8 +302,8 @@ Three tools, from cheapest to most portable:
    Import: runtime admin operation `import <file>`, run against the target local or remote runtime,
    into an **empty database only**: insert projects, blobs and events unchanged, rebuild projections,
    then append `ExpireLease` as the importing runtime for each Work order that had an active job.
-   Leases, tokens, Workers, signals and the idempotency table are not exported. In remote mode, create a
-   supervisor token and join token, then let the Workers join again; local mode uses no such tokens.
+   Leases, tokens, Cells, signals and the idempotency table are not exported. In remote mode, create a
+   supervisor token and join token, then let the Cells join again; local mode uses no such tokens.
 
 ## 8. Rebuild from git (last resort, no backup at all)
 

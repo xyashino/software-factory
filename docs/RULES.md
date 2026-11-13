@@ -24,37 +24,37 @@ Repo-wide rules in `.nitpick/config.ts` still apply.
    are never migrated in place.
 5. Projections **MUST** be updated in the same transaction as the events they derive from, and
    **MUST** be rebuildable from events with an identical result.
-6. No component other than a `factory-runtime` composition **MAY** open the database. CLI and Worker
+6. No component other than a `factory-runtime` composition **MAY** open the database. CLI and Cell
    code **MUST NOT** access storage directly. Local clients **MUST** go through the Unix socket to the
    running `factory-server`, or use the one-shot in-process fallback under the writer lock (STORAGE §1).
-   A Worker **MUST NOT** open a database connection of its own.
+   A Cell **MUST NOT** open a database connection of its own.
 
 ## 3. Distribution
 
 1. Every command **MUST** carry a `commandId`; every handler **MUST** be idempotent on it.
-2. Every Worker or Operator write **MUST** carry the lease epoch and **MUST** be rejected when stale.
+2. Every Cell or Operator write **MUST** carry the lease epoch and **MUST** be rejected when stale.
    The single exception is `RecordUsage`, which cannot change what runs next (CORE §4.3 rule 1).
-3. A Worker **MUST NOT** push to a Work order branch before the runtime has confirmed its epoch with a
+3. A Cell **MUST NOT** push to a Work order branch before the runtime has confirmed its epoch with a
    dry run, and every push **MUST** use `--force-with-lease` against the tip it just fetched
    (PROTOCOL §8.2).
-4. A Worker **MUST** self-fence when it cannot heartbeat for the self-fence window.
+4. A Cell **MUST** self-fence when it cannot heartbeat for the self-fence window.
 5. A Work order with an Andon raised **MUST NOT** hold a lease. The only wait on a person that may
    hold one is an open question, bounded by the question hold (CORE §9.2).
-6. Workers **MUST NOT** open inbound network ports. The server **MAY** bind a Unix socket locally
+6. Cells **MUST NOT** open inbound network ports. The server **MAY** bind a Unix socket locally
    (`factory.sock`, mode 0600); in distributed mode it **MAY** bind TCP. The Factory server **MUST NOT**
-   call Workers; Workers initiate requests.
+   call Cells; Cells initiate requests.
 7. Every wait **MUST** be bounded: network calls, git, Herdr, Inspections, Operators, question holds,
    Handovers on leave.
 
 ## 4. Boundaries
 
 1. `factory-runtime` and `apps/server` **MUST NOT** import Herdr, runner, worktree or `core/cycle` code.
-2. Workers **MUST NOT** import `factory-db` or `factory-definitions`; everything a job needs arrives
+2. Cells **MUST NOT** import `factory-db` or `factory-definitions`; everything a job needs arrives
    in the `Job`, including the text of runtime prompts.
-3. `factory-operator` **MUST** talk only to its Worker's socket and **MUST NOT** know the Factory
+3. `factory-operator` **MUST** talk only to its Cell's socket and **MUST NOT** know the Factory
    address.
 4. v2 packages **MUST NOT** import `@repo/software-factory`.
-5. Runner-specific code **MUST** live only in `apps/worker/src/adapters/runners/<runner>.ts`.
+5. Runner-specific code **MUST** live only in `apps/cell/src/adapters/runners/<runner>.ts`.
 6. `factory-db` **MUST NOT** call `decide`, `nextJob` or `toProjection`; it stores what it is given.
 7. Local and remote `FactoryClient` adapters **MUST** implement the same transport-neutral contracts.
    Adapters **MUST NOT** duplicate domain/application decisions or bypass the runtime to access SQLite.
@@ -79,5 +79,5 @@ Repo-wide rules in `.nitpick/config.ts` still apply.
 4. Tests **MUST NOT** mock internals of the module under test; replace ports.
 5. Local and remote adapter tests **MUST** run equivalent scenarios and assert equivalent events and
    projections.
-6. Distributed behaviour (takeover, partition, duplicate requests, a Worker leaving) **MUST** have an
-   automated test with at least two Worker processes (ROADMAP M7).
+6. Distributed behaviour (takeover, partition, duplicate requests, a Cell leaving) **MUST** have an
+   automated test with at least two Cell processes (ROADMAP M7).
