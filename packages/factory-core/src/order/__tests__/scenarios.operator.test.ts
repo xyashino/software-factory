@@ -22,7 +22,7 @@ import {
   raiseAndon,
   resume,
   retryCause,
-} from './steps';
+} from '../../testing/steps';
 
 // The v1 on-call operator. v2 has no operator Station that takes over an incident: the Supervisor
 // resumes an Andon, and a Cycle asks the Supervisor a question. The ports below keep each v1 claim

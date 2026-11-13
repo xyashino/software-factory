@@ -8,6 +8,7 @@ export interface AppendInput {
   expectedSeq: number; // the last seq the caller folded
   actor: Actor;
   epoch?: number;
+  at: number; // ms, the Factory clock when the command ran; stamped on every event it appends
   events: OrderEvent[];
   projection: OrderProjection; // core `toProjection` of the post-append state, computed by the caller
   response: unknown; // what to return on an idempotent replay

@@ -1,5 +1,5 @@
-import type { CycleId } from '../../ids';
-import type { LineSnapshot } from '../../line/snapshot';
+import type { CycleId } from '../ids';
+import type { LineSnapshot } from '../line/snapshot';
 import {
   blobOf,
   commitOf,
@@ -8,13 +8,13 @@ import {
   pinnedLineOf,
   stationOf,
   workerIdOf,
-} from '../../testing/event-builders';
-import { actors, given, type Scenario } from '../../testing/harness';
-import type { OrderCommand } from '../commands';
-import type { Actor, StoredEvent } from '../events';
-import { evolve } from '../evolve';
-import { nextJob } from '../next-job';
-import type { WorkOrderState } from '../state';
+} from './event-builders';
+import { actors, given, type Scenario } from './harness';
+import type { OrderCommand } from '../order/commands';
+import type { Actor, StoredEvent } from '../order/events';
+import { evolve } from '../order/evolve';
+import { nextJob } from '../order/next-job';
+import type { WorkOrderState } from '../order/state';
 import { raiseAndon } from './steps';
 
 /**

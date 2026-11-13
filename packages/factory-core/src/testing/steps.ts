@@ -5,29 +5,29 @@ import type {
   QuestionId,
   ResumeId,
   StationId,
-} from '../../ids';
+} from '../ids';
 import {
   blobOf,
   commitOf,
   PR_URL,
   stationOf,
   workerIdOf,
-} from '../../testing/event-builders';
+} from './event-builders';
 import {
   actors,
   type ExpectedNext,
   type Outcome,
   type Scenario,
-} from '../../testing/harness';
-import type { CommandOf, OrderCommand } from '../commands';
+} from './harness';
+import type { CommandOf, OrderCommand } from '../order/commands';
 import type {
   AndonReason,
   CycleCause,
   InspectionResult,
   ResumeMode,
-} from '../events';
-import type { Next } from '../next';
-import { nextJob } from '../next-job';
+} from '../order/events';
+import type { Next } from '../order/next';
+import { nextJob } from '../order/next-job';
 
 /** The Cycle the scenario ran last, for causes that point back at it. */
 export const lastCycleOf = (scenario: Scenario): CycleId => {

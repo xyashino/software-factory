@@ -21,7 +21,7 @@ import { isLive } from '../evolve-helpers';
 import { nextJob } from '../next-job';
 import type { WorkOrderState } from '../state';
 import { arbIntents, arbLine } from './generators';
-import { foldEach, runSequence } from './runner';
+import { foldEach, runSequence } from '../../testing/runner';
 
 const RUNS = Number(process.env.FACTORY_PROPERTY_RUNS ?? 500);
 const ORDER_CASES = { numRuns: RUNS };

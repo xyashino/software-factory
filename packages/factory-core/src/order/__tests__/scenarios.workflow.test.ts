@@ -20,7 +20,7 @@ import {
   resumeCause,
   restartCause,
   retryCause,
-} from './steps';
+} from '../../testing/steps';
 
 // The feature workflow of v1 on v2 events. The v2 default Line is plan, build, audit (a verdict
 // that retries build) and check (an Inspection that retries build). v1 ran its gate before the
