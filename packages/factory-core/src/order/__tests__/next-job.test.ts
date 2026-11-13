@@ -12,7 +12,6 @@ import {
   cycleHandedOver,
   cycleIdOf,
   deliveryFailed,
-  inspectionFinished,
   jobIdOf,
   resumed,
   resumeIdOf,
@@ -517,15 +516,19 @@ describe('nextJob rows 15-16: the phase', () => {
   });
 
   it('row 15: an Inspection Station runs as an inspection job', () => {
+    // A Line needs an operator Station (line/snapshot.ts), so the Inspection is followed by one.
     const events = [
-      orderOn({
-        id: stationOf('check'),
-        kind: 'inspection',
-        requires: [],
-        maxRestarts: 1,
-        maxLostRestarts: 3,
-        artifacts: [],
-      }),
+      orderOn(
+        {
+          id: stationOf('check'),
+          kind: 'inspection',
+          requires: [],
+          maxRestarts: 1,
+          maxLostRestarts: 3,
+          artifacts: [],
+        },
+        op('plan'),
+      ),
     ];
 
     expect(next(events)).toMatchObject({
@@ -542,23 +545,13 @@ describe('nextJob rows 15-16: the phase', () => {
   });
 
   it('row 16: delivering without any checkpoint is an invariant break', () => {
-    const inspectionOnly = [
-      orderOn({
-        id: stationOf('check'),
-        kind: 'inspection',
-        requires: [],
-        maxRestarts: 1,
-        maxLostRestarts: 3,
-        artifacts: [],
-      }),
-      claim(1, 'run_inspection'),
-      start(1, 'check'),
-      inspectionFinished({ cycleId: cycleIdOf(1), passed: true, results: [] }),
-    ];
-    const state: WorkOrderState = stateOf(inspectionOnly);
+    // Valid events always checkpoint before delivering (an operator Station passes); a state without
+    // a checkpoint can only come from a broken history, so nextJob refuses to guess a base.
+    const delivering: WorkOrderState = stateOf(deliveringEvents());
+    const broken: WorkOrderState = { ...delivering, checkpoint: undefined };
 
-    expect(state.phase.kind).toBe('delivering');
-    expect(() => nextJob(state)).toThrow(
+    expect(broken.phase.kind).toBe('delivering');
+    expect(() => nextJob(broken)).toThrow(
       'a delivering Work order has no checkpoint',
     );
   });

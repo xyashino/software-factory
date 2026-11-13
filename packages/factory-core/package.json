@@ -4,12 +4,14 @@
   "type": "module",
   "private": true,
   "exports": {
+    "./testing": "./src/testing/index.ts",
     "./*": "./src/*.ts"
   },
   "scripts": {
     "check-types": "tsc --noEmit",
     "lint": "eslint src --max-warnings 0",
-    "test": "bun --bun vitest run"
+    "test": "bun --bun vitest run",
+    "test:properties": "FACTORY_PROPERTY_RUNS=10000 bun --bun vitest run invariants"
   },
   "dependencies": {
     "zod": "catalog:"

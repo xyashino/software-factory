@@ -22,7 +22,8 @@
       "dependsOn": ["build", "^check-types"]
     },
     "test": {
-      "dependsOn": ["^build"]
+      "dependsOn": ["^build"],
+      "env": ["FACTORY_PROPERTY_RUNS"]
     },
     "test:coverage": {
       "outputs": ["coverage/**"]

@@ -8,6 +8,7 @@ import {
   invalidIf,
   missingBlobs,
   precondition,
+  refuseIfTerminal,
   requireActor,
   requireLive,
   runningCycle,
@@ -135,6 +136,9 @@ export const resume = (
 ): Decision => {
   const by = supervisorName(ctx);
   if (!by.ok) return by;
+  // A cancelled Work order stays cancelled: an Andon raised before the cancel does not reopen it.
+  const terminal = refuseIfTerminal(state);
+  if (terminal) return err(terminal);
   const andon = state.andon;
   if (!andon) return err(precondition('no Andon is raised'));
   if (command.grantRetries === 0) {
@@ -149,6 +153,20 @@ export const resume = (
     !findStation(state.line, mode.stationId)
   ) {
     return err(precondition(`${mode.stationId} is not in the Line`));
+  }
+  // A restart moves the Work order back. Ahead of where it stopped, it would skip Stations that never
+  // passed, and delivery would then have no checkpoint (CORE §4.3 rule 8).
+  if (mode.kind === 'restart_from') {
+    const target = stationIndex(state.line, mode.stationId) ?? 0;
+    const stoppedAt =
+      state.phase.kind === 'stations'
+        ? state.phase.index
+        : state.line.stations.length;
+    if (target > stoppedAt) {
+      return err(
+        precondition(`${mode.stationId} is ahead of the Work order's Station`),
+      );
+    }
   }
   const defaulted =
     andon.reason === 'retries_exhausted' && mode.kind === 'retry_station'

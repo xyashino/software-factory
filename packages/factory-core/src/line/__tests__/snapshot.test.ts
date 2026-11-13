@@ -32,6 +32,14 @@ describe('line snapshot lookup', () => {
     expect(stationAt(LINE, -1)).toBeUndefined();
   });
 
+  it('rejects a line with no operator station, since only operators commit work', () => {
+    const inspectionOnly = {
+      ...LINE,
+      stations: [{ ...LINE.stations[3]!, onFail: undefined }],
+    };
+    expect(lineSnapshotSchema.safeParse(inspectionOnly).success).toBe(false);
+  });
+
   it('rejects a line whose station ids repeat', () => {
     const duplicate = {
       ...LINE,
