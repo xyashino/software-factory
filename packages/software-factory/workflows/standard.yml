@@ -2,6 +2,12 @@
 name: standard
 description: Direct worker build with quality gate and doctor audit (bypasses planning)
 
+sync:
+  timeout: 2m
+  exec:
+    - git fetch origin
+    - git reset --hard origin/main
+
 setup:
   timeout: 10m
   exec:

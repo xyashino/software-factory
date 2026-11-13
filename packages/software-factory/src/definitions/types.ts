@@ -74,6 +74,9 @@ export interface DeliverDef {
 export interface Workflow {
   name: string;
   description: string;
+  /** Runs in the repo root before the worktree exists; discards local changes on main. */
+  sync?: { timeoutMs: number; exec: string[] };
+  /** Runs in the task worktree after it is created. */
   setup: { timeoutMs: number; exec: string[] };
   agents: Record<string, AgentDef>;
   steps: Step[];

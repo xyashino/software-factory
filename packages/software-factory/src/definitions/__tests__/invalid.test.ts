@@ -281,6 +281,20 @@ const EXPECTED: Record<string, DefinitionError[]> = {
       message: 'must contain at least one step',
     },
   ],
+  'sync-empty-exec': [
+    {
+      file: 'workflows/feature.yml',
+      field: 'sync.exec',
+      message: 'must list at least one command',
+    },
+  ],
+  'sync-missing-timeout': [
+    {
+      file: 'workflows/feature.yml',
+      field: 'sync.timeout',
+      message: 'is required',
+    },
+  ],
   'template-missing': [
     {
       file: 'templates/prompts/reminder-idle.md',

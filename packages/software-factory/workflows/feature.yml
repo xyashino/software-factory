@@ -2,6 +2,12 @@
 name: feature
 description: Plan, review the plan, build behind a quality gate, then audit
 
+sync:
+  timeout: 2m
+  exec:
+    - git fetch origin
+    - git reset --hard origin/main
+
 setup:
   timeout: 10m
   exec:

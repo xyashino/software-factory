@@ -150,11 +150,12 @@ Text the supervisor itself sends (reminders, nudges, gate and review feedback, t
 
 Workflows declare:
 
-1. A **`setup:` block**: commands run once when the task's worktree is created (`pnpm install --frozen-lockfile`), with a timeout.
-2. An **`agents:` pool**: reusable agent configurations (role, runner, model, timeout).
-3. A **`steps:` list**: ordered pipeline steps. Order in the list is the execution order.
-4. A **`deliver:` block**: what is committed and where it goes.
-5. An optional **`operator:`** agent, same shape as a pool entry. Without it, blocked tasks go straight to a human.
+1. An optional **`sync:` block**: commands run in the repo root before the task's worktree exists (`git fetch origin`, `git reset --hard origin/main`), with a timeout. The main checkout must never hold changes, so sync discards uncommitted edits and local commits on it. A failing or timed-out sync command fails setup and no worktree is created.
+2. A **`setup:` block**: commands run once inside the task worktree after it is created (`pnpm install --frozen-lockfile`), with a timeout.
+3. An **`agents:` pool**: reusable agent configurations (role, runner, model, timeout).
+4. A **`steps:` list**: ordered pipeline steps. Order in the list is the execution order.
+5. A **`deliver:` block**: what is committed and where it goes.
+6. An optional **`operator:`** agent, same shape as a pool entry. Without it, blocked tasks go straight to a human.
 
 Every successful step advances to the next one. Reaching the end of the list means every gate and every judge passed, so the task is delivered.
 
@@ -171,6 +172,10 @@ Bypasses planning and audit: `build` (worker, 40m) -> `quality-gate` (retry `bui
 ```yaml
 name: feature
 description: Plan, review the plan, build with automated quality gate, and audit
+
+sync:
+  timeout: 2m
+  exec: [git fetch origin, git reset --hard origin/main]
 
 setup:
   timeout: 10m
@@ -247,6 +252,7 @@ deliver:
 
 - Step `id`s are unique; the file name matches the workflow `name`.
 - `setup.exec` is non-empty and `setup.timeout` is set.
+- When a `sync` block is present, `sync.exec` is non-empty and `sync.timeout` is set.
 - Every step `agent` exists in the `agents:` pool; every pool `role` exists in `roles/<role>.md`; every `runner` has an adapter.
 - `inputs` reference artifacts produced by an earlier step or a supported `task.*` source.
 - `onFail.retry` points to an earlier step of `type: agent`.

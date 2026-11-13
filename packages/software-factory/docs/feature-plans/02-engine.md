@@ -106,7 +106,7 @@ Evaluated top to bottom; the first matching row wins.
 | State | Action |
 | :--- | :--- |
 | `delivered` or `blocked` | `idle` |
-| No `setup_finished` | `setup` |
+| No `setup_finished` | `setup` (runs `sync` in the repo root, then creates the worktree and runs `setup` in it) |
 | `setup_finished.ok = false` | `block setup_failed` |
 | Open question | `idle` |
 | `current.status` is `starting` or `running` | `watch` |

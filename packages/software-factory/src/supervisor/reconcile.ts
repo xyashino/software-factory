@@ -57,7 +57,12 @@ export const reconcileTask = async (
     (stored) => stored.event.type === 'setup_finished',
   );
   if (setupStarted && !setupFinished) {
-    await ports.git.removeWorktree(worktreeDir(ports.root, task.id));
+    // A crash during sync leaves no worktree to drop; sync itself is idempotent, so it just reruns.
+    try {
+      await ports.git.removeWorktree(worktreeDir(ports.root, task.id));
+    } catch {
+      // nothing to remove
+    }
     return;
   }
 
