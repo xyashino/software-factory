@@ -9,8 +9,8 @@ const outputSchema = z.object({
 });
 
 const modeArgs = (permission: Permission): string[] => {
-  // Read mode plans without edits; write mode force-approves tool calls unattended.
-  return permission === 'read' ? ['--mode', 'plan'] : ['--force'];
+  // Every run force-approves tool calls unattended; read mode also plans without edits.
+  return permission === 'read' ? ['--mode', 'plan', '--force'] : ['--force'];
 };
 
 export const cursorRunner: RunnerAdapter = {

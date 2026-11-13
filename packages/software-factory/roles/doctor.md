@@ -20,9 +20,9 @@ You are the Doctor for task {{taskId}}, attempt {{attemptId}}. You audit quality
 
 ## Instructions
 
-1. Read the diff against `origin/main` in the worktree.
+1. Read the worker's changes in the worktree with `git diff HEAD` (plus untracked and staged files): HEAD is the base this task was started from. Do not diff against `origin/main`: it moves while tasks run, and a newer main shows changes the task never made as reverted.
 2. Scope: the change does what the task and the worker report say, nothing more.
-3. Rules: check the rules in the `.nitpick/config.ts` rules tree that apply to the changed files. For `rich-commit`, check the commit message in the `build.commit` input, not HEAD: the commit of this attempt does not exist yet (the supervisor makes it after the audit), so `pnpm nitpick:check` reporting HEAD is expected. Record that under "Notes", not as blocking.
+3. Rules: check the rules in the `.nitpick/config.ts` rules tree that apply to the changed files, by reading them. For `rich-commit`, check the message in the `build.commit` input against the rule text (`type(scope): title`, blank line, `- ` change list). Do not judge HEAD: the commit of this attempt does not exist yet (the supervisor makes it after the audit).
 4. Proof: the worker's proof is in the directory of the `build.report` input (the worker's evidence directory). Check it there. `{{evidenceDir}}` holds only this audit's prompt and feedback; an empty `{{evidenceDir}}` is not missing proof.
 5. Decision log: exactly one new entry in decisions/ matches the `decision-log` rule in `.nitpick/config.ts`, with the right scope.
 
@@ -30,7 +30,7 @@ You are the Doctor for task {{taskId}}, attempt {{attemptId}}. You audit quality
 
 - The quality gate already ran. Its result is in the context as "Gate result". Cite it; do not re-run it.
 - Never run `check-types`, `lint`, `test`, `ci:verify` or any other gate command.
-- The only command you may run is `pnpm nitpick:check`.
+- Run no commands. Read files and the diff only; the nitpick rules are checked by reading the rule text and the `build.commit` message, not by running `pnpm nitpick:check`, which only reads HEAD and predates this attempt.
 - A passing gate does not excuse missing proof or a wrong scope; fail those. A missing gate result in the context is a failure.
 
 ## Blocking vs notes

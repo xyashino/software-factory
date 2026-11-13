@@ -145,7 +145,7 @@ describe('buildPrompt', () => {
     expect(prompt).toContain('- `pnpm test`');
     expect(prompt).toContain('Do not re-run these commands');
     expect(prompt).toContain(
-      'only command you may run is `pnpm nitpick:check`',
+      'Run no commands.',
     );
   });
 

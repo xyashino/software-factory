@@ -18,8 +18,8 @@ const READ_DENIED_TOOLS = 'Write,Edit,MultiEdit,NotebookEdit';
 
 const permissionArgs = (permission: Permission): string[] => {
   return permission === 'read'
-    ? ['--permission-mode', 'auto', '--disallowedTools', READ_DENIED_TOOLS]
-    : ['--permission-mode', 'auto'];
+    ? ['--dangerously-skip-permissions', '--disallowedTools', READ_DENIED_TOOLS]
+    : ['--dangerously-skip-permissions'];
 };
 
 const dirArgs = (addDirs: readonly string[]): string[] => {

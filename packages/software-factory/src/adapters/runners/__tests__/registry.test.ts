@@ -13,8 +13,7 @@ describe('runner registry', () => {
     expect(getRunner('claude')).toMatchObject({ kind: 'claude' });
     expect(getRunner('antigravity')).toMatchObject({ kind: 'agy' });
     expect(getRunner('claude')?.startArgs({ model: 'sonnet' })).toEqual([
-      '--permission-mode',
-      'auto',
+      '--dangerously-skip-permissions',
       '--model',
       'sonnet',
     ]);
@@ -27,8 +26,7 @@ describe('runner registry', () => {
         addDirs: ['/repo/.evidences'],
       }),
     ).toEqual([
-      '--permission-mode',
-      'auto',
+      '--dangerously-skip-permissions',
       '--add-dir',
       '/repo/.evidences',
       '--model',
@@ -39,8 +37,7 @@ describe('runner registry', () => {
   it('starts a read-only pane with each runner own permission flags', () => {
     const options = { model: 'm', permission: 'read' } as const;
     expect(getRunner('claude')?.startArgs(options)).toEqual([
-      '--permission-mode',
-      'auto',
+      '--dangerously-skip-permissions',
       '--disallowedTools',
       CLAUDE_READ_DENIED,
       '--model',
@@ -57,6 +54,7 @@ describe('runner registry', () => {
     expect(getRunner('cursor')?.startArgs(options)).toEqual([
       '--mode',
       'plan',
+      '--force',
       '--trust',
       '--approve-mcps',
       '--model',
@@ -78,8 +76,7 @@ describe('runner registry', () => {
     ).toEqual([
       '-p',
       'go',
-      '--permission-mode',
-      'auto',
+      '--dangerously-skip-permissions',
       '--disallowedTools',
       CLAUDE_READ_DENIED,
       '--add-dir',
@@ -94,8 +91,7 @@ describe('runner registry', () => {
     ).toEqual([
       '-p',
       'go',
-      '--permission-mode',
-      'auto',
+      '--dangerously-skip-permissions',
       '--add-dir',
       '/e',
       '--output-format',
@@ -132,6 +128,7 @@ describe('runner registry', () => {
       '-p',
       '--mode',
       'plan',
+      '--force',
       '--trust',
       '--approve-mcps',
       '--output-format',
