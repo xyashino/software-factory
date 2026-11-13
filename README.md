@@ -1,17 +1,26 @@
 # software-factory
 
-Monorepo hosting **SoftwareFactory** (`packages/software-factory`): an autonomous AI harness that turns
-`todos/*.md` task specs into verified Pull Requests via multi-agent workflows in Herdr workspaces.
+Monorepo hosting **SoftwareFactory** (`packages/software-factory` v1, and [v2 design docs](docs/README.md)): an autonomous AI harness that turns
+`todos/*.md` work orders into verified Pull Requests via declarative production lines.
 See [packages/software-factory/README.md](packages/software-factory/README.md).
+
+## Main idea
+
+The system is modeled as an automated software factory:
+
+- **The Factory** (central server) is the single control point holding blueprints (Lines, Stations, Operators), the schedule, **Traveler** records (append-only event logs), and the board.
+- **Cells** are replaceable compute machines that connect outbound to the Factory, claim a **Cycle** on a **Station**, execute it, push git checkpoints and artifacts, and can disconnect at any time without losing completed work.
+- **Lines** are declarative production workflows composed of **Stations**—either an **Operator** (an AI specialist such as `planner`, `builder`, `reviewer`, `auditor`) or an **Inspection** (a deterministic command gate).
+- **Work orders** (`todos/*.md`) travel down a Line from station to station. If an Operator or Inspection hits a blocker, it raises an **Andon** (releasing the Cell immediately) with a **Handover** so a human supervisor can resolve it and resume on any available Cell.
 
 Extracted from the omino monorepo with only the packages the factory needs:
 
-| Package                       | Purpose                                              |
-| ----------------------------- | ---------------------------------------------------- |
-| `packages/software-factory`   | The factory CLI (`sf`), roles, workflows, templates  |
-| `packages/nitpick`            | Rules/skills engine; generates `.agents/` from `.nitpick/` |
-| `packages/eslint-config`      | Shared ESLint config                                 |
-| `packages/typescript-config`  | Shared tsconfig presets                              |
+| Package                      | Purpose                                                    |
+| ---------------------------- | ---------------------------------------------------------- |
+| `packages/software-factory`  | The factory CLI (`sf`), roles, workflows, templates        |
+| `packages/nitpick`           | Rules/skills engine; generates `.agents/` from `.nitpick/` |
+| `packages/eslint-config`     | Shared ESLint config                                       |
+| `packages/typescript-config` | Shared tsconfig presets                                    |
 
 ## Prerequisites
 

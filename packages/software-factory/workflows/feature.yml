@@ -17,7 +17,7 @@ agents:
   planner:
     role: planner
     runner: claude
-    model: haiku
+    model: sonnet
     timeout: 20m
     headless: false
     permission: write
@@ -31,14 +31,14 @@ agents:
   worker:
     role: worker
     runner: claude
-    model: sonnet
+    model: haiku
     timeout: 60m
     headless: false
     permission: write
   doctor:
     role: doctor
-    runner: antigravity
-    model: gemini-3.8-flash-medium
+    runner: cursor
+    model: gpt-5.6-luna-medium
     timeout: 20m
     headless: false
     permission: read
