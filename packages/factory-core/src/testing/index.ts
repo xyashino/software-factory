@@ -4,3 +4,6 @@ export * from './event-builders';
 export * from './fakes';
 export * from './harness';
 export * from './line-builder';
+export * from './fake-event-store';
+export * from './store-contract';
+export * from './scenario-fixtures';

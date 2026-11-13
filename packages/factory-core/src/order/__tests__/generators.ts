@@ -1,7 +1,7 @@
 import fc from 'fast-check';
 import type { LineSnapshot } from '../../line/snapshot';
 import { lineBuilder } from '../../testing/line-builder';
-import type { Intent } from './runner';
+import type { Intent } from '../../testing/runner';
 
 /** One Station of a generated Line. A retry always names an earlier Station (CORE §4.1). */
 interface StationShape {

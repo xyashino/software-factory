@@ -43,7 +43,7 @@ import {
   resumeCause,
   restartCause,
   submitVerdict,
-} from './steps';
+} from '../../testing/steps';
 
 // New v2 scenarios: the Andon, the Supervisor's resume and reopen, lost and handed-over Cycles,
 // budget exhaustion, and questions that a block abandons and an answer makes visible again.
