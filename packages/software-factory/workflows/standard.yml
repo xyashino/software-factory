@@ -6,7 +6,6 @@ sync:
   timeout: 2m
   exec:
     - git fetch origin
-    - git reset --hard origin/main
 
 setup:
   timeout: 10m

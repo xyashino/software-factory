@@ -150,7 +150,7 @@ Text the supervisor itself sends (reminders, nudges, gate and review feedback, t
 
 Workflows declare:
 
-1. An optional **`sync:` block**: commands run in the repo root before the task's worktree exists (`git fetch origin`, `git reset --hard origin/main`), with a timeout. The main checkout must never hold changes, so sync discards uncommitted edits and local commits on it. A failing or timed-out sync command fails setup and no worktree is created.
+1. An optional **`sync:` block**: commands run in the repo root before the task's worktree exists (`git fetch origin`), with a timeout. Sync never resets the main checkout: uncommitted edits and local commits there survive. The worktree is created from `origin/main`, so a fetch is enough. A failing or timed-out sync command fails setup and no worktree is created.
 2. A **`setup:` block**: commands run once inside the task worktree after it is created (`pnpm install --frozen-lockfile`), with a timeout.
 3. An **`agents:` pool**: reusable agent configurations (role, runner, model, timeout).
 4. A **`steps:` list**: ordered pipeline steps. Order in the list is the execution order.
@@ -175,7 +175,7 @@ description: Plan, review the plan, build with automated quality gate, and audit
 
 sync:
   timeout: 2m
-  exec: [git fetch origin, git reset --hard origin/main]
+  exec: [git fetch origin]
 
 setup:
   timeout: 10m

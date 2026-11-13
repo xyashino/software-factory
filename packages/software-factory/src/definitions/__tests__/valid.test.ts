@@ -29,7 +29,7 @@ describe('valid definitions', () => {
     expect(workflow?.setup.timeoutMs).toBe(600_000);
     expect(workflow?.sync).toEqual({
       timeoutMs: 120_000,
-      exec: ['git fetch origin', 'git reset --hard origin/main'],
+      exec: ['git fetch origin'],
     });
     expect(workflow?.agents.worker).toEqual({
       role: 'worker',

@@ -41,15 +41,12 @@ describe('shipped definitions', () => {
     }
   });
 
-  it('sync the repo root from origin/main before the worktree', () => {
+  it('fetch origin before the worktree and never reset the repo root', () => {
     if (!result.ok) {
       throw new Error('shipped definitions are invalid');
     }
     for (const workflow of result.value.workflows.values()) {
-      expect(workflow.sync?.exec).toEqual([
-        'git fetch origin',
-        'git reset --hard origin/main',
-      ]);
+      expect(workflow.sync?.exec).toEqual(['git fetch origin']);
       expect(workflow.sync?.timeoutMs).toBe(120_000);
     }
   });
