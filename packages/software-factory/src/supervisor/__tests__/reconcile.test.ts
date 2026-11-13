@@ -115,6 +115,22 @@ describe('restart reconciliation', () => {
     expect(h.git.calls.map((call) => call.method)).toEqual(['removeWorktree']);
   });
 
+  it('survives a crash during sync, when no worktree exists yet', async () => {
+    const root = scratchRoot({ 'hello.md': todoText('todo') });
+    const h = harness(root);
+    h.store.createTask({
+      taskId: 'hello',
+      workflow: 'feature',
+      todoPath: 'todos/hello.md',
+      branch: 'factory/hello',
+    });
+    h.store.append('hello', { type: 'setup_started' });
+    h.git.removeWorktree = async () => {
+      throw new Error('is not a working tree');
+    };
+    await expect(reconcile(h.ports)).resolves.toBeUndefined();
+  });
+
   it('reaches the same end whatever tick the supervisor was stopped at', async () => {
     const attemptsOf = (h: Harness): string[] =>
       h.store

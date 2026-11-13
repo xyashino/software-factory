@@ -160,6 +160,28 @@ const setup = async (
   mkdirSync(logDir, { recursive: true });
   record(ports, task.id, { type: 'setup_started' });
 
+  // Sync runs in the repo root before any worktree exists: a failure leaves none behind.
+  const { sync } = workflow;
+  if (sync !== undefined) {
+    for (const [index, command] of sync.exec.entries()) {
+      const syncLog = join(logDir, `sync-${index}.log`);
+      const result = await ports.system.run({
+        command,
+        cwd: ports.root,
+        timeoutMs: sync.timeoutMs,
+        logPath: syncLog,
+      });
+      if (result.timedOut || result.exitCode !== 0) {
+        record(ports, task.id, {
+          type: 'setup_finished',
+          ok: false,
+          log: syncLog,
+        });
+        return;
+      }
+    }
+  }
+
   try {
     await ports.git.createWorktree({
       path: worktree,

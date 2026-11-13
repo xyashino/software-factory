@@ -27,6 +27,10 @@ describe('valid definitions', () => {
     }
     const workflow = result.value.workflows.get('feature');
     expect(workflow?.setup.timeoutMs).toBe(600_000);
+    expect(workflow?.sync).toEqual({
+      timeoutMs: 120_000,
+      exec: ['git fetch origin', 'git reset --hard origin/main'],
+    });
     expect(workflow?.agents.worker).toEqual({
       role: 'worker',
       runner: 'claude',

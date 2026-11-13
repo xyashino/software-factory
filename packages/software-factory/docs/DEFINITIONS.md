@@ -124,7 +124,8 @@ A workflow is **which agents** run, **in what order**, with **which gates and re
 | :--- | :---: | :--- |
 | `name` | yes | Equals the file name without `.yml`. |
 | `description` | yes | One line, shown by `software-factory check` and the board. |
-| `setup` | yes | `{ timeout, exec: [...] }` run once in a new worktree. |
+| `sync` | no | `{ timeout, exec: [...] }` run in the repo root before the worktree exists; the shipped workflows hard-reset it to `origin/main`, discarding local changes. A failure fails setup and no worktree is created. |
+| `setup` | yes | `{ timeout, exec: [...] }` run once inside the new worktree after it is created. |
 | `agents` | yes | Pool: `<key>: { role, runner, model, timeout, headless?, permission? }`; see [Agent keys](#agent-keys). |
 | `operator` | no | `{ role: operator, runner, model, timeout }`. The on-call agent of [feature 11](feature-plans/11-operator.md); the role must exist and must not be judging. All three shipped workflows declare it. `operator` is a reserved step id. |
 | `steps` | yes | Ordered list; see below. |

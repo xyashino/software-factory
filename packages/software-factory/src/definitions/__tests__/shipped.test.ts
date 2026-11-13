@@ -41,6 +41,19 @@ describe('shipped definitions', () => {
     }
   });
 
+  it('sync the repo root from origin/main before the worktree', () => {
+    if (!result.ok) {
+      throw new Error('shipped definitions are invalid');
+    }
+    for (const workflow of result.value.workflows.values()) {
+      expect(workflow.sync?.exec).toEqual([
+        'git fetch origin',
+        'git reset --hard origin/main',
+      ]);
+      expect(workflow.sync?.timeoutMs).toBe(120_000);
+    }
+  });
+
   it('keep runner and model out of every role', () => {
     if (!result.ok) {
       throw new Error('shipped definitions are invalid');

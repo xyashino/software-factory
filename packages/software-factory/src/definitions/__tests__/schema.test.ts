@@ -91,6 +91,22 @@ describe('workflow JSON schema', () => {
     },
   );
 
+  it('accepts a workflow without sync', () => {
+    const doc = validFeature();
+    delete doc['sync'];
+
+    expect(errorsOf(doc)).toEqual([]);
+  });
+
+  it.each(['sync-missing-timeout', 'sync-empty-exec'])(
+    'rejects the %s fixture',
+    (name) => {
+      const doc = readYaml(join(INVALID, name, 'workflows', 'feature.yml'));
+
+      expect(errorsOf(doc)).not.toEqual([]);
+    },
+  );
+
   it('rejects an unknown runner', () => {
     const doc = validFeature();
     doc['operator'] = {

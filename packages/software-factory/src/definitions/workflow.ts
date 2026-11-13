@@ -110,15 +110,19 @@ const commandsStepSchema = z.strictObject({
   onFail: onFailSchema.optional(),
 });
 
+/** A timed list of shell commands: the shape of `sync` and `setup`. */
+const commandBlockSchema = z.strictObject({
+  timeout: durationSchema,
+  exec: z
+    .array(z.string().min(1, 'must not be empty'))
+    .min(1, 'must list at least one command'),
+});
+
 const workflowSchema = z.strictObject({
   name: z.string().min(1, 'must not be empty'),
   description: z.string().min(1, 'must not be empty'),
-  setup: z.strictObject({
-    timeout: durationSchema,
-    exec: z
-      .array(z.string().min(1, 'must not be empty'))
-      .min(1, 'must list at least one command'),
-  }),
+  sync: commandBlockSchema.optional(),
+  setup: commandBlockSchema,
   agents: z.record(z.string(), agentDefSchema).superRefine((agents, ctx) => {
     for (const key of Object.keys(agents)) {
       if (!KEBAB_ID.test(key)) {
@@ -189,6 +193,9 @@ const toWorkflow = (data: WorkflowData, path: string): Workflow => {
   return {
     name: data.name,
     description: data.description,
+    ...(data.sync === undefined
+      ? {}
+      : { sync: { timeoutMs: data.sync.timeout, exec: data.sync.exec } }),
     setup: { timeoutMs: data.setup.timeout, exec: data.setup.exec },
     agents,
     steps,
