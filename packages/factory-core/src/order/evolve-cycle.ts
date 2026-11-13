@@ -140,7 +140,7 @@ const startCycle = (
   const cycle: CycleState = {
     cycleId: ev.cycleId,
     jobId: ev.jobId,
-    cellId: job.cellId,
+    workerId: job.workerId,
     stationId: ev.stationId,
     n: ev.n,
     cause: ev.cause,

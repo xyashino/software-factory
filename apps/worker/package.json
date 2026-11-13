@@ -1,10 +1,10 @@
 {
-  "name": "@repo/factory-cell",
+  "name": "@repo/factory-worker",
   "version": "0.0.0",
   "type": "module",
   "private": true,
   "bin": {
-    "factory-cell": "./src/main.ts"
+    "factory-worker": "./src/main.ts"
   },
   "exports": {
     "./*": "./src/*.ts"

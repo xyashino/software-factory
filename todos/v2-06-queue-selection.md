@@ -22,9 +22,9 @@ Implement `selectClaimable` and the dependency overlay, pure, in `factory-core/s
 
 ## Deliverables
 
-1. `QueueEntry`, `CellView`, `Limits` types.
-2. `selectClaimable(queue, cell, limits)`: the claimable rule (holder, next, deps, project, runner,
-   capabilities, `avoidCells` cooldown, per-project limit) and the five ordering keys with a total,
+1. `QueueEntry`, `WorkerView`, `Limits` types.
+2. `selectClaimable(queue, worker, limits)`: the claimable rule (holder, next, deps, project, runner,
+   capabilities, `avoidWorkers` cooldown, per-project limit) and the five ordering keys with a total,
    deterministic order.
 3. `resolveDeps(entry, others, depPolicy)` → `satisfied | waiting | broken`, covering: delivered,
    merged policy, missing dependency (satisfied), cancelled (broken), closed-unmerged under

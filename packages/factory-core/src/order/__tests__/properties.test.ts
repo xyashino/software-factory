@@ -8,7 +8,7 @@ import {
   ORDER_ID,
   andonRaised,
   blobOf,
-  cellIdOf,
+  workerIdOf,
   commitOf,
   created,
   cycleBlocked,
@@ -37,7 +37,7 @@ const scenario = (): OrderEvent[] => [
   jobClaimed({
     jobId: jobIdOf(1),
     cycleId: cycleIdOf(1),
-    cellId: cellIdOf(1),
+    workerId: workerIdOf(1),
     epoch: 1,
   }),
   cycleStarted({
@@ -52,7 +52,7 @@ const scenario = (): OrderEvent[] => [
   jobClaimed({
     jobId: jobIdOf(2),
     cycleId: cycleIdOf(2),
-    cellId: cellIdOf(1),
+    workerId: workerIdOf(1),
     epoch: 2,
   }),
   cycleStarted({
@@ -72,7 +72,7 @@ const scenario = (): OrderEvent[] => [
   jobClaimed({
     jobId: jobIdOf(3),
     cycleId: cycleIdOf(3),
-    cellId: cellIdOf(1),
+    workerId: workerIdOf(1),
     epoch: 3,
   }),
   cycleStarted({

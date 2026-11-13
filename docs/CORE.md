@@ -18,11 +18,11 @@ evolve(state: WorkOrderState | undefined, ev: StoredEvent): WorkOrderState
 // What must happen next for this Work order?
 nextJob(state: WorkOrderState): Next
 
-// Which Work orders may this Cell take, in which order?
-selectClaimable(queue: readonly QueueEntry[], cell: CellView, limits: Limits): OrderId[]
+// Which Work orders may this Worker take, in which order?
+selectClaimable(queue: readonly QueueEntry[], worker: WorkerView, limits: Limits): OrderId[]
 ```
 
-Every write on the Factory follows the same loop (STORAGE §3 makes it atomic):
+Every write handled by `factory-runtime` follows the same loop (STORAGE §3 makes it atomic):
 
 ```text
 load Traveler → fold evolve → decide(cmd) → evolve → nextJob → (raise_andon? add andon_raised)
@@ -33,7 +33,7 @@ Module layout:
 
 ```text
 factory-core/src/
-├── ids.ts                 # OrderId, CycleId, JobId, CellId, BlobRef, CommitSha (branded strings)
+├── ids.ts                 # OrderId, CycleId, JobId, WorkerId, BlobRef, CommitSha (branded strings)
 ├── result.ts              # Result<T, E>
 ├── line/                  # LineSnapshot type, Station lookup (no parsing, no hashing: that is definitions)
 ├── order/
@@ -49,10 +49,10 @@ factory-core/src/
 │   └── projection.ts      # toProjection(state): the `orders` row (STORAGE §4)
 ├── queue/
 │   └── select.ts          # selectClaimable
-├── cycle/                 # Cell-side pure policy (never imported by the Factory)
+├── cycle/                 # Worker-side pure policy (never imported by factory-runtime)
 │   ├── watch.ts
 │   └── policy.ts
-├── contracts/             # zod DTOs of the HTTP APIs (PROTOCOL)
+├── contracts/             # transport-neutral zod DTOs shared by local and HTTP adapters (PROTOCOL)
 └── ports/                 # async interfaces: EventStore, BlobStore, LeaseStore, Clock, Ids
 ```
 
@@ -64,11 +64,11 @@ factory-core/src/
 | `TodoId`                                     | the todo file name without `.md`                      | the repo                                                                                            |
 | `OrderId`                                    | `<projectId>:<todoId>`                                | intake (deterministic, so re-intake is idempotent)                                                  |
 | `StationId`                                  | the Station's `id` in its Line                        | the Line definition                                                                                 |
-| `CellId`                                     | ULID                                                  | Factory, at `join` (PROTOCOL §1)                                                                    |
-| `JobId`, `CycleId`, `ResumeId`, `QuestionId` | ULID                                                  | Factory (`Ids` port), passed into `decide` via `DecideContext`                                      |
-| `BlobRef`                                    | `sha256:<hex>`                                        | whoever uploads the content; the Factory verifies it. The core treats it as opaque and never hashes |
-| `CommitSha`                                  | 40-hex git sha                                        | the Cell that pushed it                                                                             |
-| `epoch`                                      | positive integer, per Work order, strictly increasing | Factory, on every claim                                                                             |
+| `WorkerId`                                     | ULID                                                  | factory-runtime, at remote `join` (PROTOCOL §1)                                                     |
+| `JobId`, `CycleId`, `ResumeId`, `QuestionId` | ULID                                                  | factory-runtime (`Ids` port), passed into `decide` via `DecideContext`                              |
+| `BlobRef`                                    | `sha256:<hex>`                                        | whoever uploads the content; the runtime verifies it. The core treats it as opaque and never hashes |
+| `CommitSha`                                  | 40-hex git sha                                        | the Worker that pushed it                                                                             |
+| `epoch`                                      | positive integer, per Work order, strictly increasing | factory-runtime, on every claim                                                                     |
 
 An `OrderId` is never used as a git ref or a directory name (it contains `:`). Branches and worktrees
 are named after the `TodoId` (PROTOCOL §8–9).
@@ -92,11 +92,11 @@ interface StoredEvent {
   at: number; // Factory clock (ms); the only time the core ever sees
   actor:
     | { kind: 'factory' }
-    | { kind: 'cell'; cellId: CellId }
-    | { kind: 'operator'; cellId: CellId; cycleId: CycleId }
+    | { kind: 'worker'; workerId: WorkerId }
+    | { kind: 'operator'; workerId: WorkerId; cycleId: CycleId }
     | { kind: 'supervisor'; name: string };
   commandId: string; // idempotency key of the command that produced it
-  epoch?: number; // the lease epoch the write was made under (cell and operator actors)
+  epoch?: number; // the lease epoch the write was made under (worker and operator actors)
   event: OrderEvent;
 }
 ```
@@ -125,25 +125,25 @@ interface StoredEvent {
 
 | Event              | Payload                                                                     | Notes                                                                     |
 | :----------------- | :-------------------------------------------------------------------------- | :------------------------------------------------------------------------ |
-| `job_claimed`      | `jobId, kind, cellId, epoch, cycleId?`                                      | `epoch = previous + 1`. `cycleId` is pre-allocated for Station jobs.      |
-| `job_lost`         | `jobId, epoch, reason: 'lease_expired' \| 'cell_left' \| 'cancelled'`       | Ends the job without a result.                                            |
-| `workspace_failed` | `jobId, stage: 'fetch' \| 'sync' \| 'worktree' \| 'setup', detail, logBlob` | The Cell could not prepare the workspace; ends the job; no Cycle started. |
+| `job_claimed`      | `jobId, kind, workerId, epoch, cycleId?`                                      | `epoch = previous + 1`. `cycleId` is pre-allocated for Station jobs.      |
+| `job_lost`         | `jobId, epoch, reason: 'lease_expired' \| 'worker_left' \| 'cancelled'`       | Ends the job without a result.                                            |
+| `workspace_failed` | `jobId, stage: 'fetch' \| 'sync' \| 'worktree' \| 'setup', detail, logBlob` | The Worker could not prepare the workspace; ends the job; no Cycle started. |
 
 There is **no Work-order-level setup phase**. Preparing a workspace (fetch, worktree at the base
-commit, `setup` commands) is part of every job, because the next job may run on a different Cell.
-Cells cache prepared worktrees, so on the same Cell it is usually a no-op.
+commit, `setup` commands) is part of every job, because the next job may run on a different Worker.
+Workers cache prepared worktrees, so on the same Worker it is usually a no-op.
 
 **Cycles**
 
 | Event                 | Payload                                                                                                                                          | Notes                                                                                                                               |
 | :-------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------- | :---------------------------------------------------------------------------------------------------------------------------------- |
-| `cycle_started`       | `cycleId, jobId, stationId, n, cause: CycleCause, baseCommit, operator? { profile, runner, model }, promptBlob?`                                 | `promptBlob` is the exact prompt the Operator received (R5). The Factory fills it from the job; the Cell does not send it.          |
+| `cycle_started`       | `cycleId, jobId, stationId, n, cause: CycleCause, baseCommit, operator? { profile, runner, model }, promptBlob?`                                 | `promptBlob` is the exact prompt the Operator received (R5). The runtime fills it from the job; the Worker does not send it.          |
 | `cycle_completed`     | `cycleId, artifacts: Record<key, BlobRef>, commit`                                                                                               | A non-verdict Operator station finished.                                                                                            |
 | `verdict_recorded`    | `cycleId, pass, artifacts, feedbackBlob?, commit?`                                                                                               | A verdict Operator finished. `pass = false` requires `feedbackBlob`.                                                                |
 | `inspection_finished` | `cycleId, passed, results: InspectionResult[]`                                                                                                   | `InspectionResult = { command, exitCode \| null, timedOut, durationMs, tail, logBlob }`. `tail` ≤ 2 KiB; the full log is `logBlob`. |
 | `cycle_failed`        | `cycleId, reason: 'timed_out' \| 'crashed' \| 'stalled' \| 'start_failed' \| 'lost', detail, wipCommit?`                                         | Infrastructure outcome, not a judgement on the work. `wipCommit` is kept for the Supervisor only.                                   |
 | `cycle_blocked`       | `cycleId, source: 'operator' \| 'runtime', reason: 'operator_reported' \| 'runner_prompt' \| 'question_timeout', detail, handoverBlob?, commit?` | Leads to an Andon. `source = 'operator'` requires `handoverBlob`. `commit` is the WIP checkpoint a resume continues from.           |
-| `cycle_handed_over`   | `cycleId, handoverBlob, commit?`                                                                                                                 | The Cell is leaving and the Operator wrote a Handover. No Andon: another Cell continues (§5.3).                                     |
+| `cycle_handed_over`   | `cycleId, handoverBlob, commit?`                                                                                                                 | The Worker is leaving and the Operator wrote a Handover. No Andon: another Worker continues (§5.3).                                     |
 | `usage_recorded`      | `cycleId, model, inputTokens, outputTokens, costUsd?`                                                                                            | Accepted after the Cycle ended (§4.3 rule 1).                                                                                       |
 
 ```ts
@@ -151,7 +151,7 @@ type CycleCause =
   | { kind: 'first' }
   | { kind: 'retry'; feedbackFrom: CycleId } // a verdict or Inspection failed; consumes budget
   | { kind: 'restart'; of: CycleId } // infrastructure failure; clean base
-  | { kind: 'handover'; of: CycleId } // the previous Cell left with a Handover; WIP base
+  | { kind: 'handover'; of: CycleId } // the previous Worker left with a Handover; WIP base
   | { kind: 'resume'; of?: CycleId; resumeId: ResumeId }; // a Supervisor resumed or reopened; `of` absent when moved to another Station
 ```
 
@@ -169,7 +169,7 @@ type CycleCause =
 
 | Event          | Payload                                                    | Notes                                                                                   |
 | :------------- | :--------------------------------------------------------- | :-------------------------------------------------------------------------------------- |
-| `andon_raised` | `reason: AndonReason, detail`                              | A **decision event**: the Factory appends it when `nextJob` returns `raise_andon` (§6). |
+| `andon_raised` | `reason: AndonReason, detail`                              | A **decision event**: the runtime appends it when `nextJob` returns `raise_andon` (§6). |
 | `resumed`      | `resumeId, by, mode: ResumeMode, noteBlob?, grantRetries?` | Clears the Andon (§4.3 rules 7–8).                                                      |
 | `reopened`     | `resumeId, by, stationId, noteBlob?`                       | Moves a delivered Work order back to a Station (§4.3 rule 9).                           |
 
@@ -229,12 +229,12 @@ interface WorkOrderState {
   activeJob?: {
     jobId: JobId;
     kind: JobKind;
-    cellId: CellId;
+    workerId: WorkerId;
     epoch: number;
     cycleId?: CycleId;
   };
   epoch: number; // the last issued epoch, 0 before any claim
-  workspaceFailures: { cellId: CellId; jobId: JobId; at: number }[]; // consecutive; see §4.3 rule 10
+  workspaceFailures: { workerId: WorkerId; jobId: JobId; at: number }[]; // consecutive; see §4.3 rule 10
   deliveryFailed?: { jobId: JobId; detail: string }; // set on delivery_failed; cleared on resumed
   delivery?: {
     prUrl: string;
@@ -253,7 +253,7 @@ type Phase =
 interface CycleState {
   cycleId: CycleId;
   jobId: JobId;
-  cellId: CellId;
+  workerId: WorkerId;
   stationId: StationId;
   n: number; // per Station, 1-based
   cause: CycleCause;
@@ -289,7 +289,7 @@ interface CycleState {
 `inspection_fail` and the infrastructure reasons → `failed`.
 
 Compared to v1, the flags `parked`, `blockedPr`, `escalation`, `operatorRan`, `operatorChecked`,
-`extraRetry` and `pendingPrompts` are gone. Pane-level prompts are a Cell concern (§9). v1's on-call
+`extraRetry` and `pendingPrompts` are gone. Pane-level prompts are a Worker concern (§9). v1's on-call
 operator returns later as the **Line lead**, a separate module (ROADMAP M10).
 
 ### 4.2 Derived: holder and board status
@@ -299,7 +299,7 @@ operator returns later as the **Line lead**, a separate module (ROADMAP M10).
 ```ts
 type Holder =
   | { kind: 'none' } // delivered or cancelled
-  | { kind: 'cell'; cellId: CellId; epoch: number } // a job is active (including open questions)
+  | { kind: 'worker'; workerId: WorkerId; epoch: number } // a job is active (including open questions)
   | { kind: 'supervisor'; cause: 'andon' }
   | { kind: 'queue' };
 
@@ -307,15 +307,15 @@ const holderOf = (s: WorkOrderState): Holder =>
   s.phase.kind === 'delivered' || s.phase.kind === 'cancelled'
     ? { kind: 'none' }
     : s.activeJob
-      ? { kind: 'cell', cellId: s.activeJob.cellId, epoch: s.activeJob.epoch }
+      ? { kind: 'worker', workerId: s.activeJob.workerId, epoch: s.activeJob.epoch }
       : s.andon
         ? { kind: 'supervisor', cause: 'andon' }
         : { kind: 'queue' };
 ```
 
-An open question while the Cycle runs keeps the holder `cell`: the Operator is waiting in its pane.
-This is the one case where a Work order waits on a person and still holds a lease. The Cell runtime
-bounds that wait (§9.2), so a question can never hold a Cell forever.
+An open question while the Cycle runs keeps the holder `worker`: the Operator is waiting in its pane.
+This is the one case where a Work order waits on a person and still holds a lease. The Worker runtime
+bounds that wait (§9.2), so a question can never hold a Worker forever.
 
 Board status: `queued`, `waiting_deps`, `deps_broken`, `running`, `waiting_answer`, `andon`,
 `delivering`, `delivered`, `merged`, `cancelled`. `waiting_deps` and `deps_broken` need other Work
@@ -374,7 +374,7 @@ afterStation: <the Station before s, or null> }`; sets `pendingResume = { forSta
    the remote, PROTOCOL §8). `delivery` is kept; the next delivery updates the same PR or opens a
    new one.
 10. `job_claimed` sets `activeJob` and `epoch` and clears `resumedWaiting`. `resumed` and `reopened`
-    set `resumedWaiting`. `workspace_failed` appends `{ cellId, jobId, at }` to `workspaceFailures`;
+    set `resumedWaiting`. `workspace_failed` appends `{ workerId, jobId, at }` to `workspaceFailures`;
     `cycle_started`, `delivery_finished`, `delivery_failed`, `resumed` and `reopened` clear it.
     `delivery_failed` sets `deliveryFailed`. `delivery_finished` sets `delivery` and
     `phase = delivered`.
@@ -396,11 +396,11 @@ interface DecideContext {
   ids: { next(): string }; // ULIDs, injected so tests are deterministic
   actor: StoredEvent['actor'];
   epoch?: number; // the epoch the caller claims to hold
-  blobs: { exists(ref: BlobRef): boolean; size(ref: BlobRef): number }; // pre-fetched by the Factory
+  blobs: { exists(ref: BlobRef): boolean; size(ref: BlobRef): number }; // pre-fetched by the runtime
 }
 ```
 
-`decide` is pure: the Factory resolves everything it needs (blob existence, dependency states)
+`decide` is pure: the runtime resolves everything it needs (blob existence, dependency states)
 before calling it.
 
 ### 5.2 Command table
@@ -412,31 +412,31 @@ before calling it.
 | `Cancel`                | supervisor, factory (intake) | not delivered                                                                                                | `cancelled` (+ `job_lost{cancelled}` and `cycle_failed{lost}` if active) |
 | `Reprioritise`          | supervisor                   | not terminal                                                                                                 | `priority_changed`                                                       |
 | `ClaimJob`              | factory (claim endpoint)     | holder `queue`; `nextJob` is `job`                                                                           | `job_claimed{epoch+1}`                                                   |
-| `StartCycle`            | cell                         | `epoch == activeJob.epoch`; job is a Station job; its Cycle not started                                      | `cycle_started`                                                          |
-| `ReportWorkspaceFailed` | cell                         | epoch matches; Cycle not started                                                                             | `workspace_failed`                                                       |
+| `StartCycle`            | worker                         | `epoch == activeJob.epoch`; job is a Station job; its Cycle not started                                      | `cycle_started`                                                          |
+| `ReportWorkspaceFailed` | worker                         | epoch matches; Cycle not started                                                                             | `workspace_failed`                                                       |
 | `CompleteCycle`         | operator                     | epoch matches; Cycle live; not a verdict Operator; every declared artifact present, existing and non-empty   | `cycle_completed`                                                        |
 | `SubmitVerdict`         | operator                     | epoch matches; Cycle live; a verdict Operator; `!pass ⇒ feedbackBlob`                                        | `verdict_recorded`                                                       |
-| `ReportInspection`      | cell                         | epoch matches; Cycle live; Station is an Inspection                                                          | `inspection_finished`                                                    |
-| `FailCycle`             | cell                         | epoch matches; Cycle live                                                                                    | `cycle_failed`                                                           |
-| `BlockCycle`            | operator, cell               | epoch matches; Cycle live; `source=operator ⇒ handoverBlob`                                                  | `cycle_blocked`                                                          |
-| `HandOverCycle`         | cell                         | epoch matches; Cycle live; `handoverBlob` exists                                                             | `cycle_handed_over`                                                      |
+| `ReportInspection`      | worker                         | epoch matches; Cycle live; Station is an Inspection                                                          | `inspection_finished`                                                    |
+| `FailCycle`             | worker                         | epoch matches; Cycle live                                                                                    | `cycle_failed`                                                           |
+| `BlockCycle`            | operator, worker               | epoch matches; Cycle live; `source=operator ⇒ handoverBlob`                                                  | `cycle_blocked`                                                          |
+| `HandOverCycle`         | worker                         | epoch matches; Cycle live; `handoverBlob` exists                                                             | `cycle_handed_over`                                                      |
 | `AskQuestion`           | operator                     | epoch matches; Cycle live; no open question                                                                  | `question_asked`                                                         |
 | `Answer`                | supervisor                   | the question is open, or abandoned and not yet answered; ids match                                           | `question_answered`                                                      |
 | `LeaveNote`             | operator                     | epoch matches; Cycle live; `to` is a later Station or `supervisor`                                           | `note_left`                                                              |
 | `Nudge`                 | supervisor                   | a Cycle is running                                                                                           | `nudged`                                                                 |
-| `RecordUsage`           | cell                         | the caller is the Cell that ran the named Cycle (no epoch: usage arrives late)                               | `usage_recorded`                                                         |
+| `RecordUsage`           | worker                         | the caller is the Worker that ran the named Cycle (no epoch: usage arrives late)                               | `usage_recorded`                                                         |
 | `ExpireLease`           | factory (reaper)             | `activeJob` with that epoch; lease expired (checked by caller)                                               | `cycle_failed{lost}` if a Cycle runs, + `job_lost{lease_expired}`        |
-| `ReleaseJob`            | cell (leaving)               | epoch matches                                                                                                | as `ExpireLease` with `cell_left`                                        |
+| `ReleaseJob`            | worker (leaving)               | epoch matches                                                                                                | as `ExpireLease` with `worker_left`                                        |
 | `Resume`                | supervisor                   | `andon` set; mode valid for the Line; `retries_exhausted` + `retry_station` ⇒ `grantRetries ≥ 1` (default 1) | `resumed`                                                                |
 | `Reopen`                | supervisor                   | phase `delivered`; PR not `merged`; Station exists in the Line                                               | `reopened`                                                               |
-| `ReportDelivery`        | cell                         | epoch matches; job kind `deliver`                                                                            | `delivery_finished` / `delivery_failed`                                  |
+| `ReportDelivery`        | worker                         | epoch matches; job kind `deliver`                                                                            | `delivery_finished` / `delivery_failed`                                  |
 | `RecordPrState`         | factory (intake)             | `delivery` set                                                                                               | `pr_state_changed`                                                       |
 
 **One rule for all of them:** when the events a command emits end a Cycle that has an open question,
 `decide` appends `question_abandoned` for it. This covers `CompleteCycle`, `SubmitVerdict`,
 `FailCycle`, `BlockCycle`, `HandOverCycle`, `ExpireLease`, `ReleaseJob` and `Cancel` alike.
 
-A command may be sent with `dryRun` (PROTOCOL §3.2): the Factory runs `decide` and returns the
+A command may be sent with `dryRun` (PROTOCOL §3.2): the runtime runs `decide` and returns the
 result or the error without appending anything.
 
 ```ts
@@ -456,8 +456,8 @@ Idempotency is **not** handled here: the store returns the events originally pro
 |              | Trigger                                                                            | Base commit                                                                                 | Context added                                           | Budget                                                                                                                                                                                        |
 | :----------- | :--------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------ | :------------------------------------------------------ | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **retry**    | a verdict or Inspection failed                                                     | the latest checkpoint (the work being fixed)                                                | the failure feedback                                    | `retriesUsed` vs `onFail.max + retryGrants`                                                                                                                                                   |
-| **restart**  | infrastructure failure (`timed_out`, `crashed`, `stalled`, `start_failed`, `lost`) | the failed Cycle's `baseCommit` (clean)                                                     | "a previous Cycle was interrupted" + its Q&A            | `restartsUsed` vs `maxRestarts` (default 1); a `lost` Cycle counts against `lostRestartsUsed` vs `maxLostRestarts` (default 3) instead, because a Cell that vanished is not the Cycle's fault |
-| **handover** | the Cell left and the Operator wrote a Handover                                    | the handed-over Cycle's `commit` (WIP) if any, else its base                                | the Handover + its Q&A                                  | `lostRestartsUsed` vs `maxLostRestarts`                                                                                                                                                       |
+| **restart**  | infrastructure failure (`timed_out`, `crashed`, `stalled`, `start_failed`, `lost`) | the failed Cycle's `baseCommit` (clean)                                                     | "a previous Cycle was interrupted" + its Q&A            | `restartsUsed` vs `maxRestarts` (default 1); a `lost` Cycle counts against `lostRestartsUsed` vs `maxLostRestarts` (default 3) instead, because a Worker that vanished is not the Cycle's fault |
+| **handover** | the Worker left and the Operator wrote a Handover                                    | the handed-over Cycle's `commit` (WIP) if any, else its base                                | the Handover + its Q&A                                  | `lostRestartsUsed` vs `maxLostRestarts`                                                                                                                                                       |
 | **resume**   | a Supervisor resumed an Andon or reopened a delivery                               | the named Cycle's `commit` (WIP) if any, else its base; with no named Cycle, the checkpoint | the Handover (if any) + the Supervisor's note + its Q&A | unlimited (a person decided)                                                                                                                                                                  |
 
 Whatever the cause, a Cycle of a Station that `pendingFeedback` targets also receives that feedback
@@ -470,7 +470,7 @@ type Next =
   | { kind: 'done' }
   | { kind: 'busy' } // a job is active
   | { kind: 'await_supervisor'; cause: 'andon' }
-  | { kind: 'raise_andon'; reason: AndonReason; detail: string } // the Factory appends andon_raised
+  | { kind: 'raise_andon'; reason: AndonReason; detail: string } // the runtime appends andon_raised
   | { kind: 'job'; job: JobSpec };
 
 type JobSpec =
@@ -516,14 +516,14 @@ Notes on the order:
 
 - Row 4 sits above every job row, so a workspace that cannot be prepared raises the Andon whatever
   job was pending (first run, retry, restart, handover or resume). It needs no knowledge of the
-  fleet: preferring a different Cell for the second try is the queue's job (`avoidCells`, §8).
+  fleet: preferring a different Worker for the second try is the queue's job (`avoidWorkers`, §8).
 - Row 5 sits above rows 6–13, so a `resumed` or `reopened` is always answered before the outcome of
   the old Cycle is looked at again.
 - Row 16 is idempotent by contract: a delivery job first looks for an existing PR for the branch.
 
 ## 7. Cycle context
 
-`resolveCycleContext(state, stationId, cause)` returns what goes into the prompt. The Factory renders
+`resolveCycleContext(state, stationId, cause)` returns what goes into the prompt. The runtime renders
 it into text with the Operator profile and templates, stores the result as a blob, and puts that
 blob into the job.
 
@@ -537,7 +537,7 @@ interface CycleContext {
         cycleId;
         blob: BlobRef;
         materialiseAs: string;
-      } // relative path, e.g. `.cell/inputs/plan.plan.md`
+      } // relative path, e.g. `.worker/inputs/plan.plan.md`
     | { kind: 'inspection'; stationId; cycleId; commands: string[] }
     | { kind: 'order'; field: 'title' | 'body' | 'branch'; value: string }
   >;
@@ -560,10 +560,10 @@ interface CycleContext {
 }
 ```
 
-Paths in the context are **relative to the worktree**. The Cell writes input blobs to those paths
+Paths in the context are **relative to the worktree**. The Worker writes input blobs to those paths
 before the Operator starts. No absolute path is ever rendered into a stored prompt.
 
-Inspection feedback in a prompt is rendered by the Factory from `logBlobs`: ANSI stripped, the last
+Inspection feedback in a prompt is rendered by the runtime from `logBlobs`: ANSI stripped, the last
 12,000 characters of each log (v1 logic). The event itself only carries the 2 KiB `tail`.
 
 ## 8. Queue selection
@@ -584,12 +584,12 @@ interface QueueEntry {
   deps: 'satisfied' | 'waiting' | 'broken'; // computed when the queue is read, from the other Work orders
   progressed: boolean; // at least one Station passed
   resumed: boolean; // WorkOrderState.resumedWaiting
-  lastCellId?: CellId;
-  avoidCells: { cellId: CellId; until: number }[]; // cooldown after a workspace failure (never permanent)
+  lastWorkerId?: WorkerId;
+  avoidWorkers: { workerId: WorkerId; until: number }[]; // cooldown after a workspace failure (never permanent)
 }
 
-interface CellView {
-  cellId;
+interface WorkerView {
+  workerId;
   projects: ProjectId[];
   runners: string[];
   capabilities: string[];
@@ -601,12 +601,12 @@ interface Limits {
 }
 ```
 
-A Work order is claimable by a Cell iff: `holder = queue`, `next = job`, `deps = satisfied`, the Cell
-serves the project, the Cell has the Station's runner and all `requiredCapabilities`, the Cell is
-not in an active `avoidCells` cooldown (`until > limits.now`), and the project is under its
+A Work order is claimable by a Worker iff: `holder = queue`, `next = job`, `deps = satisfied`, the Worker
+serves the project, the Worker has the Station's runner and all `requiredCapabilities`, the Worker is
+not in an active `avoidWorkers` cooldown (`until > limits.now`), and the project is under its
 concurrency limit.
 
-`avoidCells` is derived by `toProjection` from `workspaceFailures`: `until = at +
+`avoidWorkers` is derived by `toProjection` from `workspaceFailures`: `until = at +
 WORKSPACE_COOLDOWN_MS` (a core constant, 10 min), so rebuilding the projection gives the same value.
 
 Order, first key wins:
@@ -614,7 +614,7 @@ Order, first key wins:
 1. priority (`high` > `medium` > `low`);
 2. `resumed` first (a Supervisor is waiting for the result);
 3. `progressed` first (finish what was started before starting new work);
-4. same Cell as `lastCellId` first (warm worktree);
+4. same Worker as `lastWorkerId` first (warm worktree);
 5. `createdAt` ascending, then `orderId` (total order, deterministic).
 
 Dependency policy:
@@ -628,9 +628,9 @@ Dependency policy:
   never claimed; it never silently counts as satisfied. The Supervisor fixes the todo or cancels.
 - A dependency that is reopened after its dependent already started does not stop the dependent.
 
-## 9. Cycle runtime (Cell side)
+## 9. Cycle runtime (Worker side)
 
-`core/cycle/` is pure, but **only the Cell imports it** (lint rule, STRUCTURE §4). It is v1's
+`core/cycle/` is pure, but **only the Worker imports it** (lint rule, STRUCTURE §4). It is v1's
 `watch.ts` moved out of the Work order domain.
 
 ### 9.1 Watch
@@ -650,9 +650,9 @@ Order: timeout, gone, (paused → none), blocked prompt, idle, silence. Same as 
 
 ### 9.2 Question hold
 
-While a question is open the Operator waits in its pane and the Cell keeps its slot. After
-`questionHoldMs` (default 30 min) the Cell types the `handoverRequest` prompt ("write your Handover
-and run `factory-operator block`"); if the Operator does not comply within 5 min the Cell reports
+While a question is open the Operator waits in its pane and the Worker keeps its slot. After
+`questionHoldMs` (default 30 min) the Worker types the `handoverRequest` prompt ("write your Handover
+and run `factory-operator block`"); if the Operator does not comply within 5 min the Worker reports
 `BlockCycle{source: runtime, reason: question_timeout}`.
 
 The question is then abandoned, but the Supervisor can still answer it (`Answer` accepts an
@@ -660,9 +660,9 @@ abandoned, unanswered question). The answer reaches the resumed Cycle through `p
 
 ### 9.3 Runtime journal
 
-Pane ready, reminders and typed answers are recorded in a **Cell-local** journal
-(`<cell data dir>/runtime/<cycleId>.jsonl`, PROTOCOL §9) for debugging. They are never Work order
-events. A Cell may ship the journal to the Factory as a blob at the end of the Cycle.
+Pane ready, reminders and typed answers are recorded in a **Worker-local** journal
+(`<worker data dir>/runtime/<cycleId>.jsonl`, PROTOCOL §9) for debugging. They are never Work order
+events. A Worker may ship the journal to the runtime as a blob at the end of the Cycle.
 
 ## 10. Invariants
 
@@ -673,10 +673,10 @@ Each one is a property test (fast-check) over random command sequences, plus nam
 | I1  | **Determinism.** Folding the same events gives the same state; `nextJob` of that state is the same, on any machine.                                                                                                                                                                               |
 | I2  | **Machine independence.** No stored event matches an absolute-path, hostname or pane-id pattern (schema test).                                                                                                                                                                                    |
 | I3  | **Late facts are inert.** Inserting an event about a non-live Cycle anywhere in a history does not change `nextJob`, and changes the state at most in that Cycle's `usage` or a question's answer.                                                                                                |
-| I4  | **Single writer.** For every Work order, at most one `activeJob`; every accepted cell/operator event except `usage_recorded` carries the epoch of the job active when it was appended.                                                                                                            |
+| I4  | **Single writer.** For every Work order, at most one `activeJob`; every accepted worker/operator event except `usage_recorded` carries the epoch of the job active when it was appended.                                                                                                            |
 | I5  | **Monotone epochs.** `job_claimed.epoch` strictly increases per Work order.                                                                                                                                                                                                                       |
 | I6  | **Progress is kept.** `cycle_blocked`, `cycle_handed_over`, `andon_raised`, `resumed{retry_station}`, `job_lost` never remove an entry from `lastPassed` and never decrease `phase.index`. Only `resumed{restart_from}` and `reopened` may, and only for Stations at or after their target.       |
-| I7  | **Andons hold no Cell.** `holder = supervisor ⇒ activeJob = undefined`.                                                                                                                                                                                                                           |
+| I7  | **Andons hold no Worker.** `holder = supervisor ⇒ activeJob = undefined`.                                                                                                                                                                                                                           |
 | I8  | **Bounded retries.** For every Station, `retriesUsed ≤ onFail.max + retryGrants`.                                                                                                                                                                                                                 |
 | I9  | **No silent stop.** For every non-terminal state, `nextJob ≠ done`; `raise_andon` is followed by `await_supervisor` once its `andon_raised` is applied; and after any `resumed` or `reopened`, `nextJob` is `job` (a resume never re-raises the Andon it cleared without a new event in between). |
 | I10 | **Idempotent commands.** Replaying any command with the same `commandId` produces no new events. (Store-level contract test.)                                                                                                                                                                     |

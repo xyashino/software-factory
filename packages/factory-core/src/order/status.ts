@@ -1,9 +1,9 @@
-import type { CellId } from '../ids';
+import type { WorkerId } from '../ids';
 import type { WorkOrderState } from './state';
 
 export type Holder =
   | { kind: 'none' } // delivered or cancelled
-  | { kind: 'cell'; cellId: CellId; epoch: number } // a job is active (including open questions)
+  | { kind: 'worker'; workerId: WorkerId; epoch: number } // a job is active (including open questions)
   | { kind: 'supervisor'; cause: 'andon' }
   | { kind: 'queue' };
 
@@ -27,8 +27,8 @@ export const holderOf = (state: WorkOrderState): Holder => {
     return { kind: 'none' };
   if (state.activeJob) {
     return {
-      kind: 'cell',
-      cellId: state.activeJob.cellId,
+      kind: 'worker',
+      workerId: state.activeJob.workerId,
       epoch: state.activeJob.epoch,
     };
   }

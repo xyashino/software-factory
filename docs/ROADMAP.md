@@ -11,56 +11,70 @@ before v1 starts picking them, and a dependency is named by its exact file name.
 
 ## Todo files
 
-| Todo                                      | Depends on | Work items                                                                       |
-| :---------------------------------------- | :--------- | :------------------------------------------------------------------------------- |
-| `v2-01-workspace-skeleton`                | —          | all of M0                                                                        |
-| `v2-02-core-events-state`                 | 01         | `factory-m1-ids-result`, `-events`, `-ports`, `-state-evolve`                    |
-| `v2-03-core-decide-next-job`              | 02         | `factory-m1-decide`, `-next-job`, `-context`                                     |
-| `v2-04-core-harness-scenarios-properties` | 03         | `factory-m1-harness`, `-scenarios`, `-properties`                                |
-| `v2-05-definitions`                       | 02         | `factory-m2-definitions-port`, `-line-v2`, `-todo-parse`                         |
-| `v2-06-queue-selection`                   | 02         | `factory-m2-queue`                                                               |
-| `v2-07-storage-event-store`               | 04         | `factory-m3-contract`, `-tx-spike`, `-sqlite`, `-projection`                     |
-| `v2-08-storage-leases-blobs-export`       | 07         | `factory-m3-leases-blobs`, `-export`                                             |
-| `v2-09-factory-http-command-loop`         | 05, 06, 08 | `factory-m4-http`, `-command-loop`, `-claim-reaper`, `-prompts`                  |
-| `v2-10-factory-intake-stream-admin-e2e`   | 09         | `factory-m4-intake`, `-stream`, `-admin`, `-e2e-fake-cell`                       |
-| `v2-11-cell-foundation`                   | 10         | `factory-m5-adapters-port`, `-client-loops`, `-workspace`, `-inspection`         |
-| `v2-12-cell-operator-stations`            | 11         | `factory-m5-headless-station`, `-operator-socket`, `-pane-runtime`, `-leave`     |
-| `v2-13-cell-delivery`                     | 12         | `factory-m5-deliver` + the M5 end-to-end run                                     |
-| `v2-14-clis`                              | 10, 12     | all of M6                                                                        |
-| `v2-15-distributed-hardening`             | 13, 14     | all of M7                                                                        |
-| `v2-16-portability`                       | 15         | all of M8                                                                        |
-| `v2-17-cut-over`                          | 16         | M9 preparation (the v1/v2 todo split); the trial itself is run by the Supervisor |
+| Todo                                      | Depends on | Work items                                                                                    |
+| :---------------------------------------- | :--------- | :-------------------------------------------------------------------------------------------- |
+| `v2-01-workspace-skeleton`                | —          | all of M0                                                                                     |
+| `v2-02-core-events-state`                 | 01         | `factory-m1-ids-result`, `-events`, `-ports`, `-state-evolve`                                 |
+| `v2-03-core-decide-next-job`              | 02         | `factory-m1-decide`, `-next-job`, `-context`                                                  |
+| `v2-04-core-harness-scenarios-properties` | 03         | `factory-m1-harness`, `-scenarios`, `-properties`                                             |
+| `v2-05-definitions`                       | 02         | `factory-m2-definitions-port`, `-line-v2`, `-todo-parse`                                      |
+| `v2-06-queue-selection`                   | 02         | `factory-m2-queue`                                                                            |
+| `v2-07-storage-event-store`               | 04         | `factory-m3-contract`, `-tx-spike`, `-sqlite`, `-projection`                                  |
+| `v2-08-storage-leases-blobs-export`       | 07         | `factory-m3-leases-blobs`, `-export`                                                          |
+| `v2-09-factory-http-command-loop`         | 05, 06, 08 | `factory-m4-runtime`, `-claim-reaper`, `-prompts`, `-socket`; single-writer lock (core server) |
+| `v2-10-factory-intake-stream-admin-e2e`   | 09         | Server intake/feed/admin; end-to-end flow through the socket client                           |
+| `v2-11-worker-foundation`                   | 14         | `factory-m5-adapters-port`, socket `-client-loops`, `-workspace`, `-inspection`               |
+| `v2-12-worker-operator-stations`            | 11         | `factory-m5-headless-station`, `-operator-socket`, `-pane-runtime`, `-leave`, `-operator-cli` |
+| `v2-13-worker-delivery`                     | 12         | `factory-m5-deliver` + the M5 end-to-end run                                                  |
+| `v2-14-clis`                              | 10         | `factory-m6-cli` (supervisor `factory` over the socket, one-shot fallback, `factory run`)     |
+| `v2-15-distributed-hardening`             | 13, 14, 18 | all of M7                                                                                     |
+| `v2-18-remote-http-adapter`               | 14         | M4R: optional TCP HTTP/SSE listener on the same server, remote Workers and CLI, remote admin, remote e2e |
+| `v2-16-portability`                       | 15         | all of M8                                                                                     |
+| `v2-17-cut-over`                          | 16         | M9 preparation (the v1/v2 todo split); the trial itself is run by the Supervisor              |
 
 M10 gets its todos when it is specified.
 
-The order front-loads the core: up to M3 nothing needs a network, Herdr or a real runner.
+The server over a local Unix socket is the core of v2.0: `factory-server` owns the database and listens
+on `factory.sock`. No milestone before M7 needs a network listener. The optional TCP HTTP/SSE listener on
+the same server (M4R) comes after the local CLI and Worker are proven, before the distributed hardening of M7.
+
+**Implementation order** (the todo dependencies enforce it; v1 picks todos in this order):
+
+1. v2-09 server core: runtime, writer lock, Unix socket
+2. v2-10 server intake, feed, admin, and an end-to-end run through the socket with a fake Worker
+3. v2-14 supervisor CLI, so the server can be driven and inspected from a real command line
+4. v2-11 Worker foundation: socket client, loops, workspace, Inspections
+5. v2-12 Operator stations, checkpoints, Operator socket, `factory-operator`, leaving
+6. v2-13 delivery and the first real end-to-end run
+7. v2-15 distributed hardening, after the optional v2-18 remote adapter
 
 ```mermaid
 flowchart LR
   M0[M0 skeleton] --> M1[M1 core domain]
   M1 --> M2[M2 definitions + queue]
   M1 --> M3[M3 storage]
-  M2 --> M4[M4 Factory]
+  M2 --> M4[M4 Core server and local socket]
   M3 --> M4
-  M4 --> M5[M5 Cell]
-  M4 --> M6[M6 CLIs]
-  M5 --> M6
-  M6 --> M7[M7 distributed hardening]
+  M4 --> M6[M6 Supervisor CLI]
+  M6 --> M5[M5 Worker]
+  M6 --> M4R[M4R Remote adapter, optional]
+  M5 --> M7[M7 distributed hardening]
+  M4R --> M7
   M7 --> M8[M8 portability]
   M8 --> M9[M9 cut-over]
   M9 --> M10[M10 Line lead]
 ```
 
-`factory-m6-cli` needs only M4; `factory-m6-operator-cli` needs `factory-m5-operator-socket`.
+`factory-m6-cli` needs only M4. `factory-m5-operator-cli` needs `factory-m5-operator-socket`.
 
 ## M0. Workspace skeleton
 
-| Todo                    | Depends on             | Scope                                                                                                                                                                                        |
-| :---------------------- | :--------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `factory-m0-adr`        | —                      | `decisions/` entry: v2 architecture, link to `docs/`                                                                                                                                         |
-| `factory-m0-workspace`  | `factory-m0-adr`       | `apps/*` in the workspace; empty `factory-core`, `factory-db`, `factory-definitions`, `apps/{server,cell,cli,operator-cli}` with `check-types`, `lint`, `test` scripts and a smoke test each |
-| `factory-m0-boundaries` | `factory-m0-workspace` | Dependency rules of STRUCTURE §3–4, purity test, `no-restricted-imports`                                                                                                                     |
-| `factory-m0-catalog`    | `factory-m0-workspace` | Add `hono`, `fast-check` to the catalog with decision entries                                                                                                                                |
+| Todo                    | Depends on             | Scope                                                                                                                                                                                                           |
+| :---------------------- | :--------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `factory-m0-adr`        | —                      | `decisions/` entry: v2 architecture, link to `docs/`                                                                                                                                                            |
+| `factory-m0-workspace`  | `factory-m0-adr`       | `apps/*` in the workspace; empty `factory-core`, `factory-runtime`, `factory-db`, `factory-definitions`, `apps/{server,worker,cli,operator-cli}` with `check-types`, `lint`, `test` scripts and a smoke test each |
+| `factory-m0-boundaries` | `factory-m0-workspace` | Dependency rules of STRUCTURE §3–4, purity test, `no-restricted-imports`                                                                                                                                        |
+| `factory-m0-catalog`    | `factory-m0-workspace` | Add `hono`, `fast-check` to the catalog with decision entries                                                                                                                                                   |
 
 **Done when:** `pnpm turbo check-types lint test` is green; a test import of `@repo/software-factory`
 from a v2 package fails lint; `bun:sqlite` imported in core fails lint.
@@ -108,56 +122,72 @@ is stable across machines (fixture test).
 
 **Done when:** fake and SQLite pass the same contract suite, including 2 concurrent appenders.
 
-## M4. Factory
+## M4. Core server and local socket
 
-| Todo                       | Depends on                             | Scope                                                                                                                                              |
-| :------------------------- | :------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `factory-m4-http`          | M3                                     | Hono app, auth (supervisor tokens, join tokens, Cell credentials), `admin token create`, error mapping, `/v1/board`, `/v1/orders/*`, `/v1/blobs/*` |
-| `factory-m4-command-loop`  | `factory-m4-http`                      | `handle-command.ts`: decide, append, conflict retry, Andon decision event, dry run, continuation in one transaction                                |
-| `factory-m4-claim-reaper`  | `factory-m4-command-loop`, M2          | Join, hello, claim (long-poll), heartbeat + signals, reaper, boot grace                                                                            |
-| `factory-m4-prompts`       | M2                                     | Port v1 prompt rendering to blobs and relative paths; runtime prompts into the `Job`                                                               |
-| `factory-m4-intake`        | M2, `factory-m4-command-loop`          | Git mirror, todos → `CreateOrder` / `UpdateSpec` / `Cancel`, PR state polling, v2 todo filter (M9)                                                 |
-| `factory-m4-stream`        | `factory-m4-http`                      | `/v1/stream` SSE                                                                                                                                   |
-| `factory-m4-admin`         | `factory-m4-http`, `factory-m3-export` | `factory-server admin backup \| export \| import \| rebuild-projections`                                                                           |
-| `factory-m4-e2e-fake-cell` | all above                              | A scripted fake Cell drives a `feature` Work order to delivered through HTTP only                                                                  |
+| Todo                       | Depends on                | Scope                                                                                                                                  |
+| :------------------------- | :------------------------ | :------------------------------------------------------------------------------------------------------------------------------------- |
+| `factory-m4-runtime`       | M2, M3                    | `factory-runtime`: compose stores and definitions; application API and command loop over core ports; writer-lock requirement          |
+| `factory-m4-claim-reaper`  | `factory-m4-runtime`, M2  | Runtime claim, lease, heartbeat, reaper and boot-grace use cases and lifecycle loops                                                   |
+| `factory-m4-prompts`       | `factory-m4-runtime`, M2  | Port v1 prompt rendering to runtime; relative paths, blobs and runtime prompts into the `Job`                                          |
+| `factory-m4-intake`        | `factory-m4-runtime`, M2  | Runtime intake: git mirror, todos → `CreateOrder` / `UpdateSpec` / `Cancel`, PR state polling, v2 todo filter (M9)                     |
+| `factory-m4-socket`        | `factory-m4-runtime`      | `apps/server` Unix socket listener at `$FACTORY_DATA_DIR/factory.sock` (0600), contract-typed routes, and the socket client used by tests and the CLI |
+| `factory-m4-feed`          | `factory-m4-runtime`      | Runtime event feed from `global_seq`, consumed by `status --watch` and `log -f` over the socket                                        |
+| `factory-m4-admin`         | `factory-m4-runtime`, `factory-m3-export` | Local admin operations: `backup \| export \| import \| rebuild-projections`                                                 |
+| `factory-m4-e2e-local`     | all above                 | A scripted fake Worker connects to a server on a temp socket and drives a `feature` Work order to delivered through the socket client |
 
-**Done when:** the e2e test passes; killing and restarting the Factory mid-Work-order loses nothing.
+**Done when:** the local e2e test passes with no network listener (socket only); killing and restarting
+the server mid-Work-order loses nothing; a second server is refused by the lock.
 
-## M5. Cell
+## M4R. Remote HTTP adapter (optional)
 
-| Todo                          | Depends on                    | Scope                                                                                                     |
-| :---------------------------- | :---------------------------- | :-------------------------------------------------------------------------------------------------------- |
-| `factory-m5-adapters-port`    | M0                            | Port v1 adapters (herdr, git, github, process, runners) with tests                                        |
-| `factory-m5-client-loops`     | M4                            | Factory client, join + credential storage, hello, claim loop, heartbeat loop, idempotency ids, self-fence |
-| `factory-m5-workspace`        | `factory-m5-adapters-port`    | Mirror, worktree at base, sync/setup cache, LRU, `.cell/` excluded                                        |
-| `factory-m5-inspection`       | `factory-m5-workspace`        | `run-inspection.ts`                                                                                       |
-| `factory-m5-headless-station` | `factory-m5-workspace`        | `run-operator-station.ts` for headless runners first (no Herdr), checkpoint procedure (PROTOCOL §8.2)     |
-| `factory-m5-operator-socket`  | `factory-m5-headless-station` | Unix socket, Cycle tokens, local validation, blob upload                                                  |
-| `factory-m5-pane-runtime`     | `factory-m5-operator-socket`  | Herdr panes + `core/cycle` watch + signals + question hold                                                |
-| `factory-m5-leave`            | `factory-m5-pane-runtime`     | `SIGTERM` handling: Handover request, `HandOverCycle`, `ReleaseJob` fallback                              |
-| `factory-m5-deliver`          | `factory-m5-workspace`        | Squash, rebase, PR create-or-find                                                                         |
+Delivered in `v2-18`, after M6. Nothing in M5 to M6 depends on it.
+
+| Todo                       | Depends on                | Scope                                                                                                                                   |
+| :------------------------- | :------------------------ | :-------------------------------------------------------------------------------------------------------------------------------------- |
+| `factory-m4-http`          | M4, M6                    | Optional TCP listener on the same `factory-server`: Hono HTTP over the runtime, remote auth, `admin token create`, error mapping, supervisor/Worker/blob routes; reuses the socket contracts |
+| `factory-m4-stream`        | `factory-m4-http`         | Remote `/v1/stream` SSE adapter over the runtime event feed                                                                             |
+| `factory-m4-remote-clients`| `factory-m4-http`, M5, M6 | Remote `FactoryClient` for the CLI and the remote Worker client; config-selected, local stays the default                                 |
+| `factory-m4-remote-admin`  | `factory-m4-http`         | Remote `factory-server admin ...` entrypoints against the remote runtime's own database                                                 |
+| `factory-m4-e2e-remote`    | all above                 | The same scenario as `factory-m4-e2e-local` through HTTP; asserts equivalent events and projections                                    |
+
+**Done when:** remote e2e matches local e2e; local mode still starts no TCP listener.
+
+## M5. Worker
+
+| Todo                          | Depends on                    | Scope                                                                                                                                                          |
+| :---------------------------- | :---------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `factory-m5-adapters-port`    | M0                            | Port v1 adapters (herdr, git, github, process, runners) with tests                                                                                             |
+| `factory-m5-client-loops`     | M4                            | Worker socket client to `factory-server`; hello, claim/heartbeat loops, idempotency ids, self-fence (remote TCP client in M4R) |
+| `factory-m5-workspace`        | `factory-m5-adapters-port`    | Mirror, worktree at base, sync/setup cache, LRU, `.worker/` excluded                                                                                             |
+| `factory-m5-inspection`       | `factory-m5-workspace`        | `run-inspection.ts`                                                                                                                                            |
+| `factory-m5-headless-station` | `factory-m5-workspace`        | `run-operator-station.ts` for headless runners first (no Herdr), checkpoint procedure (PROTOCOL §8.2)                                                          |
+| `factory-m5-operator-socket`  | `factory-m5-headless-station` | Unix socket, Cycle tokens, local validation, blob upload                                                                                                       |
+| `factory-m5-pane-runtime`     | `factory-m5-operator-socket`  | Herdr panes + `core/cycle` watch + signals + question hold                                                                                                     |
+| `factory-m5-leave`            | `factory-m5-pane-runtime`     | `SIGTERM` handling: Handover request, `HandOverCycle`, `ReleaseJob` fallback                                                                                   |
+| `factory-m5-operator-cli`     | `factory-m5-operator-socket`  | `factory-operator` verbs (`done`, `verdict`, `ask`, `tell`, `block`, `context`); startup < 100 ms test                                                          |
+| `factory-m5-deliver`          | `factory-m5-workspace`        | Squash, rebase, PR create-or-find                                                                                                                              |
 
 **Done when:** a real fixture repo Work order is delivered end to end with a scripted fake runner,
-and once manually with a real runner.
+and once manually with a real runner. Workers connect to the server over the Unix socket; no Worker
+opens the database and no network listener is needed.
 
-## M6. CLIs
+## M6. Supervisor CLI
 
-| Todo                      | Depends on                   | Scope                                                                          |
-| :------------------------ | :--------------------------- | :----------------------------------------------------------------------------- |
-| `factory-m6-operator-cli` | `factory-m5-operator-socket` | `factory-operator` verbs; startup < 100 ms test                                |
-| `factory-m6-cli`          | M4                           | `factory` commands (PROTOCOL §10), board and Traveler rendering ported from v1 |
+| Todo                      | Depends on                   | Scope                                                                                                                                        |
+| :------------------------ | :--------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------- |
+| `factory-m6-cli`          | M4                           | `factory` commands over the socket client; `factory run` starts the server; one-shot fallback via `factory-server --once`; config, coloured board and Traveler rendering (`NO_COLOR` respected) |
 
 ## M7. Distributed hardening (R2, R3, R8)
 
 | Todo                      | Depends on           | Scope                                                                                                                                   |
 | :------------------------ | :------------------- | :-------------------------------------------------------------------------------------------------------------------------------------- |
-| `factory-m7-harness`      | M6                   | Test harness: one Factory, N Cell processes, fake runner, a TCP proxy that can drop or delay traffic                                    |
-| `factory-m7-takeover`     | `factory-m7-harness` | `kill -9` a Cell mid-Cycle → another Cell restarts the Station; no double work                                                          |
-| `factory-m7-partition`    | `factory-m7-harness` | Partition a Cell → self-fence, stale epoch rejected, no push from the fenced Cell                                                       |
+| `factory-m7-harness`      | M6, M4R              | Test harness: one Factory, N Worker processes over HTTP, fake runner, a TCP proxy that can drop or delay traffic                         |
+| `factory-m7-takeover`     | `factory-m7-harness` | `kill -9` a Worker mid-Cycle → another Worker restarts the Station; no double work                                                          |
+| `factory-m7-partition`    | `factory-m7-harness` | Partition a Worker → self-fence, stale epoch rejected, no push from the fenced Worker                                                       |
 | `factory-m7-duplicates`   | `factory-m7-harness` | Drop responses → retries produce no duplicate events, continuation job delivered once                                                   |
-| `factory-m7-andon-resume` | `factory-m7-harness` | Operator blocks on Cell A; A takes another Work order at once; resume runs on Cell B from the WIP checkpoint, passed Stations not rerun |
-| `factory-m7-leave`        | `factory-m7-harness` | `SIGTERM` a Cell mid-Cycle → Handover; Cell B continues from the WIP without the Supervisor                                             |
-| `factory-m7-race`         | `factory-m7-harness` | 10 Cells, 50 Work orders, Cells joining and leaving: every Work order delivered exactly once                                            |
+| `factory-m7-andon-resume` | `factory-m7-harness` | Operator blocks on Worker A; A takes another Work order at once; resume runs on Worker B from the WIP checkpoint, passed Stations not rerun |
+| `factory-m7-leave`        | `factory-m7-harness` | `SIGTERM` a Worker mid-Cycle → Handover; Worker B continues from the WIP without the Supervisor                                             |
+| `factory-m7-race`         | `factory-m7-harness` | 10 Workers, 50 Work orders, Workers joining and leaving: every Work order delivered exactly once                                            |
 
 **Done when:** all of the above run in CI, repeated 20× without a flake.
 
@@ -166,7 +196,7 @@ and once manually with a real runner.
 | Todo                      | Depends on              | Scope                                                                                                   |
 | :------------------------ | :---------------------- | :------------------------------------------------------------------------------------------------------ |
 | `factory-m8-backup`       | M4                      | Litestream example in `deploy/`, restore runbook                                                        |
-| `factory-m8-move`         | `factory-m8-backup`, M7 | Test: export from Factory A mid-run, import into Factory B, Cells re-joined, every Work order completes |
+| `factory-m8-move`         | `factory-m8-backup`, M7 | Test: export from Factory A mid-run, import into Factory B, Workers re-joined, every Work order completes |
 | `factory-m8-git-recovery` | M7                      | `order_recovered` (CORE amendment) + rebuild from git (STORAGE §8)                                      |
 
 ## M9. Cut-over
@@ -197,4 +227,4 @@ CORE when M10 starts; nothing before M10 depends on it.
 | R5 auditable             | prompt blobs in `cycle_started`, `nudged` events, `factory log`                                                                       |
 | R6 runner-agnostic       | `factory-m5-adapters-port`                                                                                                            |
 | R7 declarative Lines     | `factory-m2-*`                                                                                                                        |
-| R8 replaceable Cells     | `factory-m5-leave`, `factory-m7-leave`, `factory-m7-race`, I11                                                                        |
+| R8 replaceable Workers     | `factory-m5-leave`, `factory-m7-leave`, `factory-m7-race`, I11                                                                        |

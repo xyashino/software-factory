@@ -1,19 +1,19 @@
-import type { CellId, JobId, OrderId } from '../ids';
+import type { WorkerId, JobId, OrderId } from '../ids';
 
-/** The lease held by the Cell running the active job of a Work order (STORAGE §4, `leases`). */
+/** The lease held by the Worker running the active job of a Work order (STORAGE §4, `leases`). */
 export interface Lease {
   orderId: OrderId;
   jobId: JobId;
-  cellId: CellId;
+  workerId: WorkerId;
   epoch: number;
   expiresAt: number;
 }
 
 export interface LeaseStore {
   insert(lease: Lease): Promise<void>;
-  /** Pushes the expiry of every listed job held by the Cell. */
+  /** Pushes the expiry of every listed job held by the Worker. */
   extend(
-    cellId: CellId,
+    workerId: WorkerId,
     jobIds: readonly JobId[],
     expiresAt: number,
   ): Promise<void>;

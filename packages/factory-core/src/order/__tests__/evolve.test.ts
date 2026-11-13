@@ -7,7 +7,7 @@ import {
   andonRaised,
   blobOf,
   cancelled,
-  cellIdOf,
+  workerIdOf,
   commitOf,
   created,
   cycleBlocked,
@@ -49,13 +49,13 @@ type StartOver = Parameters<typeof cycleStarted>[0];
 const foldEvents = (...events: OrderEvent[]): WorkOrderState =>
   fold(history(...events));
 
-/** Claims job n for Cycle n on Cell 1 (an operator Station job unless told otherwise). */
+/** Claims job n for Cycle n on Worker 1 (an operator Station job unless told otherwise). */
 const claim = (n: number, kind: JobKind = 'run_operator_station') =>
   jobClaimed({
     jobId: jobIdOf(n),
     cycleId: cycleIdOf(n),
     kind,
-    cellId: cellIdOf(1),
+    workerId: workerIdOf(1),
     epoch: n,
   });
 
@@ -63,7 +63,7 @@ const claimDelivery = (n: number) =>
   jobClaimed({
     jobId: jobIdOf(n),
     kind: 'deliver',
-    cellId: cellIdOf(1),
+    workerId: workerIdOf(1),
     epoch: n,
     cycleId: undefined,
   });
@@ -216,7 +216,7 @@ describe('evolve: job_claimed', () => {
     expect(state.activeJob).toEqual({
       jobId: jobIdOf(1),
       kind: 'run_operator_station',
-      cellId: cellIdOf(1),
+      workerId: workerIdOf(1),
       epoch: 1,
       cycleId: cycleIdOf(1),
     });
@@ -260,7 +260,7 @@ describe('evolve: job_lost', () => {
 });
 
 describe('evolve: workspace_failed', () => {
-  it('ends the job and records the cell that failed to prepare the workspace', () => {
+  it('ends the job and records the worker that failed to prepare the workspace', () => {
     const state = foldEvents(
       created(),
       claim(1),
@@ -268,7 +268,7 @@ describe('evolve: workspace_failed', () => {
     );
     expect(state.activeJob).toBeUndefined();
     expect(state.workspaceFailures).toEqual([
-      { cellId: cellIdOf(1), jobId: jobIdOf(1), at: 3000 },
+      { workerId: workerIdOf(1), jobId: jobIdOf(1), at: 3000 },
     ]);
   });
 
@@ -290,7 +290,7 @@ describe('evolve: cycle_started', () => {
     expect(state.cycles[0]).toMatchObject({
       cycleId: cycleIdOf(1),
       jobId: jobIdOf(1),
-      cellId: cellIdOf(1),
+      workerId: workerIdOf(1),
       stationId: 'plan',
       n: 1,
       status: 'running',

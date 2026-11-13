@@ -52,7 +52,7 @@ const claimJob = (
   activeJob: {
     jobId: ev.jobId,
     kind: ev.kind,
-    cellId: ev.cellId,
+    workerId: ev.workerId,
     epoch: ev.epoch,
     cycleId: ev.cycleId,
   },
@@ -72,7 +72,7 @@ const failWorkspace = (
     activeJob: undefined,
     workspaceFailures: [
       ...state.workspaceFailures,
-      { cellId: job.cellId, jobId: ev.jobId, at },
+      { workerId: job.workerId, jobId: ev.jobId, at },
     ],
   };
 };

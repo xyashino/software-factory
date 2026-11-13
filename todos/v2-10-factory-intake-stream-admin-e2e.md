@@ -5,38 +5,43 @@ depends_on: [v2-09-factory-http-command-loop]
 workflow: feature
 ---
 
-# v2-10: Factory — intake, event stream, admin, end-to-end with a fake Cell
+# v2-10: Server — intake, event feed, admin and end-to-end flow
 
 ## Objective
 
-Finish the Factory: todos flow in from git, PR state flows back, the event stream feeds the CLI,
-admin commands cover backup and moves, and a scripted fake Cell proves a Work order goes from todo
-to delivered over HTTP only.
+Complete the `factory-server` core: todos flow in from git, PR state flows back, the CLI and Workers read
+the event feed over the Unix socket, and admin operations cover backup and move. A scripted fake Worker
+connects to the server over the socket and proves a Work order goes from todo to delivered through the
+socket client.
 
 ## Read first
 
-- `docs/PLAN.md` F1, `docs/CORE.md` §5.2 (`CreateOrder`, `UpdateSpec`, `Cancel`, `RecordPrState`)
-- `docs/PROTOCOL.md` §3.1 (`/v1/stream`, `/v1/intake/sync`, export), §11
-- `docs/STORAGE.md` §4 (`intake` table), §6, §7, `docs/ROADMAP.md` M4 and M9 (todo filter)
+- `docs/PLAN.md` F0, F1, `docs/CORE.md` §5.2 (`CreateOrder`, `UpdateSpec`, `Cancel`, `RecordPrState`)
+- `docs/PROTOCOL.md` §2–3 (local socket transport, feed, admin), §11
+- `docs/STORAGE.md` §1, §4 (`intake` table), §6, §7
+- `docs/ROADMAP.md` M4 and M9 (todo filter)
 
 ## Scope (ROADMAP items)
 
-`factory-m4-intake`, `factory-m4-stream`, `factory-m4-admin`, `factory-m4-e2e-fake-cell`.
+`factory-m4-intake`, `factory-m4-feed`, `factory-m4-admin`, `factory-m4-e2e-fake-worker`.
 
 ## Deliverables
 
-1. Intake: bare mirror per project, poll + `/v1/intake/sync`; parse todos with
+1. Runtime intake: bare mirror per project, poll + runtime `sync` operation; parse todos with
    `factory-definitions`; `CreateOrder` / `UpdateSpec` / `Cancel` (only before the first claim);
    spec-drift diagnostics; only todos with `factory: v2` while the cut-over flag is on.
-2. PR state polling for delivered Work orders → `RecordPrState`.
-3. `/v1/stream` SSE from the event feed with `Last-Event-ID` = `globalSeq`.
-4. `factory-server admin backup | export | import | rebuild-projections`; import appends
-   `ExpireLease` for Work orders that had an active job; `/v1/admin/export`.
-5. A scripted fake Cell (test helper) that joins, claims and reports through HTTP only.
+2. Runtime PR state polling for delivered Work orders → `RecordPrState`.
+3. Runtime event feed: an async stream from `global_seq`, served by `factory-server` over the socket and
+   consumed by the socket client for `factory status --watch` and `factory log -f`.
+4. Runtime admin operations `backup | export | import | rebuild-projections`, exposed as local
+   `factory admin ...` commands. Import appends `ExpireLease` for Work orders that had an active job.
+5. Scripted fake Worker and fixture repo. The fake Worker connects to a `factory-server` on a temp
+   socket and runs the flow through the socket client, not in-process.
 
 ## Acceptance criteria
 
-- E2E: a `feature` Work order goes from a todo file in a fixture repo to `delivered` with the fake
-  Cell, through every Station.
-- E2E: killing and restarting the Factory mid-Work-order loses nothing.
+- E2E: a `feature` Work order goes from a todo file in a fixture repo to `delivered` through every
+  Station, with the fake Worker connected over the socket and no network listener.
+- E2E: killing and restarting the server mid-Work-order loses nothing.
+- Export → import into an empty database reproduces events, blobs and projections.
 - `pnpm turbo check-types lint test` green.

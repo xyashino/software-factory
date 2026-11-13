@@ -11,7 +11,7 @@ import type { WorkOrderState } from '../state';
 import {
   ORDER_ID,
   andonRaised,
-  cellIdOf,
+  workerIdOf,
   commitOf,
   created,
   cycleCompleted,
@@ -36,7 +36,7 @@ const claimDelivery = (n: number) =>
   jobClaimed({
     jobId: jobIdOf(n),
     kind: 'deliver',
-    cellId: cellIdOf(1),
+    workerId: workerIdOf(1),
     epoch: n,
     cycleId: undefined,
   });
@@ -59,11 +59,11 @@ const buildJob: Next = {
   },
 };
 
-const claim = (n: number, cellN = 1) =>
+const claim = (n: number, workerN = 1) =>
   jobClaimed({
     jobId: jobIdOf(n),
     cycleId: cycleIdOf(n),
-    cellId: cellIdOf(cellN),
+    workerId: workerIdOf(workerN),
     epoch: n,
   });
 const start = (n: number, station: string) =>
@@ -81,7 +81,7 @@ const passed = (n: number, station: string) => [
   cycleCompleted({ cycleId: cycleIdOf(n), commit: commitOf(n), artifacts: {} }),
 ];
 
-/** A Work order whose plan Station passed and whose build Station is running on cell 1. */
+/** A Work order whose plan Station passed and whose build Station is running on worker 1. */
 const building = (): WorkOrderState =>
   foldEvents(created(), ...passed(1, 'plan'), claim(2), start(2, 'build'));
 
@@ -130,7 +130,7 @@ describe('toProjection: orders columns (STORAGE §4)', () => {
   });
 
   it('holder is the kind of the holder of the Work order', () => {
-    expect(toProjection(building(), META).holder).toBe('cell');
+    expect(toProjection(building(), META).holder).toBe('worker');
   });
 
   it('next_kind is the kind of the next step', () => {
@@ -213,35 +213,35 @@ describe('toProjection: orders columns (STORAGE §4)', () => {
     expect(toProjection(waiting, META).resumed).toBe(true);
   });
 
-  it('last_cell_id is the cell of the latest Cycle', () => {
-    expect(toProjection(building(), META).lastCellId).toBe(cellIdOf(1));
+  it('last_worker_id is the worker of the latest Cycle', () => {
+    expect(toProjection(building(), META).lastWorkerId).toBe(workerIdOf(1));
   });
 
-  it('last_cell_id falls back to the last workspace failure when no Cycle ran', () => {
+  it('last_worker_id falls back to the last workspace failure when no Cycle ran', () => {
     const state = foldEvents(
       created(),
       claim(1, 4),
       workspaceFailed({ jobId: jobIdOf(1) }),
     );
-    expect(toProjection(state, META).lastCellId).toBe(cellIdOf(4));
+    expect(toProjection(state, META).lastWorkerId).toBe(workerIdOf(4));
   });
 
-  it('last_cell_id is absent for a fresh Work order', () => {
-    expect(toProjection(foldEvents(created()), META).lastCellId).toBeNull();
+  it('last_worker_id is absent for a fresh Work order', () => {
+    expect(toProjection(foldEvents(created()), META).lastWorkerId).toBeNull();
   });
 
-  it('avoid_cells keeps a workspace-failed cell out until the cooldown ends', () => {
+  it('avoid_workers keeps a workspace-failed worker out until the cooldown ends', () => {
     const state = foldEvents(
       created(),
       claim(1, 4),
       workspaceFailed({ jobId: jobIdOf(1) }),
     );
-    expect(toProjection(state, META).avoidCells).toEqual([
-      { cellId: cellIdOf(4), until: 3000 + WORKSPACE_COOLDOWN_MS },
+    expect(toProjection(state, META).avoidWorkers).toEqual([
+      { workerId: workerIdOf(4), until: 3000 + WORKSPACE_COOLDOWN_MS },
     ]);
   });
 
-  it('avoid_cells lists a cell once, with the latest cooldown, when it failed twice', () => {
+  it('avoid_workers lists a worker once, with the latest cooldown, when it failed twice', () => {
     const state = foldEvents(
       created(),
       claim(1, 4),
@@ -249,13 +249,13 @@ describe('toProjection: orders columns (STORAGE §4)', () => {
       claim(2, 4),
       workspaceFailed({ jobId: jobIdOf(2) }),
     );
-    expect(toProjection(state, META).avoidCells).toEqual([
-      { cellId: cellIdOf(4), until: 5000 + WORKSPACE_COOLDOWN_MS },
+    expect(toProjection(state, META).avoidWorkers).toEqual([
+      { workerId: workerIdOf(4), until: 5000 + WORKSPACE_COOLDOWN_MS },
     ]);
   });
 
-  it('avoid_cells is empty when no workspace failed', () => {
-    expect(toProjection(building(), META).avoidCells).toEqual([]);
+  it('avoid_workers is empty when no workspace failed', () => {
+    expect(toProjection(building(), META).avoidWorkers).toEqual([]);
   });
 
   it('andon_reason is the reason of the open Andon', () => {
@@ -328,8 +328,8 @@ describe('toProjection: shape and determinism', () => {
     'station_index',
     'progressed',
     'resumed',
-    'last_cell_id',
-    'avoid_cells',
+    'last_worker_id',
+    'avoid_workers',
     'andon_reason',
     'pr_url',
     'pr_state',

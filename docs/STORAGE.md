@@ -1,18 +1,36 @@
 # Storage
 
-`packages/factory-db`. Only the Factory opens the database. Cells and both CLIs never do.
+`packages/factory-db` implements storage. Only a `factory-runtime` composition opens the database; the
+CLI and Workers use runtime clients and never access storage directly.
 
 ## 1. Engine
 
-**SQLite** (`bun:sqlite`, WAL mode) behind Drizzle, owned by the single Factory process.
+**SQLite** (`bun:sqlite`, WAL mode) behind Drizzle, with **one writer per database**.
 
-Why not Postgres from day one: there is exactly one writer process (the Factory), so SQLite's single
-writer is not a limit; `BEGIN IMMEDIATE` gives an atomic claim; backup is one file; there is nothing
-to operate. The ports in `factory-core` are **async** and the SQL stays portable, so moving to
-Postgres (for an HA control plane, OPEN-QUESTIONS Q1) is an adapter change, not a redesign.
+Single-writer rule:
 
-Location: `$FACTORY_DATA_DIR/factory.db`, default `~/.local/share/factory-server/`. Never inside a
-repository.
+- `factory-db` provides the mechanism: `acquireWriter(dataDir)` takes an exclusive `flock` on
+  `factory.lock` in the data directory. It fails immediately if another process holds it and is
+  released when the holder exits or crashes. Writes through the store require a held writer.
+- `factory-runtime` provides the policy: `factory run` acquires the writer for its whole lifetime; a
+  one-shot CLI write acquires it for that command only; reads never need it. Behaviour while the
+  writer is held is OPEN-QUESTIONS Q19.
+- The in-process write mutex (§3.1) serialises writes inside the holder. The file lock is what keeps
+  a second process from writing at all.
+- The server (`factory-server`) is the only process that writes; the CLI and Workers reach it over the socket.
+
+Why not Postgres from day one: each active runtime has one writer, so SQLite's single writer is not a
+limit; `BEGIN IMMEDIATE` gives an atomic claim; backup is one file; there is nothing to operate. The
+ports in `factory-core` are **async** and the SQL stays portable, so moving to Postgres (for an HA
+control plane, OPEN-QUESTIONS Q1) is an adapter change, not a redesign.
+
+Local mode stores `$FACTORY_DATA_DIR/factory.db`, default `~/.local/share/factory/`. A remote server
+stores its own database using the same setting, defaulting to
+`~/.local/share/factory-server/`. The CLI config stores mode, remote URL/credentials, and the local
+database path; it is a config file, not a second SQLite database. Local and remote databases are
+separate sources of truth; switching modes does not copy or synchronize queue state. Never put a
+database inside a repository. The local data directory and config are user-owned and MUST NOT be
+world-readable; use restrictive platform permissions for database files and credentials.
 
 ## 2. Ports
 
@@ -53,7 +71,7 @@ interface BlobStore {
   stat(refs): Promise<Map<BlobRef, number>>;
 }
 interface LeaseStore {
-  /* insert, extend(cellId, jobs), expired(now), delete */
+  /* insert, extend(workerId, jobs), expired(now), delete */
 }
 ```
 
@@ -139,7 +157,7 @@ CREATE TABLE orders (
   depends_on             TEXT NOT NULL,                 -- JSON array of order ids
   last_seq               INTEGER NOT NULL,
   status                 TEXT NOT NULL,                 -- board status (CORE §4.2), before dependency overlay
-  holder                 TEXT NOT NULL,                 -- 'queue' | 'cell' | 'supervisor' | 'none'
+  holder                 TEXT NOT NULL,                 -- 'queue' | 'worker' | 'supervisor' | 'none'
   next_kind              TEXT NOT NULL,                 -- CORE §6 Next.kind
   job_kind               TEXT,                          -- when next_kind = 'job'
   runner                 TEXT,                          -- when the next job is an Operator station
@@ -148,8 +166,8 @@ CREATE TABLE orders (
   station_index          INTEGER,
   progressed             INTEGER NOT NULL,              -- 0/1
   resumed                INTEGER NOT NULL,              -- 0/1, a resume or reopen waits to run
-  last_cell_id           TEXT,
-  avoid_cells            TEXT NOT NULL DEFAULT '[]',    -- JSON [{ cellId, until }]
+  last_worker_id           TEXT,
+  avoid_workers            TEXT NOT NULL DEFAULT '[]',    -- JSON [{ workerId, until }]
   andon_reason           TEXT,
   pr_url                 TEXT,
   pr_state               TEXT,
@@ -168,10 +186,10 @@ CREATE TABLE commands (
   at          INTEGER NOT NULL
 );
 
-CREATE TABLE cells (
-  cell_id       TEXT PRIMARY KEY,
+CREATE TABLE workers (
+  worker_id       TEXT PRIMARY KEY,
   name          TEXT NOT NULL,
-  token_hash    TEXT NOT NULL,                          -- hash of the Cell credential
+  token_hash    TEXT NOT NULL,                          -- hash of the Worker credential
   joined_with   TEXT REFERENCES join_tokens,
   joined_at     INTEGER NOT NULL,
   revoked_at    INTEGER,
@@ -191,7 +209,7 @@ CREATE TABLE join_tokens (
 CREATE TABLE leases (
   order_id    TEXT PRIMARY KEY,                         -- one active job per Work order (I4)
   job_id      TEXT NOT NULL UNIQUE,
-  cell_id     TEXT NOT NULL REFERENCES cells,
+  worker_id     TEXT NOT NULL REFERENCES workers,
   epoch       INTEGER NOT NULL,
   expires_at  INTEGER NOT NULL
 );
@@ -254,7 +272,7 @@ OPEN-QUESTIONS Q17.
 
 - `orders` is the only projection in v2.0. It is updated inside the append transaction (§3).
 - The fold is `toProjection` in `factory-core` (pure). `factory-db` only stores the row.
-- `factory-server admin rebuild-projections` (in `apps/server`) truncates `orders`, reads `events`
+- Runtime admin operation `rebuild-projections` truncates `orders`, reads `events`
   in `global_seq` order, folds each Work order with `evolve` + `toProjection`, and writes the rows.
   It MUST produce an identical table; a test asserts this on every scenario fixture.
 - Adding a projection = a migration in `factory-db` + a pure fold in `factory-core`; never a change
@@ -266,7 +284,7 @@ Three tools, from cheapest to most portable:
 
 1. **Continuous replication (recommended):** Litestream replicating `factory.db` to S3-compatible
    storage. A new machine restores the latest state with one command. No code needed in v2.
-2. **Snapshot:** `factory-server admin backup <file>` uses SQLite `VACUUM INTO` (consistent while
+2. **Snapshot:** runtime admin operation `backup <file>` uses SQLite `VACUUM INTO` (consistent while
    running).
 3. **Export / import:** a portable, engine-independent format, also the path to Postgres:
 
@@ -278,13 +296,14 @@ Three tools, from cheapest to most portable:
    └── blobs/<sha256>       # every referenced blob
    ```
 
-   Export: `factory admin export <file>` (supervisor API) or `factory-server admin export <file>`.
+   Export: `factory admin export <file>` (available through the selected client) or
+   `factory-server admin export <file>` on a remote host.
 
-   Import: `factory-server admin import <file>`, run on the new Factory host, into an **empty**
-   database only: insert projects, blobs and events unchanged, rebuild projections, then for every
-   Work order that had an active job append `ExpireLease` as the importing Factory. Leases, tokens,
-   Cells, signals and the idempotency table are not exported: create a supervisor token
-   (`factory-server admin token create`), create a join token, and let the Cells join again.
+   Import: runtime admin operation `import <file>`, run against the target local or remote runtime,
+   into an **empty database only**: insert projects, blobs and events unchanged, rebuild projections,
+   then append `ExpireLease` as the importing runtime for each Work order that had an active job.
+   Leases, tokens, Workers, signals and the idempotency table are not exported. In remote mode, create a
+   supervisor token and join token, then let the Workers join again; local mode uses no such tokens.
 
 ## 8. Rebuild from git (last resort, no backup at all)
 
@@ -294,7 +313,7 @@ Best-effort recovery when the database is gone and no backup exists:
 2. For each `factory/<todoId>` branch, the newest commit whose trailers say
    `Factory-Outcome: passed` (PROTOCOL §8.2) gives the last passed Station and the checkpoint
    commit. An open PR for the branch marks the Work order delivered.
-3. The Factory appends `order_recovered { passedStations, checkpoint }`. Artifacts of passed
+3. The runtime appends `order_recovered { passedStations, checkpoint }`. Artifacts of passed
    Stations are not in git, so the Work order resumes from the first Station whose inputs cannot be
    recovered, on top of the checkpoint code.
 

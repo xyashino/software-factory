@@ -1,7 +1,7 @@
 import type { LineSnapshot } from '../line/snapshot';
 import type {
   BlobRef,
-  CellId,
+  WorkerId,
   CommitSha,
   CycleId,
   JobId,
@@ -55,7 +55,7 @@ export interface Usage {
 export interface CycleState {
   cycleId: CycleId;
   jobId: JobId;
-  cellId: CellId;
+  workerId: WorkerId;
   stationId: StationId;
   n: number; // per Station, 1-based
   cause: CycleCause;
@@ -93,7 +93,7 @@ export interface QuestionRecord {
 export interface ActiveJob {
   jobId: JobId;
   kind: JobKind;
-  cellId: CellId;
+  workerId: WorkerId;
   epoch: number;
   cycleId?: CycleId;
 }
@@ -130,7 +130,7 @@ export interface WorkOrderState {
   andon?: { reason: AndonReason; detail: string; at: number } | undefined;
   activeJob?: ActiveJob | undefined;
   epoch: number; // the last issued epoch, 0 before any claim
-  workspaceFailures: { cellId: CellId; jobId: JobId; at: number }[]; // consecutive; see CORE §4.3 rule 10
+  workspaceFailures: { workerId: WorkerId; jobId: JobId; at: number }[]; // consecutive; see CORE §4.3 rule 10
   deliveryFailed?: { jobId: JobId; detail: string } | undefined;
   delivery?:
     | { prUrl: string; commit: CommitSha; state: 'open' | 'merged' | 'closed' }
