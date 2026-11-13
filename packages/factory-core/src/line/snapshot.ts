@@ -1,8 +1,12 @@
 import { z } from 'zod';
 import { type StationId, stationIdSchema } from '../ids';
-import { isMachineIndependentId } from '../machine-local';
+import {
+  isMachineIndependentId,
+  isMachineIndependentText,
+} from '../machine-local';
 
 const TAG = /^[a-z0-9][a-z0-9_-]{0,63}$/;
+const ARTIFACT_KEY = /^[a-z0-9][a-z0-9._-]{0,63}$/;
 const SHA256 = /^sha256:[0-9a-f]{64}$/;
 const tag = z
   .string()
@@ -21,6 +25,35 @@ export const stationSchema = z
       .optional(),
     maxRestarts: z.number().int().min(0).max(100),
     maxLostRestarts: z.number().int().min(0).max(100),
+    // Optional and additive (CORE §11). `verdict`: an Operator whose pass is a judgment (PROTOCOL §4).
+    verdict: z.boolean().optional(),
+    // Keys of the artifacts the Station must hand over when its Cycle completes.
+    artifacts: z
+      .array(
+        z
+          .string()
+          .regex(ARTIFACT_KEY)
+          .refine(
+            isMachineIndependentId,
+            'key must not name a machine-local value',
+          ),
+      )
+      .max(32)
+      .default([]),
+    // Shell commands of an Inspection, run in order (PROTOCOL §4 `exec`).
+    exec: z
+      .array(
+        z
+          .string()
+          .min(1)
+          .max(512)
+          .refine(
+            isMachineIndependentText,
+            'command must not contain machine-local values',
+          ),
+      )
+      .max(32)
+      .optional(),
   })
   .strict();
 
