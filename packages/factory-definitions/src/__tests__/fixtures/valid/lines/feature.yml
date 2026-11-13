@@ -1,0 +1,71 @@
+# yaml-language-server: $schema=../../../../../schemas/line.schema.json
+schemaVersion: 2
+name: feature
+description: Plan, build behind a quality gate, then audit
+
+workspace:
+  sync:
+    timeout: 2m
+    exec:
+      - git fetch origin
+  setup:
+    timeout: 10m
+    exec:
+      - pnpm install --frozen-lockfile
+
+operators:
+  planner:
+    profile: planner
+    runner: claude
+    model: sonnet
+    timeout: 20m
+  builder:
+    profile: builder
+    runner: claude
+    model: haiku
+    timeout: 60m
+    permission: write
+  doctor:
+    profile: doctor
+    runner: cursor
+    model: gpt-5.6-luna-medium
+    timeout: 20m
+    headless: false
+    permission: read
+
+stations:
+  - id: plan
+    kind: operator
+    operator: planner
+    inputs: []
+
+  - id: build
+    kind: operator
+    operator: builder
+    inputs:
+      - plan.plan
+    requires: [docker]
+
+  - id: quality-gate
+    kind: inspection
+    timeout: 15m
+    exec:
+      - pnpm test
+    onFail:
+      retry: build
+      max: 3
+
+  - id: audit
+    kind: operator
+    operator: doctor
+    inputs:
+      - build.report
+      - quality-gate.gate
+    onFail:
+      retry: build
+      max: 2
+
+deliver:
+  commit: build.commit
+  report: build.report
+  to: new-pr
