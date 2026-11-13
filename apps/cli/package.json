@@ -1,0 +1,31 @@
+{
+  "name": "@repo/factory-cli",
+  "version": "0.0.0",
+  "type": "module",
+  "private": true,
+  "bin": {
+    "factory": "./src/cli.ts"
+  },
+  "exports": {
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "check-types": "tsc --noEmit",
+    "lint": "eslint src --max-warnings 0",
+    "test": "bun --bun vitest run"
+  },
+  "dependencies": {
+    "@repo/factory-core": "workspace:*",
+    "@repo/factory-definitions": "workspace:*",
+    "citty": "catalog:",
+    "picocolors": "catalog:"
+  },
+  "devDependencies": {
+    "@repo/eslint-config": "workspace:*",
+    "@repo/typescript-config": "workspace:*",
+    "@types/node": "catalog:",
+    "eslint": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}
