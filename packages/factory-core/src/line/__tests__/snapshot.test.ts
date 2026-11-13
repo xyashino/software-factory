@@ -40,6 +40,26 @@ describe('line snapshot lookup', () => {
     expect(lineSnapshotSchema.safeParse(duplicate).success).toBe(false);
   });
 
+  it('gives a station no declared artifacts when it names none', () => {
+    const bare = { ...LINE.stations[1]!, artifacts: undefined };
+
+    const parsed = lineSnapshotSchema.parse({
+      ...LINE,
+      stations: [bare],
+    });
+
+    expect(parsed.stations[0]?.artifacts).toEqual([]);
+  });
+
+  it('rejects an inspection command that names a machine-local path', () => {
+    const broken = {
+      ...LINE,
+      stations: [{ ...LINE.stations[3]!, exec: ['cat /home/dev/build.log'] }],
+    };
+
+    expect(lineSnapshotSchema.safeParse(broken).success).toBe(false);
+  });
+
   it('accepts a single-station line', () => {
     expect(makeLine([LINE.stations[0]!]).stations).toHaveLength(1);
   });

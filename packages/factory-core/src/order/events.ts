@@ -38,7 +38,7 @@ const artifactKeyText = z
   .refine(isMachineIndependentId, 'key must not name a machine-local value');
 
 /** Free text: at most 4 KiB of UTF-8 and machine independent. Larger content is a blob. */
-const freeText = z
+export const freeText = z
   .string()
   .refine(
     (text) => byteLength(text) <= MAX_TEXT_BYTES,
@@ -60,7 +60,7 @@ const tailText = z
     'tail must not contain machine-local values',
   );
 /** A name, tag or short label. */
-const shortText = z
+export const shortText = z
   .string()
   .min(1)
   .max(MAX_NAME_CHARS)
@@ -69,11 +69,11 @@ const shortText = z
     'name must not contain machine-local values',
   );
 const contentHash = z.string().regex(SHA256);
-const prUrl = z.string().regex(HTTPS_URL);
+export const prUrl = z.string().regex(HTTPS_URL);
 const nonNegativeInt = z.number().int().min(0);
 const positiveInt = z.number().int().min(1);
 
-const priorities = z.enum(['high', 'medium', 'low']);
+export const priorities = z.enum(['high', 'medium', 'low']);
 const changeTypes = z.enum([
   'feat',
   'fix',
@@ -87,7 +87,7 @@ const changeTypes = z.enum([
   'style',
   'revert',
 ]);
-const specSchema = z
+export const specSchema = z
   .object({
     title: freeText,
     type: changeTypes,
@@ -95,7 +95,7 @@ const specSchema = z
     contentHash,
   })
   .strict();
-const pinnedLineSchema = z
+export const pinnedLineSchema = z
   .object({
     name: tagText,
     hash: z.string().regex(SHA256),
@@ -108,14 +108,19 @@ const pinnedLineSchema = z
       line.name === line.snapshot.name && line.hash === line.snapshot.hash,
     'line name and hash must match the snapshot',
   );
-const artifactsSchema = z.record(artifactKeyText, blobRefSchema);
+export const artifactsSchema = z.record(artifactKeyText, blobRefSchema);
 const jobKindSchema = z.enum([
   'run_operator_station',
   'run_inspection',
   'deliver',
 ]);
-const workspaceStageSchema = z.enum(['fetch', 'sync', 'worktree', 'setup']);
-const cycleFailureSchema = z.enum([
+export const workspaceStageSchema = z.enum([
+  'fetch',
+  'sync',
+  'worktree',
+  'setup',
+]);
+export const cycleFailureSchema = z.enum([
   'timed_out',
   'crashed',
   'stalled',
@@ -130,13 +135,13 @@ const andonReasonSchema = z.enum([
   'workspace_failed',
   'delivery_failed',
 ]);
-const resumeModeSchema = z.discriminatedUnion('kind', [
+export const resumeModeSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('retry_station') }).strict(),
   z
     .object({ kind: z.literal('restart_from'), stationId: stationIdSchema })
     .strict(),
 ]);
-const cycleCauseSchema = z.discriminatedUnion('kind', [
+export const cycleCauseSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('first') }).strict(),
   z.object({ kind: z.literal('retry'), feedbackFrom: cycleIdSchema }).strict(),
   z.object({ kind: z.literal('restart'), of: cycleIdSchema }).strict(),
@@ -149,7 +154,7 @@ const cycleCauseSchema = z.discriminatedUnion('kind', [
     })
     .strict(),
 ]);
-const inspectionResultSchema = z
+export const inspectionResultSchema = z
   .object({
     command: freeText,
     exitCode: z.number().int().nullable(),
@@ -159,10 +164,10 @@ const inspectionResultSchema = z
     logBlob: blobRefSchema,
   })
   .strict();
-const operatorSchema = z
+export const operatorSchema = z
   .object({ profile: shortText, runner: shortText, model: shortText })
   .strict();
-const actorSchema = z.discriminatedUnion('kind', [
+export const actorSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('factory') }).strict(),
   z.object({ kind: z.literal('worker'), workerId: workerIdSchema }).strict(),
   z

@@ -16,7 +16,9 @@ import {
   type Station,
   lineSnapshotSchema,
 } from '../../line/snapshot';
-import type { OrderEvent, StoredEvent } from '../events';
+import type { DecideContext } from '../commands';
+import type { Decision } from '../decide-guards';
+import type { Actor, OrderEvent, StoredEvent } from '../events';
 import { evolve } from '../evolve';
 import type { WorkOrderState } from '../state';
 
@@ -45,13 +47,18 @@ const operator = (id: string, extra: Partial<Station> = {}): Station => ({
   requires: [],
   maxRestarts: 1,
   maxLostRestarts: 3,
+  artifacts: [],
   ...extra,
 });
 
 const DEFAULT_STATIONS: Station[] = [
-  operator('plan'),
+  operator('plan', { artifacts: ['plan'] }),
   operator('build', { requires: ['docker'] }),
-  operator('audit', { onFail: { retry: stationOf('build'), max: 2 } }),
+  operator('audit', {
+    verdict: true,
+    artifacts: ['review'],
+    onFail: { retry: stationOf('build'), max: 2 },
+  }),
   {
     id: stationOf('check'),
     kind: 'inspection',
@@ -59,6 +66,8 @@ const DEFAULT_STATIONS: Station[] = [
     onFail: { retry: stationOf('build'), max: 1 },
     maxRestarts: 1,
     maxLostRestarts: 3,
+    artifacts: [],
+    exec: ['pnpm test'],
   },
 ];
 
@@ -388,6 +397,49 @@ export const fold = (events: StoredEvent[]): WorkOrderState => {
 /** A Traveler that has claimed its first job on plan and is running the first Cycle. */
 export const runningPlan = (): StoredEvent[] =>
   history(created(), jobClaimed(), cycleStarted());
+
+/** The pinned form of a Line, as `order_created` carries it (CORE §4.4). */
+export const pinnedLineOf = (line: LineSnapshot) => ({
+  name: line.name,
+  hash: line.hash,
+  snapshotBlob: blobOf(9),
+  snapshot: line,
+});
+
+/** The ids a decision hands out, in order: ULIDs with the letter D, 1 first. */
+export const generatedIdOf = (n: number): string => ulid('D', n);
+
+/**
+ * A decide context. Ids are counted from 1. Every blob exists and has 100 bytes, except those listed
+ * as `missing` or `empty`. `epoch` is what the caller claims to hold.
+ */
+export const contextOf = (
+  actor: Actor = { kind: 'factory' },
+  options: { epoch?: number; missing?: string[]; empty?: string[] } = {},
+): DecideContext => {
+  let issued = 0;
+  return {
+    now: 5000,
+    ids: {
+      next: () => {
+        issued += 1;
+        return generatedIdOf(issued);
+      },
+    },
+    actor,
+    epoch: options.epoch,
+    blobs: {
+      exists: (ref) => !(options.missing ?? []).includes(ref),
+      size: (ref) => ((options.empty ?? []).includes(ref) ? 0 : 100),
+    },
+  };
+};
+
+/** The event types of a successful decision; a refusal fails the test with its error. */
+export const typesOf = (result: Decision): string[] => {
+  if (!result.ok) throw new Error(`refused: ${JSON.stringify(result.error)}`);
+  return result.value.map((event) => event.type);
+};
 
 /** Every event type of the catalogue, with a valid sample. Keyed by type so a missing sample fails to type-check. */
 export const samples: { [T in OrderEvent['type']]: Ev<T> } = {
