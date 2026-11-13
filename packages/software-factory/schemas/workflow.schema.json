@@ -1,0 +1,186 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://omino.dev/schemas/software-factory/workflow.schema.json",
+  "title": "software-factory workflow",
+  "description": "A production line: setup, an agent pool, an on-call operator, ordered steps and a delivery. Mirrors the Zod contract in src/definitions/workflow.ts.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "name",
+    "description",
+    "setup",
+    "agents",
+    "operator",
+    "steps",
+    "deliver"
+  ],
+  "properties": {
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Workflow name. Must equal the file name without .yml."
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1,
+      "description": "One line on what the workflow is for."
+    },
+    "setup": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["timeout", "exec"],
+      "description": "Commands run once in the fresh worktree before any step.",
+      "properties": {
+        "timeout": { "$ref": "#/$defs/duration" },
+        "exec": { "$ref": "#/$defs/commandList" }
+      }
+    },
+    "agents": {
+      "type": "object",
+      "description": "Agent pool, keyed by kebab-case agent name. Steps pick from it.",
+      "minProperties": 1,
+      "propertyNames": { "$ref": "#/$defs/kebabId" },
+      "additionalProperties": { "$ref": "#/$defs/agentDef" }
+    },
+    "operator": {
+      "$ref": "#/$defs/agentDef",
+      "description": "The on-call operator agent. Required at the root; it answers questions and unblocks steps."
+    },
+    "steps": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Steps run in order. On success the next step starts.",
+      "items": {
+        "oneOf": [
+          { "$ref": "#/$defs/agentStep" },
+          { "$ref": "#/$defs/commandsStep" }
+        ]
+      }
+    },
+    "deliver": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["commit", "report", "to"],
+      "description": "What is delivered when the last step passes.",
+      "properties": {
+        "commit": {
+          "$ref": "#/$defs/artifactRef",
+          "description": "Artifact holding the commit message, like build.commit."
+        },
+        "report": {
+          "$ref": "#/$defs/artifactRef",
+          "description": "Artifact holding the report, like build.report."
+        },
+        "to": {
+          "enum": ["new-pr"],
+          "description": "new-pr opens a pull request."
+        }
+      }
+    }
+  },
+  "$defs": {
+    "kebabId": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$"
+    },
+    "duration": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]*(s|m|h)$",
+      "description": "A duration like 30s, 20m or 1h. No decimals, no zero."
+    },
+    "commandList": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "artifactRef": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*\\.[a-z][a-zA-Z0-9]*$",
+      "description": "<stepId>.<artifactKey>"
+    },
+    "inputRef": {
+      "type": "string",
+      "pattern": "^(task\\.[a-zA-Z][a-zA-Z0-9]*|[a-z][a-z0-9-]*\\.[a-z][a-zA-Z0-9]*)$",
+      "description": "<stepId>.<artifactKey>, <stepId>.gate or task.<field>"
+    },
+    "agentDef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role", "runner", "model", "timeout"],
+      "properties": {
+        "role": {
+          "$ref": "#/$defs/kebabId",
+          "description": "Role id; names a file in roles/."
+        },
+        "runner": {
+          "enum": ["claude", "codex", "cursor", "antigravity", "opencode"],
+          "description": "The agent CLI that runs this agent."
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Model name passed to the runner."
+        },
+        "timeout": { "$ref": "#/$defs/duration" },
+        "headless": {
+          "type": "boolean",
+          "default": false,
+          "description": "Run without an interactive pane."
+        },
+        "permission": {
+          "enum": ["read", "write"],
+          "default": "write",
+          "description": "read blocks file edits."
+        }
+      }
+    },
+    "stepId": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "not": { "enum": ["task", "operator"] },
+      "description": "Kebab-case step id. \"task\" and \"operator\" are reserved."
+    },
+    "onFail": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["retry", "max"],
+      "description": "On failure, go back to an earlier step, at most max times.",
+      "properties": {
+        "retry": { "$ref": "#/$defs/kebabId" },
+        "max": { "type": "integer", "minimum": 1, "maximum": 5 }
+      }
+    },
+    "agentStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "agent"],
+      "properties": {
+        "id": { "$ref": "#/$defs/stepId" },
+        "type": { "const": "agent" },
+        "agent": {
+          "type": "string",
+          "minLength": 1,
+          "description": "A key of agents:."
+        },
+        "inputs": {
+          "type": "array",
+          "default": [],
+          "items": { "$ref": "#/$defs/inputRef" }
+        },
+        "onFail": { "$ref": "#/$defs/onFail" }
+      }
+    },
+    "commandsStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "timeout", "exec"],
+      "properties": {
+        "id": { "$ref": "#/$defs/stepId" },
+        "type": { "const": "commands" },
+        "timeout": { "$ref": "#/$defs/duration" },
+        "exec": { "$ref": "#/$defs/commandList" },
+        "onFail": { "$ref": "#/$defs/onFail" }
+      }
+    }
+  }
+}

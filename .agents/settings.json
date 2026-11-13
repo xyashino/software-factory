@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__playwright__*",
+      "mcp__a11y__*",
+      "Bash(git checkout -b *)",
+      "Bash(git switch -c *)",
+      "Bash(git branch *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git push -u origin *)",
+      "Bash(git push origin *)"
+    ]
+  },
+  "attribution": {
+    "commit": "",
+    "pr": ""
+  },
+  "enabledMcpjsonServers": [
+    "playwright",
+    "a11y"
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "name": "software-factory",
+  "private": true,
+  "scripts": {
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "check-types": "turbo run check-types",
+    "test": "turbo run test",
+    "test:coverage": "turbo run test:coverage",
+    "format": "prettier --write \"**/*.{ts,tsx,json,yaml,css,js,jsx}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,json,yaml,css,js,jsx}\"",
+    "ci:format": "lint-staged",
+    "ci:verify": "turbo run //#format:check lint check-types test build --ui=stream",
+    "sf": "bun packages/software-factory/src/cli.ts",
+    "sf:run": "bun packages/software-factory/src/cli.ts run",
+    "sf:status": "bun packages/software-factory/src/cli.ts status",
+    "sf:reset": "bun packages/software-factory/src/cli.ts reset",
+    "nitpick:check": "pnpm nitpick --check",
+    "nitpick:sync": "pnpm nitpick --sync",
+    "prepare": "node scripts/prepare.mjs"
+  },
+  "devDependencies": {
+    "@repo/nitpick": "workspace:*",
+    "husky": "catalog:",
+    "lint-staged": "catalog:",
+    "prettier": "catalog:",
+    "turbo": "catalog:"
+  },
+  "packageManager": "pnpm@12.15.0",
+  "engines": {
+    "node": ">=24.0.0"
+  }
+}

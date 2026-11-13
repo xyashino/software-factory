@@ -1,0 +1,48 @@
+name: feature
+description: Plan, build behind a gate, then audit
+
+setup:
+  timeout: 10m
+  exec: [pnpm install --frozen-lockfile]
+
+agents:
+  planner: { role: planner, runner: claude, model: opus, timeout: 20m }
+  worker: { role: worker, runner: claude, model: sonnet, timeout: 60m }
+  doctor:
+    {
+      role: doctor,
+      runner: opencode,
+      model: sonnet,
+      timeout: 20m,
+      permission: read,
+    }
+
+operator: { role: operator, runner: claude, model: sonnet, timeout: 20m }
+
+steps:
+  - id: plan
+    type: agent
+    agent: planner
+
+  - id: build
+    type: agent
+    agent: worker
+    inputs: [plan.plan]
+
+  - id: quality-gate
+    type: commands
+    timeout: 15m
+    exec:
+      - pnpm test
+    onFail: { retry: build, max: 3 }
+
+  - id: audit
+    type: agent
+    agent: doctor
+    inputs: [plan.plan, build.report, quality-gate.gate]
+    onFail: { retry: build, max: 2 }
+
+deliver:
+  commit: build.commit
+  report: build.report
+  to: new-pr

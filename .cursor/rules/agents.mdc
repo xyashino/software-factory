@@ -1,0 +1,6 @@
+---
+description: Software Factory agent instructions
+alwaysApply: true
+---
+
+Read and follow @.agents/AGENTS.md before every task. Links in it are relative to `.agents/`.

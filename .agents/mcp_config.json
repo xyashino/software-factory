@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "playwright": {
+      "command": "npx",
+      "args": [
+        "@playwright/mcp@latest"
+      ]
+    },
+    "a11y": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "a11y-mcp"
+      ]
+    }
+  }
+}

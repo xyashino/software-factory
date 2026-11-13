@@ -1,0 +1,94 @@
+# yaml-language-server: $schema=../schemas/workflow.schema.json
+name: feature
+description: Plan, review the plan, build behind a quality gate, then audit
+
+setup:
+  timeout: 10m
+  exec:
+    - pnpm install --frozen-lockfile
+
+agents:
+  planner:
+    role: planner
+    runner: claude
+    model: haiku
+    timeout: 20m
+    headless: false
+    permission: write
+  plan-reviewer:
+    role: plan-reviewer
+    runner: cursor
+    model: cursor-grok-4.5-medium
+    timeout: 10m
+    headless: false
+    permission: write
+  worker:
+    role: worker
+    runner: claude
+    model: sonnet
+    timeout: 60m
+    headless: false
+    permission: write
+  doctor:
+    role: doctor
+    runner: antigravity
+    model: gemini-3.8-flash-medium
+    timeout: 20m
+    headless: false
+    permission: read
+
+operator:
+  role: operator
+  runner: cursor
+  model: composer-2.5
+  timeout: 20m
+  headless: false
+  permission: write
+
+steps:
+  - id: plan
+    type: agent
+    agent: planner
+    inputs: []
+
+  - id: plan-review
+    type: agent
+    agent: plan-reviewer
+    inputs:
+      - plan.plan
+    onFail:
+      retry: plan
+      max: 2
+
+  - id: build
+    type: agent
+    agent: worker
+    inputs:
+      - plan.plan
+
+  - id: quality-gate
+    type: commands
+    timeout: 15m
+    exec:
+      - pnpm check-types
+      - pnpm lint
+      - pnpm test
+    onFail:
+      retry: build
+      max: 3
+
+  - id: audit
+    type: agent
+    agent: doctor
+    inputs:
+      - plan.plan
+      - build.report
+      - quality-gate.gate
+    onFail:
+      retry: build
+      max: 2
+
+deliver:
+  commit: build.commit
+  report: build.report
+  to: new-pr

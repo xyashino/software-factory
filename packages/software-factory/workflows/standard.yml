@@ -1,0 +1,65 @@
+# yaml-language-server: $schema=../schemas/workflow.schema.json
+name: standard
+description: Direct worker build with quality gate and doctor audit (bypasses planning)
+
+setup:
+  timeout: 10m
+  exec:
+    - pnpm install --frozen-lockfile
+
+agents:
+  worker:
+    role: worker
+    runner: claude
+    model: sonnet
+    timeout: 60m
+    headless: false
+    permission: write
+
+  doctor:
+    role: doctor
+    runner: claude
+    model: sonnet
+    timeout: 20m
+    headless: false
+    permission: read
+
+operator:
+  role: operator
+  runner: claude
+  model: sonnet
+  timeout: 20m
+  headless: false
+  permission: write
+
+steps:
+  - id: build
+    type: agent
+    agent: worker
+    inputs: []
+
+  - id: quality-gate
+    type: commands
+    timeout: 15m
+    exec:
+      - pnpm check-types
+      - pnpm lint
+      - pnpm test
+    onFail:
+      retry: build
+      max: 3
+
+  - id: audit
+    type: agent
+    agent: doctor
+    inputs:
+      - build.report
+      - quality-gate.gate
+    onFail:
+      retry: build
+      max: 2
+
+deliver:
+  commit: build.commit
+  report: build.report
+  to: new-pr

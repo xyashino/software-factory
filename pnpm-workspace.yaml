@@ -1,0 +1,41 @@
+packages:
+  - packages/*
+
+engineStrict: true
+saveExact: true
+catalogMode: strict
+linkWorkspacePackages: false
+pmOnFail: error
+trustPolicy: no-downgrade
+
+trustPolicyExclude:
+  - semver@6.3.1
+
+catalog:
+  '@eslint/js': 9.39.5
+  '@types/bun': 1.4.4
+  '@types/node': 26.6.4
+  '@vitest/coverage-v8': 5.1.0
+  ajv: 8.20.0
+  citty: 0.2.2
+  drizzle-orm: 0.45.4
+  eslint: 9.39.5
+  eslint-config-prettier: 10.1.8
+  eslint-plugin-only-warn: 1.2.1
+  eslint-plugin-react: 7.37.5
+  eslint-plugin-react-hooks: 7.1.1
+  eslint-plugin-turbo: 2.11.10
+  globals: 17.13.0
+  husky: 9.1.7
+  lint-staged: 17.6.0
+  picocolors: 1.1.1
+  prettier: 3.9.10
+  turbo: 2.11.10
+  typescript: 6.0.3
+  typescript-eslint: 8.72.1
+  vitest: 5.1.0
+  yaml: 2.9.1
+  zod: 4.6.7
+
+allowBuilds:
+  esbuild: true

@@ -1,0 +1,35 @@
+{
+  "name": "@repo/nitpick",
+  "version": "0.0.0",
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    "./*": {
+      "types": "./dist/*.d.ts",
+      "import": "./dist/*.js"
+    }
+  },
+  "license": "MIT",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && node -e \"require('fs').cpSync('src/rules','dist/rules',{recursive:true,filter:s=>!s.endsWith('.ts')})\"",
+    "dev": "tsc -p tsconfig.build.json --watch",
+    "check-types": "tsc --noEmit",
+    "lint": "eslint src --max-warnings 0",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage --coverage.reporter=text"
+  },
+  "devDependencies": {
+    "@repo/eslint-config": "workspace:*",
+    "@repo/typescript-config": "workspace:*",
+    "@types/node": "catalog:",
+    "@vitest/coverage-v8": "catalog:",
+    "eslint": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "bin": {
+    "nitpick": "./dist/cli.js"
+  }
+}

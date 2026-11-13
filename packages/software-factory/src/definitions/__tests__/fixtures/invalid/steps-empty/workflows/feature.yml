@@ -1,0 +1,20 @@
+name: feature
+description: Plan, build behind a gate, then audit
+
+setup:
+  timeout: 10m
+  exec: [pnpm install --frozen-lockfile]
+
+agents:
+  planner: { role: planner, runner: claude, model: opus, timeout: 20m }
+  worker: { role: worker, runner: claude, model: sonnet, timeout: 60m }
+  doctor: { role: doctor, runner: claude, model: sonnet, timeout: 20m }
+
+operator: { role: operator, runner: claude, model: sonnet, timeout: 20m }
+
+steps: []
+
+deliver:
+  commit: build.commit
+  report: build.report
+  to: new-pr

@@ -1,0 +1,11 @@
+/skills
+.tmp
+.evidences/
+.courses
+node_modules/
+.turbo/
+dist/
+coverage/
+.worktrees/
+.boss.lock
+.factory/
