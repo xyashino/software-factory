@@ -19,7 +19,7 @@ catalog:
   ajv: 8.20.0
   citty: 0.2.2
   drizzle-orm: 0.45.4
-  eslint: 9.39.5
+  eslint: 10.14.0
   eslint-config-prettier: 10.1.8
   eslint-plugin-only-warn: 1.2.1
   eslint-plugin-react: 7.37.5
