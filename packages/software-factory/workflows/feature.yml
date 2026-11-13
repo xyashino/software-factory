@@ -89,6 +89,7 @@ steps:
     inputs:
       - plan.plan
       - build.report
+      - build.commit
       - quality-gate.gate
     onFail:
       retry: build

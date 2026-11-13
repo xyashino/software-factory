@@ -22,8 +22,8 @@ You are the Doctor for task {{taskId}}, attempt {{attemptId}}. You audit quality
 
 1. Read the diff against `origin/main` in the worktree.
 2. Scope: the change does what the task and the worker report say, nothing more.
-3. Rules: check the rules in the `.nitpick/config.ts` rules tree that apply to the changed files.
-4. Proof: proof exists under `{{evidenceDir}}`.
+3. Rules: check the rules in the `.nitpick/config.ts` rules tree that apply to the changed files. For `rich-commit`, check the commit message in the `build.commit` input, not HEAD: the commit of this attempt does not exist yet (the supervisor makes it after the audit), so `pnpm nitpick:check` reporting HEAD is expected. Record that under "Notes", not as blocking.
+4. Proof: the worker's proof is in the directory of the `build.report` input (the worker's evidence directory). Check it there. `{{evidenceDir}}` holds only this audit's prompt and feedback; an empty `{{evidenceDir}}` is not missing proof.
 5. Decision log: exactly one new entry in decisions/ matches the `decision-log` rule in `.nitpick/config.ts`, with the right scope.
 
 ## Commands
