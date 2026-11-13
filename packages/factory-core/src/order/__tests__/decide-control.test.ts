@@ -5,6 +5,7 @@ import {
   blobOf,
   contextOf,
   created,
+  cycleBlocked,
   cycleFailed,
   cycleIdOf,
   generatedIdOf,
@@ -416,12 +417,21 @@ describe('Resume', () => {
   });
 
   it('resumes at a restart Station named by the Supervisor', () => {
+    // plan passed, build blocked: the Work order stopped at build, so restarting at build is allowed.
+    const blockedAtBuild = stateOf([
+      created(),
+      ...passedStation(1, 'plan', 2, { plan: blobOf(2) }),
+      claim(2),
+      start(2, 'build'),
+      cycleBlocked({ cycleId: cycleIdOf(2) }),
+      andonRaised({ reason: 'cycle_blocked' }),
+    ]);
     const restart = {
       type: 'Resume' as const,
       mode: { kind: 'restart_from' as const, stationId: stationOf('build') },
     };
 
-    const result = decide(andonWith('cycle_blocked'), restart, supervisor());
+    const result = decide(blockedAtBuild, restart, supervisor());
 
     expect(result).toMatchObject({
       ok: true,

@@ -67,6 +67,14 @@ export const lineSnapshotSchema = z
   .strict()
   .superRefine((line, ctx) => {
     const ids = new Set(line.stations.map((station) => station.id));
+    // Only an operator's Cycle commits work, so a Line without one has no checkpoint to deliver from.
+    if (!line.stations.some((station) => station.kind === 'operator')) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'a line needs at least one operator station',
+        path: ['stations'],
+      });
+    }
     if (ids.size !== line.stations.length) {
       ctx.addIssue({
         code: 'custom',
