@@ -144,9 +144,7 @@ describe('buildPrompt', () => {
     expect(prompt).toContain('- `pnpm check-types`');
     expect(prompt).toContain('- `pnpm test`');
     expect(prompt).toContain('Do not re-run these commands');
-    expect(prompt).toContain(
-      'Run no commands.',
-    );
+    expect(prompt).toContain('Run no commands.');
   });
 
   it('renders nothing for a gate that has not passed', () => {
