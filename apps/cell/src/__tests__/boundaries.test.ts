@@ -33,11 +33,29 @@ describe('factory-cell boundaries', () => {
     expect(rules).toContain('no-restricted-imports');
   });
 
-  it('rejects an import of the runtime library', async () => {
+  it('rejects an import of the runtime library from Cell source', async () => {
     const rules = await reportedRules(
       `import { createRuntime } from '@repo/factory-runtime/composition';`,
     );
     expect(rules).toContain('no-restricted-imports');
+  });
+
+  it('rejects an import of factory-server from Cell source', async () => {
+    const rules = await reportedRules(
+      `import { startSocketListener } from '@repo/factory-server/socket/listener';`,
+    );
+    expect(rules).toContain('no-restricted-imports');
+  });
+
+  it('allows the e2e tests to boot the runtime and the server', async () => {
+    const eslint = new ESLint({ cwd: PACKAGE_DIR });
+    const [result] = await eslint.lintText(
+      `import { openRuntime } from '@repo/factory-runtime/open-runtime';\nimport { startSocketListener } from '@repo/factory-server/socket/listener';`,
+      { filePath: resolve(PACKAGE_DIR, 'src/__tests__/e2e/probe.ts') },
+    );
+    expect(
+      (result?.messages ?? []).map((message) => message.ruleId),
+    ).not.toContain('no-restricted-imports');
   });
 
   it('accepts an import of factory-core', async () => {

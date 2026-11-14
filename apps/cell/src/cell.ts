@@ -5,13 +5,16 @@ import {
 } from '@repo/factory-core/contracts/cell';
 import type { CellId } from '@repo/factory-core/ids';
 import type { CellConfig } from './config';
+import { createRegistry } from './cycle/registry';
 import type { SystemPort } from './ports/system.port';
 import type { ClockPort } from './ports/clock.port';
 import { createJobRegistry } from './jobs/registry';
 import { runJob } from './jobs/run-job';
 import type { JobContext } from './jobs/send';
+import { leaveCell } from './leave';
 import { createHeartbeat } from './loops/heartbeat';
 import { runSlot } from './loops/claim';
+import type { PaneDriver } from './ports';
 
 /** Loop timings the Factory does not decide: a test shortens them; the hello answer sets the rest. */
 export interface CellTiming {
@@ -30,6 +33,8 @@ export interface CellOptions {
   system: SystemPort;
   clock: ClockPort;
   version: string;
+  /** Optional Herdr pane driver for non-headless Operator stations. */
+  pane?: PaneDriver;
   timing?: CellTiming;
   sleep?: (ms: number) => Promise<void>;
   onError?: (error: unknown, context: string) => void;
@@ -40,6 +45,11 @@ export interface RunningCell {
   readonly config: HelloResponse['config'];
   /** Stops claims, aborts every job, and stops the heartbeat. Jobs end at their next step. */
   stop(): void;
+  /**
+   * Leaves the Cell gracefully (PROTOCOL §9): pauses claims, asks every live Operator station to hand
+   * over, waits up to the leave cap while heartbeats keep running, and then stops the Cell.
+   */
+  leave(pollMs?: number): Promise<{ remaining: number }>;
   /** Resolves once every slot has left its loop (after `stop`, a slot leaves at its next claim). */
   readonly slotsDone: Promise<void>;
 }
@@ -73,6 +83,7 @@ export const startCell = async (options: CellOptions): Promise<RunningCell> => {
   const sleep = options.sleep ?? wait;
 
   const registry = createJobRegistry();
+  const stations = createRegistry();
   const heartbeat = createHeartbeat({
     client,
     cellId,
@@ -93,10 +104,24 @@ export const startCell = async (options: CellOptions): Promise<RunningCell> => {
     cellDataDir: options.cellDataDir,
     worktreeLimit: config.worktreeLimit,
     inUse: new Set(),
+    stations,
+    takeSignals: (jobId) => registry.takeSignals(jobId),
+    ...(options.pane ? { pane: options.pane } : {}),
   };
 
   let stopping = false;
-  const isStopped = (): boolean => stopping;
+  let stopped = false;
+  let leaving: Promise<{ remaining: number }> | undefined;
+  const isStopped = (): boolean => stopping || stopped;
+
+  const stop = (): void => {
+    if (stopped) return;
+    stopped = true;
+    stopping = true;
+    clearInterval(beat);
+    clearInterval(fenceCheck);
+    registry.abortAll('the Cell is stopping');
+  };
 
   const slots = Array.from({ length: config.slots }, () =>
     runSlot({
@@ -124,12 +149,18 @@ export const startCell = async (options: CellOptions): Promise<RunningCell> => {
 
   return {
     config: hello.config,
-    stop() {
-      if (stopping) return;
+    stop,
+    leave: (pollMs = 1_000) => {
       stopping = true;
-      clearInterval(beat);
-      clearInterval(fenceCheck);
-      registry.abortAll('the Cell is stopping');
+      leaving ??= leaveCell({
+        registry: stations,
+        sleep,
+        now: () => options.clock.now(),
+        pollMs,
+      }).finally(() => {
+        stop();
+      });
+      return leaving;
     },
     slotsDone: Promise.all(slots).then(() => undefined),
   };

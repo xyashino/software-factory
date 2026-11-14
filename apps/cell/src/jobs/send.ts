@@ -1,11 +1,14 @@
 import { createHash } from 'node:crypto';
 import { stripVTControlCharacters } from 'node:util';
+import type { Signal } from '@repo/factory-core/contracts/cell';
 import type { FactoryClient } from '@repo/factory-core/contracts/client';
 import type { Job } from '@repo/factory-core/contracts/job';
 import { fitBlob } from '@repo/factory-core/blob-rules';
-import type { CellId, BlobRef } from '@repo/factory-core/ids';
+import type { CellId, BlobRef, JobId } from '@repo/factory-core/ids';
 import type { OrderCommand } from '@repo/factory-core/order/commands';
 import type { OrderEvent } from '@repo/factory-core/order/events';
+import type { StationRegistry } from '../cycle/registry';
+import type { PaneDriver } from '../ports';
 import type { SystemPort } from '../ports/system.port';
 import { commandIdOf } from '../factory-client';
 
@@ -18,6 +21,12 @@ export interface JobContext {
   worktreeLimit: number;
   /** Worktrees a job holds; eviction keeps them. */
   inUse: Set<string>;
+  /** Live Operator stations on this Cell, asked to hand over on leave. */
+  stations?: StationRegistry;
+  /** Takes queued heartbeat signals for one running job. */
+  takeSignals?: (jobId: JobId) => Signal[];
+  /** Optional Herdr pane driver for non-headless Operator stations. */
+  pane?: PaneDriver;
 }
 
 /**
