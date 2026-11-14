@@ -128,7 +128,11 @@ export const buildJob = async (
       deliver: {
         title: state.spec.title,
         bodyBlob,
-        commitMessage: state.spec.title,
+        commitMessage: richCommitOf(
+          state.spec.type,
+          state.spec.title,
+          state.todoId,
+        ),
         removeTodo: `todos/${state.todoId}.md`,
       },
     });
@@ -254,7 +258,12 @@ export const buildJob = async (
       outputs: context.outputs.map((output) => ({
         key: output.key,
         path: output.path,
-        required: true,
+        // A verdict writes its feedback only when it fails: the domain refuses a failing verdict without it,
+        // so a passing verdict must not be refused for a feedback file it has no reason to write.
+        required: !(
+          output.key === 'feedback' &&
+          (station.verdict ?? profile.verdict)
+        ),
       })),
       verdict: station.verdict ?? profile.verdict,
       runtimePrompts: ports.definitions.runtimePrompts,
@@ -343,4 +352,21 @@ export const buildPlanJob = async (
 /** A claimed job always carries its Cycle id; a missing one is a bug in the claim, not a refusal. */
 const stationCycleMissing = (): never => {
   throw new Error('a claimed job has no cycle id');
+};
+
+/**
+ * The deliver commit: one `type(scope): title` subject, a blank line and a `- ` change list, the shape the
+ * repository's commit-message rule (rich-commit) accepts. The todo id prefix of the title is not repeated.
+ */
+export const richCommitOf = (
+  type: string,
+  title: string,
+  todoId: string,
+): string => {
+  const plain = title.startsWith(`${todoId}:`)
+    ? title.slice(todoId.length + 1).trim()
+    : title.trim();
+  const subject = `${type}(factory): ${plain}`;
+  const short = subject.length > 72 ? `${subject.slice(0, 69)}...` : subject;
+  return `${short}\n\n- Deliver the Work order for todo ${todoId}\n`;
 };

@@ -1,5 +1,13 @@
 import { execFile } from 'node:child_process';
 import type { LaunchSpec, PaneDriver, PaneReading } from '../ports';
+import { acceptClaudeTrust, claudeConfigPathOf } from './claude-trust';
+
+/** How long the agent takes to leave its startup screen after Enter, as v1 waited. */
+const STARTUP_WAIT_MS = 3000;
+
+/** The folder-trust screen of Antigravity (`agy`), as v1 matched it. */
+const TRUST_SCREEN =
+  /Do you trust the contents of this project\?[\s\S]*Yes, I trust this folder/;
 
 /** One call to the Herdr CLI: the arguments, and what it printed and returned. */
 export interface HerdrOutcome {
@@ -60,7 +68,7 @@ const envArgs = (env: Readonly<Record<string, string>>): string[] =>
  * the agent, the typed text, the read and the close.
  */
 export const createHerdrPane = (
-  options: { exec?: HerdrExec } = {},
+  options: { exec?: HerdrExec; claudeConfigPath?: string } = {},
 ): PaneDriver => {
   const exec = options.exec ?? execHerdr;
   const ok = async (args: readonly string[]): Promise<HerdrOutcome> => {
@@ -75,8 +83,20 @@ export const createHerdrPane = (
   const tabs = new Map<string, string>();
   const workspaces = new Map<string, string>();
 
+  /** Presses Enter on the folder-trust screen of an agent, if that is what it shows. */
+  const confirmTrustOf = async (name: string): Promise<boolean> => {
+    const screen = await exec(['agent', 'read', name, '--source', 'visible']);
+    if (screen.code !== 0 || !TRUST_SCREEN.test(screen.stdout)) return false;
+    await ok(['agent', 'send-keys', name, 'Enter']);
+    return true;
+  };
+
   /** The task's workspace, created on its first Operator and kept for the rest of the task. */
-  const workspaceOf = async (task: string, cwd: string): Promise<string> => {
+  const workspaceOf = async (
+    task: string,
+    cwd: string,
+    logCommand: string | undefined,
+  ): Promise<string> => {
     const known = workspaces.get(task);
     if (known !== undefined) return known;
     const created = await ok([
@@ -93,13 +113,37 @@ export const createHerdrPane = (
       throw new Error('herdr workspace create returned no workspace_id');
     }
     workspaces.set(task, workspaceId);
+    if (logCommand !== undefined) {
+      // The workspace's first tab is the task's `logs` tab, as in v1. Cosmetic: a failure here is not an error.
+      const tabId = findJsonString(created.stdout, 'tab_id');
+      const paneId = findJsonString(created.stdout, 'pane_id');
+      try {
+        if (tabId !== undefined) await ok(['tab', 'rename', tabId, 'logs']);
+        if (paneId !== undefined) await ok(['pane', 'run', paneId, logCommand]);
+      } catch {
+        // the logs tab is cosmetic
+      }
+    }
     return workspaceId;
   };
 
   return {
-    open: async (spec: LaunchSpec & { name: string; task: string }) => {
+    open: async (
+      spec: LaunchSpec & { name: string; task: string; logCommand?: string },
+    ) => {
+      // Claude Code shows its trust dialog for every new folder; its flag is set before the start.
+      if (spec.command[0] === 'claude') {
+        acceptClaudeTrust(
+          options.claudeConfigPath ?? claudeConfigPathOf(),
+          spec.cwd,
+        );
+      }
       const env = envArgs(spec.env);
-      const workspaceId = await workspaceOf(spec.task, spec.cwd);
+      const workspaceId = await workspaceOf(
+        spec.task,
+        spec.cwd,
+        spec.logCommand,
+      );
       const created = await ok([
         'tab',
         'create',
@@ -120,22 +164,47 @@ export const createHerdrPane = (
       tabs.set(spec.name, tabId);
       const [binary, ...args] = spec.command;
       if (binary === undefined) throw new Error('pane launch names no command');
-      await ok([
-        'agent',
-        'start',
-        spec.name,
-        '--kind',
-        binary,
-        '--pane',
-        paneId,
-        '--timeout',
-        '60000',
-        '--',
-        ...args,
-      ]);
+      try {
+        await ok([
+          'agent',
+          'start',
+          spec.name,
+          '--kind',
+          binary,
+          '--pane',
+          paneId,
+          '--timeout',
+          '60000',
+          '--',
+          ...args,
+        ]);
+      } catch (error) {
+        // A trust screen stops the start (`blocked during startup`): confirm it, as v1 did, then go on.
+        const startupBlock =
+          error instanceof Error &&
+          error.message.includes('blocked during startup');
+        if (!startupBlock || !(await confirmTrustOf(spec.name))) throw error;
+        await new Promise((resolve) => setTimeout(resolve, STARTUP_WAIT_MS));
+      }
     },
     type: async (name, text) => {
-      await ok(['agent', 'prompt', name, text]);
+      // Waits until the agent starts working, or stops on a prompt, so the text is not lost while the TUI
+      // is still starting. `idle` is left out: an agent sitting at an empty prompt answers it at once.
+      await ok([
+        'agent',
+        'prompt',
+        name,
+        text,
+        '--wait',
+        '--until',
+        'working',
+        '--until',
+        'blocked',
+        '--timeout',
+        '30000',
+      ]);
+      // The prompt can be pasted into the input without being sent: submit it with Enter.
+      await ok(['agent', 'send-keys', name, 'Enter']);
     },
     read: async (name): Promise<PaneReading> => {
       const outcome = await exec(['agent', 'get', name]);
@@ -150,6 +219,13 @@ export const createHerdrPane = (
     tail: async (name) => {
       const outcome = await exec(['agent', 'read', name, '--source', 'recent']);
       return outcome.code === 0 ? outcome.stdout.slice(-2048) : '';
+    },
+    confirmTrust: confirmTrustOf,
+    closeTask: async (task) => {
+      const workspaceId = workspaces.get(task);
+      workspaces.delete(task);
+      if (workspaceId !== undefined)
+        await exec(['workspace', 'close', workspaceId]);
     },
     close: async (name) => {
       const tab = tabs.get(name);

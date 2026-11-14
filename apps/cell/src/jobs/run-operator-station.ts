@@ -1,5 +1,12 @@
-import { mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  mkdirSync,
+  readFileSync,
+  realpathSync,
+  writeFileSync,
+} from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { CommandResult, Signal } from '@repo/factory-core/contracts/cell';
 import type { FactoryClient } from '@repo/factory-core/contracts/client';
 import type { Job } from '@repo/factory-core/contracts/job';
@@ -106,6 +113,30 @@ const encode = (text: string): Uint8Array => new TextEncoder().encode(text);
 /** What the idle reminder asks for: the Operator's own instructions name the artifacts. */
 const MISSING_ARTIFACTS =
   'the artifacts your instructions name for this station';
+
+/**
+ * A `factory-operator` command for the Operator's PATH: the operator CLI run by the same bun as the Cell.
+ * Its directory is the cycle's own, so each Cycle has its own copy.
+ */
+const operatorBinOf = (cycleDir: string): string => {
+  const binDir = join(cycleDir, 'bin');
+  mkdirSync(binDir, { recursive: true });
+  const cli = fileURLToPath(
+    new URL('../../../operator-cli/src/cli.ts', import.meta.url),
+  );
+  const shim = join(binDir, 'factory-operator');
+  writeFileSync(shim, `#!/bin/sh\nexec "${process.execPath}" "${cli}" "$@"\n`);
+  chmodSync(shim, 0o755);
+  return binDir;
+};
+
+/** The command the task's `logs` tab runs: the Traveler of its Work order, followed (`factory log -f`). */
+const logCommandOf = (orderId: string): string => {
+  const cli = fileURLToPath(
+    new URL('../../../cli/src/cli.ts', import.meta.url),
+  );
+  return `"${process.execPath}" "${cli}" log "${orderId}" -f`;
+};
 
 const todoOf = (orderId: string): string =>
   orderId.slice(orderId.indexOf(':') + 1);
@@ -674,8 +705,17 @@ export const runOperatorStation = async (
           decision.reason,
           `watch ended the Cycle: ${decision.reason}`,
         );
-      case 'block':
+      case 'block': {
+        if (
+          pane !== undefined &&
+          deps.pane !== undefined &&
+          (await deps.pane.confirmTrust(pane).catch(() => false))
+        ) {
+          journal({ at: now, kind: 'trust_confirmed' });
+          return;
+        }
         return runtimeBlock('runner_prompt', 'the runner stopped on a prompt');
+      }
     }
   };
 
@@ -713,6 +753,7 @@ export const runOperatorStation = async (
     // The Operator inherits the Cell's environment, plus the two variables its CLI reads.
     const env = {
       ...process.env,
+      PATH: `${operatorBinOf(cycleDir)}:${process.env.PATH ?? ''}`,
       FACTORY_OPERATOR_SOCKET: socketPath,
       FACTORY_CYCLE_TOKEN: token,
     };
@@ -738,12 +779,15 @@ export const runOperatorStation = async (
           await deps.pane.open({
             name: pane,
             task: todo,
+            logCommand: logCommandOf(job.orderId),
             command,
             cwd: worktree,
             env,
             stdoutPath,
             stderrPath,
           });
+          // An interactive runner starts with no prompt: the kickoff is submitted into its pane (v1 `prompt`).
+          await deps.pane.type(pane, kickoff);
         } else {
           throw new Error('the Cell has no pane driver for a pane station');
         }

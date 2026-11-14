@@ -88,7 +88,7 @@ describe('golden hashes', () => {
   it.each([
     [
       'feature',
-      'sha256:58154b61755ea5203d900b2e0d8b090227755b572bedda8741625532348391e5',
+      'sha256:ba391147944fe54200c13ac94deaa3055eb926504916c4324ddf03801e81e98d',
     ],
     [
       'fast',

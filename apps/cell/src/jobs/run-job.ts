@@ -143,6 +143,10 @@ export const runJob = async (
       }
       case 'deliver':
         await runDeliver(jobCtx, job, signal);
+        // The task is done with its Herdr workspace once it is delivered (v1 closed its tabs the same way).
+        await ctx.pane
+          ?.closeTask(job.orderId.slice(job.orderId.indexOf(':') + 1))
+          .catch(() => undefined);
         return continuation;
       case 'plan_branch':
       case 'plan_pr':

@@ -199,6 +199,7 @@ Show dev adequate evidence the problem is solved, e.g.:
     'plan-fe': { source: './skills/plan-fe' },
     'plan-requirements': { source: './skills/plan-requirements' },
     'run-workflow': { source: './skills/run-workflow' },
+    'setup-factory': { source: './skills/setup-factory' },
     sloth: { source: './skills/sloth' },
     socrates: { source: './skills/socrates' },
     'vps-gon-stack': { source: './skills/vps-gon-stack' },

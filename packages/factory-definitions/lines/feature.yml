@@ -37,8 +37,8 @@ operators:
     permission: write
   doctor:
     profile: doctor
-    runner: cursor
-    model: gpt-5.6-luna-medium
+    runner: antigravity
+    model: gemini-3.8-flash-medium
     timeout: 20m
     headless: false
     permission: read

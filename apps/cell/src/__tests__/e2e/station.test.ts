@@ -356,6 +356,8 @@ describe('Operator station against the runtime', () => {
       read: async () => ({ operator: 'blocked' }),
       tail: async () => '',
       close: async () => undefined,
+      confirmTrust: async () => false,
+      closeTask: async () => undefined,
     };
 
     await runOperatorStation(job, {

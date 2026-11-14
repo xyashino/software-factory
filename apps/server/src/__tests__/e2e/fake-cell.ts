@@ -133,7 +133,7 @@ export const createFakeCell = (
       cellId,
       version: '0.1.0',
       projects: [projectId],
-      runners: ['claude', 'cursor'],
+      runners: ['claude', 'cursor', 'antigravity'],
       capabilities: [],
       slots: 1,
     });

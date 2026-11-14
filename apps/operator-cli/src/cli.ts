@@ -7,6 +7,8 @@ import { usage } from './usage';
 /** Reads a named file the Operator points at; a missing file is a clear error, not a crash. */
 const readFileArg = (path: string | undefined, flag: string): string => {
   if (path === undefined) throw new OperatorError(`${flag} needs a file`, 2);
+  // `-` reads the feedback from stdin (a heredoc), for an Operator that cannot write files.
+  if (path === '-') return readFileSync(0, 'utf8');
   try {
     return readFileSync(path, 'utf8');
   } catch {

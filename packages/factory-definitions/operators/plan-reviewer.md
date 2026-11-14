@@ -24,5 +24,5 @@ You are the Plan Reviewer for task {{taskId}}, attempt {{attemptId}}. You review
 
 ## Finish
 
-- The plan solves the problem: run `sf verdict pass`.
-- Otherwise write each blocking problem to `{{feedbackPath}}`, one line per problem, then run `sf verdict fail`.
+- The plan solves the problem: run `factory-operator verdict pass`. Do not write `{{feedbackPath}}` in this case, even though the outputs list shows it: a pass needs no feedback and the command takes none.
+- Otherwise write each blocking problem to `{{feedbackPath}}`, one line per problem, then run `factory-operator verdict fail --feedback {{feedbackPath}}`.
