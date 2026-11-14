@@ -83,7 +83,7 @@ describe('the Supervisor and the Andon, on v2 events', () => {
   });
 
   it('never starts a second job while a question for the Supervisor is open', () => {
-    // v1: "never starts the operator for a question a worker asked a human"
+    // v1: "never starts the operator for a question a cell asked a human"
     const s = given([created()]);
     passOperator(s, 2);
     const { started, cycle } = beginJob(s);
@@ -95,7 +95,7 @@ describe('the Supervisor and the Andon, on v2 events', () => {
   });
 
   it('refuses a second question while the first one is open', () => {
-    // v1: "never starts the operator for a question a worker asked a human"
+    // v1: "never starts the operator for a question a cell asked a human"
     const s = given([created()]);
     passOperator(s, 2);
     const { started, cycle } = beginJob(s);

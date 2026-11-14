@@ -2,20 +2,18 @@ import {
   orderIdOf,
   projectIdSchema,
   todoIdSchema,
-  workerIdSchema,
+  cellIdSchema,
   type OrderId,
   type ProjectId,
-  type WorkerId,
+  type CellId,
 } from '../../ids';
-import type { Limits, QueueEntry, WorkerView } from '../types';
+import type { Limits, QueueEntry, CellView } from '../types';
 
 export const NOW = 1_000_000;
 export const PROJECT: ProjectId = projectIdSchema.parse('shop');
 export const OTHER_PROJECT: ProjectId = projectIdSchema.parse('blog');
-export const WORKER: WorkerId = workerIdSchema.parse(
-  '01BX5ZZKBKACTAV9WEVGEMMVRY',
-);
-export const OTHER_WORKER: WorkerId = workerIdSchema.parse(
+export const CELL: CellId = cellIdSchema.parse('01BX5ZZKBKACTAV9WEVGEMMVRY');
+export const OTHER_CELL: CellId = cellIdSchema.parse(
   '01BX5ZZKBKACTAV9WEVGEMMVRZ',
 );
 
@@ -37,13 +35,13 @@ export const entry = (overrides: Partial<QueueEntry> = {}): QueueEntry => ({
   deps: 'satisfied',
   progressed: false,
   resumed: false,
-  avoidWorkers: [],
+  avoidCells: [],
   ...overrides,
 });
 
-/** A Worker that serves the shop project, has a free slot and no runner or capability tags. */
-export const worker = (overrides: Partial<WorkerView> = {}): WorkerView => ({
-  workerId: WORKER,
+/** A Cell that serves the shop project, has a free slot and no runner or capability tags. */
+export const cell = (overrides: Partial<CellView> = {}): CellView => ({
+  cellId: CELL,
   projects: [PROJECT],
   runners: [],
   capabilities: [],

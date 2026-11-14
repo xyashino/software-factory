@@ -50,7 +50,7 @@ describe('readRuleIds', () => {
     const ids = readRuleIds({
       rules: { git: {} },
       skills: { evidence: {} },
-      agents: { worker: {} },
+      agents: { cell: {} },
     });
     expect([...ids]).toEqual(['git']);
   });

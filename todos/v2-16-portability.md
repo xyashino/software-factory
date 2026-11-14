@@ -22,9 +22,9 @@ else is left.
 
 ## Deliverables
 
-1. `deploy/`: systemd units for `factory-server` and `factory-worker`, a Litestream config example,
+1. `deploy/`: systemd units for `factory-server` and `factory-cell`, a Litestream config example,
    a restore runbook.
-2. Test: export from Factory A mid-run, import into Factory B, Workers re-join, every Work order
+2. Test: export from Factory A mid-run, import into Factory B, Cells re-join, every Work order
    completes with no duplicate work.
 3. CORE amendment specifying `order_recovered { passedStations, checkpoint }` (docs change first),
    then implementation of STORAGE §8 using `Factory-Outcome: passed` trailers, with a test that

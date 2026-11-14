@@ -2,13 +2,13 @@ import type {
   HeartbeatRequest,
   HeartbeatResponse,
   Signal,
-} from '@repo/factory-core/contracts/worker';
+} from '@repo/factory-core/contracts/cell';
 import type { JobId } from '@repo/factory-core/ids';
 import type { RuntimePorts } from './ports';
-import { assertWorker } from './workers';
+import { assertCell } from './cells';
 
 /**
- * A Worker's heartbeat (PROTOCOL §5, §7): every job it names that it still holds gets its lease
+ * A Cell's heartbeat (PROTOCOL §5, §7): every job it names that it still holds gets its lease
  * extended and reports `ok`; any other job reports `stale`, the cue to stop it. Acknowledged signals
  * are dropped; the unacknowledged signals of the live jobs come back in the response.
  */
@@ -17,14 +17,14 @@ export const heartbeat = async (
   request: HeartbeatRequest,
 ): Promise<HeartbeatResponse> => {
   ports.writer.assertHeld();
-  const { workerId } = request;
-  await assertWorker(ports, workerId);
+  const { cellId } = request;
+  await assertCell(ports, cellId);
   const now = ports.clock.now();
-  await ports.workers.touch(workerId, now);
+  await ports.cells.touch(cellId, now);
   await ports.signals.ack(request.acked, now);
 
   const held = new Set<JobId>(
-    (await ports.leases.forWorker(workerId)).map((lease) => lease.jobId),
+    (await ports.leases.forCell(cellId)).map((lease) => lease.jobId),
   );
   const jobs = request.jobs.map((jobId) => ({
     jobId,
@@ -34,7 +34,7 @@ export const heartbeat = async (
     .filter((job) => job.status === 'ok')
     .map((job) => job.jobId);
   if (live.length > 0) {
-    await ports.leases.extend(workerId, live, now + ports.config.leaseTtlMs);
+    await ports.leases.extend(cellId, live, now + ports.config.leaseTtlMs);
   }
   const signals: Signal[] = [];
   for (const jobId of live) {

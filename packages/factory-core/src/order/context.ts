@@ -4,8 +4,8 @@ import type { CycleCause, InspectionResult } from './events';
 import { requireCycle } from './evolve-helpers';
 import type { WorkOrderState } from './state';
 
-/** Where the Worker keeps the Cycle's scratch files, relative to the worktree (PROTOCOL §4). */
-const SCRATCH_DIR = '.worker';
+/** Where the Cell keeps the Cycle's scratch files, relative to the worktree (PROTOCOL §4). */
+const SCRATCH_DIR = '.cell';
 
 export type CycleInput =
   | {
@@ -14,7 +14,7 @@ export type CycleInput =
       key: string;
       cycleId: CycleId;
       blob: BlobRef;
-      materialiseAs: string; // relative path, e.g. `.worker/inputs/plan.plan`
+      materialiseAs: string; // relative path, e.g. `.cell/inputs/plan.plan`
     }
   | {
       kind: 'inspection';
@@ -27,7 +27,7 @@ export type CycleInput =
       kind: 'order';
       field: 'body';
       blob: BlobRef; // the spec keeps the body as a blob, not as text
-      materialiseAs: string; // relative path, `.worker/inputs/order.body`
+      materialiseAs: string; // relative path, `.cell/inputs/order.body`
     };
 
 export type CycleFeedback =

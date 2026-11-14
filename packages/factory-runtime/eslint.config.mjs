@@ -13,7 +13,7 @@ export default [
   },
   {
     // STRUCTURE §2-3: the runtime is transport-free. It has no HTTP, no TCP listener and no v1 code,
-    // and it does not call core/cycle (Worker-side policy).
+    // and it does not call core/cycle (Cell-side policy).
     files: ['src/**/*.ts'],
     rules: {
       'no-restricted-imports': [

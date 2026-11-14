@@ -20,7 +20,7 @@ describe('the orders row mapping', () => {
     },
   );
 
-  it('maps the worker columns to lastCellId and avoidCells', () => {
+  it('maps the cell columns to lastCellId and avoidCells', () => {
     const events = fixtureEvents(SCENARIO_FIXTURES[0]!);
     const last = events[events.length - 1]!;
     const row = orderRowOf(

@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { lineSnapshotSchema } from '../line/snapshot';
 import {
   blobRefSchema,
-  workerIdSchema,
+  cellIdSchema,
   commitShaSchema,
   cycleIdSchema,
   jobIdSchema,
@@ -169,11 +169,11 @@ export const operatorSchema = z
   .strict();
 export const actorSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('factory') }).strict(),
-  z.object({ kind: z.literal('worker'), workerId: workerIdSchema }).strict(),
+  z.object({ kind: z.literal('cell'), cellId: cellIdSchema }).strict(),
   z
     .object({
       kind: z.literal('operator'),
-      workerId: workerIdSchema,
+      cellId: cellIdSchema,
       cycleId: cycleIdSchema,
     })
     .strict(),
@@ -213,7 +213,7 @@ const jobClaimedSchema = z
     type: z.literal('job_claimed'),
     jobId: jobIdSchema,
     kind: jobKindSchema,
-    workerId: workerIdSchema,
+    cellId: cellIdSchema,
     epoch: positiveInt,
     cycleId: cycleIdSchema.optional(),
   })
@@ -223,7 +223,7 @@ const jobLostSchema = z
     type: z.literal('job_lost'),
     jobId: jobIdSchema,
     epoch: positiveInt,
-    reason: z.enum(['lease_expired', 'worker_left', 'cancelled']),
+    reason: z.enum(['lease_expired', 'cell_left', 'cancelled']),
   })
   .strict();
 const workspaceFailedSchema = z

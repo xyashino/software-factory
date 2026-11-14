@@ -5,7 +5,7 @@ import type { WorkOrderState } from '../state';
 import {
   andonRaised,
   cancelled,
-  workerIdOf,
+  cellIdOf,
   commitOf,
   created,
   cycleBlocked,
@@ -32,14 +32,14 @@ const claim = (n: number) =>
   jobClaimed({
     jobId: jobIdOf(n),
     cycleId: cycleIdOf(n),
-    workerId: workerIdOf(1),
+    cellId: cellIdOf(1),
     epoch: n,
   });
 const claimDelivery = (n: number) =>
   jobClaimed({
     jobId: jobIdOf(n),
     kind: 'deliver',
-    workerId: workerIdOf(1),
+    cellId: cellIdOf(1),
     epoch: n,
     cycleId: undefined,
   });
@@ -80,22 +80,22 @@ describe('holderOf', () => {
     expect(holderOf(foldEvents(created()))).toEqual({ kind: 'queue' });
   });
 
-  it('holds the Work order with the Worker of the active job and its epoch', () => {
+  it('holds the Work order with the Cell of the active job and its epoch', () => {
     expect(holderOf(foldEvents(created(), claim(1)))).toEqual({
-      kind: 'worker',
-      workerId: workerIdOf(1),
+      kind: 'cell',
+      cellId: cellIdOf(1),
       epoch: 1,
     });
   });
 
-  it('keeps the Worker while a question is open, because the Operator waits in its pane', () => {
+  it('keeps the Cell while a question is open, because the Operator waits in its pane', () => {
     const state = foldEvents(
       created(),
       claim(1),
       start(1, 'plan'),
       questionAsked({ cycleId: cycleIdOf(1), questionId: questionIdOf(1) }),
     );
-    expect(holderOf(state).kind).toBe('worker');
+    expect(holderOf(state).kind).toBe('cell');
   });
 
   it('holds the Work order with the supervisor when an Andon is raised and no job runs', () => {

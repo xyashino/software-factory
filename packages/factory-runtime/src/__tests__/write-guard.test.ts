@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import type { WorkerId } from '@repo/factory-core/ids';
-import { PROJECT, helloWorker, sha256Ref, world } from './test-kit';
+import type { CellId } from '@repo/factory-core/ids';
+import { PROJECT, helloCell, sha256Ref, world } from './test-kit';
 
-const WORKER = '01J0000000000000000000000W' as WorkerId;
-const NEW_WORKER = '01J0000000000000000000000X' as WorkerId;
+const CELL = '01J0000000000000000000000W' as CellId;
+const NEW_CELL = '01J0000000000000000000000X' as CellId;
 const LOCK_LOST = /writer lock is not held/;
 
 const hello = {
@@ -20,33 +20,33 @@ describe('write guard on every write path', () => {
     w.writer.held = false;
 
     await expect(
-      w.runtime.call('hello', { workerId: NEW_WORKER, ...hello }),
+      w.runtime.call('hello', { cellId: NEW_CELL, ...hello }),
     ).rejects.toThrow(LOCK_LOST);
-    expect(w.workers.all()).toEqual([]);
+    expect(w.cells.all()).toEqual([]);
   });
 
   it('refuses heartbeat without the writer lock and touches nothing', async () => {
     const w = world();
-    await helloWorker(w, WORKER);
-    const before = w.workers.all()[0]?.lastSeenAt;
+    await helloCell(w, CELL);
+    const before = w.cells.all()[0]?.lastSeenAt;
     w.clock.advance(5_000);
     w.writer.held = false;
 
     await expect(
-      w.runtime.call('heartbeat', { workerId: WORKER, jobs: [], acked: [] }),
+      w.runtime.call('heartbeat', { cellId: CELL, jobs: [], acked: [] }),
     ).rejects.toThrow(LOCK_LOST);
-    expect(w.workers.all()[0]?.lastSeenAt).toBe(before);
+    expect(w.cells.all()[0]?.lastSeenAt).toBe(before);
   });
 
-  it('refuses a Worker revocation without the writer lock and keeps the Worker live', async () => {
+  it('refuses a Cell revocation without the writer lock and keeps the Cell live', async () => {
     const w = world();
-    await helloWorker(w, WORKER);
+    await helloCell(w, CELL);
     w.writer.held = false;
 
     await expect(
-      w.runtime.call('workerRevoke', { workerId: WORKER }),
+      w.runtime.call('cellRevoke', { cellId: CELL }),
     ).rejects.toThrow(LOCK_LOST);
-    expect(w.workers.all()[0]?.revokedAt).toBeNull();
+    expect(w.cells.all()[0]?.revokedAt).toBeNull();
   });
 
   it('refuses a blob put without the writer lock and stores nothing', async () => {

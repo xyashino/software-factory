@@ -37,12 +37,12 @@ export const reapOnce = async (
 
 /**
  * Boot grace (PROTOCOL §5.1): on start, every lease gets a full TTL from now, so a Factory that was
- * down does not cost the Workers their jobs before they can heartbeat again.
+ * down does not cost the Cells their jobs before they can heartbeat again.
  */
 export const bootGrace = async (ports: RuntimePorts): Promise<void> => {
   ports.writer.assertHeld();
   const expiresAt = ports.clock.now() + ports.config.leaseTtlMs;
   for (const lease of await ports.leases.list()) {
-    await ports.leases.extend(lease.workerId, [lease.jobId], expiresAt);
+    await ports.leases.extend(lease.cellId, [lease.jobId], expiresAt);
   }
 };

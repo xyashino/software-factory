@@ -15,7 +15,7 @@ import {
   questionAsked,
   questionIdOf,
   stationOf,
-  workerIdOf,
+  cellIdOf,
 } from './builders';
 import {
   begun,
@@ -28,7 +28,7 @@ import {
 
 const operator = (cycle: number, epoch: number) =>
   contextOf(
-    { kind: 'operator', workerId: workerIdOf(1), cycleId: cycleIdOf(cycle) },
+    { kind: 'operator', cellId: cellIdOf(1), cycleId: cycleIdOf(cycle) },
     { epoch },
   );
 /** A fresh context per decision, so generated ids start at 1 in every test. */
@@ -94,18 +94,18 @@ describe('AskQuestion', () => {
     });
   });
 
-  it('refuses a worker actor', () => {
+  it('refuses a cell actor', () => {
     const result = decide(
       planning(),
       ask,
-      contextOf({ kind: 'worker', workerId: workerIdOf(1) }, { epoch: 1 }),
+      contextOf({ kind: 'cell', cellId: cellIdOf(1) }, { epoch: 1 }),
     );
 
     expect(result).toEqual({
       ok: false,
       error: {
         code: 'precondition',
-        detail: 'actor worker may not run this command',
+        detail: 'actor cell may not run this command',
       },
     });
   });

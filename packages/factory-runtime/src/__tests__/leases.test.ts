@@ -1,15 +1,10 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import type {
-  CommitSha,
-  CycleId,
-  JobId,
-  WorkerId,
-} from '@repo/factory-core/ids';
+import type { CommitSha, CycleId, JobId, CellId } from '@repo/factory-core/ids';
 import { RuntimeError } from '../errors';
-import { createOrder, flush, helloWorker, world, type World } from './test-kit';
+import { createOrder, flush, helloCell, world, type World } from './test-kit';
 
-const WORKER = '01J0000000000000000000000W' as WorkerId;
-const OTHER_WORKER = '01J0000000000000000000000X' as WorkerId;
+const CELL = '01J0000000000000000000000W' as CellId;
+const OTHER_CELL = '01J0000000000000000000000X' as CellId;
 const UNKNOWN_JOB = '01J0000000000000000000000Z' as JobId;
 const COMMIT = 'b'.repeat(40) as CommitSha;
 
@@ -20,18 +15,18 @@ afterEach(() => {
   running = undefined;
 });
 
-/** A Worker holding one plan job, with its Cycle started. */
+/** A Cell holding one plan job, with its Cycle started. */
 const startedJob = async (w: World) => {
-  await helloWorker(w, WORKER, 1, ['claude']);
+  await helloCell(w, CELL, 1, ['claude']);
   const orderId = await createOrder(w, { todoId: 'todo-a' });
   const claimed = await w.runtime.call('claim', {
-    workerId: WORKER,
+    cellId: CELL,
     waitMs: 0,
   });
   const job = claimed.job;
   if (!job) throw new Error('expected a job');
   await w.runtime.call('submitCommand', {
-    workerId: WORKER,
+    cellId: CELL,
     orderId,
     commandId: 'start-a',
     epoch: job.epoch,
@@ -46,7 +41,7 @@ describe('heartbeat', () => {
     const { job } = await startedJob(w);
 
     const beat = await w.runtime.call('heartbeat', {
-      workerId: WORKER,
+      cellId: CELL,
       jobs: [job.jobId, UNKNOWN_JOB],
       acked: [],
     });
@@ -57,7 +52,7 @@ describe('heartbeat', () => {
     ]);
   });
 
-  it('delivers a nudge to the live job until the Worker acknowledges it', async () => {
+  it('delivers a nudge to the live job until the Cell acknowledges it', async () => {
     const w = world();
     const { orderId, job } = await startedJob(w);
     await w.runtime.call('nudge', {
@@ -67,7 +62,7 @@ describe('heartbeat', () => {
     });
 
     const first = await w.runtime.call('heartbeat', {
-      workerId: WORKER,
+      cellId: CELL,
       jobs: [job.jobId],
       acked: [],
     });
@@ -77,18 +72,18 @@ describe('heartbeat', () => {
     const signalId = first.signals[0]?.signalId ?? '';
 
     const second = await w.runtime.call('heartbeat', {
-      workerId: WORKER,
+      cellId: CELL,
       jobs: [job.jobId],
       acked: [signalId],
     });
     expect(second.signals).toEqual([]);
   });
 
-  it('is refused for a Worker that was never registered', async () => {
+  it('is refused for a Cell that was never registered', async () => {
     const w = world();
 
     const error = await w.runtime
-      .call('heartbeat', { workerId: OTHER_WORKER, jobs: [], acked: [] })
+      .call('heartbeat', { cellId: OTHER_CELL, jobs: [], acked: [] })
       .catch((caught: unknown) => caught);
 
     expect((error as RuntimeError).wire).toEqual({ code: 'unauthorized' });
@@ -105,7 +100,7 @@ describe('reaper', () => {
     const reaped = await w.runtime.reapOnce();
 
     expect(reaped).toBe(1);
-    expect(await w.leases.forWorker(WORKER)).toEqual([]);
+    expect(await w.leases.forCell(CELL)).toEqual([]);
     const types = (await w.events.load(orderId)).map(
       (stored) => stored.event.type,
     );
@@ -124,7 +119,7 @@ describe('reaper', () => {
 
     await w.runtime.start();
 
-    expect((await w.leases.forWorker(WORKER))[0]?.expiresAt).toBe(
+    expect((await w.leases.forCell(CELL))[0]?.expiresAt).toBe(
       w.clock.now() + 60_000,
     );
     expect(await w.runtime.reapOnce()).toBe(0);
@@ -142,34 +137,34 @@ describe('reaper', () => {
     w.timers.advance(5_000);
     await flush();
 
-    expect(await w.leases.forWorker(WORKER)).toEqual([]);
+    expect(await w.leases.forCell(CELL)).toEqual([]);
   });
 });
 
 describe('revocation', () => {
-  it('expires the leases of a revoked Worker and refuses it afterwards', async () => {
+  it('expires the leases of a revoked Cell and refuses it afterwards', async () => {
     const w = world();
     running = w;
     await startedJob(w);
 
-    await w.runtime.call('workerRevoke', { workerId: WORKER });
+    await w.runtime.call('cellRevoke', { cellId: CELL });
     expect(await w.runtime.reapOnce()).toBe(1);
 
-    expect(await w.leases.forWorker(WORKER)).toEqual([]);
+    expect(await w.leases.forCell(CELL)).toEqual([]);
     const error = await w.runtime
-      .call('heartbeat', { workerId: WORKER, jobs: [], acked: [] })
+      .call('heartbeat', { cellId: CELL, jobs: [], acked: [] })
       .catch((caught: unknown) => caught);
     expect((error as RuntimeError).wire).toEqual({ code: 'unauthorized' });
   });
 
-  it('refuses a claim by a revoked Worker', async () => {
+  it('refuses a claim by a revoked Cell', async () => {
     const w = world();
     running = w;
-    await helloWorker(w, WORKER);
-    await w.runtime.call('workerRevoke', { workerId: WORKER });
+    await helloCell(w, CELL);
+    await w.runtime.call('cellRevoke', { cellId: CELL });
 
     const error = await w.runtime
-      .call('claim', { workerId: WORKER, waitMs: 0 })
+      .call('claim', { cellId: CELL, waitMs: 0 })
       .catch((caught: unknown) => caught);
 
     expect((error as RuntimeError).wire).toEqual({ code: 'unauthorized' });
@@ -180,13 +175,13 @@ describe('completing a job', () => {
   it('releases the lease when the Cycle ends the job', async () => {
     const w = world();
     running = w;
-    await helloWorker(w, WORKER, 1, ['claude']);
+    await helloCell(w, CELL, 1, ['claude']);
     const orderId = await createOrder(w, { todoId: 'todo-a' });
     const { job } = await w.runtime
-      .call('claim', { workerId: WORKER, waitMs: 0 })
+      .call('claim', { cellId: CELL, waitMs: 0 })
       .then((response) => ({ job: response.job! }));
     await w.runtime.call('submitCommand', {
-      workerId: WORKER,
+      cellId: CELL,
       orderId,
       commandId: 'start-b',
       epoch: job.epoch,
@@ -197,7 +192,7 @@ describe('completing a job', () => {
     await w.blobs.put(plan, new TextEncoder().encode(text), 'text/markdown');
 
     await w.runtime.call('submitCommand', {
-      workerId: WORKER,
+      cellId: CELL,
       orderId,
       commandId: 'complete-b',
       epoch: job.epoch,
@@ -210,7 +205,7 @@ describe('completing a job', () => {
     });
 
     expect(
-      (await w.leases.forWorker(WORKER)).map((lease) => lease.orderId),
+      (await w.leases.forCell(CELL)).map((lease) => lease.orderId),
     ).toEqual([]);
   });
 });

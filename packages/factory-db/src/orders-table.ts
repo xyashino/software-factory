@@ -4,7 +4,7 @@ import type {
   ProjectId,
   StationId,
   TodoId,
-  WorkerId,
+  CellId,
 } from '@repo/factory-core/ids';
 import type { AndonReason, JobKind } from '@repo/factory-core/order/events';
 import type { Next } from '@repo/factory-core/order/next';
@@ -40,10 +40,10 @@ export const orderRowOf = (projection: OrderProjection): OrderRow => ({
   stationIndex: projection.stationIndex,
   progressed: projection.progressed ? 1 : 0,
   resumed: projection.resumed ? 1 : 0,
-  lastCellId: projection.lastWorkerId,
+  lastCellId: projection.lastCellId,
   avoidCells: JSON.stringify(
-    projection.avoidWorkers.map((avoid) => ({
-      cellId: avoid.workerId,
+    projection.avoidCells.map((avoid) => ({
+      cellId: avoid.cellId,
       until: avoid.until,
     })),
   ),
@@ -79,9 +79,9 @@ export const projectionOfRow = (row: OrderRow): OrderProjection => {
     stationIndex: row.stationIndex,
     progressed: row.progressed === 1,
     resumed: row.resumed === 1,
-    lastWorkerId: row.lastCellId as WorkerId | null,
-    avoidWorkers: avoid.map((entry) => ({
-      workerId: entry.cellId as WorkerId,
+    lastCellId: row.lastCellId as CellId | null,
+    avoidCells: avoid.map((entry) => ({
+      cellId: entry.cellId as CellId,
       until: entry.until,
     })),
     andonReason: row.andonReason as AndonReason | null,

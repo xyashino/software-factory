@@ -7,4 +7,6 @@ export * from './harness';
 export * from './line-builder';
 export * from './fake-event-store';
 export * from './store-contract';
+export * from './lease-contract';
+export * from './blob-contract';
 export * from './scenario-fixtures';

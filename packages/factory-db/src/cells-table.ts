@@ -1,10 +1,10 @@
 import type { Database } from 'bun:sqlite';
-import type { WorkerId } from '@repo/factory-core/ids';
+import type { CellId } from '@repo/factory-core/ids';
 import type {
-  WorkerInfo,
-  WorkerRecord,
-  WorkerStore,
-} from '@repo/factory-core/ports/workers';
+  CellInfo,
+  CellRecord,
+  CellStore,
+} from '@repo/factory-core/ports/cells';
 import type { StatementGate } from './sqlite-event-store';
 import type { WriterLock } from './writer-lock';
 
@@ -17,22 +17,22 @@ interface CellRow {
   info: string | null;
 }
 
-const recordOf = (row: CellRow): WorkerRecord => ({
-  workerId: row.cell_id as WorkerId,
+const recordOf = (row: CellRow): CellRecord => ({
+  cellId: row.cell_id as CellId,
   name: row.name,
-  info: row.info === null ? null : (JSON.parse(row.info) as WorkerInfo),
+  info: row.info === null ? null : (JSON.parse(row.info) as CellInfo),
   joinedAt: row.joined_at,
   lastSeenAt: row.last_seen_at,
   revokedAt: row.revoked_at,
 });
 
-/** The `cells` table behind `WorkerStore`. `token_hash` marks the local, operating-system trust. */
-export const sqliteWorkerStore = (
+/** The `cells` table behind `CellStore`. `token_hash` marks the local, operating-system trust. */
+export const sqliteCellStore = (
   db: Database,
   writer: WriterLock,
   gate: StatementGate,
-): WorkerStore => ({
-  hello: ({ workerId, name, info, at }) =>
+): CellStore => ({
+  hello: ({ cellId, name, info, at }) =>
     gate.run(() => {
       writer.assertHeld();
       db.run(
@@ -40,14 +40,14 @@ export const sqliteWorkerStore = (
          VALUES (?, ?, 'local:os-account', ?, ?, ?)
          ON CONFLICT(cell_id) DO UPDATE SET
            name = excluded.name, last_seen_at = excluded.last_seen_at, info = excluded.info`,
-        [workerId, name, at, at, JSON.stringify(info)],
+        [cellId, name, at, at, JSON.stringify(info)],
       );
     }),
-  get: (workerId) =>
+  get: (cellId) =>
     gate.run(() => {
       const row = db
         .query<CellRow, [string]>('SELECT * FROM cells WHERE cell_id = ?')
-        .get(workerId);
+        .get(cellId);
       return row ? recordOf(row) : undefined;
     }),
   list: () =>
@@ -57,20 +57,20 @@ export const sqliteWorkerStore = (
         .all()
         .map(recordOf),
     ),
-  touch: (workerId, at) =>
+  touch: (cellId, at) =>
     gate.run(() => {
       writer.assertHeld();
       db.run('UPDATE cells SET last_seen_at = ? WHERE cell_id = ?', [
         at,
-        workerId,
+        cellId,
       ]);
     }),
-  revoke: (workerId, at) =>
+  revoke: (cellId, at) =>
     gate.run(() => {
       writer.assertHeld();
       db.run(
         'UPDATE cells SET revoked_at = COALESCE(revoked_at, ?) WHERE cell_id = ?',
-        [at, workerId],
+        [at, cellId],
       );
     }),
 });

@@ -12,7 +12,7 @@ import {
   jobIdOf,
   priorityChanged,
   questionAsked,
-  workerIdOf,
+  cellIdOf,
   workspaceFailed,
 } from './builders';
 import {
@@ -24,10 +24,7 @@ import {
   stateOf,
 } from './histories';
 
-const worker = contextOf(
-  { kind: 'worker', workerId: workerIdOf(1) },
-  { epoch: 1 },
-);
+const cell = contextOf({ kind: 'cell', cellId: cellIdOf(1) }, { epoch: 1 });
 
 describe('CreateOrder', () => {
   it('creates the order for the factory', () => {
@@ -217,16 +214,16 @@ describe('Cancel', () => {
     });
   });
 
-  it('refuses a worker actor', () => {
+  it('refuses a cell actor', () => {
     const state = stateOf([created()]);
 
-    const result = decide(state, cancel, worker);
+    const result = decide(state, cancel, cell);
 
     expect(result).toEqual({
       ok: false,
       error: {
         code: 'precondition',
-        detail: 'actor worker may not run this command',
+        detail: 'actor cell may not run this command',
       },
     });
   });
@@ -284,7 +281,7 @@ describe('Reprioritise', () => {
 });
 
 describe('ClaimJob', () => {
-  const claimJob = { type: 'ClaimJob' as const, workerId: workerIdOf(1) };
+  const claimJob = { type: 'ClaimJob' as const, cellId: cellIdOf(1) };
 
   it('claims the first job with a fresh job and Cycle id', () => {
     const state = stateOf([created()]);
@@ -298,7 +295,7 @@ describe('ClaimJob', () => {
           type: 'job_claimed',
           jobId: generatedIdOf(1),
           kind: 'run_operator_station',
-          workerId: workerIdOf(1),
+          cellId: cellIdOf(1),
           epoch: 1,
           cycleId: generatedIdOf(2),
         },
@@ -318,7 +315,7 @@ describe('ClaimJob', () => {
           type: 'job_claimed',
           jobId: generatedIdOf(1),
           kind: 'deliver',
-          workerId: workerIdOf(1),
+          cellId: cellIdOf(1),
           epoch: 5,
         },
       ],
@@ -334,7 +331,7 @@ describe('ClaimJob', () => {
       ok: false,
       error: {
         code: 'precondition',
-        detail: 'the Work order is held by worker',
+        detail: 'the Work order is held by cell',
       },
     });
   });
@@ -414,7 +411,7 @@ describe('ReportWorkspaceFailed', () => {
   it('records a workspace that could not be prepared', () => {
     const state = stateOf([created(), claim(1)]);
 
-    const result = decide(state, failed, worker);
+    const result = decide(state, failed, cell);
 
     expect(result).toEqual({
       ok: true,
@@ -436,7 +433,7 @@ describe('ReportWorkspaceFailed', () => {
     const result = decide(
       state,
       failed,
-      contextOf({ kind: 'worker', workerId: workerIdOf(1) }, { epoch: 0 }),
+      contextOf({ kind: 'cell', cellId: cellIdOf(1) }, { epoch: 0 }),
     );
 
     expect(result).toEqual({
@@ -448,7 +445,7 @@ describe('ReportWorkspaceFailed', () => {
   it('refuses once the Cycle has started', () => {
     const state = stateOf([created(), claim(1), start(1, 'plan')]);
 
-    const result = decide(state, failed, worker);
+    const result = decide(state, failed, cell);
 
     expect(result).toEqual({
       ok: false,
@@ -459,7 +456,7 @@ describe('ReportWorkspaceFailed', () => {
   it('refuses a log that does not exist', () => {
     const state = stateOf([created(), claim(1)]);
     const missing = contextOf(
-      { kind: 'worker', workerId: workerIdOf(1) },
+      { kind: 'cell', cellId: cellIdOf(1) },
       { epoch: 1, missing: [blobOf(7)] },
     );
 
@@ -542,16 +539,16 @@ describe('ExpireLease', () => {
     });
   });
 
-  it('refuses a worker actor', () => {
+  it('refuses a cell actor', () => {
     const state = stateOf([created(), claim(1)]);
 
-    const result = decide(state, expire, worker);
+    const result = decide(state, expire, cell);
 
     expect(result).toEqual({
       ok: false,
       error: {
         code: 'precondition',
-        detail: 'actor worker may not run this command',
+        detail: 'actor cell may not run this command',
       },
     });
   });
@@ -560,10 +557,10 @@ describe('ExpireLease', () => {
 describe('ReleaseJob', () => {
   const release = { type: 'ReleaseJob' as const };
 
-  it('loses the job when the worker leaves its running Cycle', () => {
+  it('loses the job when the cell leaves its running Cycle', () => {
     const state = stateOf([created(), claim(1), start(1, 'plan')]);
 
-    const result = decide(state, release, worker);
+    const result = decide(state, release, cell);
 
     expect(result).toEqual({
       ok: true,
@@ -572,13 +569,13 @@ describe('ReleaseJob', () => {
           type: 'cycle_failed',
           cycleId: cycleIdOf(1),
           reason: 'lost',
-          detail: 'the worker left the job',
+          detail: 'the cell left the job',
         },
         {
           type: 'job_lost',
           jobId: jobIdOf(1),
           epoch: 1,
-          reason: 'worker_left',
+          reason: 'cell_left',
         },
       ],
     });
@@ -590,7 +587,7 @@ describe('ReleaseJob', () => {
     const result = decide(
       state,
       release,
-      contextOf({ kind: 'worker', workerId: workerIdOf(1) }, { epoch: 3 }),
+      contextOf({ kind: 'cell', cellId: cellIdOf(1) }, { epoch: 3 }),
     );
 
     expect(result).toEqual({
@@ -610,7 +607,7 @@ describe('ReportDelivery', () => {
     },
   };
   const deliverer = (epoch: number) =>
-    contextOf({ kind: 'worker', workerId: workerIdOf(1) }, { epoch });
+    contextOf({ kind: 'cell', cellId: cellIdOf(1) }, { epoch });
 
   it('records the PR the delivery opened', () => {
     const state = stateOf([...deliveringEvents(), claim(5, 'deliver')]);
@@ -657,7 +654,7 @@ describe('ReportDelivery', () => {
   it('refuses a job that is not a delivery', () => {
     const state = stateOf([created(), claim(1), start(1, 'plan')]);
 
-    const result = decide(state, finished, worker);
+    const result = decide(state, finished, cell);
 
     expect(result).toEqual({
       ok: false,
@@ -708,16 +705,16 @@ describe('RecordPrState', () => {
     });
   });
 
-  it('refuses a worker actor', () => {
+  it('refuses a cell actor', () => {
     const state = stateOf(deliveredEvents());
 
-    const result = decide(state, merged, worker);
+    const result = decide(state, merged, cell);
 
     expect(result).toEqual({
       ok: false,
       error: {
         code: 'precondition',
-        detail: 'actor worker may not run this command',
+        detail: 'actor cell may not run this command',
       },
     });
   });

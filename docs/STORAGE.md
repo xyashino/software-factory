@@ -66,17 +66,25 @@ type AppendResult =
   | { kind: 'conflict'; currentSeq: number }; // someone appended first: reload and decide again
 
 interface BlobStore {
-  put(ref, bytes): Promise<void>;
+  /** Throws when the bytes do not hash to `ref` or exceed the limit of `kind` (§5). Idempotent. */
+  put(ref, bytes, mediaType?, kind?: 'text' | 'log'): Promise<void>;
   get(ref): Promise<Uint8Array | undefined>;
+  /** Uncompressed size of each stored blob; missing refs are absent from the map. */
   stat(refs): Promise<Map<BlobRef, number>>;
+  /** Deletes unreferenced blobs created at or before `now - 24 h`. Returns the refs deleted. */
+  sweep(now, referenced: ReadonlySet<BlobRef>): Promise<BlobRef[]>;
 }
 interface LeaseStore {
-  /* insert, extend(cellId, jobs), expired(now), delete */
+  /* insert, extend(cellId, jobs), expired(now), list, forCell(cellId), delete(orderId) */
+  /** Boot grace (PROTOCOL §5.1): every expiry becomes `now + ttl`. */
+  bootGrace(now, ttl): Promise<void>;
 }
 ```
 
 `factory-core/testing` ships in-memory fakes of all three and a **contract suite** both the fake and
-the SQLite implementation must pass (as v1's `store.contract.ts`).
+the SQLite implementation must pass (as v1's `store.contract.ts`). Size limits, the log truncation
+and the ref scan live in `factory-core/blob-rules`; gzip, hashing and the sweep query live in
+`factory-db`.
 
 The store never computes a projection and never calls `decide` or `nextJob`: the row it writes is
 handed to it. This keeps domain decisions out of `factory-db` (STRUCTURE §2).

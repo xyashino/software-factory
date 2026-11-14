@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { decide } from '../decide';
-import { contextOf, created, cycleIdOf, workerIdOf } from './builders';
+import { contextOf, created, cycleIdOf, cellIdOf } from './builders';
 import { createCommand, stateOf } from './histories';
 
 describe('decide on a Work order that does not exist', () => {
@@ -31,7 +31,7 @@ describe('decide on a Work order that does not exist', () => {
         reason: 'crashed',
         detail: 'x',
       },
-      contextOf({ kind: 'worker', workerId: workerIdOf(1) }, { epoch: 1 }),
+      contextOf({ kind: 'cell', cellId: cellIdOf(1) }, { epoch: 1 }),
     );
 
     expect(result).toEqual({ ok: false, error: { code: 'not_found' } });

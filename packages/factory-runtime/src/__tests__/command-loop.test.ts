@@ -4,7 +4,7 @@ import type {
   BlobRef,
   CommitSha,
   CycleId,
-  WorkerId,
+  CellId,
 } from '@repo/factory-core/ids';
 import type { StoreTx } from '@repo/factory-core/ports/event-store';
 import { createCommandHandler } from '../command-handler';
@@ -13,7 +13,7 @@ import type { RuntimePorts } from '../ports';
 import {
   createOrder,
   flush,
-  helloWorker,
+  helloCell,
   sha256Ref,
   world,
   type World,
@@ -22,12 +22,12 @@ import {
 /** The store transaction the conflict wrappers replace. */
 type StoreTxLike = StoreTx;
 
-const WORKER = '01J0000000000000000000000W' as WorkerId;
+const CELL = '01J0000000000000000000000W' as CellId;
 const COMMIT = 'a'.repeat(40) as CommitSha;
 
-/** Claims the next job for a Worker; the Worker must be registered and have a free slot. */
-const claim = async (w: World, workerId: WorkerId = WORKER): Promise<Job> => {
-  const response = await w.runtime.call('claim', { workerId, waitMs: 0 });
+/** Claims the next job for a Cell; the Cell must be registered and have a free slot. */
+const claim = async (w: World, cellId: CellId = CELL): Promise<Job> => {
+  const response = await w.runtime.call('claim', { cellId, waitMs: 0 });
   if (!response.job) throw new Error('expected a job to be on offer');
   return response.job;
 };
@@ -40,7 +40,7 @@ const artifactOf = async (w: World, text: string): Promise<BlobRef> => {
   return ref;
 };
 
-/** Starts the job's Cycle and completes it with its plan artifact; the Worker's command ends the job. */
+/** Starts the job's Cycle and completes it with its plan artifact; the Cell's command ends the job. */
 const runPlanStation = async (
   w: World,
   job: Job,
@@ -50,7 +50,7 @@ const runPlanStation = async (
   const station = job.station;
   if (!station?.cycleId) throw new Error('job has no Cycle');
   await w.runtime.call('submitCommand', {
-    workerId: WORKER,
+    cellId: CELL,
     orderId: job.orderId,
     commandId: ids.start,
     epoch: job.epoch,
@@ -58,7 +58,7 @@ const runPlanStation = async (
   });
   const plan = await artifactOf(w, '# Plan\n');
   return w.runtime.call('submitCommand', {
-    workerId: WORKER,
+    cellId: CELL,
     orderId: job.orderId,
     commandId: ids.complete,
     epoch: job.epoch,
@@ -75,7 +75,7 @@ const runPlanStation = async (
 describe('command loop', () => {
   it('a duplicate commandId returns the stored response, including the next job', async () => {
     const w = world();
-    await helloWorker(w, WORKER);
+    await helloCell(w, CELL);
     const orderId = await createOrder(w, { todoId: 'todo-a' });
     const job = await claim(w);
 
@@ -84,7 +84,7 @@ describe('command loop', () => {
       complete: 'c-1',
     });
     const again = await w.runtime.call('submitCommand', {
-      workerId: WORKER,
+      cellId: CELL,
       orderId,
       commandId: 'c-1',
       epoch: job.epoch,
@@ -103,14 +103,14 @@ describe('command loop', () => {
 
   it('a stale epoch is refused and nothing is appended', async () => {
     const w = world();
-    await helloWorker(w, WORKER);
+    await helloCell(w, CELL);
     const orderId = await createOrder(w, { todoId: 'todo-a' });
     const job = await claim(w);
     const before = (await w.events.load(orderId)).length;
 
     const refused = await w.runtime
       .call('submitCommand', {
-        workerId: WORKER,
+        cellId: CELL,
         orderId,
         commandId: 's-stale',
         epoch: job.epoch + 1,
@@ -128,11 +128,11 @@ describe('command loop', () => {
 
   it('a dry run returns the events it would produce and appends nothing', async () => {
     const w = world();
-    await helloWorker(w, WORKER);
+    await helloCell(w, CELL);
     const orderId = await createOrder(w, { todoId: 'todo-a' });
     const job = await claim(w);
     await w.runtime.call('submitCommand', {
-      workerId: WORKER,
+      cellId: CELL,
       orderId,
       commandId: 's-dry',
       epoch: job.epoch,
@@ -141,7 +141,7 @@ describe('command loop', () => {
     const before = (await w.events.load(orderId)).length;
 
     const dry = await w.runtime.call('submitCommand', {
-      workerId: WORKER,
+      cellId: CELL,
       orderId,
       commandId: 'c-dry',
       epoch: job.epoch,
@@ -265,9 +265,9 @@ describe('command loop', () => {
 });
 
 describe('claims', () => {
-  it('claims the best queued job for a Worker and leases it', async () => {
+  it('claims the best queued job for a Cell and leases it', async () => {
     const w = world();
-    await helloWorker(w, WORKER);
+    await helloCell(w, CELL);
     await createOrder(w, { todoId: 'todo-low', priority: 'low' });
     await createOrder(w, { todoId: 'todo-high', priority: 'high' });
 
@@ -277,19 +277,19 @@ describe('claims', () => {
     expect(job.station?.stationId).toBe('plan');
     expect(job.epoch).toBe(1);
     expect(
-      (await w.leases.forWorker(WORKER)).map((lease) => lease.orderId),
+      (await w.leases.forCell(CELL)).map((lease) => lease.orderId),
     ).toEqual(['software-factory:todo-high']);
   });
 
-  it('a Worker with no free slot is offered nothing', async () => {
+  it('a Cell with no free slot is offered nothing', async () => {
     const w = world();
-    await helloWorker(w, WORKER, 1);
+    await helloCell(w, CELL, 1);
     await createOrder(w, { todoId: 'todo-a' });
     await createOrder(w, { todoId: 'todo-b' });
     await claim(w);
 
     const response = await w.runtime.call('claim', {
-      workerId: WORKER,
+      cellId: CELL,
       waitMs: 0,
     });
 
@@ -298,10 +298,10 @@ describe('claims', () => {
 
   it('the long-poll answers none at 25 s when nothing is queued', async () => {
     const w = world();
-    await helloWorker(w, WORKER);
+    await helloCell(w, CELL);
     let settled: unknown;
     void w.runtime
-      .call('claim', { workerId: WORKER, waitMs: 25_000 })
+      .call('claim', { cellId: CELL, waitMs: 25_000 })
       .then((value) => {
         settled = value;
       });
@@ -318,10 +318,10 @@ describe('claims', () => {
 
   it('the long-poll wakes early when a Work order arrives', async () => {
     const w = world();
-    await helloWorker(w, WORKER);
+    await helloCell(w, CELL);
     let settled: { job: Job | null } | undefined;
     void w.runtime
-      .call('claim', { workerId: WORKER, waitMs: 25_000 })
+      .call('claim', { cellId: CELL, waitMs: 25_000 })
       .then((value) => {
         settled = value;
       });
@@ -335,10 +335,10 @@ describe('claims', () => {
 });
 
 describe('continuation', () => {
-  it('returns no next job when the Worker cannot run the next station', async () => {
+  it('returns no next job when the Cell cannot run the next station', async () => {
     const w = world();
-    // The plan Station runs on `claude`; the plan review runs on `cursor`, which this Worker lacks.
-    await helloWorker(w, WORKER, 1, ['claude']);
+    // The plan Station runs on `claude`; the plan review runs on `cursor`, which this Cell lacks.
+    await helloCell(w, CELL, 1, ['claude']);
     const orderId = await createOrder(w, { todoId: 'todo-a' });
     const job = await claim(w);
 
@@ -351,7 +351,7 @@ describe('continuation', () => {
       result.events.some((event) => event.type === 'cycle_completed'),
     ).toBe(true);
     expect(result.next).toBeNull();
-    expect(await w.leases.forWorker(WORKER)).toEqual([]);
+    expect(await w.leases.forCell(CELL)).toEqual([]);
     expect(orderId).toBe('software-factory:todo-a');
   });
 });

@@ -50,14 +50,14 @@ describe('resolveCycleContext for a first Cycle', () => {
           kind: 'order',
           field: 'body',
           blob: blobOf(8),
-          materialiseAs: '.worker/inputs/order.body',
+          materialiseAs: '.cell/inputs/order.body',
         },
         { kind: 'order', field: 'branch', value: 'v2-02-demo' },
       ],
       notes: [],
       nudges: [],
       priorQuestions: [],
-      outputs: [{ key: 'plan', path: '.worker/outputs/plan' }],
+      outputs: [{ key: 'plan', path: '.cell/outputs/plan' }],
     });
   });
 
@@ -68,9 +68,9 @@ describe('resolveCycleContext for a first Cycle', () => {
       (input) => input.kind === 'order' && input.field === 'body',
     );
     expect(body).toMatchObject({
-      materialiseAs: '.worker/inputs/order.body',
+      materialiseAs: '.cell/inputs/order.body',
     });
-    expect(JSON.stringify(result)).not.toMatch(/"\/\.worker/);
+    expect(JSON.stringify(result)).not.toMatch(/"\/\.cell/);
   });
 
   it('hands the artifacts of earlier passed Stations in as inputs', () => {
@@ -82,7 +82,7 @@ describe('resolveCycleContext for a first Cycle', () => {
       key: 'plan',
       cycleId: cycleIdOf(1),
       blob: blobOf(2),
-      materialiseAs: '.worker/inputs/plan.plan',
+      materialiseAs: '.cell/inputs/plan.plan',
     });
   });
 

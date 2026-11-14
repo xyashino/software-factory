@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { WireFailure } from '@repo/factory-core/contracts/errors';
-import type { ProjectId, WorkerId } from '@repo/factory-core/ids';
+import type { ProjectId, CellId } from '@repo/factory-core/ids';
 import { seedProject } from '@repo/factory-runtime/seed';
 import {
   openRuntime,
@@ -12,7 +12,7 @@ import {
 import { startSocketListener, type SocketListener } from '../socket/listener';
 import { socketFactoryClient } from '../socket/client';
 
-const WORKER = '01J0000000000000000000000W' as WorkerId;
+const CELL = '01J0000000000000000000000W' as CellId;
 const PROJECT = 'software-factory' as ProjectId;
 const SOCKET = 'factory.sock';
 
@@ -97,11 +97,11 @@ describe('socket client parity', () => {
     expect(viaSocket).toEqual(direct);
   });
 
-  it('answers the same Worker registration and claim as the runtime called directly', async () => {
+  it('answers the same Cell registration and claim as the runtime called directly', async () => {
     const socketPath = await serve();
     const client = socketFactoryClient({ socketPath });
     const hello = {
-      workerId: WORKER,
+      cellId: CELL,
       version: '0.1.0',
       projects: [PROJECT],
       runners: ['claude'],
@@ -111,7 +111,7 @@ describe('socket client parity', () => {
 
     const viaSocket = await client.call('hello', hello);
     const direct = await opened!.runtime.call('hello', hello);
-    const claim = await client.call('claim', { workerId: WORKER, waitMs: 0 });
+    const claim = await client.call('claim', { cellId: CELL, waitMs: 0 });
 
     expect(viaSocket).toEqual(direct);
     expect(claim).toEqual({ job: null });
@@ -140,8 +140,8 @@ describe('the transport answers for itself', () => {
   it('answers a body the route schema refuses with 422 invalid', async () => {
     const socketPath = await serve();
 
-    const response = await raw(socketPath, '/v1/worker/claim', {
-      workerId: 'nope',
+    const response = await raw(socketPath, '/v1/cell/claim', {
+      cellId: 'nope',
     });
     const body = (await response.json()) as { code: string; issues: string[] };
 
@@ -153,7 +153,7 @@ describe('the transport answers for itself', () => {
   it('answers an unknown route with 404', async () => {
     const socketPath = await serve();
 
-    const response = await raw(socketPath, '/v1/worker/unknown', {});
+    const response = await raw(socketPath, '/v1/cell/unknown', {});
 
     expect(response.status).toBe(404);
   });

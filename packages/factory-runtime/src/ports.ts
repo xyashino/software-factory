@@ -5,7 +5,7 @@ import type { LeaseStore } from '@repo/factory-core/ports/lease-store';
 import type { ProjectStore } from '@repo/factory-core/ports/projects';
 import type { ProjectionReader } from '@repo/factory-core/ports/projection-reader';
 import type { SignalStore } from '@repo/factory-core/ports/signals';
-import type { WorkerStore } from '@repo/factory-core/ports/workers';
+import type { CellStore } from '@repo/factory-core/ports/cells';
 import type { Clock } from '@repo/factory-core/ports/clock';
 import type { RuntimeIds } from './ids';
 
@@ -24,7 +24,7 @@ export interface Timers {
   after(ms: number, fn: () => void): () => void;
 }
 
-/** Factory settings returned to Workers at `hello` (PROTOCOL §5.1), plus the runtime's own knobs. */
+/** Factory settings returned to Cells at `hello` (PROTOCOL §5.1), plus the runtime's own knobs. */
 export interface RuntimeConfig {
   leaseTtlMs: number;
   heartbeatMs: number;
@@ -34,7 +34,7 @@ export interface RuntimeConfig {
   claimTickMs: number;
   /** Tries of one command before `unavailable` (STORAGE §3). */
   commandAttempts: number;
-  /** Whether a job-ending Worker command also claims the next job of its Work order (PROTOCOL §4). */
+  /** Whether a job-ending Cell command also claims the next job of its Work order (PROTOCOL §4). */
   continuation: boolean;
   /** Timeout of an inspection command when its Line does not set one. */
   inspectionTimeoutMs: number;
@@ -71,7 +71,7 @@ export interface RuntimePorts {
   projects: ProjectStore;
   blobs: BlobStore;
   leases: LeaseStore;
-  workers: WorkerStore;
+  cells: CellStore;
   signals: SignalStore;
   clock: Clock;
   ids: RuntimeIds;

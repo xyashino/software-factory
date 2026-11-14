@@ -8,7 +8,7 @@ import {
   questionIdSchema,
   stationIdSchema,
   todoIdSchema,
-  workerIdSchema,
+  cellIdSchema,
   type BlobRef,
   type CycleId,
 } from '../ids';
@@ -62,7 +62,7 @@ const reprioritiseSchema = z
   .object({ type: z.literal('Reprioritise'), priority: priorities })
   .strict();
 const claimJobSchema = z
-  .object({ type: z.literal('ClaimJob'), workerId: workerIdSchema })
+  .object({ type: z.literal('ClaimJob'), cellId: cellIdSchema })
   .strict();
 const startCycleSchema = z
   .object({

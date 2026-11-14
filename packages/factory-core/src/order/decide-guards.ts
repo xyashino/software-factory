@@ -119,13 +119,13 @@ export const runningCycleOf = (
   job.cycleId && isLive(state, job.cycleId) ? job.cycleId : undefined;
 
 /**
- * Ends the active job without an outcome from its Worker: a running Cycle fails as `lost`, then the
+ * Ends the active job without an outcome from its Cell: a running Cycle fails as `lost`, then the
  * job is lost (CORE §5.2, `ExpireLease`, `ReleaseJob`, `Cancel`).
  */
 export const loseJob = (
   state: WorkOrderState,
   job: ActiveJob,
-  reason: 'lease_expired' | 'worker_left' | 'cancelled',
+  reason: 'lease_expired' | 'cell_left' | 'cancelled',
   detail: string,
 ): OrderEvent[] => {
   const cycleId = runningCycleOf(state, job);

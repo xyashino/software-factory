@@ -9,8 +9,8 @@ workflow: feature
 
 ## Objective
 
-Complete the `factory-server` core: todos flow in from git, PR state flows back, the CLI and Workers read
-the event feed over the Unix socket, and admin operations cover backup and move. A scripted fake Worker
+Complete the `factory-server` core: todos flow in from git, PR state flows back, the CLI and Cells read
+the event feed over the Unix socket, and admin operations cover backup and move. A scripted fake Cell
 connects to the server over the socket and proves a Work order goes from todo to delivered through the
 socket client.
 
@@ -23,7 +23,7 @@ socket client.
 
 ## Scope (ROADMAP items)
 
-`factory-m4-intake`, `factory-m4-feed`, `factory-m4-admin`, `factory-m4-e2e-fake-worker`.
+`factory-m4-intake`, `factory-m4-feed`, `factory-m4-admin`, `factory-m4-e2e-fake-cell`.
 
 ## Deliverables
 
@@ -35,13 +35,13 @@ socket client.
    consumed by the socket client for `factory status --watch` and `factory log -f`.
 4. Runtime admin operations `backup | export | import | rebuild-projections`, exposed as local
    `factory admin ...` commands. Import appends `ExpireLease` for Work orders that had an active job.
-5. Scripted fake Worker and fixture repo. The fake Worker connects to a `factory-server` on a temp
+5. Scripted fake Cell and fixture repo. The fake Cell connects to a `factory-server` on a temp
    socket and runs the flow through the socket client, not in-process.
 
 ## Acceptance criteria
 
 - E2E: a `feature` Work order goes from a todo file in a fixture repo to `delivered` through every
-  Station, with the fake Worker connected over the socket and no network listener.
+  Station, with the fake Cell connected over the socket and no network listener.
 - E2E: killing and restarting the server mid-Work-order loses nothing.
 - Export → import into an empty database reproduces events, blobs and projections.
 - `pnpm turbo check-types lint test` green.

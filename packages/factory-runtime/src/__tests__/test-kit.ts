@@ -12,7 +12,7 @@ import {
   type OrderId,
   type ProjectId,
   type TodoId,
-  type WorkerId,
+  type CellId,
 } from '@repo/factory-core/ids';
 import type { OrderCommand } from '@repo/factory-core/order/commands';
 import type { Actor } from '@repo/factory-core/order/events';
@@ -22,12 +22,12 @@ import type {
   ProjectStore,
 } from '@repo/factory-core/ports/projects';
 import type { SignalStore, NewSignal } from '@repo/factory-core/ports/signals';
-import type { Signal } from '@repo/factory-core/contracts/worker';
+import type { Signal } from '@repo/factory-core/contracts/cell';
 import type {
-  WorkerRecord,
-  WorkerStore,
-  WorkerInfo,
-} from '@repo/factory-core/ports/workers';
+  CellRecord,
+  CellStore,
+  CellInfo,
+} from '@repo/factory-core/ports/cells';
 import {
   loadDefinitions,
   type Definitions,
@@ -95,31 +95,31 @@ export const flush = async (): Promise<void> => {
   }
 };
 
-export const memoryWorkers = (): WorkerStore & { all(): WorkerRecord[] } => {
-  const records = new Map<WorkerId, WorkerRecord>();
+export const memoryCells = (): CellStore & { all(): CellRecord[] } => {
+  const records = new Map<CellId, CellRecord>();
   return {
     all: () => [...records.values()],
-    hello: async ({ workerId, name, info, at }) => {
-      const existing = records.get(workerId);
-      records.set(workerId, {
-        workerId,
+    hello: async ({ cellId, name, info, at }) => {
+      const existing = records.get(cellId);
+      records.set(cellId, {
+        cellId,
         name,
-        info: info as WorkerInfo,
+        info: info as CellInfo,
         joinedAt: existing?.joinedAt ?? at,
         lastSeenAt: at,
         revokedAt: existing?.revokedAt ?? null,
       });
     },
-    get: async (workerId) => records.get(workerId),
+    get: async (cellId) => records.get(cellId),
     list: async () => [...records.values()],
-    touch: async (workerId, at) => {
-      const record = records.get(workerId);
-      if (record) records.set(workerId, { ...record, lastSeenAt: at });
+    touch: async (cellId, at) => {
+      const record = records.get(cellId);
+      if (record) records.set(cellId, { ...record, lastSeenAt: at });
     },
-    revoke: async (workerId, at) => {
-      const record = records.get(workerId);
+    revoke: async (cellId, at) => {
+      const record = records.get(cellId);
       if (record && record.revokedAt === null) {
-        records.set(workerId, { ...record, revokedAt: at });
+        records.set(cellId, { ...record, revokedAt: at });
       }
     },
   };
@@ -189,7 +189,7 @@ export interface World {
   events: ReturnType<typeof fakeEventStore>;
   blobs: ReturnType<typeof fakeBlobStore>;
   leases: ReturnType<typeof fakeLeaseStore>;
-  workers: ReturnType<typeof memoryWorkers>;
+  cells: ReturnType<typeof memoryCells>;
   signals: ReturnType<typeof memorySignals>;
   writer: ReturnType<typeof heldWriter>;
   ports: RuntimePorts;
@@ -203,7 +203,7 @@ export const world = (overrides: Partial<RuntimeConfig> = {}): World => {
   const events = fakeEventStore();
   const blobs = fakeBlobStore();
   const leases = fakeLeaseStore();
-  const workers = memoryWorkers();
+  const cells = memoryCells();
   const signals = memorySignals();
   const writer = heldWriter();
   const ports: RuntimePorts = {
@@ -220,7 +220,7 @@ export const world = (overrides: Partial<RuntimeConfig> = {}): World => {
     ]),
     blobs,
     leases,
-    workers,
+    cells,
     signals,
     clock,
     ids: ulidIds(clock as Clock),
@@ -235,7 +235,7 @@ export const world = (overrides: Partial<RuntimeConfig> = {}): World => {
     events,
     blobs,
     leases,
-    workers,
+    cells,
     signals,
     writer,
     ports,
@@ -303,15 +303,15 @@ export const createOrder = async (
   return orderId;
 };
 
-/** Registers a Worker that can run every shipped runner, with the given slots. */
-export const helloWorker = async (
+/** Registers a Cell that can run every shipped runner, with the given slots. */
+export const helloCell = async (
   w: { runtime: Runtime },
-  workerId: WorkerId,
+  cellId: CellId,
   slots = 1,
   runners = ['claude', 'cursor'],
 ): Promise<void> => {
   await w.runtime.call('hello', {
-    workerId,
+    cellId,
     version: '0.1.0',
     projects: [PROJECT],
     runners,

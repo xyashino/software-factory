@@ -13,7 +13,7 @@ import { bootGrace, reapOnce } from './reaper';
 import type { RuntimePorts } from './ports';
 
 /**
- * The runtime: the command loop, the claims, the heartbeats, the reaper and the Supervisor and Worker
+ * The runtime: the command loop, the claims, the heartbeats, the reaper and the Supervisor and Cell
  * operations, built from ports only. It opens no file, no socket and no port; a write needs the
  * writer lock held (see `WriterGuard`). Transports reach it through `call` or `client`.
  */

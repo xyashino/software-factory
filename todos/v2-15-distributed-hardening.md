@@ -1,7 +1,7 @@
 ---
 status: todo
 priority: high
-depends_on: [v2-13-worker-delivery, v2-14-clis, v2-18-remote-http-adapter]
+depends_on: [v2-13-cell-delivery, v2-14-clis, v2-18-remote-http-adapter]
 workflow: feature
 ---
 
@@ -23,17 +23,17 @@ Prove R2, R3 and R8 with real processes and a hostile network.
 
 ## Deliverables
 
-1. Harness: one Factory process (`factory-server`), N Worker processes, fake runner, local bare git remote,
-   a TCP proxy per Worker that can drop, delay or cut traffic. Workers connect over the Unix socket when
+1. Harness: one Factory process (`factory-server`), N Cell processes, fake runner, local bare git remote,
+   a TCP proxy per Cell that can drop, delay or cut traffic. Cells connect over the Unix socket when
    local and over TCP when remote.
 2. Tests:
-   - `kill -9` a Worker mid-Cycle → another Worker restarts the Station; no double work;
-   - partition a Worker → self-fence, `stale_epoch` on return, no push from the fenced Worker;
+   - `kill -9` a Cell mid-Cycle → another Cell restarts the Station; no double work;
+   - partition a Cell → self-fence, `stale_epoch` on return, no push from the fenced Cell;
    - drop responses → no duplicate events, continuation delivered once;
-   - Operator blocks on Worker A; A takes other work at once; resume on Worker B from the WIP
+   - Operator blocks on Cell A; A takes other work at once; resume on Cell B from the WIP
      checkpoint; passed Stations not rerun;
-   - `SIGTERM` a Worker mid-Cycle → Handover; Worker B continues without the Supervisor;
-   - 10 Workers, 50 Work orders, Workers joining and leaving → every Work order delivered exactly once.
+   - `SIGTERM` a Cell mid-Cycle → Handover; Cell B continues without the Supervisor;
+   - 10 Cells, 50 Work orders, Cells joining and leaving → every Work order delivered exactly once.
 3. CI job running the suite.
 
 ## Acceptance criteria

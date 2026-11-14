@@ -5,7 +5,7 @@ import {
   orderIdSchema,
   projectIdSchema,
   questionIdSchema,
-  workerIdSchema,
+  cellIdSchema,
 } from '../ids';
 import { orderCommandSchema } from '../order/commands';
 import { orderEventSchema } from '../order/events';
@@ -16,10 +16,10 @@ export const MAX_CLAIM_WAIT_MS = 25_000;
 
 const signalIdSchema = z.string().min(1).max(64);
 
-/** A Worker announces itself and its capacity; the answer is the runtime config it must follow. */
+/** A Cell announces itself and its capacity; the answer is the runtime config it must follow. */
 export const helloRequestSchema = z
   .object({
-    workerId: workerIdSchema,
+    cellId: cellIdSchema,
     version: z.string().min(1).max(64),
     projects: z.array(projectIdSchema).max(64),
     runners: z.array(z.string().min(1).max(64)).max(32),
@@ -30,7 +30,7 @@ export const helloRequestSchema = z
 
 export const helloResponseSchema = z
   .object({
-    workerId: workerIdSchema,
+    cellId: cellIdSchema,
     config: z
       .object({
         leaseTtlMs: z.number().int().min(1),
@@ -44,7 +44,7 @@ export const helloResponseSchema = z
 
 export const claimRequestSchema = z
   .object({
-    workerId: workerIdSchema,
+    cellId: cellIdSchema,
     waitMs: z.number().int().min(0).max(MAX_CLAIM_WAIT_MS),
   })
   .strict();
@@ -78,7 +78,7 @@ export type Signal = z.infer<typeof signalSchema>;
 
 export const heartbeatRequestSchema = z
   .object({
-    workerId: workerIdSchema,
+    cellId: cellIdSchema,
     jobs: z.array(jobIdSchema).max(64),
     acked: z.array(signalIdSchema).max(256),
   })
@@ -96,12 +96,12 @@ export const heartbeatResponseSchema = z
   .strict();
 
 /**
- * A command a Worker sends for its job. The actor is the Worker; `epoch` is the epoch it holds.
+ * A command a Cell sends for its job. The actor is the Cell; `epoch` is the epoch it holds.
  * `dryRun` runs every check and appends nothing (PROTOCOL §8.2).
  */
 export const submitCommandRequestSchema = z
   .object({
-    workerId: workerIdSchema,
+    cellId: cellIdSchema,
     orderId: orderIdSchema,
     commandId: z.string().min(1).max(128),
     epoch: z.number().int().min(1),
@@ -112,7 +112,7 @@ export const submitCommandRequestSchema = z
 
 /**
  * The result of a command: the events it produced (bare, without the store envelope) and, when it
- * ended the job and the same Work order has a job this Worker can run, that job (PROTOCOL §4).
+ * ended the job and the same Work order has a job this Cell can run, that job (PROTOCOL §4).
  */
 export const commandResultSchema = z
   .object({

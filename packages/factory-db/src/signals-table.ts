@@ -1,5 +1,5 @@
 import type { Database } from 'bun:sqlite';
-import type { Signal } from '@repo/factory-core/contracts/worker';
+import type { Signal } from '@repo/factory-core/contracts/cell';
 import type { SignalStore } from '@repo/factory-core/ports/signals';
 import type { StatementGate } from './sqlite-event-store';
 import type { WriterLock } from './writer-lock';
