@@ -303,6 +303,16 @@ export const createOperations = (
     adminRebuildProjections: async () => ({
       rows: await extras.admin.rebuildProjections(),
     }),
+    adminRecover: async (request) => {
+      const report = await extras.admin.recover(request.projectId);
+      return {
+        recovered: report.recovered.map((order) => ({
+          ...order,
+          passedStations: [...order.passedStations],
+        })),
+        skipped: report.skipped,
+      };
+    },
   };
 
   return {

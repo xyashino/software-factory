@@ -12,7 +12,7 @@ import {
 } from './process';
 
 /** The `factory-server` entry point, run as a real process. */
-const SERVER_MAIN = fileURLToPath(
+export const SERVER_MAIN = fileURLToPath(
   new URL('../../../../../server/src/main.ts', import.meta.url),
 );
 

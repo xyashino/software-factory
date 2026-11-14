@@ -1,4 +1,4 @@
-import type { OrderId } from '@repo/factory-core/ids';
+import type { OrderId, ProjectId } from '@repo/factory-core/ids';
 import { nextJob } from '@repo/factory-core/order/next-job';
 import { toProjection } from '@repo/factory-core/order/projection';
 import type {
@@ -7,6 +7,7 @@ import type {
 } from '@repo/factory-core/ports/archive';
 import type { CommandHandler } from './command-handler';
 import type { RuntimePorts } from './ports';
+import { type RecoveryReport, recoverFromGit } from './recovery';
 import { foldHistory } from './state';
 
 /** The projection of a folded Work order, with its next job (STORAGE §6): the rebuild's row function. */
@@ -25,6 +26,11 @@ export interface RuntimeAdmin {
     file: string,
   ): Promise<{ counts: ArchiveCounts; expired: OrderId[] }>;
   rebuildProjections(): Promise<number>;
+  /**
+   * Rebuilds Work orders from git after the database is lost (STORAGE §8): intake, then one
+   * `order_recovered` per fresh order with a passed commit on its branch. Idempotent.
+   */
+  recover(projectId?: ProjectId): Promise<RecoveryReport>;
 }
 
 export const createAdmin = (
@@ -58,4 +64,5 @@ export const createAdmin = (
     return { counts, expired: active.map((row) => row.orderId) };
   },
   rebuildProjections: () => ports.archive.rebuildProjections(projectionOf),
+  recover: (projectId) => recoverFromGit(ports, handler, projectId),
 });

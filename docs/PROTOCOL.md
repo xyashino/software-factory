@@ -363,6 +363,10 @@ Used whenever a Cycle ends with work to keep (`done`, `verdict`, `block`, handov
 
    `Factory-Outcome` is `passed`, `failed` (a failed verdict), `blocked` or `handed_over`.
 
+   `Factory-Outcome: passed` is load-bearing for recovery (STORAGE §8): `admin recover` finds the
+   checkpoint of a lost database by that trailer, so a passed Cycle's commit must carry it and be
+   pushed before its command is sent.
+
 4. **Dry-run** the command (`dryRun: true`) with the commit sha. `stale_epoch` → stop, no push.
    `precondition` / `invalid` → report to the Operator, drop the local commit (`git reset --soft`),
    continue the Cycle.
@@ -464,6 +468,7 @@ The Cell exits when every job is released. A Cell that simply vanishes is handle
 | `factory project rm <id>`                                                                                        | Remove a project with no history (§3.1)                                                       |
 | `factory check`                                                                                                  | Offline: validate Operator profiles, Lines and templates (no Factory needed)                  |
 | `factory admin export <file>`                                                                                    | STORAGE §7                                                                                    |
+| `factory admin recover [--project <id>]`                                                                         | STORAGE §8: rebuild Work orders from git after the database is lost                           |
 
 `factory-server` is the core process: `factory run` is its local start command. It owns the database
 through the writer lock, runs intake, scheduling, the reaper and leases, and listens on the local Unix
@@ -490,8 +495,10 @@ Configuration (`apps/cli`): settings come from the flag, then `FACTORY_DATA_DIR`
 `color`), then the default `~/.local/share/factory`. `NO_COLOR` set to a non-empty value, `--no-color`
 and `"color": false` turn colour off. The config file holds no state; it is never a second database.
 
-`factory-server admin …` (token create, backup, import, rebuild-projections) operates on the server's
-database.
+`factory-server admin …` (token create, backup, export, import, rebuild-projections, recover) operates on
+the server's database. `admin recover` is the socket and HTTP operation `supervisor/admin/recover`
+(`POST /v1/admin/recover`, body `{ projectId? }`); it answers the Work orders it recovered and the
+branches it skipped. Like `admin backup`, the offline form needs the writer lock.
 
 ## 11. Failure matrix
 

@@ -129,9 +129,9 @@ export const toProjection = (
     requiredCapabilities: station ? [...station.requires] : [],
     stationId: station?.id ?? null,
     stationIndex: station?.index ?? null,
-    progressed: Object.values(state.lastPassed).some(
-      (cycleId) => cycleId !== undefined,
-    ),
+    progressed:
+      state.recovered.length > 0 ||
+      Object.values(state.lastPassed).some((cycleId) => cycleId !== undefined),
     resumed: state.resumedWaiting,
     lastCellId: lastCellIdOf(state),
     avoidCells: avoidCellsOf(state),

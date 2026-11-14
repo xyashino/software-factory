@@ -1,0 +1,44 @@
+# factory-server: the single writer of the Factory data directory (STORAGE §1, PROTOCOL §2).
+# Install: copy to /etc/systemd/system/, create the user and /etc/factory/factory-server.env, then
+#   systemctl daemon-reload && systemctl enable --now factory-server
+# Restore after a lost machine: deploy/RESTORE.md.
+
+[Unit]
+Description=Software Factory server
+Documentation=file:///opt/software-factory/deploy/RESTORE.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# factory-server reads FACTORY_BIND, FACTORY_REMOTE, FACTORY_DATA_DIR and GH_TOKEN (for the PR poll)
+# from this file. The leading "-" makes it optional.
+EnvironmentFile=-/etc/factory/factory-server.env
+Environment=FACTORY_DATA_DIR=%S/factory
+# The binary must be on the PATH of the unit: `factory-server` from the package that installs it.
+ExecStart=/usr/bin/env factory-server
+Restart=on-failure
+RestartSec=5
+
+# State: the database, blobs, mirrors and the writer lock live in one directory, owned by the unit.
+User=factory
+Group=factory
+StateDirectory=factory
+StateDirectoryMode=0700
+UMask=0077
+
+# Hardening. The server writes only its state directory and talks to git and gh over the network.
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+RestrictNamespaces=yes
+
+[Install]
+WantedBy=multi-user.target

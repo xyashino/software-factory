@@ -62,10 +62,12 @@ const notConfigured = (what: string): Error =>
 const unconfiguredGit: GitMirror = {
   sync: () => Promise.reject(notConfigured('a git mirror')),
   todoFiles: () => Promise.reject(notConfigured('a git mirror')),
+  branches: () => Promise.reject(notConfigured('a git mirror')),
 };
 
 const unconfiguredPrState: PrStatePort = {
   read: () => Promise.reject(notConfigured('a PR state reader')),
+  forBranch: () => Promise.reject(notConfigured('a PR state reader')),
 };
 
 export interface OpenedRuntime {

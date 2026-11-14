@@ -114,6 +114,7 @@ export interface WorkOrderState {
   retryGrants: Record<StationId, number>; // extra budget granted by `resumed`
   restartsUsed: Record<StationId, number>; // `restart` Cycles since that Station last passed
   lostRestartsUsed: Record<StationId, number>; // `lost` restarts and handovers since that Station last passed
+  recovered: StationId[]; // Stations passed before an `order_recovered`; their artifacts are not held (CORE §4.3 rule 11)
   pendingFeedback?: { forStation: StationId; fromCycle: CycleId } | undefined;
   pendingResume?:
     | {

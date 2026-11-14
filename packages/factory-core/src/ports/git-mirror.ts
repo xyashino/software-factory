@@ -13,6 +13,18 @@ export interface MirroredProject {
   baseBranch: string;
 }
 
+/** One commit of a branch: its sha and its full message (subject, blank line, trailers). */
+export interface BranchCommit {
+  sha: CommitSha;
+  message: string;
+}
+
+/** A branch of the mirror and its commits, newest first from the tip (STORAGE §8). */
+export interface BranchLog {
+  branch: string;
+  commits: BranchCommit[];
+}
+
 /**
  * The project's bare mirror (ROADMAP M4). The real adapter runs `git` behind this port; tests use a
  * fixture repository or a fake. Reads never write to the working tree.
@@ -22,4 +34,6 @@ export interface GitMirror {
   sync(project: MirroredProject): Promise<CommitSha>;
   /** Every `todos/*.md` file at a commit. */
   todoFiles(projectId: ProjectId, commit: CommitSha): Promise<TodoFile[]>;
+  /** Every branch whose name starts with `prefix`, with its commits from the tip (STORAGE §8). */
+  branches(projectId: ProjectId, prefix: string): Promise<BranchLog[]>;
 }

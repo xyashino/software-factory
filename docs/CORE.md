@@ -121,6 +121,7 @@ interface StoredEvent {
 | `spec_updated`     | `spec, priority, dependsOn, line?`                                                                                                              | Only before the first job is claimed. |
 | `priority_changed` | `priority`                                                                                                                                      | Any time before delivery.             |
 | `cancelled`        | `reason`                                                                                                                                        | Terminal.                             |
+| `order_recovered`  | `passedStations: StationId[]` (a non-empty prefix of the pinned Line), `checkpoint { commit, afterStation }`, `delivery?: { prUrl, commit, state: 'open' \| 'merged' \| 'closed' }` | Only on a fresh Work order (§4.3 rule 11). Written by `RecoverOrder` (§5.2), from git (STORAGE §8). Added in schema version 2 (additive, §11). |
 
 **Scheduling**
 
@@ -216,6 +217,7 @@ interface WorkOrderState {
   retryGrants: Record<StationId, number>; // extra budget granted by `resumed`
   restartsUsed: Record<StationId, number>; // `restart` Cycles since that Station last passed
   lostRestartsUsed: Record<StationId, number>; // `lost` restarts and handovers since that Station last passed
+  recovered: StationId[]; // Stations passed before a `order_recovered`; their artifacts are not held (§4.3 rule 11)
   pendingFeedback?: { forStation: StationId; fromCycle: CycleId };
   pendingResume?: {
     resumeId: ResumeId;
@@ -380,6 +382,18 @@ afterStation: <the Station before s, or null> }`; sets `pendingResume = { forSta
     `cycle_started`, `delivery_finished`, `delivery_failed`, `resumed` and `reopened` clear it.
     `delivery_failed` sets `deliveryFailed`. `delivery_finished` sets `delivery` and
     `phase = delivered`.
+11. **Recovery** (`order_recovered { passedStations, checkpoint, delivery? }`), a fresh Work order
+    only (epoch 0, no Cycle, no job ever claimed; §5.2 `RecoverOrder`). It sets:
+    - `recovered = passedStations`, `checkpoint = checkpoint`, `resumedWaiting = false`;
+    - without `delivery`: `phase.index = index of the first Station after passedStations`, or
+      `delivering` when every Station is in `passedStations`;
+    - with `delivery` (a PR exists for `factory/<todoId>`): `delivery = { prUrl, commit, state }`
+      and `phase = delivered`; `passedStations` then names every Station.
+
+    It never writes `lastPassed`: a recovered Station has no Cycle, so `cycle_completed`-style
+    lookups stay exact, and I6 holds because nothing exists yet that could be removed. A recovered
+    Station's artifacts are not in the state, so `context` gives the next Station no inputs from it
+    (§7); that is the recovery limit of STORAGE §8.
 
 ### 4.4 Pinned Line
 
@@ -428,6 +442,7 @@ before calling it.
 | `Nudge`                 | supervisor, mechanic (M10)                   | a Cycle is running                                                                                           | `nudged`                                                                 |
 | `RecordUsage`           | cell                                         | the caller is the Cell that ran the named Cycle (no epoch: usage arrives late)                               | `usage_recorded`                                                         |
 | `ExpireLease`           | factory (reaper)                             | `activeJob` with that epoch; lease expired (checked by caller)                                               | `cycle_failed{lost}` if a Cycle runs, + `job_lost{lease_expired}`        |
+| `RecoverOrder`          | factory (`admin recover`)                    | `epoch == 0` (never claimed), no Cycle, not terminal, no `order_recovered` yet; `passedStations` is a non-empty prefix of the pinned Line, the whole Line when `delivery` is given | `order_recovered` (§4.3 rule 11) |
 | `ReleaseJob`            | cell (leaving)                               | epoch matches                                                                                                | as `ExpireLease` with `cell_left`                                        |
 | `Resume`                | supervisor, mechanic (M10)                   | `andon` set; mode valid for the Line; `retries_exhausted` + `retry_station` ⇒ `grantRetries ≥ 1` (default 1) | `resumed`                                                                |
 | `Reopen`                | supervisor                                   | phase `delivered`; PR not `merged`; Station exists in the Line                                               | `reopened`                                                               |
@@ -453,6 +468,11 @@ type DomainError =
 ## 6. `nextJob`
 
 `nextJob(state): Next` is a pure function of `WorkOrderState`.
+
+Row 15 of a recovered Work order resumes at the first Station after `recovered`, on the checkpoint
+commit (`checkpointBase`), with `cause: first`. The inputs rule of STORAGE §8 is this choice: the
+Station declares no inputs in the Line, and the artifacts of recovered Stations are not in git, so
+no Station can recover them; the resume point is the first Station that has not passed.
 
 ```ts
 type Next =

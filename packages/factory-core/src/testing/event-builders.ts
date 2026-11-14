@@ -365,6 +365,16 @@ export const prStateChanged = (
   ...over,
 });
 
+/** A recovery of the first Station of the feature Line, from git on commit 5. */
+export const orderRecovered = (
+  over: Partial<Fields<'order_recovered'>> = {},
+): Ev<'order_recovered'> => ({
+  type: 'order_recovered',
+  passedStations: [stationOf('plan')],
+  checkpoint: { commit: commitOf(5), afterStation: stationOf('plan') },
+  ...over,
+});
+
 /**
  * Wraps events into a Traveler: seq 1..n, `at` = seq * 1000 ms, a factory actor. Pure, so tests
  * can build any history from events alone.
@@ -469,4 +479,5 @@ export const samples: { [T in OrderEvent['type']]: Ev<T> } = {
   delivery_finished: deliveryFinished(),
   delivery_failed: deliveryFailed(),
   pr_state_changed: prStateChanged(),
+  order_recovered: orderRecovered(),
 };
