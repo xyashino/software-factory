@@ -5,6 +5,7 @@ import type {
   CommitSha,
   CycleId,
   CellId,
+  OrderId,
 } from '@repo/factory-core/ids';
 import type { StoreTx } from '@repo/factory-core/ports/event-store';
 import { createCommandHandler } from '../command-handler';
@@ -51,7 +52,7 @@ const runPlanStation = async (
   if (!station?.cycleId) throw new Error('job has no Cycle');
   await w.runtime.call('submitCommand', {
     cellId: CELL,
-    orderId: job.orderId,
+    orderId: job.orderId as OrderId,
     commandId: ids.start,
     epoch: job.epoch,
     command: { type: 'StartCycle', baseCommit: COMMIT },
@@ -59,7 +60,7 @@ const runPlanStation = async (
   const plan = await artifactOf(w, '# Plan\n');
   return w.runtime.call('submitCommand', {
     cellId: CELL,
-    orderId: job.orderId,
+    orderId: job.orderId as OrderId,
     commandId: ids.complete,
     epoch: job.epoch,
     command: {
@@ -369,7 +370,7 @@ describe('continuation', () => {
 
     const released = await w.runtime.call('submitCommand', {
       cellId: CELL,
-      orderId: job.orderId,
+      orderId: job.orderId as OrderId,
       commandId: 'release-cont',
       epoch: job.epoch,
       command: { type: 'ReleaseJob' },

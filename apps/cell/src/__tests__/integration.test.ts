@@ -429,6 +429,8 @@ describe('Cell over the socket', () => {
         created.push(input);
         return { url: 'https://example.test/software-factory/pull/1' };
       },
+      markReady: async () => undefined,
+      updateBody: async () => undefined,
     };
     const loopErrors: string[] = [];
 

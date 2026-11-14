@@ -81,7 +81,7 @@ describe('restart mid-order with SIGKILL', () => {
     job = job ? await cell.run(job) : null; // plan-review; the next job is build
     if (!job) throw new Error('expected the build job');
     expect(job.station?.stationId).toBe('build');
-    const orderId = job.orderId;
+    const orderId = job.orderId as OrderId;
 
     first.child.kill('SIGKILL');
     await first.child.exited;

@@ -7,6 +7,7 @@ import {
   rmSync,
   writeFileSync,
 } from 'node:fs';
+import { workspaceOf } from './jobs/job-shape';
 import { join } from 'node:path';
 import type { Job } from '@repo/factory-core/contracts/job';
 import type { CommitSha } from '@repo/factory-core/ids';
@@ -93,6 +94,7 @@ export const prepareWorkspace = async (input: {
   const git = input.git ?? runGit;
   const shell = input.shell ?? runShell;
   const { job, dataDir } = input;
+  const workspace = workspaceOf(job);
   const mirror = join(dataDir, 'repos', `${job.projectId}.git`);
   mkdirSync(join(dataDir, 'repos'), { recursive: true });
 
@@ -190,8 +192,8 @@ export const prepareWorkspace = async (input: {
     const syncFailure = await runLines(
       shell,
       worktree,
-      job.workspace.sync,
-      job.workspace.timeoutMs,
+      workspace.sync,
+      workspace.timeoutMs,
     );
     if (syncFailure !== undefined) {
       return { ok: false, stage: 'sync', detail: syncFailure };
@@ -199,8 +201,8 @@ export const prepareWorkspace = async (input: {
     const setupFailure = await runLines(
       shell,
       worktree,
-      job.workspace.setup,
-      job.workspace.timeoutMs,
+      workspace.setup,
+      workspace.timeoutMs,
     );
     if (setupFailure !== undefined) {
       return { ok: false, stage: 'setup', detail: setupFailure };

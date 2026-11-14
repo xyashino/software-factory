@@ -3,12 +3,15 @@ import {
   blobRefSchema,
   jobIdSchema,
   orderIdSchema,
+  planIdSchema,
   projectIdSchema,
   questionIdSchema,
   cellIdSchema,
 } from '../ids';
 import { orderCommandSchema } from '../order/commands';
 import { orderEventSchema } from '../order/events';
+import { planCommandSchema } from '../plan/commands';
+import { planEventSchema } from '../plan/events';
 import { jobSchema } from './job';
 
 /** Longest a claim may wait before it answers `none` (PROTOCOL §5.2, long-poll ≤ 25 s). */
@@ -95,34 +98,59 @@ export const heartbeatResponseSchema = z
   })
   .strict();
 
-/**
- * A command a Cell sends for its job. The actor is the Cell; `epoch` is the epoch it holds.
- * `dryRun` runs every check and appends nothing (PROTOCOL §8.2).
- */
-export const submitCommandRequestSchema = z
+/** The fields both command variants share: who sends it, the claimed epoch, and the job it is for. */
+const submitCommandBase = {
+  cellId: cellIdSchema,
+  commandId: z.string().min(1).max(128),
+  epoch: z.number().int().min(1),
+  dryRun: z.boolean().optional(),
+  /**
+   * The job the command is for. The remote route carries it in the path (PROTOCOL §3.2), so a remote
+   * client needs it here; the socket and the runtime ignore it, since the stream and epoch fence the command.
+   */
+  jobId: jobIdSchema.optional(),
+};
+
+/** A Work order command: the stream is the OrderId. */
+const orderSubmitSchema = z
   .object({
-    cellId: cellIdSchema,
+    ...submitCommandBase,
     orderId: orderIdSchema,
-    commandId: z.string().min(1).max(128),
-    epoch: z.number().int().min(1),
     command: orderCommandSchema,
-    dryRun: z.boolean().optional(),
-    /**
-     * The job the command is for. The remote route carries it in the path (PROTOCOL §3.2), so a remote
-     * client needs it here; the socket and the runtime ignore it, since the order and epoch fence the command.
-     */
-    jobId: jobIdSchema.optional(),
+  })
+  .strict();
+
+/** An Order Plan command (PROTOCOL §4): the stream is the PlanId, so the two variants never overlap. */
+const planSubmitSchema = z
+  .object({
+    ...submitCommandBase,
+    planId: planIdSchema,
+    command: planCommandSchema,
   })
   .strict();
 
 /**
+ * A command a Cell sends for its job. The actor is the Cell; `epoch` is the epoch it holds. Either a
+ * Work order command (`orderId`) or a plan command (`planId`). `dryRun` runs every check and appends
+ * nothing (PROTOCOL §8.2).
+ */
+export const submitCommandRequestSchema = z.union([
+  orderSubmitSchema,
+  planSubmitSchema,
+]);
+
+export type OrderSubmit = z.infer<typeof orderSubmitSchema>;
+export type PlanSubmit = z.infer<typeof planSubmitSchema>;
+
+/**
  * The result of a command: the events it produced (bare, without the store envelope) and, when it
- * ended the job and the same Work order has a job this Cell can run, that job (PROTOCOL §4).
+ * ended the job and the same Work order has a job this Cell can run, that job (PROTOCOL §4). A plan
+ * command's result carries plan events and `next: null`.
  */
 export const commandResultSchema = z
   .object({
     dryRun: z.boolean(),
-    events: z.array(orderEventSchema),
+    events: z.array(z.union([orderEventSchema, planEventSchema])),
     next: jobSchema.nullable(),
   })
   .strict();

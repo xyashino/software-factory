@@ -80,9 +80,11 @@ const fakeGithub = (existing?: PrRef) => {
     findPr: async () => pr,
     createPr: async (input) => {
       created.push(input);
-      pr = { number: 7, url: PR_URL, state: 'open' };
+      pr = { url: PR_URL, state: 'open', draft: input.draft };
       return { url: PR_URL };
     },
+    markReady: async () => undefined,
+    updateBody: async () => undefined,
   };
   return { port, created };
 };
@@ -227,9 +229,9 @@ describe('deliver job', () => {
   it('reuses the open PR of the branch and creates none', async () => {
     commitOnBranch('wip-1.txt', 'one\n');
     const existing: PrRef = {
-      number: 3,
       url: 'https://example.test/pull/3',
       state: 'open',
+      draft: false,
     };
     const github = fakeGithub(existing);
     const { context, calls } = contextWith(accepting, github);
@@ -360,5 +362,106 @@ describe('deliver job', () => {
     const [report] = reportsOf(calls);
     expect(report).toMatchObject({ status: 'failed' });
     expect(String(report?.detail)).toMatch(/^push refused/);
+  });
+});
+
+/** A job on a stacked base: the branch is `factory/todo-1`, its base the predecessor's branch. */
+const stackedJob = (predecessor: string): Job => {
+  const job = deliverJob({ branchBase: predecessor });
+  return { ...job, repo: { ...job.repo, baseBranch: predecessor } } as Job;
+};
+
+/** Makes or moves `name` on origin to `from` plus one commit per file. Returns the new tip. */
+const branchOnOrigin = (
+  name: string,
+  from: string,
+  files: Record<string, string>,
+): string => {
+  git(origin, 'checkout', '-q', '-B', name, from);
+  for (const [file, text] of Object.entries(files)) {
+    commitFile(origin, file, text);
+  }
+  const tip = git(origin, 'rev-parse', 'HEAD');
+  git(origin, 'checkout', '-q', 'main');
+  return tip;
+};
+
+describe('deliver job on a stacked base (CORE §12.5)', () => {
+  it('delivers onto factory/<predecessor>: the PR targets it and the predecessor commit is an ancestor', async () => {
+    const predTip = branchOnOrigin('factory/todo-0', baseHead, {
+      'pred.txt': 'pred\n',
+    });
+    branchOnOrigin(BRANCH, predTip, {
+      'todos/todo-1.md': '# todo\n',
+      'wip.txt': 'wip\n',
+    });
+    const { context, calls, github } = contextWith();
+
+    await runDeliver(context, stackedJob('factory/todo-0'), signal());
+
+    const tip = branchTip();
+    expect(git(origin, 'rev-parse', `${tip}^`)).toBe(predTip);
+    expect(
+      git(origin, 'rev-list', '--count', `factory/todo-0..${BRANCH}`),
+    ).toBe('1');
+    expect(filesOf(tip)).toEqual(
+      expect.arrayContaining(['pred.txt', 'wip.txt']),
+    );
+    expect(filesOf(tip)).not.toContain('todos/todo-1.md');
+    expect(github.created).toEqual([
+      expect.objectContaining({ branch: BRANCH, base: 'factory/todo-0' }),
+    ]);
+    expect(reportsOf(calls)).toEqual([
+      { status: 'finished', prUrl: PR_URL, commit: tip },
+    ]);
+  });
+
+  it('delivers onto feat/<slug>: the PR targets the plan branch', async () => {
+    const planTip = branchOnOrigin('feat/xyz', baseHead, {
+      'plan.txt': 'plan\n',
+    });
+    branchOnOrigin(BRANCH, planTip, { 'wip.txt': 'wip\n' });
+    const { context, github } = contextWith();
+
+    await runDeliver(context, stackedJob('feat/xyz'), signal());
+
+    const tip = branchTip();
+    expect(git(origin, 'rev-parse', `${tip}^`)).toBe(planTip);
+    expect(github.created).toEqual([
+      expect.objectContaining({ branch: BRANCH, base: 'feat/xyz' }),
+    ]);
+  });
+
+  it('reports delivery_failed and pushes nothing when the base branch is missing', async () => {
+    const tipBefore = branchOnOrigin(BRANCH, baseHead, { 'wip.txt': 'wip\n' });
+    const { context, calls, github } = contextWith();
+
+    await runDeliver(context, stackedJob('factory/todo-gone'), signal());
+
+    expect(branchTip()).toBe(tipBefore);
+    expect(github.created).toEqual([]);
+    const [report] = reportsOf(calls);
+    expect(report).toMatchObject({ status: 'failed' });
+    expect(String(report?.detail)).toMatch(/factory\/todo-gone/);
+  });
+
+  it('reports delivery_failed and pushes nothing when the predecessor was rewritten under the branch', async () => {
+    const first = branchOnOrigin('factory/todo-0', baseHead, {
+      'shared.txt': 'pred one\n',
+    });
+    const tipBefore = branchOnOrigin(BRANCH, first, {
+      'shared.txt': 'work side\n',
+    });
+    // The predecessor is reopened and rewritten: the work commit no longer rebases cleanly.
+    branchOnOrigin('factory/todo-0', baseHead, { 'shared.txt': 'pred two\n' });
+    const { context, calls, github } = contextWith();
+
+    await runDeliver(context, stackedJob('factory/todo-0'), signal());
+
+    expect(branchTip()).toBe(tipBefore);
+    expect(github.created).toEqual([]);
+    const [report] = reportsOf(calls);
+    expect(report).toMatchObject({ status: 'failed' });
+    expect(String(report?.detail)).toMatch(/^rebase conflict/);
   });
 });

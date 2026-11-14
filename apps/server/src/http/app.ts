@@ -11,7 +11,7 @@ import {
   type HttpRouteName,
 } from '@repo/factory-core/contracts/http-routes';
 import { ROUTES, type RouteName } from '@repo/factory-core/contracts/routes';
-import type { CellId, JobId } from '@repo/factory-core/ids';
+import { isPlanId, type CellId, type JobId } from '@repo/factory-core/ids';
 import type { Runtime } from '@repo/factory-runtime/composition';
 import { isRuntimeError } from '@repo/factory-runtime/errors';
 import { streamResponse } from '../socket/serve';
@@ -134,7 +134,11 @@ const serveRoute = async (
         }
         throw error;
       });
-    if (held !== undefined) input.orderId = held;
+    // A plan job's lease names its plan, so the body carries `planId` for that variant (PROTOCOL §4).
+    if (held !== undefined) {
+      if (isPlanId(held)) input.planId = held;
+      else input.orderId = held;
+    }
   }
 
   const parsed = ROUTES[route].request.safeParse(input);

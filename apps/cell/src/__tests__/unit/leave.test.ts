@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest';
+import type { Job } from '@repo/factory-core/contracts/job';
 import { leaveCell, onLeaveSignal } from '../../leave';
 import { createRegistry, type RunHandle } from '../../cycle/registry';
+
+const planJob = (jobId: string): Job =>
+  ({
+    jobId,
+    epoch: 2,
+    kind: 'plan_branch',
+    orderId: 'plan_0123456789abcdef',
+  }) as unknown as Job;
 
 const handle = (
   jobId: string,
@@ -101,5 +110,66 @@ describe('leaving a Cell', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(exits).toEqual([1]);
+  });
+});
+
+describe('leaving a Cell that holds plan jobs', () => {
+  it('lets a plan job finish within the cap, with no ReleaseJob', async () => {
+    const registry = createRegistry();
+    let running: Job[] = [planJob('p1')];
+    const events: string[] = [];
+    let clock = 0;
+
+    const result = await leaveCell({
+      registry,
+      plans: {
+        held: () => running,
+        release: async (job) => {
+          events.push(`release:${job.jobId}`);
+        },
+        abort: (job) => {
+          events.push(`abort:${job.jobId}`);
+        },
+      },
+      sleep: async (ms) => {
+        clock += ms;
+        running = [];
+      },
+      now: () => clock,
+      pollMs: 10,
+    });
+
+    expect(result).toEqual({ remaining: 0 });
+    expect(events).toEqual([]);
+  });
+
+  it('releases, then stops, a plan job still running past the cap', async () => {
+    const registry = createRegistry();
+    const running: Job[] = [planJob('p1')];
+    const events: string[] = [];
+    let clock = 0;
+
+    const result = await leaveCell({
+      registry,
+      plans: {
+        held: () => running,
+        release: async (job) => {
+          events.push(`release:${job.jobId}`);
+        },
+        abort: (job) => {
+          events.push(`abort:${job.jobId}`);
+        },
+      },
+      sleep: async (ms) => {
+        clock += ms;
+      },
+      now: () => clock,
+      pollMs: 100,
+      capMs: 1_000,
+    });
+
+    expect(result).toEqual({ remaining: 0 });
+    expect(events).toEqual(['release:p1', 'abort:p1']);
+    expect(clock).toBeGreaterThanOrEqual(1_000);
   });
 });

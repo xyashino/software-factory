@@ -3,7 +3,8 @@ import type {
   JoinRequest,
   JoinResponse,
 } from '@repo/factory-core/contracts/cell';
-import type { CellId, JobId, OrderId } from '@repo/factory-core/ids';
+import type { CellId, JobId } from '@repo/factory-core/ids';
+import type { LeaseStreamId } from '@repo/factory-core/ports/lease-store';
 import { notFound, unauthorized } from './errors';
 import type { RuntimePorts } from './ports';
 
@@ -37,7 +38,8 @@ export interface RemoteAccess {
   /** The Cell that owns a credential, or undefined when it is unknown or its Cell is revoked. */
   cellOf(credential: string): Promise<CellId | undefined>;
   /** The Work order of a job the Cell holds; `not_found` when the Cell holds no such job. */
-  orderOfJob(cellId: CellId, jobId: JobId): Promise<OrderId>;
+  /** The stream the job's lease names: its Work order, or its plan (a plan job). */
+  orderOfJob(cellId: CellId, jobId: JobId): Promise<LeaseStreamId>;
   /**
    * Creates a supervisor token (`factory-server admin token create`). The plain token is returned
    * once. Needs the writer lock; no network route calls it (PROTOCOL §1).

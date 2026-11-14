@@ -16,6 +16,7 @@ import {
   type PlanProjection,
 } from '@repo/factory-core/plan/projection';
 import type { PlanState } from '@repo/factory-core/plan/state';
+import type { Lease } from '@repo/factory-core/ports/lease-store';
 import { refusal, RuntimeError, unavailable } from './errors';
 import { orderLocks } from './order-lock';
 import type { RuntimePorts } from './ports';
@@ -29,10 +30,20 @@ export interface PlanCommandRequest {
   actor: Actor;
   /** The epoch the caller claims to hold; `decidePlan` refuses it unless it is the active job's. */
   epoch?: number;
+  /**
+   * `dryRun` runs every check (load, fold, decide, the epoch fence) and appends nothing (PROTOCOL §8.2).
+   */
+  dryRun?: boolean;
+  /**
+   * The lease a `ClaimJob` writes, built from the events the command decided. It is inserted in the same
+   * transaction as the claim's events, so a claim never leaves a plan job without a lease (CORE §5.4).
+   */
+  lease?: (events: PlanEvent[]) => Lease | undefined;
 }
 
-/** What a plan command stores as its idempotent response: the events it appended. */
+/** What a plan command stores as its idempotent response: the events it appended (or would append, on a dry run). */
 export interface PlanCommandResult {
+  dryRun: boolean;
   events: PlanEvent[];
 }
 
@@ -74,6 +85,8 @@ interface Prepared {
   expectedSeq: number;
   events: PlanEvent[];
   projection: PlanProjection;
+  /** The job that ended with this command: its lease goes (the job's events cleared `activeJob`). */
+  endedJobId?: string;
 }
 
 const fold = (
@@ -147,6 +160,11 @@ export const createPlanCommands = (
       });
     }
     if (!state) throw new Error('a decided plan command left no state');
+    const beforeJob = before?.activeJob?.jobId;
+    const endedJobId =
+      beforeJob !== undefined && state.activeJob?.jobId !== beforeJob
+        ? beforeJob
+        : undefined;
     return {
       request,
       expectedSeq: lastSeq,
@@ -157,33 +175,58 @@ export const createPlanCommands = (
         updatedAt: now,
         next: planNextJob(state),
       }),
+      ...(endedJobId === undefined ? {} : { endedJobId }),
     };
   };
+
+  /** One append and its lease change in one transaction (the order commit's rule, CORE §5.4). */
+  const commit = (prepared: Prepared, request: PlanCommandRequest) =>
+    ports.events.transaction(async (tx) => {
+      const response: PlanCommandResult = {
+        dryRun: false,
+        events: prepared.events,
+      };
+      const outcome = await tx.appendPlan({
+        planId: request.planId,
+        commandId: request.commandId,
+        expectedSeq: prepared.expectedSeq,
+        actor: request.actor,
+        ...(request.epoch !== undefined ? { epoch: request.epoch } : {}),
+        at: clock.now(),
+        events: prepared.events,
+        projection: prepared.projection,
+        response,
+      });
+      if (outcome.kind !== 'appended') return outcome;
+      if (prepared.endedJobId !== undefined) {
+        await ports.leases.delete(request.planId);
+      }
+      const lease = request.lease?.(prepared.events);
+      if (lease) await ports.leases.insert(lease);
+      return outcome;
+    });
 
   const submit = async (
     request: PlanCommandRequest,
   ): Promise<PlanCommandResult> => {
     writer.assertHeld();
-    const replay = await ports.events.response(request.commandId);
-    if (replay) return replay.response as PlanCommandResult;
+    if (!request.dryRun) {
+      const replay = await ports.events.response(request.commandId);
+      if (replay) return replay.response as PlanCommandResult;
+    }
     return locks.run(request.planId, async () => {
+      if (request.dryRun) {
+        const stored = await ports.events.loadPlan(request.planId);
+        const prepared = prepare(request, stored);
+        return { dryRun: true, events: prepared.events };
+      }
       for (let attempt = 1; attempt <= config.commandAttempts; attempt += 1) {
         const stored = await ports.events.loadPlan(request.planId);
         const prepared = prepare(request, stored);
-        const outcome = await ports.events.appendPlan({
-          planId: request.planId,
-          commandId: request.commandId,
-          expectedSeq: prepared.expectedSeq,
-          actor: request.actor,
-          ...(request.epoch !== undefined ? { epoch: request.epoch } : {}),
-          at: clock.now(),
-          events: prepared.events,
-          projection: prepared.projection,
-          response: { events: prepared.events } satisfies PlanCommandResult,
-        });
+        const outcome = await commit(prepared, request);
         if (outcome.kind === 'appended') {
           onCommit();
-          return { events: prepared.events };
+          return { dryRun: false, events: prepared.events };
         }
         if (outcome.kind === 'replayed')
           return outcome.response as PlanCommandResult;

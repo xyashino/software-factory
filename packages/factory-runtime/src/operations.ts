@@ -13,6 +13,7 @@ import type {
 import { resolveDeps } from '@repo/factory-core/queue/deps';
 import { boardStatusWithDeps } from '@repo/factory-core/queue/deps';
 import type { PlanProjection } from '@repo/factory-core/plan/projection';
+import type { PlanCommand } from '@repo/factory-core/plan/commands';
 import { resolveBase } from './job-builder';
 import {
   orderCommandSchema,
@@ -126,10 +127,13 @@ const OPERATOR_COMMANDS = new Set([
   'LeaveNote',
 ]);
 
-/** The actor a Cell's command is run as: the Operator of its Cycle, or the Cell itself. */
+/**
+ * The actor a Cell's command is run as: the Operator of its Cycle, or the Cell itself. The plan commands a
+ * Cell sends (the reports and `ReleaseJob`) are all the Cell's own; `decidePlan` refuses any other actor.
+ */
 export const actorOfCellCommand = (
   cellId: CellId,
-  command: OrderCommand,
+  command: OrderCommand | PlanCommand,
 ): Actor => {
   if (OPERATOR_COMMANDS.has(command.type) && 'cycleId' in command) {
     return { kind: 'operator', cellId, cycleId: command.cycleId };
@@ -186,6 +190,22 @@ export const createOperations = (
     heartbeat: (request) => heartbeat(ports, request),
     submitCommand: async (request) => {
       await assertCell(ports, request.cellId);
+      if ('planId' in request) {
+        // A plan job's report: the Cell's epoch fences it on the plan stream, nothing is routed further.
+        const result = await handler.submitPlan({
+          planId: request.planId,
+          commandId: request.commandId,
+          command: request.command,
+          actor: actorOfCellCommand(request.cellId, request.command),
+          epoch: request.epoch,
+          ...(request.dryRun !== undefined ? { dryRun: request.dryRun } : {}),
+        });
+        return {
+          dryRun: result.dryRun,
+          events: result.events,
+          next: null,
+        };
+      }
       const command = orderCommandSchema.parse(request.command);
       return requireResult(
         await handler.submit({

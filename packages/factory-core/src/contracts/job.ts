@@ -3,12 +3,16 @@ import {
   blobRefSchema,
   commitShaSchema,
   cycleIdSchema,
+  isPlanId,
   jobIdSchema,
   orderIdSchema,
+  planIdSchema,
+  planSlugSchema,
   projectIdSchema,
   stationIdSchema,
 } from '../ids';
 import { cycleCauseSchema, jobKindSchema } from '../order/events';
+import { planJobKindSchema } from '../plan/events';
 
 /**
  * A path the Cell resolves itself: relative to its worktree, never absolute, never climbing out.
@@ -104,23 +108,75 @@ const deliverSchema = z
   })
   .strict();
 
-/** A job a Cell runs: PROTOCOL §4, the shape the claim and the continuation return. */
+/**
+ * What a plan job needs (CORE §12.3, PROTOCOL §4): the plan's slug and title, the sub-PR list or the
+ * plan PR body as a blob, and the plan PR URL once `plan_pr` reported it.
+ */
+const planBlockSchema = z
+  .object({
+    slug: planSlugSchema,
+    title: z.string().min(1).max(256),
+    bodyBlob: blobRefSchema.optional(),
+    prUrl: z.string().min(1).max(512).optional(),
+  })
+  .strict();
+
+const WORK_KINDS = new Set([
+  'run_operator_station',
+  'run_inspection',
+  'deliver',
+]);
+const PLAN_KINDS = new Set(['plan_branch', 'plan_pr', 'plan_pr_ready']);
+
+/**
+ * A job a Cell runs: PROTOCOL §4, the shape the claim and the continuation return. A Work order job
+ * names an OrderId and carries its `workspace`; a plan job names a PlanId, carries a `plan` block and
+ * no workspace (plan jobs work on the bare mirror only).
+ */
 export const jobSchema = z
   .object({
     jobId: jobIdSchema,
-    orderId: orderIdSchema,
+    orderId: z.union([orderIdSchema, planIdSchema]),
     projectId: projectIdSchema,
     epoch: z.number().int().min(1),
-    kind: jobKindSchema,
+    kind: z.union([jobKindSchema, planJobKindSchema]),
     repo: repoSchema,
     base: z.union([
       commitShaSchema,
       z.object({ branchBase: z.string().min(1).max(128) }).strict(),
     ]),
-    workspace: workspaceSchema,
+    workspace: workspaceSchema.optional(),
     station: stationSchema.optional(),
     deliver: deliverSchema.optional(),
+    plan: planBlockSchema.optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((job, ctx) => {
+    const issue = (message: string) =>
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message, path: ['kind'] });
+    if (PLAN_KINDS.has(job.kind)) {
+      if (!isPlanId(job.orderId)) issue(`${job.kind} needs a PlanId`);
+      if (job.plan === undefined) issue(`${job.kind} needs a plan block`);
+      if (job.workspace !== undefined) issue(`${job.kind} has no workspace`);
+      if (job.station !== undefined) issue(`${job.kind} has no station`);
+      if (job.deliver !== undefined) issue(`${job.kind} has no deliver block`);
+      if (job.kind === 'plan_pr_ready' && job.plan?.prUrl === undefined) {
+        issue('plan_pr_ready needs plan.prUrl');
+      }
+      return;
+    }
+    if (WORK_KINDS.has(job.kind) && isPlanId(job.orderId)) {
+      issue(`${job.kind} needs an OrderId`);
+    }
+    if (job.plan !== undefined) issue(`${job.kind} has no plan block`);
+    if (job.workspace === undefined) issue(`${job.kind} needs a workspace`);
+    if (job.kind === 'deliver') {
+      if (job.deliver === undefined) issue('deliver needs a deliver block');
+      if (job.station !== undefined) issue('deliver has no station');
+    } else {
+      if (job.station === undefined) issue(`${job.kind} needs a station`);
+      if (job.deliver !== undefined) issue(`${job.kind} has no deliver block`);
+    }
+  });
 
 export type Job = z.infer<typeof jobSchema>;

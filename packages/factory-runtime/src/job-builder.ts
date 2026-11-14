@@ -1,6 +1,8 @@
 import { createHash } from 'node:crypto';
 import { jobSchema, type Job } from '@repo/factory-core/contracts/job';
-import type { BlobRef, CommitSha } from '@repo/factory-core/ids';
+import type { BlobRef, CommitSha, JobId } from '@repo/factory-core/ids';
+import type { PlanJobKind } from '@repo/factory-core/plan/events';
+import type { PlanProjection } from '@repo/factory-core/plan/projection';
 import { findStation } from '@repo/factory-core/line/snapshot';
 import { resolveCycleContext } from '@repo/factory-core/order/context';
 import type { JobSpec } from '@repo/factory-core/order/next';
@@ -256,6 +258,84 @@ export const buildJob = async (
       })),
       verdict: station.verdict ?? profile.verdict,
       runtimePrompts: ports.definitions.runtimePrompts,
+    },
+  });
+};
+
+/** What `buildPlanJob` needs of a claimed plan: the claim's identity, the plan row and its members. */
+export interface PlanJobInput {
+  jobId: JobId;
+  epoch: number;
+  kind: PlanJobKind;
+  plan: PlanProjection;
+  project: ProjectRecord;
+  rows: readonly OrderProjection[];
+}
+
+/** The sub-PR list of a plan PR body: one line per member, in chain order, with its PR when it has one. */
+export const renderPlanBody = (
+  plan: PlanProjection,
+  rows: readonly OrderProjection[],
+): string => {
+  const lines = plan.members.map((member) => {
+    const row = rows.find((candidate) => candidate.orderId === member.orderId);
+    const title = row?.title ?? member.todoId;
+    const link = row?.prUrl ? ` ${row.prUrl}` : ' (no PR yet)';
+    return `- ${member.todoId}: ${title}${link}`;
+  });
+  return [
+    `## Order Plan ${plan.slug}`,
+    '',
+    'Sub-PRs, in chain order:',
+    '',
+    ...lines,
+    '',
+  ].join('\n');
+};
+
+/**
+ * The Job a claimed plan job becomes (PROTOCOL §4). A plan job runs on the bare mirror only, so it has no
+ * workspace and no station. `plan_pr` and `plan_pr_ready` carry the sub-PR list as a blob; `plan_pr_ready`
+ * names the plan PR it marks ready. Pure apart from the one body blob write.
+ */
+export const buildPlanJob = async (
+  blobs: BlobStore,
+  input: PlanJobInput,
+): Promise<Job> => {
+  const { plan } = input;
+  const bodyBlob =
+    input.kind === 'plan_branch'
+      ? undefined
+      : await storeText(
+          blobs,
+          renderPlanBody(plan, input.rows),
+          'text/markdown',
+        );
+  if (input.kind === 'plan_pr_ready' && plan.prUrl === null) {
+    throw refusal({
+      code: 'precondition',
+      detail: `plan ${plan.slug} has no plan PR to mark ready`,
+    });
+  }
+  return jobSchema.parse({
+    jobId: input.jobId,
+    orderId: plan.planId,
+    projectId: plan.projectId,
+    epoch: input.epoch,
+    kind: input.kind,
+    repo: {
+      url: input.project.repoUrl,
+      baseBranch: plan.baseBranch,
+      branch: plan.branch,
+    },
+    base: { branchBase: plan.baseBranch },
+    plan: {
+      slug: plan.slug,
+      title: `Order Plan ${plan.slug}`,
+      ...(bodyBlob === undefined ? {} : { bodyBlob }),
+      ...(input.kind === 'plan_pr_ready' && plan.prUrl !== null
+        ? { prUrl: plan.prUrl }
+        : {}),
     },
   });
 };

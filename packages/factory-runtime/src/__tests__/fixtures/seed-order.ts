@@ -4,6 +4,7 @@ import {
   orderIdOf,
   type BlobRef,
   type CellId,
+  type OrderId,
   type ProjectId,
   type TodoId,
 } from '@repo/factory-core/ids';
@@ -126,7 +127,7 @@ const seed = async (
     if (!job) throw new Error('no job was claimed');
     const started = await runtime.call('submitCommand', {
       cellId: CELL as CellId,
-      orderId: job.orderId,
+      orderId: job.orderId as OrderId,
       commandId: 'seed-start',
       epoch: job.epoch,
       command: { type: 'StartCycle', baseCommit: 'a'.repeat(40) as never },
@@ -138,7 +139,7 @@ const seed = async (
       throw new Error('no cycle started');
     const asked = await runtime.call('submitCommand', {
       cellId: CELL as CellId,
-      orderId: job.orderId,
+      orderId: job.orderId as OrderId,
       commandId: 'seed-ask',
       epoch: job.epoch,
       command: {

@@ -135,7 +135,7 @@ only in remote mode.
 | `POST` | `/v1/cell/heartbeat`            | Extend the leases of all held jobs at once. Returns per-job `ok \| stale` and pending **signals**.                   |
 | `GET`  | `/v1/blobs/:ref`                | Download a blob named in a `Job` (prompt, inputs).                                                                   |
 | `PUT`  | `/v1/blobs/:ref`                | Upload a blob. Idempotent; the runtime verifies the hash.                                                            |
-| `POST` | `/v1/cell/jobs/:jobId/commands` | Every command of §3.4, in one envelope `{ commandId, epoch, command, dryRun? }`. Response: `{ events, next?: Job }`. |
+| `POST` | `/v1/cell/jobs/:jobId/commands` | Every command of §3.4, in one envelope `{ commandId, epoch, command, dryRun? }`. A plan job names its plan instead, `{ planId, commandId, epoch, command, dryRun? }`; the plan variant answers `next: null`. Response: `{ dryRun, events, next? }`. |
 
 With `dryRun: true` the runtime runs `decide` and returns the events it _would_ append, or the error,
 and stores nothing (no events, no idempotency record). Cells use it before a checkpoint push (§8.2).
@@ -195,12 +195,12 @@ interface Job {
   //   member the resolved plan base: `feat/<slug>` or `factory/<predecessorTodoId>` (CORE §12.5).
   // plan job: branch = feat/<slug>; baseBranch = the plan's baseBranch.
   base: CommitSha | { branchBase: string }; // CORE 'branch_base' → { branchBase: repo.baseBranch }; resolved by the Cell at fetch time
-  workspace: {
+  workspace?: {
     dir: string;
     sync: string[];
     setup: string[];
     timeoutMs: number;
-  }; // dir = <todoId>, relative to the Cell's worktrees/
+  }; // dir = <todoId>, relative to the Cell's worktrees/; absent on plan jobs (no worktree)
   station?: {
     stationId;
     cycleId;
@@ -340,6 +340,11 @@ One SQLite transaction (`BEGIN IMMEDIATE`, STORAGE §3):
    build the `Job`.
 
 If step 3 fails on `expectedSeq` (another writer moved the Work order), try the next candidate.
+
+Plan jobs are offered first (§4): the same claim on the plan stream, `ClaimJob` and its lease written in
+one transaction, so a claimed plan job always has a lease the reaper can expire. A plan job's
+`orderId` is its PlanId; its report is the plan variant of `submitCommand` (§3.2), fenced by the same
+lease and epoch.
 
 ### 5.3 Fencing, three layers
 
