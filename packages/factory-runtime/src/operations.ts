@@ -4,19 +4,21 @@ import type {
   RouteName,
   RouteResponse,
 } from '@repo/factory-core/contracts/routes';
+import type { CellId, OrderId, ProjectId } from '@repo/factory-core/ids';
 import {
   orderCommandSchema,
   type OrderCommand,
 } from '@repo/factory-core/order/commands';
 import type { Actor } from '@repo/factory-core/order/events';
-import type { OrderId, CellId } from '@repo/factory-core/ids';
 import type { OrderProjection } from '@repo/factory-core/order/projection';
-import type { CommandHandler } from './command-handler';
-import { RuntimeError, notFound } from './errors';
-import { heartbeat } from './heartbeat';
-import { hello, assertCell, revokeCell } from './cells';
-import { createJoinToken, revokeJoinToken } from './join-tokens';
+import type { RuntimeAdmin } from './admin';
+import { assertCell, hello, revokeCell } from './cells';
 import { longPollClaim, type ClaimDeps } from './claim';
+import type { CommandHandler } from './command-handler';
+import { notFound, RuntimeError } from './errors';
+import { heartbeat } from './heartbeat';
+import type { IntakeReport } from './intake';
+import { createJoinToken, revokeJoinToken } from './join-tokens';
 import type { RuntimePorts } from './ports';
 
 /** Per-call options a transport passes: the claim long-poll ends when its request ends. */
@@ -89,6 +91,12 @@ const requireResult = (result: CommandResult | undefined): CommandResult => {
   return result;
 };
 
+/** What the composition root provides beyond the ports: intake and the admin operations. */
+export interface OperationExtras {
+  sync(projectId?: ProjectId): Promise<IntakeReport[]>;
+  admin: RuntimeAdmin;
+}
+
 /**
  * Every route the runtime serves, in one table (PROTOCOL §3). The socket server and the in-process
  * client both call this, so a route behaves the same whichever transport reaches it.
@@ -97,6 +105,7 @@ export const createOperations = (
   ports: RuntimePorts,
   handler: CommandHandler,
   claimDeps: ClaimDeps,
+  extras: OperationExtras,
 ): Operations => {
   const supervisorCommand = (
     orderId: OrderId,
@@ -245,14 +254,13 @@ export const createOperations = (
         );
       }
     },
-    intakeSync: async () => {
-      if (!ports.intake) {
-        throw new RuntimeError({
-          code: 'precondition',
-          detail: 'intake is not built yet (v2-10): nothing was synced',
-        });
-      }
-      return ports.intake.sync();
+    intakeSync: async (request) => {
+      const projects = await extras.sync(request.projectId);
+      const created = projects.reduce(
+        (total, report) => total + report.created.length,
+        0,
+      );
+      return { created, projects };
     },
     joinTokenCreate: (request) => createJoinToken(ports, request),
     joinTokenList: async () => ({
@@ -275,6 +283,13 @@ export const createOperations = (
         bytes: bytes.byteLength,
       };
     },
+    adminBackup: async (request) => ({
+      file: request.file,
+      counts: await extras.admin.backup(request.file),
+    }),
+    adminRebuildProjections: async () => ({
+      rows: await extras.admin.rebuildProjections(),
+    }),
   };
 
   return {
@@ -283,11 +298,11 @@ export const createOperations = (
       request: ParsedRequest<K>,
       options: CallOptions = {},
     ): Promise<RouteResponse<K>> => {
-      const handler = handlers[route] as (
+      const handlerFn = handlers[route] as (
         request: ParsedRequest<K>,
         options: CallOptions,
       ) => Promise<RouteResponse<K>>;
-      return handler(request, options);
+      return handlerFn(request, options);
     },
   };
 };

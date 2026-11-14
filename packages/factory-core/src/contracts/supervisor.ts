@@ -1,9 +1,12 @@
 import { z } from 'zod';
 import {
   blobRefSchema,
-  orderIdSchema,
-  stationIdSchema,
   cellIdSchema,
+  commitShaSchema,
+  orderIdSchema,
+  projectIdSchema,
+  stationIdSchema,
+  todoIdSchema,
 } from '../ids';
 import {
   priorities,
@@ -138,15 +141,42 @@ export const streamEventsResponseSchema = z
   .strict();
 
 /**
- * Runs intake now (PROTOCOL §3.1, `/v1/intake/sync`). Intake is idempotent, so the answer does not
- * depend on the `commandId`; the id is still sent on every POST (PROTOCOL §3.1).
+ * Runs intake now (PROTOCOL §3.1, `/v1/supervisor/intake/sync`) for one project or every
+ * registered project. Intake is idempotent, so the answer does not depend on `commandId`.
  */
 export const intakeSyncRequestSchema = z
-  .object({ commandId: z.string().min(1).max(128) })
+  .object({
+    commandId: z.string().min(1).max(128).optional(),
+    projectId: projectIdSchema.optional(),
+  })
+  .strict();
+
+/** What one intake pass did to one project's todos (STORAGE §4, PROTOCOL §3.1). */
+export const intakeProjectReportSchema = z
+  .object({
+    projectId: projectIdSchema,
+    commit: commitShaSchema,
+    created: z.array(todoIdSchema),
+    updated: z.array(todoIdSchema),
+    cancelled: z.array(todoIdSchema),
+    specDrift: z.array(todoIdSchema),
+    diagnostics: z.array(
+      z
+        .object({
+          todoId: z.string(),
+          kind: z.string(),
+          message: z.string(),
+        })
+        .strict(),
+    ),
+  })
   .strict();
 
 export const intakeSyncResponseSchema = z
-  .object({ created: z.number().int().min(0) })
+  .object({
+    created: z.number().int().min(0),
+    projects: z.array(intakeProjectReportSchema),
+  })
   .strict();
 
 export const joinTokenCreateRequestSchema = z
@@ -199,4 +229,30 @@ export const joinTokenRevokeResponseSchema = z
 /** The export archive (STORAGE §7.3), base64 so it crosses the JSON socket. */
 export const adminExportResponseSchema = z
   .object({ base64: z.string(), bytes: z.number().int().min(0) })
+  .strict();
+
+/** Admin operations (PROTOCOL §3.1, STORAGE §7). `file` is an absolute path on the server's host. */
+const absoluteFile = z
+  .string()
+  .min(1)
+  .max(4096)
+  .refine((path) => path.startsWith('/'), 'the file must be an absolute path');
+
+export const adminFileRequestSchema = z.object({ file: absoluteFile }).strict();
+
+const archiveCountsSchema = z
+  .object({
+    globalSeq: z.number().int().min(0),
+    projects: z.number().int().min(0),
+    events: z.number().int().min(0),
+    blobs: z.number().int().min(0),
+  })
+  .strict();
+
+export const adminArchiveResponseSchema = z
+  .object({ file: absoluteFile, counts: archiveCountsSchema })
+  .strict();
+
+export const adminRebuildResponseSchema = z
+  .object({ rows: z.number().int().min(0) })
   .strict();

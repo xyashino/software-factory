@@ -1,8 +1,19 @@
 import { type BlobKind, SWEEP_AGE_MS, fitBlob } from '../blob-rules';
-import type { BlobRef, CellId, JobId, OrderId } from '../ids';
-import type { Clock } from '../ports/clock';
+import type {
+  BlobRef,
+  CellId,
+  CommitSha,
+  JobId,
+  OrderId,
+  ProjectId,
+  TodoId,
+} from '../ids';
 import type { BlobStore } from '../ports/blob-store';
+import type { Clock } from '../ports/clock';
+import type { GitMirror, TodoFile } from '../ports/git-mirror';
+import type { IntakeRecord, IntakeStore } from '../ports/intake';
 import type { Lease, LeaseStore } from '../ports/lease-store';
+import type { PrState, PrStatePort } from '../ports/pr-state';
 
 export interface FakeBlobStoreOptions {
   /**
@@ -101,6 +112,71 @@ export const fakeLeaseStore = (): LeaseStore => {
       for (const lease of leases.values()) {
         leases.set(lease.orderId, { ...lease, expiresAt: now + ttl });
       }
+    },
+  };
+};
+
+/** An in-memory `IntakeStore`, keyed like the `intake` table: by project and todo. */
+export const fakeIntakeStore = (): IntakeStore & {
+  rows(): IntakeRecord[];
+} => {
+  const rows = new Map<string, IntakeRecord>();
+  const keyOf = (projectId: ProjectId, todoId: TodoId) =>
+    `${projectId}\u0000${todoId}`;
+  return {
+    rows: () => [...rows.values()],
+    get: async (projectId, todoId) => rows.get(keyOf(projectId, todoId)),
+    forProject: async (projectId) =>
+      [...rows.values()].filter((row) => row.projectId === projectId),
+    upsert: async (record) => {
+      rows.set(keyOf(record.projectId, record.todoId), record);
+    },
+  };
+};
+
+/**
+ * An in-memory git mirror. `setTodos` replaces the files at a new commit, so a test moves the
+ * repository forward the way a push does. Commits are numbered, not hashed.
+ */
+export interface FakeGitMirror extends GitMirror {
+  setTodos(files: TodoFile[]): CommitSha;
+}
+
+export const fakeGitMirror = (): FakeGitMirror => {
+  let files: TodoFile[] = [];
+  let count = 0;
+  let head = commitOf(count);
+  return {
+    setTodos: (next) => {
+      files = next.map((file) => ({ ...file }));
+      count += 1;
+      head = commitOf(count);
+      return head;
+    },
+    sync: async () => head,
+    todoFiles: async (_projectId, commit) =>
+      commit === head ? files.map((file) => ({ ...file })) : [],
+  };
+};
+
+const commitOf = (n: number): CommitSha =>
+  n.toString(16).padStart(40, '0') as CommitSha;
+
+/** An in-memory PR state reader: a test sets each pull request's state. */
+export interface FakePrState extends PrStatePort {
+  set(prUrl: string, state: PrState): void;
+}
+
+export const fakePrState = (): FakePrState => {
+  const states = new Map<string, PrState>();
+  return {
+    set: (prUrl, state) => {
+      states.set(prUrl, state);
+    },
+    read: async (prUrl) => {
+      const state = states.get(prUrl);
+      if (!state) throw new Error(`no fake state for ${prUrl}`);
+      return state;
     },
   };
 };

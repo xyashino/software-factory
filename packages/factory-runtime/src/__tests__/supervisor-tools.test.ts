@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { CellId } from '@repo/factory-core/ids';
 import { RuntimeError } from '../errors';
-import { createOrder, helloCell, world } from './test-kit';
+import { createOrder, helloCell, PROJECT, world } from './test-kit';
 
 const CELL = '01J0000000000000000000000W' as CellId;
 const COMMAND = '01J00000000000000000000001';
@@ -148,28 +148,21 @@ describe('join tokens', () => {
 });
 
 describe('intake sync', () => {
-  it('refuses with a precondition while intake is not wired, and changes nothing', async () => {
+  it('opens Work orders from wired intake and returns both the count and per-project report', async () => {
     const w = world();
+    w.git.setTodos([
+      {
+        file: 'todos/add-login.md',
+        text: '---\nstatus: todo\nfactory: v2\n---\n\n# Add login\n\nBody.\n',
+      },
+    ]);
 
-    const refused = await w.runtime
-      .call('intakeSync', { commandId: COMMAND })
-      .catch((error: unknown) => error);
+    const result = await w.runtime.call('intakeSync', { commandId: COMMAND });
 
-    expect(refused).toBeInstanceOf(RuntimeError);
-    expect((refused as RuntimeError).wire).toEqual({
-      code: 'precondition',
-      detail: 'intake is not built yet (v2-10): nothing was synced',
-    });
-    expect(await w.events.orders()).toEqual([]);
-  });
-
-  it('answers with the count of Work orders the wired intake opened', async () => {
-    const w = world();
-    w.ports.intake = { sync: async () => ({ created: 3 }) };
-
-    expect(await w.runtime.call('intakeSync', { commandId: COMMAND })).toEqual({
-      created: 3,
-    });
+    expect(result.created).toBe(1);
+    expect(result.projects).toHaveLength(1);
+    expect(result.projects[0]?.projectId).toBe(PROJECT);
+    expect(result.projects[0]?.created).toEqual(['add-login']);
   });
 });
 

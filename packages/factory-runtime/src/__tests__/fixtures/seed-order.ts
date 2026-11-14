@@ -19,7 +19,8 @@ import { seedProject } from '@repo/factory-runtime/seed';
  * Test fixture for the CLI's integration tests: seeds a data directory before a server starts.
  * It creates project `software-factory`, two Work orders on the `feature` Line, and a Cell that
  * has claimed the first order, started its Cycle and asked a question. Run as
- * `bun seed-order.ts <dataDir>`; it prints the ids as one JSON line and exits.
+ * `bun seed-order.ts <dataDir> [--plain] [--no-orders] [--repo <url>]`; it prints the ids as one
+ * JSON line and exits.
  *
  * The runtime is opened here because the CLI never does (STRUCTURE §3); a test that needs data
  * spawns this file instead of importing the runtime.
@@ -81,24 +82,33 @@ const createOrder = async (
   });
 };
 
+const flagValue = (
+  args: readonly string[],
+  flag: string,
+): string | undefined => {
+  const index = args.indexOf(flag);
+  return index >= 0 ? args[index + 1] : undefined;
+};
+
 /**
  * Seeds the directory. With `plain`, only the two orders are created: no Cell, no Cycle, so every
  * blob the events cite is stored and the export archive is complete.
  */
 const seed = async (
   dataDir: string,
-  plain: boolean,
+  options: { plain: boolean; noOrders: boolean; repoUrl: string },
 ): Promise<{ questionId: string | null }> => {
   mkdirSync(dataDir, { recursive: true, mode: 0o700 });
   seedProject(dataDir, {
     projectId: PROJECT,
-    repoUrl: 'https://example.test/sf.git',
+    repoUrl: options.repoUrl,
   });
+  if (options.noOrders) return { questionId: null };
   const opened = openRuntime({ dataDir });
   try {
     await createOrder(opened, 'todo-a');
     await createOrder(opened, 'todo-b');
-    if (plain) return { questionId: null };
+    if (options.plain) return { questionId: null };
     const runtime = opened.runtime;
     await runtime.call('hello', {
       cellId: CELL as CellId,
@@ -151,8 +161,16 @@ const seed = async (
 
 if (import.meta.main) {
   const dataDir = process.argv[2];
-  if (!dataDir) throw new Error('usage: seed-order.ts <dataDir> [--plain]');
-  const { questionId } = await seed(dataDir, process.argv.includes('--plain'));
+  if (!dataDir) {
+    throw new Error(
+      'usage: seed-order.ts <dataDir> [--plain] [--no-orders] [--repo <url>]',
+    );
+  }
+  const { questionId } = await seed(dataDir, {
+    plain: process.argv.includes('--plain'),
+    noOrders: process.argv.includes('--no-orders'),
+    repoUrl: flagValue(process.argv, '--repo') ?? 'https://example.test/sf.git',
+  });
   console.log(
     JSON.stringify({ answerable: ANSWERABLE, plain: PLAIN, questionId }),
   );

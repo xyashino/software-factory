@@ -1,4 +1,7 @@
-import type { FactoryClient } from '@repo/factory-core/contracts/client';
+import type {
+  FactoryClient,
+  FactoryFeed,
+} from '@repo/factory-core/contracts/client';
 import {
   WireFailure,
   wireErrorSchema,
@@ -10,7 +13,11 @@ import {
   type RouteRequest,
   type RouteResponse,
 } from '@repo/factory-core/contracts/routes';
-import { API_PREFIX } from './serve';
+import {
+  storedEventSchema,
+  type StoredEvent,
+} from '@repo/factory-core/order/events';
+import { API_PREFIX, STREAM_PATH } from './serve';
 
 export interface SocketClientOptions {
   /** The socket to call: `$FACTORY_DATA_DIR/factory.sock`. */
@@ -36,12 +43,88 @@ const wireErrorOf = (body: unknown): WireError => {
  * the answer is validated when it arrives. A refusal throws `WireFailure` with its wire error. Network
  * failures and 5xx answers are retried a bounded number of times with the same body; every command
  * carries its commandId, so a retry that the server already applied returns the stored response.
+ *
+ * `stream` reads the event feed (PROTOCOL §3.1). When the connection drops it reconnects from the
+ * last globalSeq it yielded, so no event is skipped or repeated; it gives up after `attempts`
+ * connection failures in a row.
  */
 export const socketFactoryClient = (
   options: SocketClientOptions,
-): FactoryClient => {
+): FactoryClient & FactoryFeed => {
   const attempts = options.attempts ?? 3;
   const retryDelayMs = options.retryDelayMs ?? 100;
+
+  const stream = async function* (
+    afterGlobalSeq: number,
+    signal?: AbortSignal,
+  ): AsyncGenerator<StoredEvent> {
+    let cursor = afterGlobalSeq;
+    let failures = 0;
+    while (!signal?.aborted) {
+      let response: Response;
+      try {
+        response = await fetch(`http://factory${STREAM_PATH}?after=${cursor}`, {
+          method: 'GET',
+          unix: options.socketPath,
+          headers: { accept: 'text/event-stream' },
+          ...(signal ? { signal } : {}),
+        } as RequestInit);
+      } catch {
+        if (signal?.aborted) return;
+        failures += 1;
+        if (failures >= attempts)
+          throw new WireFailure({ code: 'unavailable' }, 503);
+        await sleep(retryDelayMs);
+        continue;
+      }
+      if (!response.ok || !response.body) {
+        const payload: unknown = await response.json().catch(() => undefined);
+        if (response.status >= 500) {
+          failures += 1;
+          if (failures >= attempts)
+            throw new WireFailure(wireErrorOf(payload), response.status);
+          await sleep(retryDelayMs);
+          continue;
+        }
+        throw new WireFailure(wireErrorOf(payload), response.status);
+      }
+      failures = 0;
+
+      const reader = response.body
+        .pipeThrough(new TextDecoderStream())
+        .getReader();
+      let buffer = '';
+      try {
+        for (;;) {
+          // A read error is a dropped connection: reconnect from the cursor below.
+          const chunk = await reader.read().catch(() => undefined);
+          if (!chunk || chunk.done) break;
+          buffer += chunk.value;
+          for (
+            let end = buffer.indexOf('\n\n');
+            end >= 0;
+            end = buffer.indexOf('\n\n')
+          ) {
+            const frame = buffer.slice(0, end);
+            buffer = buffer.slice(end + 2);
+            const data = frame
+              .split('\n')
+              .filter((line) => line.startsWith('data: '))
+              .map((line) => line.slice('data: '.length))
+              .join('\n');
+            if (data.length === 0) continue;
+            const event = storedEventSchema.parse(JSON.parse(data));
+            cursor = event.globalSeq;
+            yield event;
+          }
+        }
+      } finally {
+        await reader.cancel().catch(() => undefined);
+      }
+      if (signal?.aborted) return;
+      await sleep(retryDelayMs);
+    }
+  };
 
   const call = async <K extends RouteName>(
     route: K,
@@ -78,5 +161,5 @@ export const socketFactoryClient = (
     }
   };
 
-  return { call };
+  return { call, stream };
 };

@@ -1,10 +1,12 @@
 import {
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
   readlinkSync,
   rmSync,
+  writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -88,9 +90,19 @@ const stop = async (child: Bun.Subprocess): Promise<number> => {
 };
 
 /** Seeds a data directory before a server starts (the runtime is opened by the fixture, not the CLI). */
-const seed = async (dataDir: string, plain: boolean): Promise<void> => {
+const seed = async (
+  dataDir: string,
+  plain: boolean,
+  extraArgs: readonly string[] = [],
+): Promise<void> => {
   const child = Bun.spawn(
-    [process.execPath, SEED, dataDir, ...(plain ? ['--plain'] : [])],
+    [
+      process.execPath,
+      SEED,
+      dataDir,
+      ...(plain ? ['--plain'] : []),
+      ...extraArgs,
+    ],
     { stdout: 'pipe', stderr: 'pipe', env: env(dataDir) },
   );
   const code = await child.exited;
@@ -341,12 +353,74 @@ describe('factory against a running server', () => {
     expect(listing.stdout.toString()).toContain('events.jsonl');
   });
 
-  it('sync asks the server to run intake, and says so when intake is not wired (v2-10)', async () => {
-    const result = await factory(dataDir, ['sync']);
+  it('admin backup writes a SQLite backup to the file it names', async () => {
+    const file = join(dataDir, 'backup.sqlite');
+
+    const result = await factory(dataDir, ['admin', 'backup', file]);
+
+    expect(result.code).toBe(0);
+    expect(existsSync(file)).toBe(true);
+    expect(result.stdout).toContain('backed up');
+  });
+
+  it('admin rebuild-projections replays events and prints the row count', async () => {
+    const result = await factory(dataDir, ['admin', 'rebuild-projections']);
+
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain('rebuilt projections');
+  });
+
+  it('admin import refuses and points to factory-server admin import', async () => {
+    const result = await factory(dataDir, ['admin', 'import', 'export.tar']);
 
     expect(result.code).toBe(1);
-    expect(result.stderr).toContain('intake is not built yet (v2-10)');
-    expect(result.stderr).toContain('nothing was synced');
+    expect(result.stderr).toContain('factory-server admin import');
+  });
+
+  it('sync runs intake against the project repo and creates a Work order', async () => {
+    const repoDir = scratch();
+    const syncDir = scratch();
+    try {
+      mkdirSync(join(repoDir, 'todos'), { recursive: true });
+      writeFileSync(
+        join(repoDir, 'todos', 'add-sso.md'),
+        '---\nstatus: todo\nfactory: v2\npriority: high\n---\n\n# Add SSO\n\nSupport SAML sign-in.\n',
+      );
+      const git = (args: string[]) => {
+        const out = Bun.spawnSync(['git', '-C', repoDir, ...args], {
+          stdout: 'pipe',
+          stderr: 'pipe',
+        });
+        if (out.exitCode !== 0) {
+          throw new Error(
+            `git ${args.join(' ')} failed: ${out.stderr.toString()}`,
+          );
+        }
+      };
+      git(['init', '--quiet', '-b', 'main']);
+      git(['add', '.']);
+      git([
+        '-c',
+        'user.name=test',
+        '-c',
+        'user.email=test@example.test',
+        'commit',
+        '--quiet',
+        '-m',
+        'add todo',
+      ]);
+
+      await seed(syncDir, true, ['--no-orders', '--repo', repoDir]);
+      const result = await factory(syncDir, ['sync']);
+      const board = await factory(syncDir, ['status']);
+
+      expect(result.code).toBe(0);
+      expect(result.stdout).toContain('intake ran: 1 Work order(s) created');
+      expect(board.stdout).toContain('software-factory:add-sso');
+    } finally {
+      rmSync(repoDir, { recursive: true, force: true });
+      rmSync(syncDir, { recursive: true, force: true });
+    }
   });
 
   it('check validates the definitions offline', async () => {

@@ -1,3 +1,4 @@
+import type { StoredEvent } from '../order/events';
 import type { RouteName, RouteRequest, RouteResponse } from './routes';
 
 /**
@@ -10,4 +11,16 @@ export interface FactoryClient {
     route: K,
     request: RouteRequest<K>,
   ): Promise<RouteResponse<K>>;
+}
+
+/**
+ * Event subscription (PROTOCOL §3.0): every stored event after `afterGlobalSeq`, in global order,
+ * until the signal aborts. Kept apart from `FactoryClient` so the request/response contract is
+ * unchanged; the socket client implements both.
+ */
+export interface FactoryFeed {
+  stream(
+    afterGlobalSeq: number,
+    signal?: AbortSignal,
+  ): AsyncIterable<StoredEvent>;
 }
