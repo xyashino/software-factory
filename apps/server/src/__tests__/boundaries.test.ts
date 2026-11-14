@@ -28,6 +28,27 @@ describe('factory-server boundaries', () => {
     expect(rules).toContain('no-restricted-imports');
   });
 
+  it('rejects an import of factory-db: the server goes through the runtime', async () => {
+    const rules = await reportedRules(
+      `import { openDatabase } from '@repo/factory-db/sqlite-event-store';`,
+    );
+    expect(rules).toContain('no-restricted-imports');
+  });
+
+  it('rejects an import of factory-definitions: the runtime loads them', async () => {
+    const rules = await reportedRules(
+      `import { loadDefinitions } from '@repo/factory-definitions/load';`,
+    );
+    expect(rules).toContain('no-restricted-imports');
+  });
+
+  it('accepts an import of factory-runtime', async () => {
+    const rules = await reportedRules(
+      `import { openRuntime } from '@repo/factory-runtime/open-runtime';`,
+    );
+    expect(rules).not.toContain('no-restricted-imports');
+  });
+
   it('accepts an import of factory-core', async () => {
     const rules = await reportedRules(
       `import { PACKAGE_NAME } from '@repo/factory-core/meta';`,

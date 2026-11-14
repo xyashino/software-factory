@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { Database } from 'bun:sqlite';
 import type { OrderId } from '@repo/factory-core/ids';
 import {
@@ -29,6 +30,17 @@ export interface SqliteEventStore extends EventStore {
    * Only the projection rebuild uses it; `section` must not await.
    */
   exclusive<T>(section: (db: Database) => T): Promise<T>;
+  /**
+   * The statement gate the other stores of this connection run through. Outside a transaction a
+   * section queues behind the write mutex; inside `transaction`, the body's own sections run at once,
+   * because the body already holds the mutex. A foreign statement never joins an open transaction.
+   */
+  gate: StatementGate;
+}
+
+/** Runs one synchronous section of statements on the connection (see `SqliteEventStore.gate`). */
+export interface StatementGate {
+  run<T>(section: () => T | Promise<T>): Promise<T>;
 }
 
 interface EventRow {
@@ -200,19 +212,30 @@ const appendInSavepoint = (db: Database, input: AppendInput): AppendResult => {
  */
 export const openSqliteEventStore = (db: Database): SqliteEventStore => {
   const writes = writeMutex();
+  // Marks the async context of a transaction body, so `gate` can tell its own sections from others'.
+  const inTransaction = new AsyncLocalStorage<true>();
+
+  const gate: StatementGate = {
+    run: <T>(section: () => T | Promise<T>): Promise<T> =>
+      inTransaction.getStore()
+        ? Promise.resolve().then(section)
+        : writes.run(async () => section()),
+  };
 
   const inWriteTransaction = <T>(body: () => Promise<T>): Promise<T> =>
-    writes.run(async () => {
-      db.exec('BEGIN IMMEDIATE');
-      try {
-        const value = await body();
-        db.exec('COMMIT');
-        return value;
-      } catch (error) {
-        db.exec('ROLLBACK');
-        throw error;
-      }
-    });
+    writes.run(() =>
+      inTransaction.run(true, async () => {
+        db.exec('BEGIN IMMEDIATE');
+        try {
+          const value = await body();
+          db.exec('COMMIT');
+          return value;
+        } catch (error) {
+          db.exec('ROLLBACK');
+          throw error;
+        }
+      }),
+    );
 
   const transaction = <T>(fn: (tx: StoreTx) => Promise<T>): Promise<T> =>
     inWriteTransaction(() => {
@@ -225,10 +248,22 @@ export const openSqliteEventStore = (db: Database): SqliteEventStore => {
 
   return {
     load: (orderId) => writes.run(async () => loadRows(db, orderId)),
+    response: (commandId) =>
+      writes.run(async () => {
+        const row = db
+          .query<{ response: string }, [string]>(
+            'SELECT response FROM commands WHERE command_id = ?',
+          )
+          .get(commandId);
+        return row
+          ? { response: JSON.parse(row.response) as unknown }
+          : undefined;
+      }),
     feed: (afterGlobalSeq, limit) =>
       writes.run(async () => feedRows(db, afterGlobalSeq, limit)),
     append: (input) => transaction((tx) => tx.append(input)),
     transaction,
     exclusive: (section) => inWriteTransaction(async () => section(db)),
+    gate,
   };
 };

@@ -29,6 +29,19 @@ export default [
               message:
                 'apps/server does not import core/cycle (STRUCTURE §3, RULES §4.1).',
             },
+            {
+              group: ['@repo/factory-db', '@repo/factory-db/*'],
+              message:
+                'apps/server reaches the database only through factory-runtime (STRUCTURE §3).',
+            },
+            {
+              group: [
+                '@repo/factory-definitions',
+                '@repo/factory-definitions/*',
+              ],
+              message:
+                'apps/server does not load definitions; factory-runtime does (STRUCTURE §3).',
+            },
           ],
         },
       ],

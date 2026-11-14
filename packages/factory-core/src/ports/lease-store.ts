@@ -19,5 +19,9 @@ export interface LeaseStore {
   ): Promise<void>;
   /** Leases whose expiry is at or before `now`. */
   expired(now: number): Promise<Lease[]>;
+  /** Every lease, in no particular order (boot grace). */
+  list(): Promise<Lease[]>;
+  /** The leases one Worker holds (heartbeat, revocation, slot count). */
+  forWorker(workerId: WorkerId): Promise<Lease[]>;
   delete(orderId: OrderId): Promise<void>;
 }

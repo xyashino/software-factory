@@ -109,7 +109,7 @@ export const pinnedLineSchema = z
     'line name and hash must match the snapshot',
   );
 export const artifactsSchema = z.record(artifactKeyText, blobRefSchema);
-const jobKindSchema = z.enum([
+export const jobKindSchema = z.enum([
   'run_operator_station',
   'run_inspection',
   'deliver',

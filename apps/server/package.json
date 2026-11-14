@@ -16,13 +16,13 @@
   },
   "dependencies": {
     "@repo/factory-core": "workspace:*",
-    "@repo/factory-db": "workspace:*",
-    "@repo/factory-definitions": "workspace:*",
+    "@repo/factory-runtime": "workspace:*",
     "hono": "catalog:"
   },
   "devDependencies": {
     "@repo/eslint-config": "workspace:*",
     "@repo/typescript-config": "workspace:*",
+    "@types/bun": "catalog:",
     "@types/node": "catalog:",
     "eslint": "catalog:",
     "typescript": "catalog:",

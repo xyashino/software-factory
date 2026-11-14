@@ -144,6 +144,10 @@ export const fakeEventStore = (): FakeEventStore => {
 
   return {
     load: async (orderId) => loadFrom(committed, orderId),
+    response: async (commandId) => {
+      const record = committed.commands.get(commandId);
+      return record ? { response: record.response } : undefined;
+    },
     feed: async (afterGlobalSeq, limit) =>
       committed.events
         .filter((stored) => stored.globalSeq > afterGlobalSeq)
