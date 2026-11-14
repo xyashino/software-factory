@@ -8,8 +8,18 @@ export const todoFile = (options: {
   body?: string;
   status?: 'todo' | 'done' | 'cancelled';
   v2?: boolean;
-}): string =>
-  `---\nstatus: ${options.status ?? 'todo'}\n${options.v2 ? 'factory: v2\n' : ''}priority: high\n---\n\n# ${options.title}\n\n${options.body ?? 'Users can sign in.'}\n`;
+  /** The Order Plan slug this todo is a member of (`plan:` in the frontmatter). */
+  plan?: string;
+  /** The todo ids this todo depends on (`depends_on:`). */
+  dependsOn?: string[];
+}): string => {
+  const plan = options.plan === undefined ? '' : `plan: ${options.plan}\n`;
+  const dependsOn =
+    options.dependsOn === undefined || options.dependsOn.length === 0
+      ? ''
+      : `depends_on: [${options.dependsOn.join(', ')}]\n`;
+  return `---\nstatus: ${options.status ?? 'todo'}\n${options.v2 ? 'factory: v2\n' : ''}${plan}${dependsOn}priority: high\n---\n\n# ${options.title}\n\n${options.body ?? 'Users can sign in.'}\n`;
+};
 
 /**
  * A real git repository on `main` with one commit: the given todo files under `todos/`. The intake

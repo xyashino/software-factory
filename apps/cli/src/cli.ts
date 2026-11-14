@@ -8,6 +8,7 @@ import { answerCommand } from './commands/answer';
 import { logCommand } from './commands/log';
 import { projectCommand } from './commands/project';
 import { nudgeCommand } from './commands/nudge';
+import { planCommand } from './commands/plan';
 import { prioCommand } from './commands/prio';
 import { reopenCommand } from './commands/reopen';
 import { resumeCommand } from './commands/resume';
@@ -37,6 +38,7 @@ const main = defineCommand({
     sync: syncCommand,
     cells: cellsCommand,
     project: projectCommand,
+    plan: planCommand,
     check: checkCommand,
     admin: adminCommand,
   },

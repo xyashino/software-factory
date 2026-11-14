@@ -27,6 +27,7 @@
         "FACTORY_PROPERTY_RUNS",
         "PATH",
         "FAKE_GH_DIR",
+        "FAKE_OBSERVE_LOG",
         "FAKE_RUNNER_LOG",
         "FAKE_RUNNER_SCENARIOS"
       ]
