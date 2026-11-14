@@ -247,7 +247,9 @@ export const createPlanCommands = (
     try {
       await submit({
         planId: planIdOf(row.projectId, row.plan),
-        commandId: `${row.orderId}:${row.lastSeq}:plan`,
+        // `#`, not `:`: a `name:12` pair is a host:port to the machine-local check that every stored
+        // name passes (I2), and it would fail the whole pass once the order's sequence reaches two digits.
+        commandId: `${row.orderId}#${row.lastSeq}:plan`,
         command: {
           type: 'RecordMemberState',
           orderId: row.orderId,

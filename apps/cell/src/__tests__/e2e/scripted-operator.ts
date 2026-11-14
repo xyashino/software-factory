@@ -5,7 +5,7 @@
  * <scenario> <kickoff>`. Every line the Cell types into it is logged to `typed.log` beside the
  * Cycle socket, never in the worktree.
  */
-import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
@@ -98,6 +98,31 @@ const scenarios: Record<string, () => Promise<void>> = {
   'verdict-pass': async () => {
     await writeOutputs();
     await finish(['verdict', 'pass']);
+  },
+  'add-file': async () => {
+    // A builder of an Order Plan member: it adds the first of a.txt, b.txt, c.txt the worktree does not
+    // hold yet. The worktree is the base the Cell gave it, so what it sees is what the base holds; the
+    // branch and the files it saw are logged to FAKE_OBSERVE_LOG for the test to check.
+    const letters = ['a', 'b', 'c'];
+    const seen = letters.filter((letter) => existsSync(`${letter}.txt`));
+    const wrote = letters.find((letter) => !seen.includes(letter));
+    if (wrote === undefined) throw new Error('every letter is already here');
+    const branch = Bun.spawnSync(['git', 'rev-parse', '--abbrev-ref', 'HEAD'])
+      .stdout.toString()
+      .trim();
+    if (process.env.FAKE_OBSERVE_LOG) {
+      appendFileSync(
+        process.env.FAKE_OBSERVE_LOG,
+        `${JSON.stringify({
+          branch,
+          seen: seen.map((letter) => `${letter}.txt`),
+          wrote: `${wrote}.txt`,
+        })}\n`,
+      );
+    }
+    await writeOutputs();
+    writeFileSync(`${wrote}.txt`, `${wrote}\n`);
+    await finish(['done']);
   },
   block: async () => {
     writeFileSync(join(cycleDir, 'handover.md'), 'stuck on the schema\n');

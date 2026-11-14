@@ -56,7 +56,7 @@ main
 4. As soon as `wo-1` is **delivered** (PR open, not closed), `wo-2` becomes claimable. It builds on
    `factory/wo-1` (so it sees `wo-1`'s code), and delivers a PR `factory/wo-2 → factory/wo-1`. `wo-3`
    stacks on `wo-2` the same way.
-5. A person (or the opt-in auto-merge workflow that v2-23 adds to this guide) **merges** the sub-PRs bottom-up, each with a **merge
+5. A person (or the opt-in auto-merge workflow in [§7](#7-opt-in-auto-merge-of-sub-prs)) **merges** the sub-PRs bottom-up, each with a **merge
    commit**, deleting the head branch. GitHub retargets the next PR to `feat/xyz`. From then on the
    Factory builds the dependents' next jobs on `feat/xyz`.
 6. When `wo-1` is **merged**, a Cell runs `plan_pr` and opens the **draft** PR `feat/xyz → main`
@@ -113,14 +113,75 @@ branch would conflict (OPEN-QUESTIONS Q23).
 
 ## 6. Looking at a plan
 
-`factory plan ls` lists plans; `factory plan status <slug> [--project <id>]` shows the chain in order
-with each member's board status, base branch, PR link and blocker, then the plan PR and its Andon:
+`factory plan ls` lists plans: slug, project, member count, phase and the plan PR state. Output of the
+end-to-end test (`apps/cell/src/__tests__/distributed/order-plan.test.ts`) once the plan has completed:
 
 ```text
-xyz  software-factory  pr_open
-  wo-1 [merged] -> wo-2 [delivered, PR into factory/wo-1] -> wo-3 [running]
-  plan PR: feat/xyz -> main (draft)
+SLUG                 PROJECT              MEMBERS  PHASE          PLAN PR
+e2e                  software-factory     3        completed      merged
 ```
 
-Both take `--json`, and give the same output over the socket, over HTTP and with `--once`
+`factory plan status <slug> [--project <id>]` shows the chain in order with each member's board status,
+base branch, PR link and blocker, then the plan PR and its Andon. The same run, at the end:
+
+```text
+e2e  software-factory  completed
+  wo-1 [merged] -> wo-2 [merged] -> wo-3 [merged]
+    wo-1         merged       base feat/e2e  PR https://github.test/fake/software-factory/pull/factory%2Fwo-1
+    wo-2         merged       base feat/e2e  PR https://github.test/fake/software-factory/pull/factory%2Fwo-2
+    wo-3         merged       base feat/e2e  PR https://github.test/fake/software-factory/pull/factory%2Fwo-3
+plan PR: feat/e2e -> main (merged) https://github.test/fake/software-factory/pull/feat%2Fe2e
+```
+
+While a stack is in progress the chain reads, for example, `wo-1 [merged] -> wo-2 [delivered, PR into
+factory/wo-1] -> wo-3 [running, waiting_deps]`: `PR into <base>` on a delivered member whose PR targets a
+predecessor branch rather than `feat/<slug>`, and the blocker after the status when it has one.
+
+- The slug is unique within a project. Give `--project <id>` when the same slug exists in more than
+  one project; without it, an ambiguous slug is a usage error that names the projects.
+- An Andon prints `andon: <reason>` and the command that clears it, `factory resume <planId>` or
+  `factory cancel <planId>`.
+- `--json` prints `{"plans": [...]}` for `plan ls` and `{"plan": {...}, "members": [...]}` for
+  `plan status`, one line, uncoloured.
+
+Both are read-only. They give the same output over the socket, over HTTP and with `--once`
 (PROTOCOL §10).
+
+## 7. Opt-in auto-merge of sub-PRs
+
+Merging each sub-PR by hand is the default (§2 step 5). A repository may opt in to a workflow that
+merges a passing sub-PR into `feat/*` for you. The Factory does not ship it enabled. Copy it into
+`.github/workflows/` only if you want it:
+
+```yaml
+name: Order Plan auto-merge
+on:
+  pull_request:
+    types: [opened, synchronize, ready_for_review]
+
+jobs:
+  merge-sub-pr:
+    # Only Work order PRs (factory/*) into a plan branch (feat/*). Never into main.
+    if: startsWith(github.head_ref, 'factory/') && startsWith(github.base_ref, 'feat/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Enable auto-merge (merge commit, waits for required checks)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: gh pr merge --auto --merge --delete-branch "$PR_URL"
+```
+
+Why it is safe to copy:
+
+- It only touches `factory/*` → `feat/*`. The base is checked in the `if:`, so a PR into `main` is never
+  merged by it.
+- `--auto` waits for the required checks, so it merges only when they are green. Set branch protection on
+  `feat/*` to require the checks you want, or `--auto` merges as soon as the PR opens.
+- `--merge` is the merge commit that §5 requires. `--delete-branch` deletes the head branch, which makes
+  GitHub retarget the next sub-PR to `feat/*`.
+- The plan PR `feat/* → main` is never touched. It stays a draft until the Factory marks it ready, and a
+  person merges it (squash).

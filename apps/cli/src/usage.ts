@@ -20,6 +20,8 @@ with no server running, a write or a read runs one command under the writer lock
   factory project add <id> --repo <url> [--base-branch <b>] [--dep-policy delivered|merged] [--max-running <n>]
   factory project set <id> [--base-branch <b>] [--dep-policy delivered|merged] [--max-running <n>]
   factory project rm <id>                   remove a project with no history
+  factory plan ls                           list the Order Plans
+  factory plan status <slug> [--project <id>]  the chain of one plan, its plan PR and Andon
   factory check                             validate definitions offline
   factory admin backup <file>               write an online SQLite backup (STORAGE §7)
   factory admin export <file>               write the Factory export (STORAGE §7)

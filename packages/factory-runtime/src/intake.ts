@@ -466,7 +466,7 @@ export const syncProject = async (
       try {
         await planCommand(
           plan.planId,
-          `${order.orderId}:${order.lastSeq}:plan`,
+          `${order.orderId}#${order.lastSeq}:plan`,
           {
             type: 'RecordMemberState',
             orderId: order.orderId,

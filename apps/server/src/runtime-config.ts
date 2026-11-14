@@ -13,6 +13,7 @@ const KNOBS = [
   ['FACTORY_REAPER_MS', 'reaperMs'],
   ['FACTORY_SELF_FENCE_MS', 'selfFenceMs'],
   ['FACTORY_CLAIM_TICK_MS', 'claimTickMs'],
+  ['FACTORY_PR_POLL_MS', 'prPollMs'],
 ] as const satisfies readonly (readonly [string, keyof RuntimeConfig])[];
 
 /** One knob's value: a positive whole number of milliseconds, or nothing when it is unset. */

@@ -107,7 +107,13 @@ const suiteEnv = (ghDir: string): Record<string, string> => ({
  */
 export const createWorld = async (
   todos: Record<string, string>,
-  options: { remote?: boolean } = {},
+  options: {
+    remote?: boolean;
+    /** The Factory and Cells use a bare clone of the fixture, a remote that takes pushes to any branch. */
+    bare?: boolean;
+    /** Extra environment for every process of the world (a test's own knobs). */
+    env?: Record<string, string>;
+  } = {},
 ): Promise<World> => {
   const root = mkdtempSync(join(tmpdir(), 'factory-distributed-'));
   const dataDir = join(root, 'data');
@@ -120,9 +126,24 @@ export const createWorld = async (
     await Bun.write(join(repo, name), text);
   }
   await createFixtureRepo(repo, todos);
-  seedProject(dataDir, { projectId: PROJECT, repoUrl: repo });
+  // The remote the Factory and the Cells use: the fixture itself, or a bare clone of it (a real remote).
+  const remote = options.bare === true ? join(root, 'remote.git') : repo;
+  if (options.bare === true) {
+    const cloned = Bun.spawnSync([
+      'git',
+      'clone',
+      '--bare',
+      '--quiet',
+      repo,
+      remote,
+    ]);
+    if (cloned.exitCode !== 0) {
+      throw new Error(`git clone --bare failed: ${cloned.stderr.toString()}`);
+    }
+  }
+  seedProject(dataDir, { projectId: PROJECT, repoUrl: remote });
 
-  const env = suiteEnv(ghDir);
+  const env = { ...suiteEnv(ghDir), ...(options.env ?? {}) };
   const start = async (): Promise<RunningFactory> => {
     const factory = await startFactory({
       dataDir,
@@ -141,7 +162,7 @@ export const createWorld = async (
   return {
     root,
     dataDir,
-    repo,
+    repo: remote,
     ghDir,
     get factory() {
       return factory;
