@@ -1,15 +1,15 @@
 ---
 status: todo
 priority: low
-workflow: standard
+workflow: feature
 factory: v2
 ---
 
-# v2-trial-remove-comments: remove redundant comments from one file
+# v2-trial-remove-comments-feature: remove redundant comments from one file
 
 ## Objective
 
-Real-AI trial of the v2 factory: remove redundant comments from one source file, change no code.
+Real-AI trial of the v2 factory on the feature Line: remove redundant comments from one source file, change no code.
 
 ## Scope
 
