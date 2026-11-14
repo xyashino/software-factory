@@ -43,6 +43,13 @@ export const runtimeConfigFrom = (
   }
   const ttl = config.leaseTtlMs ?? DEFAULT_CONFIG.leaseTtlMs;
   const fence = config.selfFenceMs ?? DEFAULT_CONFIG.selfFenceMs;
+  const v2Only = env.FACTORY_V2_ONLY;
+  if (v2Only !== undefined) {
+    if (v2Only !== '0' && v2Only !== '1') {
+      throw new Error('FACTORY_V2_ONLY must be 1 or 0');
+    }
+    config.v2Only = v2Only === '1';
+  }
   if (fence >= ttl) {
     throw new Error(
       `FACTORY_SELF_FENCE_MS (${fence}) must be below FACTORY_LEASE_TTL_MS (${ttl}) (PROTOCOL §5.1)`,

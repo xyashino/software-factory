@@ -12,6 +12,8 @@ const todoFrontmatter = z.object({
   priority: z.enum(['high', 'medium', 'low']).default('medium'),
   depends_on: z.array(z.string()).default([]),
   workflow: z.string().default('feature'),
+  /** `v2` marks a todo owned by Software Factory v2 (docs/ROADMAP.md M9). */
+  factory: z.string().optional(),
 });
 
 export interface PickedTodo {
@@ -33,7 +35,8 @@ export const todoIdOf = (todoPath: string): string => {
 
 /**
  * The next todo to run: `status: todo`, every dependency satisfied, no task
- * yet for it, highest priority first, then by file name. Only one todo is
+ * yet for it, highest priority first, then by file name. A todo with
+ * `factory: v2` belongs to v2 and is skipped silently. Only one todo is
  * returned, and the caller starts it.
  */
 export const pickTodo = (
@@ -52,6 +55,7 @@ export const pickTodo = (
 
   const ready = parsed
     .filter((todo) => todo.status === 'todo')
+    .filter((todo) => todo.factory !== 'v2')
     .filter((todo) => {
       if (tasks.some((task) => task.todoPath === todo.file)) return false;
       return true;

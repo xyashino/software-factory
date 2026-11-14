@@ -33,6 +33,18 @@ describe('runtime timing knobs from the environment', () => {
     );
   });
 
+  it('reads the cut-over flag: 0 turns the v2 todo filter off, 1 keeps it on', () => {
+    expect(runtimeConfigFrom({ FACTORY_V2_ONLY: '0' })).toEqual({
+      v2Only: false,
+    });
+    expect(runtimeConfigFrom({ FACTORY_V2_ONLY: '1' })).toEqual({
+      v2Only: true,
+    });
+    expect(() => runtimeConfigFrom({ FACTORY_V2_ONLY: 'off' })).toThrow(
+      'FACTORY_V2_ONLY',
+    );
+  });
+
   it('refuses a self-fence that is not shorter than the lease TTL (PROTOCOL §5.1)', () => {
     expect(() =>
       runtimeConfigFrom({

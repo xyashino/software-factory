@@ -18,6 +18,7 @@
 | [STRUCTURE.md](STRUCTURE.md)           | Repo layout, package responsibilities, dependency rules, what is carried over from v1                                                                           |
 | [RULES.md](RULES.md)                   | Hard implementation rules for every v2 change                                                                                                                   |
 | [ROADMAP.md](ROADMAP.md)               | Milestones, acceptance criteria, the todo breakdown v1 executes                                                                                                 |
+| [TRIAL.md](TRIAL.md)                   | Runbook of the M9 trial: v1 and v2 side by side, `factory: v2` todos, what to watch, exit criteria                                                              |
 | [OPEN-QUESTIONS.md](OPEN-QUESTIONS.md) | Decisions not yet taken, each with a recommended default                                                                                                        |
 
 Reading order: WORKFLOW, PLAN, CORE, PROTOCOL, STORAGE, STRUCTURE, RULES, ROADMAP.
