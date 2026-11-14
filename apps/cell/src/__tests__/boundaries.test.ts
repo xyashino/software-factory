@@ -33,6 +33,13 @@ describe('factory-cell boundaries', () => {
     expect(rules).toContain('no-restricted-imports');
   });
 
+  it('rejects an import of the runtime library', async () => {
+    const rules = await reportedRules(
+      `import { createRuntime } from '@repo/factory-runtime/composition';`,
+    );
+    expect(rules).toContain('no-restricted-imports');
+  });
+
   it('accepts an import of factory-core', async () => {
     const rules = await reportedRules(
       `import { PACKAGE_NAME } from '@repo/factory-core/meta';`,

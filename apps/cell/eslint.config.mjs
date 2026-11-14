@@ -36,6 +36,11 @@ export default [
               message:
                 'apps/cell does not import factory-definitions (RULES §4.2).',
             },
+            {
+              group: ['@repo/factory-runtime', '@repo/factory-runtime/*'],
+              message:
+                'apps/cell does not import the runtime library; it talks to factory-server over the socket (PROTOCOL §2).',
+            },
           ],
         },
       ],
