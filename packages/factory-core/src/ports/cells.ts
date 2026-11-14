@@ -35,4 +35,22 @@ export interface CellStore {
   touch(cellId: CellId, at: number): Promise<void>;
   /** Marks the Cell revoked at `at`. A second revoke keeps the first time. */
   revoke(cellId: CellId, at: number): Promise<void>;
+  /**
+   * Enrolls a Cell over the network (PROTOCOL §1): stores the hash of its credential and the join
+   * token that admitted it. The plain credential is never stored.
+   */
+  join(record: {
+    cellId: CellId;
+    name: string;
+    credentialHash: string;
+    joinedWith: string;
+    at: number;
+  }): Promise<void>;
+  /**
+   * The Cell that owns a credential hash, with the stored hash, or undefined. Revoked Cells are returned
+   * too. The caller compares the stored hash in constant time.
+   */
+  findByCredentialHash(
+    credentialHash: string,
+  ): Promise<{ credentialHash: string; record: CellRecord } | undefined>;
 }

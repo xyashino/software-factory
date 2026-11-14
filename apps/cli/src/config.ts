@@ -2,11 +2,15 @@ import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
-/** The keys of the config file (PROTOCOL §10, STORAGE §1). Remote keys arrive with v2-18. */
+/**
+ * The keys of the config file (PROTOCOL §10, STORAGE §1). `remoteUrl` selects remote mode; the token
+ * is never a file key, it comes from `FACTORY_TOKEN` only, so it is not written to disk.
+ */
 export interface FileConfig {
   dataDir?: string;
   serverBin?: string;
   color?: boolean;
+  remoteUrl?: string;
 }
 
 export class ConfigError extends Error {
@@ -16,7 +20,7 @@ export class ConfigError extends Error {
   }
 }
 
-const KEYS = new Set(['dataDir', 'serverBin', 'color']);
+const KEYS = new Set(['dataDir', 'serverBin', 'color', 'remoteUrl']);
 
 /** The config file: `$FACTORY_CONFIG`, else `$XDG_CONFIG_HOME/factory/config.json`. */
 export const configFilePath = (env: NodeJS.ProcessEnv): string =>
@@ -37,7 +41,7 @@ export const parseFileConfig = (value: unknown): FileConfig => {
     if (!KEYS.has(key)) throw new ConfigError(`unknown config key "${key}"`);
   }
   const config: FileConfig = {};
-  for (const key of ['dataDir', 'serverBin'] as const) {
+  for (const key of ['dataDir', 'serverBin', 'remoteUrl'] as const) {
     const entry = record[key];
     if (entry === undefined) continue;
     if (typeof entry !== 'string' || entry === '') {
@@ -70,6 +74,10 @@ export interface Settings {
   dataDir: string;
   serverBin: string;
   color: boolean;
+  /** Set when the CLI talks to a remote server over HTTP (PROTOCOL §2). Undefined means local mode. */
+  remoteUrl?: string;
+  /** The supervisor token of remote mode, from `FACTORY_TOKEN`. */
+  token?: string;
 }
 
 export interface SettingsInput {
@@ -81,16 +89,23 @@ export interface SettingsInput {
 
 /**
  * The settings in force, by precedence (PROTOCOL §10): a flag, then the environment, then the config
- * file, then the default. Colour is off with `--no-color`, with `NO_COLOR` set to a non-empty value,
+ * file, then the default. Remote mode is on when `FACTORY_URL` or `remoteUrl` names a server; the
+ * default is local, the socket of the data directory. Colour is off with `--no-color`, with `NO_COLOR` set to a non-empty value,
  * or with `"color": false` in the config file.
  */
-export const resolveSettings = (input: SettingsInput): Settings => ({
-  dataDir:
-    input.flags.dataDir ||
-    input.env.FACTORY_DATA_DIR ||
-    input.file.dataDir ||
-    join(homedir(), '.local', 'share', 'factory'),
-  serverBin: input.file.serverBin ?? input.defaultServerBin,
-  color:
-    !input.flags.noColor && !input.env.NO_COLOR && input.file.color !== false,
-});
+export const resolveSettings = (input: SettingsInput): Settings => {
+  const remoteUrl = input.env.FACTORY_URL || input.file.remoteUrl;
+  const token = input.env.FACTORY_TOKEN || undefined;
+  return {
+    dataDir:
+      input.flags.dataDir ||
+      input.env.FACTORY_DATA_DIR ||
+      input.file.dataDir ||
+      join(homedir(), '.local', 'share', 'factory'),
+    serverBin: input.file.serverBin ?? input.defaultServerBin,
+    color:
+      !input.flags.noColor && !input.env.NO_COLOR && input.file.color !== false,
+    ...(remoteUrl ? { remoteUrl } : {}),
+    ...(token !== undefined ? { token } : {}),
+  };
+};

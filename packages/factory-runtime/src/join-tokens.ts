@@ -1,10 +1,10 @@
-import { createHash, randomBytes } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 import { RuntimeError, notFound } from './errors';
+import { hashToken } from './remote';
 import type { RuntimePorts } from './ports';
 
 /** The SHA-256 hex of a join token: the only form the runtime stores (PROTOCOL §1). */
-export const hashJoinToken = (token: string): string =>
-  createHash('sha256').update(token).digest('hex');
+export const hashJoinToken = hashToken;
 
 /**
  * Creates a join token (PROTOCOL §1): 256 random bits, stored as a hash with its expiry. The plain

@@ -15,6 +15,8 @@ interface CellRow {
   last_seen_at: number | null;
   revoked_at: number | null;
   info: string | null;
+  /** The credential hash of a remote Cell; null for a local, operating-system-trusted one. */
+  token_hash: string | null;
 }
 
 const recordOf = (row: CellRow): CellRecord => ({
@@ -72,5 +74,25 @@ export const sqliteCellStore = (
         'UPDATE cells SET revoked_at = COALESCE(revoked_at, ?) WHERE cell_id = ?',
         [at, cellId],
       );
+    }),
+  join: ({ cellId, name, credentialHash, joinedWith, at }) =>
+    gate.run(() => {
+      writer.assertHeld();
+      db.run(
+        `INSERT INTO cells (cell_id, name, token_hash, joined_with, joined_at)
+         VALUES (?, ?, ?, ?, ?)`,
+        [cellId, name, credentialHash, joinedWith, at],
+      );
+    }),
+  findByCredentialHash: (credentialHash) =>
+    gate.run(() => {
+      const row = db
+        .query<CellRow, [string]>(
+          'SELECT * FROM cells WHERE token_hash = ? LIMIT 1',
+        )
+        .get(credentialHash);
+      return row
+        ? { credentialHash: row.token_hash ?? '', record: recordOf(row) }
+        : undefined;
     }),
 });

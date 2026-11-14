@@ -26,4 +26,12 @@ export interface JoinTokenStore {
   list(): Promise<JoinTokenRecord[]>;
   /** Marks the token revoked at `at`; a second revoke keeps the first time. False when unknown. */
   revoke(joinTokenId: string, at: number): Promise<boolean>;
+  /**
+   * The token with this hash when it is neither revoked nor expired at `at`; undefined otherwise. A
+   * join token is checked by hash only (PROTOCOL §1); the caller compares the stored hash in constant time.
+   */
+  findActive(
+    tokenHash: string,
+    at: number,
+  ): Promise<{ tokenHash: string; joinTokenId: string } | undefined>;
 }

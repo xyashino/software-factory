@@ -40,6 +40,7 @@ import type {
   JoinTokenRecord,
   JoinTokenStore,
 } from '@repo/factory-core/ports/join-tokens';
+import type { SupervisorTokenStore } from '@repo/factory-core/ports/supervisor-tokens';
 import { DEFINITIONS_ROOT } from '../paths';
 import { createRuntime, type Runtime } from '../composition';
 import {
@@ -105,6 +106,7 @@ export const flush = async (): Promise<void> => {
 
 export const memoryCells = (): CellStore & { all(): CellRecord[] } => {
   const records = new Map<CellId, CellRecord>();
+  const credentials = new Map<string, CellId>();
   return {
     all: () => [...records.values()],
     hello: async ({ cellId, name, info, at }) => {
@@ -130,6 +132,36 @@ export const memoryCells = (): CellStore & { all(): CellRecord[] } => {
         records.set(cellId, { ...record, revokedAt: at });
       }
     },
+    join: async ({ cellId, name, credentialHash, at }) => {
+      credentials.set(credentialHash, cellId);
+      records.set(cellId, {
+        cellId,
+        name,
+        info: null,
+        joinedAt: at,
+        lastSeenAt: null,
+        revokedAt: null,
+      });
+    },
+    findByCredentialHash: async (credentialHash) => {
+      const cellId = credentials.get(credentialHash);
+      const record = cellId === undefined ? undefined : records.get(cellId);
+      return record === undefined ? undefined : { credentialHash, record };
+    },
+  };
+};
+
+/** An in-memory `supervisor_tokens` table keyed by hash, like the SQLite one. */
+export const memorySupervisorTokens = (): SupervisorTokenStore & {
+  all(): { tokenHash: string; name: string }[];
+} => {
+  const rows = new Map<string, { tokenHash: string; name: string }>();
+  return {
+    all: () => [...rows.values()],
+    create: async ({ tokenHash, name }) => {
+      rows.set(tokenHash, { tokenHash, name });
+    },
+    find: async (tokenHash) => rows.get(tokenHash),
   };
 };
 
@@ -157,6 +189,7 @@ export const memoryJoinTokens = (): JoinTokenStore & {
 } => {
   const rows = new Map<string, JoinTokenRecord>();
   const hashes: string[] = [];
+  const idByHash = new Map<string, string>();
   const commands = new Set<string>();
   return {
     all: () => [...rows.values()],
@@ -170,6 +203,7 @@ export const memoryJoinTokens = (): JoinTokenStore & {
       commandId,
     }) => {
       hashes.push(tokenHash);
+      idByHash.set(tokenHash, joinTokenId);
       commands.add(commandId);
       rows.set(joinTokenId, {
         joinTokenId,
@@ -186,6 +220,13 @@ export const memoryJoinTokens = (): JoinTokenStore & {
       if (!row) return false;
       rows.set(joinTokenId, { ...row, revokedAt: row.revokedAt ?? at });
       return true;
+    },
+    findActive: async (tokenHash, at) => {
+      const id = idByHash.get(tokenHash);
+      const row = id === undefined ? undefined : rows.get(id);
+      if (!row || row.revokedAt !== null) return undefined;
+      if (row.expiresAt !== null && row.expiresAt <= at) return undefined;
+      return { tokenHash, joinTokenId: row.joinTokenId };
     },
   };
 };
@@ -250,6 +291,7 @@ export interface World {
   cells: ReturnType<typeof memoryCells>;
   signals: ReturnType<typeof memorySignals>;
   joinTokens: ReturnType<typeof memoryJoinTokens>;
+  supervisorTokens: ReturnType<typeof memorySupervisorTokens>;
   writer: ReturnType<typeof heldWriter>;
   intake: ReturnType<typeof fakeIntakeStore>;
   git: ReturnType<typeof fakeGitMirror>;
@@ -268,11 +310,13 @@ export const world = (overrides: Partial<RuntimeConfig> = {}): World => {
   const cells = memoryCells();
   const signals = memorySignals();
   const joinTokens = memoryJoinTokens();
+  const supervisorTokens = memorySupervisorTokens();
   const writer = heldWriter();
   const intake = fakeIntakeStore();
   const git = fakeGitMirror();
   const prState = fakePrState();
   const ports: RuntimePorts = {
+    supervisorTokens,
     events,
     feed: events,
     archive: unusedArchive,
@@ -304,6 +348,7 @@ export const world = (overrides: Partial<RuntimeConfig> = {}): World => {
   };
   return {
     joinTokens,
+    supervisorTokens,
     clock,
     timers,
     events,

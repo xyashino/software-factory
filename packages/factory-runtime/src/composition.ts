@@ -16,6 +16,7 @@ import { createNotifier } from './notifier';
 import { type CallOptions, createOperations } from './operations';
 import type { RuntimePorts, Timers } from './ports';
 import { pollPrStates } from './pr-poll';
+import { createRemoteAccess, type RemoteAccess } from './remote';
 import { bootGrace, reapOnce } from './reaper';
 
 /**
@@ -54,6 +55,8 @@ export interface Runtime {
   ): AsyncIterable<StoredEvent>;
   /** Backup, export, import and projection rebuild (STORAGE §7). The writer lock must be held. */
   admin: RuntimeAdmin;
+  /** Credentials for the remote transport: join, token checks, supervisor token creation (PROTOCOL §1). */
+  remote: RemoteAccess;
   /**
    * Boot grace, then the reaper every `reaperMs`, and the intake and PR poll loops at their own
    * intervals (PROTOCOL §5.1, §5.4). Idempotent.
@@ -176,6 +179,7 @@ export const createRuntime = (ports: RuntimePorts): Runtime => {
     feed: (afterGlobalSeq, signal) =>
       feedFrom(ports, notifier, afterGlobalSeq, signal),
     admin,
+    remote: createRemoteAccess(ports),
     start: async () => {
       if (running) return;
       await bootGrace(ports);

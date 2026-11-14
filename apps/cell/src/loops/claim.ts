@@ -2,6 +2,7 @@ import type { FactoryClient } from '@repo/factory-core/contracts/client';
 import type { Job } from '@repo/factory-core/contracts/job';
 import type { CellId } from '@repo/factory-core/ids';
 import type { JobRegistry } from '../jobs/registry';
+import { isUnauthorized } from '../remote-client';
 
 export interface SlotOptions {
   client: FactoryClient;
@@ -19,6 +20,8 @@ export interface SlotOptions {
   /** Runs one claimed job to its end. The slot is free again when it returns or throws. */
   runJob: (job: Job, signal: AbortSignal) => Promise<void>;
   onError?: (error: unknown, context: string) => void;
+  /** The Factory refused the credential (401): this slot stops, and the Cell joins again. */
+  onUnauthorized?: () => void;
 }
 
 /**
@@ -41,6 +44,10 @@ export const runSlot = async (options: SlotOptions): Promise<void> => {
       });
       job = answer.job;
     } catch (error) {
+      if (isUnauthorized(error)) {
+        options.onUnauthorized?.();
+        return;
+      }
       options.onError?.(error, 'claim');
       await options.sleep(options.idlePauseMs);
       continue;

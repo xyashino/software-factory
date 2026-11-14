@@ -5,6 +5,7 @@ import type { GitMirror } from '@repo/factory-core/ports/git-mirror';
 import type { PrStatePort } from '@repo/factory-core/ports/pr-state';
 import { sqliteArchive } from '@repo/factory-db/archive';
 import { sqliteCellStore } from '@repo/factory-db/cells-table';
+import { sqliteSupervisorTokenStore } from '@repo/factory-db/supervisor-tokens-table';
 import { exportFactory } from '@repo/factory-db/export-import';
 import { sqliteIntakeStore } from '@repo/factory-db/intake-table';
 import { sqliteJoinTokenStore } from '@repo/factory-db/join-tokens-table';
@@ -111,6 +112,7 @@ export const openRuntime = (options: OpenRuntimeOptions): OpenedRuntime => {
       leases: sqliteLeaseStore(database, writer, gate),
       cells: sqliteCellStore(database, writer, gate),
       joinTokens: sqliteJoinTokenStore(database, writer, gate),
+      supervisorTokens: sqliteSupervisorTokenStore(database, writer, gate),
       signals: sqliteSignalStore(database, writer, gate),
       clock,
       ids: ulidIds(clock),

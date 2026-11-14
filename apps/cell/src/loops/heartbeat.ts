@@ -2,6 +2,7 @@ import type { FactoryClient } from '@repo/factory-core/contracts/client';
 import type { CellId } from '@repo/factory-core/ids';
 import type { ClockPort } from '../ports/clock.port';
 import type { JobRegistry } from '../jobs/registry';
+import { isUnauthorized } from '../remote-client';
 
 export interface HeartbeatOptions {
   client: FactoryClient;
@@ -12,6 +13,8 @@ export interface HeartbeatOptions {
   selfFenceMs: number;
   /** Called once when the Cell fences itself, with the time of its last ok heartbeat. */
   onFence?: (lastOkAt: number) => void;
+  /** The Factory refused the credential (401) on a beat: the Cell stops its jobs and joins again. */
+  onUnauthorized?: () => void;
 }
 
 export interface Heartbeat {
@@ -67,7 +70,8 @@ export const createHeartbeat = (options: HeartbeatOptions): Heartbeat => {
           pendingAcks.push(signal.signalId);
         }
       }
-    } catch {
+    } catch (error) {
+      if (isUnauthorized(error)) options.onUnauthorized?.();
       // A failed beat is retried on the next tick; the fence below decides when it matters.
     }
     fenceIfSilent();
