@@ -719,6 +719,7 @@ export const runOperatorStation = async (
           pane = paneName(station.stationId, station.n, cycleId);
           await deps.pane.open({
             name: pane,
+            task: todo,
             command,
             cwd: worktree,
             env,

@@ -55,11 +55,11 @@ const toOperator = (status: string | undefined): PaneReading['operator'] => {
 const envArgs = (env: Readonly<Record<string, string>>): string[] =>
   Object.entries(env).flatMap(([key, value]) => ['--env', `${key}=${value}`]);
 
-/** Runs the Operator in a Herdr pane: the tab, the agent, the typed text, the read and the close. */
-export const createHerdrPane = (options: {
-  workspaceId: string;
-  exec?: HerdrExec;
-}): PaneDriver => {
+/**
+ * Runs the Operator in a Herdr pane: one workspace per task (as v1 did), a tab for the Operator in it,
+ * the agent, the typed text, the read and the close.
+ */
+export const createHerdrPane = (options: { exec?: HerdrExec } = {}): PaneDriver => {
   const exec = options.exec ?? execHerdr;
   const ok = async (args: readonly string[]): Promise<HerdrOutcome> => {
     const outcome = await exec(args);
@@ -71,15 +71,38 @@ export const createHerdrPane = (options: {
     return outcome;
   };
   const tabs = new Map<string, string>();
+  const workspaces = new Map<string, string>();
+
+  /** The task's workspace, created on its first Operator and kept for the rest of the task. */
+  const workspaceOf = async (task: string, cwd: string): Promise<string> => {
+    const known = workspaces.get(task);
+    if (known !== undefined) return known;
+    const created = await ok([
+      'workspace',
+      'create',
+      '--cwd',
+      cwd,
+      '--label',
+      task,
+      '--no-focus',
+    ]);
+    const workspaceId = findJsonString(created.stdout, 'workspace_id');
+    if (workspaceId === undefined) {
+      throw new Error('herdr workspace create returned no workspace_id');
+    }
+    workspaces.set(task, workspaceId);
+    return workspaceId;
+  };
 
   return {
-    open: async (spec: LaunchSpec & { name: string }) => {
+    open: async (spec: LaunchSpec & { name: string; task: string }) => {
       const env = envArgs(spec.env);
+      const workspaceId = await workspaceOf(spec.task, spec.cwd);
       const created = await ok([
         'tab',
         'create',
         '--workspace',
-        options.workspaceId,
+        workspaceId,
         '--cwd',
         spec.cwd,
         '--label',

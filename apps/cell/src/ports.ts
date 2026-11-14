@@ -62,7 +62,8 @@ export interface PaneReading {
 
 /** A Herdr pane the Cell drives: open, type, read, close (PROTOCOL §9, v1 Herdr adapter). */
 export interface PaneDriver {
-  open(spec: LaunchSpec & { name: string }): Promise<void>;
+  /** `task` is the Work order's todo: one Herdr workspace per task, as in v1, holds its Operator tabs. */
+  open(spec: LaunchSpec & { name: string; task: string }): Promise<void>;
   type(name: string, text: string): Promise<void>;
   read(name: string): Promise<PaneReading>;
   /** The sanitized last lines of the pane, for a stall alert. */
