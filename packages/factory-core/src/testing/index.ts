@@ -2,6 +2,7 @@
 // I/O and no test framework: failures are plain Errors, so any test runner can show them.
 export * from './event-builders';
 export * from './fakes';
+export * from './fakes-ports';
 export * from './harness';
 export * from './line-builder';
 export * from './fake-event-store';

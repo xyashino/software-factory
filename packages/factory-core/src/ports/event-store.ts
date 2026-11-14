@@ -28,6 +28,11 @@ export interface StoreTx {
 export interface EventStore {
   /** All events of a Work order (its Traveler), upcast to the current schema. */
   load(orderId: OrderId): Promise<StoredEvent[]>;
+  /**
+   * The response stored for a command that already ran (STORAGE §3 step 1). Read before `decide`,
+   * because a replayed command may no longer be decidable against the current state.
+   */
+  response(commandId: string): Promise<{ response: unknown } | undefined>;
   /** Factory-wide feed from a global position (stream, export, projections rebuild). */
   feed(afterGlobalSeq: number, limit: number): Promise<StoredEvent[]>;
   /**
