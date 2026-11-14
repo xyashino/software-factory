@@ -1,7 +1,7 @@
 ---
 status: todo
 priority: high
-depends_on: [v2-07-storage-event-store]
+depends_on: [v2-07b-storage-drizzle, v2-07c-nomenclature-worker-to-cell]
 workflow: feature
 ---
 
@@ -10,12 +10,14 @@ workflow: feature
 ## Objective
 
 Complete `factory-db`: the lease store, the content-addressed blob store with size rules and sweep,
-and the portable export/import format.
+and the portable export/import format, built on the Drizzle schema and query layer (`v2-07b`) and
+aligned with `Cell` nomenclature (`v2-07c`).
 
 ## Read first
 
 - `docs/STORAGE.md` §2 (ports), §4 (`leases`, `blobs`), §5, §7
 - `docs/PROTOCOL.md` §5 (lease numbers)
+- `packages/factory-db/src/schema.ts`
 
 ## Scope (ROADMAP items)
 
@@ -23,11 +25,11 @@ and the portable export/import format.
 
 ## Deliverables
 
-1. `LeaseStore` (insert, extend for a Worker's jobs, expired(now), delete, `bootGrace(now, ttl)`),
-   fake + SQLite, added to the contract suite.
+1. `LeaseStore` (insert, extend for a Cell's jobs, expired(now), delete, `bootGrace(now, ttl)`),
+   fake + SQLite (via Drizzle), added to the contract suite.
 2. `BlobStore` (put with hash verification, get, stat), gzip above 4 KiB, size limits (2 MiB text,
    20 MiB logs with head + tail truncation marker), daily sweep of blobs unreferenced after 24 h,
-   fake + SQLite, contract tests.
+   fake + SQLite (via Drizzle), contract tests.
 3. Export writer and import reader for `export.factory.tar` (STORAGE §7.3): manifest, projects,
    events in `global_seq` order, referenced blobs; import into an empty database only.
 
