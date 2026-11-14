@@ -4,6 +4,8 @@ import {
   adminExportResponseSchema,
   adminFileRequestSchema,
   adminRebuildResponseSchema,
+  adminRecoverRequestSchema,
+  adminRecoverResponseSchema,
   answerRequestSchema,
   boardResponseSchema,
   planDetailRequestSchema,
@@ -205,6 +207,11 @@ export const ROUTES = {
     path: 'supervisor/admin/rebuild-projections',
     request: emptyRequestSchema,
     response: adminRebuildResponseSchema,
+  },
+  adminRecover: {
+    path: 'supervisor/admin/recover',
+    request: adminRecoverRequestSchema,
+    response: adminRecoverResponseSchema,
   },
 } as const;
 

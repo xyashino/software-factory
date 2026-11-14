@@ -379,3 +379,28 @@ export const projectResponseSchema = z
 export const projectRemoveResponseSchema = z
   .object({ projectId: projectIdSchema, removed: z.literal(true) })
   .strict();
+
+/** `admin recover` (STORAGE §8): every project unless one is named. */
+export const adminRecoverRequestSchema = z
+  .object({ projectId: projectIdSchema.optional() })
+  .strict();
+
+const recoveredOrderSchema = z
+  .object({
+    orderId: z.string(),
+    todoId: z.string(),
+    passedStations: z.array(z.string()),
+    checkpoint: z.string(),
+    delivered: z.boolean(),
+  })
+  .strict();
+const skippedOrderSchema = z
+  .object({ orderId: z.string(), todoId: z.string(), reason: z.string() })
+  .strict();
+
+export const adminRecoverResponseSchema = z
+  .object({
+    recovered: z.array(recoveredOrderSchema),
+    skipped: z.array(skippedOrderSchema),
+  })
+  .strict();

@@ -7,6 +7,7 @@ import {
   applyResumed,
 } from './evolve-control';
 import { evolveCycleEvent } from './evolve-cycle';
+import { applyRecovered } from './evolve-recovery';
 import type { WorkOrderState } from './state';
 
 type Created = Extract<OrderEvent, { type: 'order_created' }>;
@@ -39,6 +40,7 @@ const createOrder = (stored: StoredEvent, ev: Created): WorkOrderState => ({
   retryGrants: zeroCounters(ev.line.snapshot),
   restartsUsed: zeroCounters(ev.line.snapshot),
   lostRestartsUsed: zeroCounters(ev.line.snapshot),
+  recovered: [],
   notes: [],
   questions: [],
   epoch: 0,
@@ -159,6 +161,8 @@ export const evolve = (
       return failDelivery(state, ev);
     case 'pr_state_changed':
       return changePrState(state, ev);
+    case 'order_recovered':
+      return applyRecovered(state, ev);
     case 'andon_raised':
       return applyAndonRaised(state, ev, stored.at);
     case 'resumed':

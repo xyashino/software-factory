@@ -210,6 +210,26 @@ const recordPrStateSchema = z
     state: z.enum(['open', 'merged', 'closed']),
   })
   .strict();
+const recoverOrderSchema = z
+  .object({
+    type: z.literal('RecoverOrder'),
+    passedStations: z.array(stationIdSchema).min(1).max(64),
+    checkpoint: z
+      .object({
+        commit: commitShaSchema,
+        afterStation: stationIdSchema.nullable(),
+      })
+      .strict(),
+    delivery: z
+      .object({
+        prUrl,
+        commit: commitShaSchema,
+        state: z.enum(['open', 'merged', 'closed']),
+      })
+      .strict()
+      .optional(),
+  })
+  .strict();
 
 /** Every command of CORE §5.2, discriminated by `type`. The payloads mirror the events they emit. */
 export const orderCommandSchema = z.discriminatedUnion('type', [
@@ -237,6 +257,7 @@ export const orderCommandSchema = z.discriminatedUnion('type', [
   reopenSchema,
   reportDeliverySchema,
   recordPrStateSchema,
+  recoverOrderSchema,
 ]);
 
 export type OrderCommand = z.infer<typeof orderCommandSchema>;

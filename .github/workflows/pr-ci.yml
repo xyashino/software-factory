@@ -47,6 +47,10 @@ jobs:
       - name: Run verification gate
         run: pnpm exec turbo run //#format:check lint check-types test build --ui=stream
 
+      # The factory-operator startup budget is skipped inside turbo (CPU contention); enforce it alone here.
+      - name: Operator CLI startup budget
+        run: pnpm --filter @repo/factory-operator-cli test
+
   # The distributed suite (ROADMAP v2-15): real Factory and Cell processes, a fake runner, a hostile proxy.
   # Kept out of `verify` so that job stays fast; it runs once per PR here.
   distributed:

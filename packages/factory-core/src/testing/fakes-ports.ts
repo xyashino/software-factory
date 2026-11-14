@@ -9,10 +9,10 @@ import type {
 } from '../ids';
 import type { BlobStore } from '../ports/blob-store';
 import type { Clock } from '../ports/clock';
-import type { GitMirror, TodoFile } from '../ports/git-mirror';
+import type { BranchLog, GitMirror, TodoFile } from '../ports/git-mirror';
 import type { IntakeRecord, IntakeStore } from '../ports/intake';
 import type { Lease, LeaseStore, LeaseStreamId } from '../ports/lease-store';
-import type { PrState, PrStatePort } from '../ports/pr-state';
+import type { PrForBranch, PrState, PrStatePort } from '../ports/pr-state';
 import type {
   ProjectPatch,
   ProjectRecord,
@@ -146,10 +146,13 @@ export const fakeIntakeStore = (): IntakeStore & {
  */
 export interface FakeGitMirror extends GitMirror {
   setTodos(files: TodoFile[]): CommitSha;
+  /** Replaces the branches the mirror lists; a test gives each branch its commits, newest first. */
+  setBranches(branches: BranchLog[]): void;
 }
 
 export const fakeGitMirror = (): FakeGitMirror => {
   let files: TodoFile[] = [];
+  let branches: BranchLog[] = [];
   let count = 0;
   let head = commitOf(count);
   return {
@@ -159,9 +162,22 @@ export const fakeGitMirror = (): FakeGitMirror => {
       head = commitOf(count);
       return head;
     },
+    setBranches: (next) => {
+      branches = next.map((log) => ({
+        branch: log.branch,
+        commits: log.commits.map((commit) => ({ ...commit })),
+      }));
+    },
     sync: async () => head,
     todoFiles: async (_projectId, commit) =>
       commit === head ? files.map((file) => ({ ...file })) : [],
+    branches: async (_projectId, prefix) =>
+      branches
+        .filter((log) => log.branch.startsWith(prefix))
+        .map((log) => ({
+          branch: log.branch,
+          commits: log.commits.map((commit) => ({ ...commit })),
+        })),
   };
 };
 
@@ -171,10 +187,13 @@ const commitOf = (n: number): CommitSha =>
 /** An in-memory PR state reader: a test sets each pull request's state. */
 export interface FakePrState extends PrStatePort {
   set(prUrl: string, state: PrState): void;
+  /** Gives the branch a pull request, as `gh pr list --head` would find it. */
+  setForBranch(branch: string, pr: PrForBranch): void;
 }
 
 export const fakePrState = (): FakePrState => {
   const states = new Map<string, PrState>();
+  const byBranch = new Map<string, PrForBranch>();
   return {
     set: (prUrl, state) => {
       states.set(prUrl, state);
@@ -183,6 +202,13 @@ export const fakePrState = (): FakePrState => {
       const state = states.get(prUrl);
       if (!state) throw new Error(`no fake state for ${prUrl}`);
       return state;
+    },
+    setForBranch: (branch, pr) => {
+      byBranch.set(branch, { ...pr });
+    },
+    forBranch: async (_repoUrl, branch) => {
+      const pr = byBranch.get(branch);
+      return pr === undefined ? undefined : { ...pr };
     },
   };
 };
