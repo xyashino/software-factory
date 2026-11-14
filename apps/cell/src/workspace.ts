@@ -3,6 +3,8 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  renameSync,
+  rmSync,
   writeFileSync,
 } from 'node:fs';
 import { join } from 'node:path';
@@ -24,6 +26,9 @@ export type WorkspaceResult =
 /** The file in the Cell scratch that names the base a worktree was last prepared at. */
 const PREPARED = join(CELL_DIR, 'prepared');
 
+/** The mirror preparations in flight, by mirror path: the next one for a path waits for the one before. */
+const mirrorTurns = new Map<string, Promise<unknown>>();
+
 /** The Work order's todo part of `<project>:<todo>` (CORE §3). */
 const todoOf = (orderId: string): string =>
   orderId.slice(orderId.indexOf(':') + 1);
@@ -40,6 +45,20 @@ const excludeCell = (mirror: string): void => {
   if (!current.split('\n').includes(`${CELL_DIR}/`)) {
     appendFileSync(path, `${CELL_DIR}/\n`);
   }
+};
+
+/** Runs `work` after the mirror preparations queued before it for the same mirror path. */
+const withMirrorLock = <T>(
+  mirror: string,
+  work: () => Promise<T>,
+): Promise<T> => {
+  const previous = mirrorTurns.get(mirror) ?? Promise.resolve();
+  const turn = previous.then(() => work());
+  mirrorTurns.set(
+    mirror,
+    turn.catch(() => undefined),
+  );
+  return turn;
 };
 
 /**
@@ -77,30 +96,41 @@ export const prepareWorkspace = async (input: {
   const mirror = join(dataDir, 'repos', `${job.projectId}.git`);
   mkdirSync(join(dataDir, 'repos'), { recursive: true });
 
-  if (!existsSync(mirror)) {
-    const cloned = await git(dataDir, [
-      'clone',
-      '--mirror',
-      '--quiet',
-      job.repo.url,
-      mirror,
-    ]);
-    if (cloned.code !== 0)
-      return { ok: false, stage: 'fetch', detail: cloned.stderr.trim() };
-    // A mirror remote pushes everything and refuses explicit refspecs, and it fetches into
-    // refs/heads, where the worktrees live. The Cell keeps the remote's branches apart, under
-    // refs/remotes/origin/*, so a fetch never writes to a branch a worktree has checked out.
-    await git(mirror, ['config', 'remote.origin.mirror', 'false']);
-    await git(mirror, [
-      'config',
-      'remote.origin.fetch',
-      '+refs/heads/*:refs/remotes/origin/*',
-    ]);
-  }
-  const fetched = await git(mirror, ['fetch', '--quiet', '--prune', 'origin']);
+  // Two slots of one Cell may prepare one repo at once: they take turns on its mirror, so the first
+  // clone is finished before a second fetch reads it.
+  const fetched = await withMirrorLock(mirror, async () => {
+    if (!existsSync(join(mirror, 'HEAD'))) {
+      // Cloned under a temporary name and renamed into place, so a Cell killed mid-clone leaves no
+      // half mirror at the real path.
+      const partial = `${mirror}.partial-${process.pid}-${Date.now()}`;
+      const cloned = await git(dataDir, [
+        'clone',
+        '--mirror',
+        '--quiet',
+        job.repo.url,
+        partial,
+      ]);
+      if (cloned.code !== 0) {
+        rmSync(partial, { recursive: true, force: true });
+        return cloned;
+      }
+      // A mirror remote pushes everything and refuses explicit refspecs, and it fetches into
+      // refs/heads, where the worktrees live. The Cell keeps the remote's branches apart, under
+      // refs/remotes/origin/*, so a fetch never writes to a branch a worktree has checked out.
+      await git(partial, ['config', 'remote.origin.mirror', 'false']);
+      await git(partial, [
+        'config',
+        'remote.origin.fetch',
+        '+refs/heads/*:refs/remotes/origin/*',
+      ]);
+      renameSync(partial, mirror);
+    }
+    const pulled = await git(mirror, ['fetch', '--quiet', '--prune', 'origin']);
+    excludeCell(mirror);
+    return pulled;
+  });
   if (fetched.code !== 0)
     return { ok: false, stage: 'fetch', detail: fetched.stderr.trim() };
-  excludeCell(mirror);
 
   let base: CommitSha;
   if (typeof job.base === 'string') {

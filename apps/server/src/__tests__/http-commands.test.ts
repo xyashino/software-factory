@@ -222,6 +222,42 @@ describe('intake sync over HTTP', () => {
   });
 });
 
+describe('a command for a job the Cell no longer holds', () => {
+  it('is refused with stale_epoch (409), as the socket refuses it, not with a server error', async () => {
+    const token = await supervisorToken();
+    await syncIntake(token);
+    const cell = await joinAndHello();
+    const job = await claimJob(cell);
+    const released = await send({
+      method: 'POST',
+      path: `/v1/cell/jobs/${job.jobId}/commands`,
+      token: cell.credential,
+      json: {
+        commandId: nextCommandId(),
+        epoch: job.epoch,
+        command: { type: 'ReleaseJob' },
+      },
+    });
+    expect(released.status).toBe(200);
+
+    // A late command from the Cell, for the job whose lease is gone (PROTOCOL §11: late reports).
+    const late = await send({
+      method: 'POST',
+      path: `/v1/cell/jobs/${job.jobId}/commands`,
+      token: cell.credential,
+      json: {
+        commandId: nextCommandId(),
+        orderId: ORDER,
+        epoch: job.epoch,
+        command: { type: 'StartCycle', baseCommit: BASE_COMMIT },
+      },
+    });
+
+    expect(late.status).toBe(409);
+    expect(await late.json()).toMatchObject({ code: 'stale_epoch' });
+  });
+});
+
 describe('the heartbeat over HTTP', () => {
   it('reports a job the Cell holds as ok while its lease is live', async () => {
     const token = await supervisorToken();

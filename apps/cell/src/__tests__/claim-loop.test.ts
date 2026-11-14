@@ -62,6 +62,7 @@ describe('claim loop', () => {
       sleep: slot.sleep,
       runJob: async (job) => {
         ran.push(job.jobId);
+        return null;
       },
     });
 
@@ -86,6 +87,7 @@ describe('claim loop', () => {
       sleep: slot.sleep,
       runJob: async () => {
         heldWhileRunning = registry.activeJobIds();
+        return null;
       },
     });
 
@@ -137,7 +139,7 @@ describe('claim loop', () => {
       waitMs: MAX_CLAIM_WAIT_MS,
       idlePauseMs: 1,
       sleep: slot.sleep,
-      runJob: async () => undefined,
+      runJob: async () => null,
     });
 
     expect(slot.pauses()).toBe(2);
@@ -158,7 +160,7 @@ describe('claim loop', () => {
       waitMs: MAX_CLAIM_WAIT_MS,
       idlePauseMs: 1,
       sleep: slot.sleep,
-      runJob: async () => undefined,
+      runJob: async () => null,
       onError,
     });
 

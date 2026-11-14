@@ -232,10 +232,13 @@ export const createCommandHandler = (
     } else if (
       !request.dryRun &&
       request.continueFor !== undefined &&
+      request.command.type !== 'ReleaseJob' &&
       config.continuation &&
       stateOf(working).activeJob === undefined &&
       nextJob(stateOf(working)).kind === 'job'
     ) {
+      // A release gives the job up (PROTOCOL §9): the Work order goes back to the queue, not to the Cell
+      // that released it, so a release never continues.
       // Continuation: tried on a copy, so a claim that cannot be built leaves the command's own events.
       const cellId = request.continueFor;
       const beforeClaim = working;

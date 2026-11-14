@@ -51,6 +51,7 @@ import type {
 } from '../ports';
 import type { WorkspaceResult } from '../workspace';
 import { getBlob, putBlob } from './blobs';
+import { workspaceDetailOf } from './workspace-detail';
 
 /** The usage a runner reports in its output: tokens, and the cost when the runner names one. */
 export interface RunnerUsage {
@@ -180,6 +181,7 @@ export const runOperatorStation = async (
     try {
       const result: CommandResult = await deps.client.call('submitCommand', {
         cellId: deps.cellId,
+        jobId: job.jobId,
         orderId: job.orderId,
         commandId: `${job.jobId}:${step}`,
         epoch: job.epoch,
@@ -205,7 +207,7 @@ export const runOperatorStation = async (
     const reported = await submit('workspace', {
       type: 'ReportWorkspaceFailed',
       stage,
-      detail: ws.detail,
+      detail: workspaceDetailOf(stage, ws.detail),
       logBlob,
     });
     return reported.ok ? reported.result.next : null;

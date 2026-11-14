@@ -354,4 +354,25 @@ describe('continuation', () => {
     expect(await w.leases.forCell(CELL)).toEqual([]);
     expect(orderId).toBe('software-factory:todo-a');
   });
+
+  it('hands no next job back when the Cell releases its job (PROTOCOL §9)', async () => {
+    const w = world();
+    // The Cell could run the next station (the plan review runs on `cursor`): only the release keeps it
+    // from being claimed straight back, which would hand the same job to the Cell that gave it up.
+    await helloCell(w, CELL, 1, ['claude', 'cursor']);
+    await createOrder(w, { todoId: 'todo-a' });
+    const job = await claim(w);
+
+    const released = await w.runtime.call('submitCommand', {
+      cellId: CELL,
+      orderId: job.orderId,
+      commandId: 'release-cont',
+      epoch: job.epoch,
+      command: { type: 'ReleaseJob' },
+    });
+
+    expect(released.events.map((event) => event.type)).toEqual(['job_lost']);
+    expect(released.next).toBeNull();
+    expect(await w.leases.forCell(CELL)).toEqual([]);
+  });
 });

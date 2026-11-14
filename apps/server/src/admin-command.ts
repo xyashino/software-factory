@@ -4,6 +4,7 @@ import {
   WriterHeldError,
   type OpenedRuntime,
 } from '@repo/factory-runtime/open-runtime';
+import type { RuntimeConfig } from '@repo/factory-runtime/ports';
 import { ghPrState } from './adapters/pr-state';
 import { gitMirror } from './adapters/git-mirror';
 import { adminUsage } from './usage';
@@ -20,12 +21,19 @@ type Operation = (typeof OPERATIONS)[number];
 const isOperation = (name: string | undefined): name is Operation =>
   OPERATIONS.includes(name as Operation);
 
-/** Opens the data directory as its single writer, with the real git and PR adapters. */
-export const openForAdmin = (dataDir: string): OpenedRuntime =>
+/**
+ * Opens the data directory as its single writer, with the real git and PR adapters. `config` carries
+ * the timing knobs the environment set (runtime-config.ts); it is empty in production.
+ */
+export const openForAdmin = (
+  dataDir: string,
+  config: Partial<RuntimeConfig> = {},
+): OpenedRuntime =>
   openRuntime({
     dataDir,
     git: gitMirror({ mirrorsDir: `${dataDir}/mirrors` }),
     prState: ghPrState(),
+    config,
   });
 
 /**

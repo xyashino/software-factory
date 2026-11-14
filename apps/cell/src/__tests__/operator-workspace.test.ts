@@ -34,6 +34,33 @@ const jobFor = (overrides: Partial<Job> = {}): Job =>
   }) as Job;
 
 describe('operator workspace', () => {
+  it('prepares two Work orders of one repo at once on a fresh Cell, both ok', async () => {
+    // Two slots of one Cell prepare at the same time: the first clone must not break the second.
+    const cellDir = join(dir, 'cell-fresh');
+    const [first, second] = await Promise.all([
+      prepareWorkspace({
+        job: jobFor({
+          orderId: 'software-factory:add-login' as Job['orderId'],
+        }),
+        dataDir: cellDir,
+      }),
+      prepareWorkspace({
+        job: jobFor({
+          orderId: 'software-factory:add-logout' as Job['orderId'],
+          repo: {
+            url: remote,
+            baseBranch: 'main',
+            branch: 'factory/add-logout',
+          },
+        }),
+        dataDir: cellDir,
+      }),
+    ]);
+
+    expect(first).toMatchObject({ ok: true, base });
+    expect(second).toMatchObject({ ok: true, base });
+  });
+
   it('creates the worktree at the base commit on the Work order branch', async () => {
     const result = await prepareWorkspace({
       job: jobFor(),
