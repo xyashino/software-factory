@@ -1,4 +1,4 @@
-import type { Database } from 'bun:sqlite';
+import { asc } from 'drizzle-orm';
 import type {
   OrderId,
   ProjectId,
@@ -8,162 +8,108 @@ import type {
 } from '@repo/factory-core/ids';
 import type { AndonReason, JobKind } from '@repo/factory-core/order/events';
 import type { Next } from '@repo/factory-core/order/next';
-import type { BoardStatus, Holder } from '@repo/factory-core/order/status';
 import type { OrderProjection } from '@repo/factory-core/order/projection';
+import type { BoardStatus, Holder } from '@repo/factory-core/order/status';
 import type { Priority } from '@repo/factory-core/order/state';
+import type { FactoryDatabase } from './db';
+import { type NewOrderRecord, type OrderRecord, orders } from './schema';
 
-/** One `orders` row (STORAGE §4). JSON columns are strings, booleans are 0/1. */
-export interface OrderRow {
-  order_id: string;
-  project_id: string;
-  todo_id: string;
-  title: string;
-  line: string;
-  priority: string;
-  depends_on: string;
-  last_seq: number;
-  status: string;
-  holder: string;
-  next_kind: string;
-  job_kind: string | null;
-  runner: string | null;
-  required_capabilities: string;
-  station_id: string | null;
-  station_index: number | null;
-  progressed: number;
-  resumed: number;
-  last_cell_id: string | null;
-  avoid_cells: string;
-  andon_reason: string | null;
-  pr_url: string | null;
-  pr_state: string | null;
-  created_at: number;
-  updated_at: number;
-}
+/** One `orders` row as read (STORAGE §4). JSON columns are strings, booleans are 0/1. */
+export type OrderRow = OrderRecord;
 
-/** The column list in the order `orderRowValues` returns them. */
-export const ORDER_COLUMNS = [
-  'order_id',
-  'project_id',
-  'todo_id',
-  'title',
-  'line',
-  'priority',
-  'depends_on',
-  'last_seq',
-  'status',
-  'holder',
-  'next_kind',
-  'job_kind',
-  'runner',
-  'required_capabilities',
-  'station_id',
-  'station_index',
-  'progressed',
-  'resumed',
-  'last_cell_id',
-  'avoid_cells',
-  'andon_reason',
-  'pr_url',
-  'pr_state',
-  'created_at',
-  'updated_at',
-] as const;
+/** One `orders` row as written. */
+export type NewOrderRow = NewOrderRecord;
 
 /** The row a projection is stored as. Pure serialisation: no fold, no domain decision. */
 export const orderRowOf = (projection: OrderProjection): OrderRow => ({
-  order_id: projection.orderId,
-  project_id: projection.projectId,
-  todo_id: projection.todoId,
+  orderId: projection.orderId,
+  projectId: projection.projectId,
+  todoId: projection.todoId,
   title: projection.title,
   line: projection.line,
   priority: projection.priority,
-  depends_on: JSON.stringify(projection.dependsOn),
-  last_seq: projection.lastSeq,
+  dependsOn: JSON.stringify(projection.dependsOn),
+  lastSeq: projection.lastSeq,
   status: projection.status,
   holder: projection.holder,
-  next_kind: projection.nextKind,
-  job_kind: projection.jobKind,
+  nextKind: projection.nextKind,
+  jobKind: projection.jobKind,
   runner: projection.runner,
-  required_capabilities: JSON.stringify(projection.requiredCapabilities),
-  station_id: projection.stationId,
-  station_index: projection.stationIndex,
+  requiredCapabilities: JSON.stringify(projection.requiredCapabilities),
+  stationId: projection.stationId,
+  stationIndex: projection.stationIndex,
   progressed: projection.progressed ? 1 : 0,
   resumed: projection.resumed ? 1 : 0,
-  last_cell_id: projection.lastWorkerId,
-  avoid_cells: JSON.stringify(
+  lastCellId: projection.lastWorkerId,
+  avoidCells: JSON.stringify(
     projection.avoidWorkers.map((avoid) => ({
       cellId: avoid.workerId,
       until: avoid.until,
     })),
   ),
-  andon_reason: projection.andonReason,
-  pr_url: projection.prUrl,
-  pr_state: projection.prState,
-  created_at: projection.createdAt,
-  updated_at: projection.updatedAt,
+  andonReason: projection.andonReason,
+  prUrl: projection.prUrl,
+  prState: projection.prState,
+  createdAt: projection.createdAt,
+  updatedAt: projection.updatedAt,
 });
-
-/** The positional values of `ORDER_COLUMNS` for one row. */
-export const orderRowValues = (row: OrderRow): (string | number | null)[] =>
-  ORDER_COLUMNS.map((column) => row[column]);
-
-/** Writes a projection row: insert, or replace the row of the same order (STORAGE §3 step 4). */
-export const upsertOrder = (
-  db: Database,
-  projection: OrderProjection,
-): void => {
-  const placeholders = ORDER_COLUMNS.map(() => '?').join(', ');
-  const updates = ORDER_COLUMNS.filter((column) => column !== 'order_id')
-    .map((column) => `${column} = excluded.${column}`)
-    .join(', ');
-  db.run(
-    `INSERT INTO orders (${ORDER_COLUMNS.join(', ')}) VALUES (${placeholders}) ON CONFLICT(order_id) DO UPDATE SET ${updates}`,
-    orderRowValues(orderRowOf(projection)),
-  );
-};
-
-/** Every `orders` row as a projection, sorted by order id. */
-export const loadOrders = (db: Database): OrderProjection[] =>
-  db
-    .query<OrderRow, []>('SELECT * FROM orders ORDER BY order_id')
-    .all()
-    .map(projectionOfRow);
 
 /** The projection a row holds. The inverse of `orderRowOf`. */
 export const projectionOfRow = (row: OrderRow): OrderProjection => {
-  const avoid = JSON.parse(row.avoid_cells) as {
+  const avoid = JSON.parse(row.avoidCells) as {
     cellId: string;
     until: number;
   }[];
   return {
-    orderId: row.order_id as OrderId,
-    projectId: row.project_id as ProjectId,
-    todoId: row.todo_id as TodoId,
+    orderId: row.orderId as OrderId,
+    projectId: row.projectId as ProjectId,
+    todoId: row.todoId as TodoId,
     title: row.title,
     line: row.line,
     priority: row.priority as Priority,
-    dependsOn: JSON.parse(row.depends_on) as OrderId[],
-    lastSeq: row.last_seq,
+    dependsOn: JSON.parse(row.dependsOn) as OrderId[],
+    lastSeq: row.lastSeq,
     status: row.status as BoardStatus,
     holder: row.holder as Holder['kind'],
-    nextKind: row.next_kind as Next['kind'],
-    jobKind: row.job_kind as JobKind | null,
+    nextKind: row.nextKind as Next['kind'],
+    jobKind: row.jobKind as JobKind | null,
     runner: row.runner,
-    requiredCapabilities: JSON.parse(row.required_capabilities) as string[],
-    stationId: row.station_id as StationId | null,
-    stationIndex: row.station_index,
+    requiredCapabilities: JSON.parse(row.requiredCapabilities) as string[],
+    stationId: row.stationId as StationId | null,
+    stationIndex: row.stationIndex,
     progressed: row.progressed === 1,
     resumed: row.resumed === 1,
-    lastWorkerId: row.last_cell_id as WorkerId | null,
+    lastWorkerId: row.lastCellId as WorkerId | null,
     avoidWorkers: avoid.map((entry) => ({
       workerId: entry.cellId as WorkerId,
       until: entry.until,
     })),
-    andonReason: row.andon_reason as AndonReason | null,
-    prUrl: row.pr_url,
-    prState: row.pr_state as OrderProjection['prState'],
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
+    andonReason: row.andonReason as AndonReason | null,
+    prUrl: row.prUrl,
+    prState: row.prState as OrderProjection['prState'],
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
   };
 };
+
+/** Writes a projection row: insert, or replace the row of the same order (STORAGE §3 step 4). */
+export const upsertOrder = (
+  db: FactoryDatabase,
+  projection: OrderProjection,
+): void => {
+  const row = orderRowOf(projection);
+  // The conflicting row has the same order id, so setting it again changes nothing.
+  db.insert(orders)
+    .values(row)
+    .onConflictDoUpdate({ target: orders.orderId, set: row })
+    .run();
+};
+
+/** Every `orders` row as a projection, sorted by order id. */
+export const loadOrders = (db: FactoryDatabase): OrderProjection[] =>
+  db
+    .select()
+    .from(orders)
+    .orderBy(asc(orders.orderId))
+    .all()
+    .map(projectionOfRow);

@@ -1,9 +1,10 @@
-import type { Database } from 'bun:sqlite';
 import type { OrderId } from '@repo/factory-core/ids';
 import { evolve } from '@repo/factory-core/order/evolve';
 import type { OrderProjection } from '@repo/factory-core/order/projection';
 import type { WorkOrderState } from '@repo/factory-core/order/state';
+import type { FactoryDatabase } from './db';
 import { upsertOrder } from './orders-table';
+import { orders } from './schema';
 import { feedRows, type SqliteEventStore } from './sqlite-event-store';
 
 /** Events read per page while rebuilding. */
@@ -48,8 +49,8 @@ const foldPage = (
   }
 };
 
-const rebuildOn = (db: Database, project: ProjectRow): number => {
-  db.exec('DELETE FROM orders');
+const rebuildOn = (db: FactoryDatabase, project: ProjectRow): number => {
+  db.delete(orders).run();
   const foldings = new Map<OrderId, Folding>();
   let afterGlobalSeq = 0;
   let page = feedRows(db, afterGlobalSeq, PAGE);

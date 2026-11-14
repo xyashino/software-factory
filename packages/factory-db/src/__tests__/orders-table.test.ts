@@ -20,7 +20,7 @@ describe('the orders row mapping', () => {
     },
   );
 
-  it('stores the worker columns under their STORAGE names', () => {
+  it('maps the worker columns to lastCellId and avoidCells', () => {
     const events = fixtureEvents(SCENARIO_FIXTURES[0]!);
     const last = events[events.length - 1]!;
     const row = orderRowOf(
@@ -32,7 +32,7 @@ describe('the orders row mapping', () => {
     );
 
     expect(Object.keys(row)).toEqual(
-      expect.arrayContaining(['last_cell_id', 'avoid_cells']),
+      expect.arrayContaining(['lastCellId', 'avoidCells']),
     );
     expect(row.progressed).toBe(1);
   });

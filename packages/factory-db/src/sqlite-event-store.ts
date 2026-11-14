@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { Database } from 'bun:sqlite';
+import { asc, eq, gt } from 'drizzle-orm';
 import type { OrderId } from '@repo/factory-core/ids';
 import {
   type OrderEvent,
@@ -14,14 +15,26 @@ import type {
   EventStore,
   StoreTx,
 } from '@repo/factory-core/ports/event-store';
+import { type FactoryDatabase, drizzleOf } from './db';
 import { upsertOrder } from './orders-table';
+import { commands, type EventRecord, events, orders } from './schema';
 import { writeMutex } from './write-mutex';
 
 /** The envelope version this store writes (CORE §11). */
 const SCHEMA_VERSION = 2;
 
-const EVENT_COLUMNS =
-  'global_seq, order_id, seq, at, actor, command_id, epoch, schema_version, payload';
+/** The columns a stored event is read back as. `type` is not needed: the payload carries it. */
+const EVENT_SELECT = {
+  globalSeq: events.globalSeq,
+  orderId: events.orderId,
+  seq: events.seq,
+  at: events.at,
+  actor: events.actor,
+  commandId: events.commandId,
+  epoch: events.epoch,
+  schemaVersion: events.schemaVersion,
+  payload: events.payload,
+};
 
 /** A SQLite store: the port, plus a write section the projection rebuild runs inside. */
 export interface SqliteEventStore extends EventStore {
@@ -29,7 +42,7 @@ export interface SqliteEventStore extends EventStore {
    * Runs `section` on the connection inside one write transaction, after every write already queued.
    * Only the projection rebuild uses it; `section` must not await.
    */
-  exclusive<T>(section: (db: Database) => T): Promise<T>;
+  exclusive<T>(section: (db: FactoryDatabase) => T): Promise<T>;
   /**
    * The statement gate the other stores of this connection run through. Outside a transaction a
    * section queues behind the write mutex; inside `transaction`, the body's own sections run at once,
@@ -43,17 +56,8 @@ export interface StatementGate {
   run<T>(section: () => T | Promise<T>): Promise<T>;
 }
 
-interface EventRow {
-  global_seq: number;
-  order_id: string;
-  seq: number;
-  at: number;
-  actor: string;
-  command_id: string;
-  epoch: number | null;
-  schema_version: number;
-  payload: string;
-}
+/** One stored event row, as `EVENT_SELECT` reads it. */
+type EventRow = Pick<EventRecord, keyof typeof EVENT_SELECT>;
 
 /** Opens (or creates) a database file in WAL mode with foreign keys and a busy timeout. */
 export const openDatabase = (file: string): Database => {
@@ -67,57 +71,67 @@ export const openDatabase = (file: string): Database => {
 /** A stored row back to the current envelope. A row that does not upcast is an error, never skipped. */
 const storedOf = (row: EventRow): StoredEvent => {
   const raw = {
-    schemaVersion: row.schema_version,
+    schemaVersion: row.schemaVersion,
     seq: row.seq,
-    globalSeq: row.global_seq,
-    orderId: row.order_id,
+    globalSeq: row.globalSeq,
+    orderId: row.orderId,
     at: row.at,
     actor: JSON.parse(row.actor) as unknown,
-    commandId: row.command_id,
+    commandId: row.commandId,
     ...(row.epoch === null ? {} : { epoch: row.epoch }),
     event: JSON.parse(row.payload) as unknown,
   };
   const upcast = upcastEvent(raw);
   if (!upcast.ok) {
     throw new Error(
-      `stored event ${row.global_seq} is unreadable: ${upcast.error}`,
+      `stored event ${row.globalSeq} is unreadable: ${upcast.error}`,
     );
   }
   return upcast.value;
 };
 
-const loadRows = (db: Database, orderId: OrderId): StoredEvent[] =>
+const loadRows = (db: FactoryDatabase, orderId: OrderId): StoredEvent[] =>
   db
-    .query<EventRow, [string]>(
-      `SELECT ${EVENT_COLUMNS} FROM events WHERE order_id = ? ORDER BY seq`,
-    )
-    .all(orderId)
+    .select(EVENT_SELECT)
+    .from(events)
+    .where(eq(events.orderId, orderId))
+    .orderBy(asc(events.seq))
+    .all()
     .map(storedOf);
 
 /** Events after a global position, in global order. Shared with the projection rebuild. */
 export const feedRows = (
-  db: Database,
+  db: FactoryDatabase,
   afterGlobalSeq: number,
   limit: number,
 ): StoredEvent[] =>
   db
-    .query<EventRow, [number, number]>(
-      `SELECT ${EVENT_COLUMNS} FROM events WHERE global_seq > ? ORDER BY global_seq LIMIT ?`,
-    )
-    .all(afterGlobalSeq, limit)
+    .select(EVENT_SELECT)
+    .from(events)
+    .where(gt(events.globalSeq, afterGlobalSeq))
+    .orderBy(asc(events.globalSeq))
+    .limit(limit)
+    .all()
     .map(storedOf);
+
+/** The response a command stored, if the command ran before. */
+const storedResponse = (
+  db: FactoryDatabase,
+  commandId: string,
+): { response: string } | undefined =>
+  db
+    .select({ response: commands.response })
+    .from(commands)
+    .where(eq(commands.commandId, commandId))
+    .get();
 
 /**
  * One append inside an open write transaction (STORAGE §3 steps 1-5). Idempotency and concurrency
  * are checked first; a refusal writes nothing. The event is zod-checked before the insert and the
  * stored envelope after it, so a bad write throws and the transaction rolls back.
  */
-const appendOn = (db: Database, input: AppendInput): AppendResult => {
-  const replay = db
-    .query<{ response: string }, [string]>(
-      'SELECT response FROM commands WHERE command_id = ?',
-    )
-    .get(input.commandId);
+const appendOn = (db: FactoryDatabase, input: AppendInput): AppendResult => {
+  const replay = storedResponse(db, input.commandId);
   if (replay) {
     return {
       kind: 'replayed',
@@ -127,10 +141,10 @@ const appendOn = (db: Database, input: AppendInput): AppendResult => {
 
   const currentSeq =
     db
-      .query<{ last_seq: number }, [string]>(
-        'SELECT last_seq FROM orders WHERE order_id = ?',
-      )
-      .get(input.orderId)?.last_seq ?? 0;
+      .select({ lastSeq: orders.lastSeq })
+      .from(orders)
+      .where(eq(orders.orderId, input.orderId))
+      .get()?.lastSeq ?? 0;
   if (currentSeq !== input.expectedSeq) {
     return { kind: 'conflict', currentSeq };
   }
@@ -142,31 +156,28 @@ const appendOn = (db: Database, input: AppendInput): AppendResult => {
     );
   }
 
-  const insertEvent = db.query<
-    { global_seq: number },
-    (string | number | null)[]
-  >(
-    `INSERT INTO events (order_id, seq, at, actor, command_id, epoch, schema_version, type, payload)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING global_seq`,
-  );
   const stored = input.events.map((event: OrderEvent, index) => {
     orderEventSchema.parse(event);
     const seq = input.expectedSeq + index + 1;
-    const inserted = insertEvent.get(
-      input.orderId,
-      seq,
-      input.at,
-      JSON.stringify(input.actor),
-      input.commandId,
-      input.epoch ?? null,
-      SCHEMA_VERSION,
-      event.type,
-      JSON.stringify(event),
-    );
+    const inserted = db
+      .insert(events)
+      .values({
+        orderId: input.orderId,
+        seq,
+        at: input.at,
+        actor: JSON.stringify(input.actor),
+        commandId: input.commandId,
+        epoch: input.epoch ?? null,
+        schemaVersion: SCHEMA_VERSION,
+        type: event.type,
+        payload: JSON.stringify(event),
+      })
+      .returning({ globalSeq: events.globalSeq })
+      .get();
     return storedEventSchema.parse({
       schemaVersion: SCHEMA_VERSION,
       seq,
-      globalSeq: inserted?.global_seq,
+      globalSeq: inserted?.globalSeq,
       orderId: input.orderId,
       at: input.at,
       actor: input.actor,
@@ -177,30 +188,36 @@ const appendOn = (db: Database, input: AppendInput): AppendResult => {
   });
 
   upsertOrder(db, input.projection);
-  db.run(
-    'INSERT INTO commands (command_id, order_id, first_seq, last_seq, response, at) VALUES (?, ?, ?, ?, ?, ?)',
-    [
-      input.commandId,
-      input.orderId,
-      input.expectedSeq + 1,
+  db.insert(commands)
+    .values({
+      commandId: input.commandId,
+      orderId: input.orderId,
+      firstSeq: input.expectedSeq + 1,
       lastSeq,
-      JSON.stringify(input.response ?? null),
-      input.at,
-    ],
-  );
+      response: JSON.stringify(input.response ?? null),
+      at: input.at,
+    })
+    .run();
   return { kind: 'appended', events: stored };
 };
 
-/** Runs one `tx.append` in a savepoint, so a failing append leaves the outer transaction usable. */
-const appendInSavepoint = (db: Database, input: AppendInput): AppendResult => {
-  db.exec('SAVEPOINT append');
+/**
+ * Runs one `tx.append` in a savepoint, so a failing append leaves the outer transaction usable.
+ * Savepoints are raw SQL on the connection; Drizzle runs the statements inside them.
+ */
+const appendInSavepoint = (
+  raw: Database,
+  db: FactoryDatabase,
+  input: AppendInput,
+): AppendResult => {
+  raw.exec('SAVEPOINT append');
   try {
     const result = appendOn(db, input);
-    db.exec('RELEASE append');
+    raw.exec('RELEASE append');
     return result;
   } catch (error) {
-    db.exec('ROLLBACK TO append');
-    db.exec('RELEASE append');
+    raw.exec('ROLLBACK TO append');
+    raw.exec('RELEASE append');
     throw error;
   }
 };
@@ -211,6 +228,7 @@ const appendInSavepoint = (db: Database, input: AppendInput): AppendResult => {
  * must already be migrated (`migrate`).
  */
 export const openSqliteEventStore = (db: Database): SqliteEventStore => {
+  const orm = drizzleOf(db);
   const writes = writeMutex();
   // Marks the async context of a transaction body, so `gate` can tell its own sections from others'.
   const inTransaction = new AsyncLocalStorage<true>();
@@ -240,30 +258,26 @@ export const openSqliteEventStore = (db: Database): SqliteEventStore => {
   const transaction = <T>(fn: (tx: StoreTx) => Promise<T>): Promise<T> =>
     inWriteTransaction(() => {
       const tx: StoreTx = {
-        load: async (orderId) => loadRows(db, orderId),
-        append: async (input) => appendInSavepoint(db, input),
+        load: async (orderId) => loadRows(orm, orderId),
+        append: async (input) => appendInSavepoint(db, orm, input),
       };
       return fn(tx);
     });
 
   return {
-    load: (orderId) => writes.run(async () => loadRows(db, orderId)),
+    load: (orderId) => writes.run(async () => loadRows(orm, orderId)),
     response: (commandId) =>
       writes.run(async () => {
-        const row = db
-          .query<{ response: string }, [string]>(
-            'SELECT response FROM commands WHERE command_id = ?',
-          )
-          .get(commandId);
+        const row = storedResponse(orm, commandId);
         return row
           ? { response: JSON.parse(row.response) as unknown }
           : undefined;
       }),
     feed: (afterGlobalSeq, limit) =>
-      writes.run(async () => feedRows(db, afterGlobalSeq, limit)),
+      writes.run(async () => feedRows(orm, afterGlobalSeq, limit)),
     append: (input) => transaction((tx) => tx.append(input)),
     transaction,
-    exclusive: (section) => inWriteTransaction(async () => section(db)),
+    exclusive: (section) => inWriteTransaction(async () => section(orm)),
     gate,
   };
 };

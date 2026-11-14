@@ -6,6 +6,7 @@ import {
   defineEventStoreContract,
   type StoreFactory,
 } from '@repo/factory-core/testing';
+import { drizzleOf } from '../db';
 import { loadOrders } from '../orders-table';
 import { MIGRATIONS_DIR, migrate } from '../migrate';
 import { openDatabase, openSqliteEventStore } from '../sqlite-event-store';
@@ -20,7 +21,7 @@ const sqliteUnderTest =
     return {
       store: openSqliteEventStore(db),
       seedProject: async () => seedProject(db),
-      orders: async () => loadOrders(db),
+      orders: async () => loadOrders(drizzleOf(db)),
       close: async () => db.close(),
     };
   };
