@@ -275,6 +275,12 @@ importers:
       '@repo/eslint-config':
         specifier: workspace:*
         version: link:../../packages/eslint-config
+      '@repo/factory-runtime':
+        specifier: workspace:*
+        version: link:../../packages/factory-runtime
+      '@repo/factory-server':
+        specifier: workspace:*
+        version: link:../server
       '@repo/typescript-config':
         specifier: workspace:*
         version: link:../../packages/typescript-config
@@ -346,6 +352,9 @@ importers:
       '@repo/typescript-config':
         specifier: workspace:*
         version: link:../../packages/typescript-config
+      '@types/bun':
+        specifier: 'catalog:'
+        version: 1.4.4
       '@types/node':
         specifier: 'catalog:'
         version: 26.6.4

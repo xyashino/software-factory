@@ -11,6 +11,7 @@ import { loadOrCreateIdentity } from './identity';
 import { newCellId } from './ids';
 import { createSystemAdapter } from './adapters/system/system.adapter';
 import { systemClock } from './clock/system-clock';
+import { createHerdrPane } from './runners/herdr-pane';
 import { usage } from './usage';
 
 /** The version the Cell announces at hello. */
@@ -22,8 +23,8 @@ const messageOf = (error: unknown): string =>
 /**
  * `factory-cell`: a client of the running `factory-server` over `factory.sock` (PROTOCOL §2). It reads
  * its config, keeps its identity, says hello, and runs one claim loop per slot with one heartbeat loop.
- * SIGINT and SIGTERM stop it: claims stop, the jobs are aborted, the process exits. A full leave is a
- * later task.
+ * SIGINT stops claims and aborts running jobs immediately; SIGTERM initiates a graceful leave, asking
+ * live Operator stations to hand over before stopping.
  */
 const main = async (): Promise<void> => {
   if (process.argv.includes('--help')) {
@@ -39,6 +40,7 @@ const main = async (): Promise<void> => {
     config.factoryDataDir ?? factoryDataDirOf(env),
   );
   const client = socketFactoryClient({ socketPath });
+  const workspaceId = env.HERDR_WORKSPACE_ID;
 
   const running = await startCell({
     client,
@@ -48,6 +50,7 @@ const main = async (): Promise<void> => {
     system: createSystemAdapter(),
     clock: systemClock,
     version: CELL_VERSION,
+    ...(workspaceId ? { pane: createHerdrPane({ workspaceId }) } : {}),
     onError: (error, context) =>
       console.error(`factory-cell: ${context}: ${messageOf(error)}`),
   }).catch((error: unknown) => {
@@ -60,13 +63,22 @@ const main = async (): Promise<void> => {
     `factory-cell: ${config.slots} slot(s) running as ${identity.cellId}`,
   );
 
-  const shutdown = (signal: string): void => {
-    console.log(`factory-cell: ${signal}, stopping`);
+  process.once('SIGINT', () => {
+    console.log('factory-cell: SIGINT, stopping');
     running.stop();
     process.exit(0);
-  };
-  process.on('SIGINT', () => shutdown('SIGINT'));
-  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  });
+
+  process.once('SIGTERM', () => {
+    console.log('factory-cell: SIGTERM, leaving');
+    void running.leave().then(
+      ({ remaining }) => process.exit(remaining === 0 ? 0 : 1),
+      (error: unknown) => {
+        console.error(`factory-cell: leave failed: ${messageOf(error)}`);
+        process.exit(1);
+      },
+    );
+  });
 };
 
 if (import.meta.main) {
