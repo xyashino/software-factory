@@ -68,6 +68,9 @@ const contextWith = (answer: Answer = accepting) => {
     cellDataDir: join(root, 'cell'),
     worktreeLimit: 8,
     inUse: new Set(),
+    githubFor: () => {
+      throw new Error('an inspection never reaches GitHub');
+    },
   };
   return { context, calls };
 };

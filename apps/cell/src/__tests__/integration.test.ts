@@ -7,13 +7,20 @@ import {
   readlinkSync,
   rmSync,
 } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { FactoryClient } from '@repo/factory-core/contracts/client';
 import type { Job } from '@repo/factory-core/contracts/job';
-import type { CellId, OrderId } from '@repo/factory-core/ids';
+import type {
+  BlobRef,
+  CellId,
+  CommitSha,
+  OrderId,
+} from '@repo/factory-core/ids';
+import type { OrderCommand } from '@repo/factory-core/order/commands';
 import { startCell, type RunningCell } from '../cell';
 import { parseConfig } from '../config';
 import { createSystemAdapter } from '../adapters/system/system.adapter';
@@ -23,7 +30,8 @@ import { createJobRegistry } from '../jobs/registry';
 import { runJob } from '../jobs/run-job';
 import type { JobContext } from '../jobs/send';
 import { createHeartbeat } from '../loops/heartbeat';
-import { makeRepo } from '../testing/git-repo';
+import { commitFile, git, makeRepo } from '../testing/git-repo';
+import type { GithubPort } from '../ports/github.port';
 
 /** The fixture server: factory-server over a seeded data directory, spawned by path (no import). */
 const FIXTURE = fileURLToPath(
@@ -56,10 +64,23 @@ afterEach(async () => {
   rmSync(root, { recursive: true, force: true });
 });
 
-/** Starts the fixture server with `checks` as the quality gate, and waits until its socket listens. */
-const startFactory = async (checks: string[]): Promise<Bun.Subprocess> => {
+/**
+ * Starts the fixture server with `checks` as the quality gate, and waits until its socket listens.
+ * `continuation` false keeps every next job in the queue, so the test's own Cell claims it.
+ */
+const startFactory = async (
+  checks: string[],
+  continuation = true,
+): Promise<Bun.Subprocess> => {
   const child = Bun.spawn(
-    ['bun', FIXTURE, dataDir, origin, JSON.stringify(checks)],
+    [
+      'bun',
+      FIXTURE,
+      dataDir,
+      origin,
+      JSON.stringify(checks),
+      String(continuation),
+    ],
     { stdout: 'pipe', stderr: 'pipe' },
   );
   children.push(child);
@@ -104,6 +125,9 @@ const jobContext = (client: FactoryClient): JobContext => ({
   cellDataDir,
   worktreeLimit: 8,
   inUse: new Set(),
+  githubFor: () => {
+    throw new Error('no GitHub in this test');
+  },
 });
 
 /** Socket inodes a process holds, from its file descriptors. */
@@ -133,6 +157,78 @@ const listeningTcpInodes = (): Set<string> => {
     }
   }
   return inodes;
+};
+
+/** Uploads text as a blob through the socket and returns its ref. */
+const putText = async (
+  client: FactoryClient,
+  text: string,
+): Promise<BlobRef> => {
+  const bytes = new TextEncoder().encode(text);
+  const ref =
+    `sha256:${createHash('sha256').update(bytes).digest('hex')}` as BlobRef;
+  await client.call('blobPut', {
+    ref,
+    base64: Buffer.from(bytes).toString('base64'),
+    mediaType: 'text/markdown',
+  });
+  return ref;
+};
+
+/**
+ * Plays one station the way a runner would through the socket: start the Cycle, then either report the
+ * inspection as passed or complete the operator station on `commit`. The Cell does not run operator
+ * stations yet, so the end-to-end test scripts the stations and runs only the delivery for real.
+ */
+const playStation = async (
+  client: FactoryClient,
+  job: Job,
+  base: string,
+  commit: string,
+): Promise<void> => {
+  const station = job.station;
+  if (!station) throw new Error(`job ${job.jobId} has no station`);
+  const send = async (step: string, command: OrderCommand) => {
+    await client.call('submitCommand', {
+      cellId: CELL,
+      orderId: job.orderId,
+      commandId: `${job.jobId}:${step}`,
+      epoch: job.epoch,
+      command,
+    });
+  };
+
+  await send('start', { type: 'StartCycle', baseCommit: base as CommitSha });
+  if (job.kind === 'run_inspection') {
+    const results = [];
+    for (const command of station.exec ?? []) {
+      results.push({
+        command,
+        exitCode: 0,
+        timedOut: false,
+        durationMs: 1,
+        tail: 'inspected',
+        logBlob: await putText(client, `$ ${command}\ninspected\n`),
+      });
+    }
+    await send('inspect', {
+      type: 'ReportInspection',
+      cycleId: station.cycleId,
+      passed: true,
+      results,
+    });
+    return;
+  }
+  const artifacts: Record<string, BlobRef> = {};
+  for (const output of station.outputs ?? []) {
+    artifacts[output.key] = await putText(client, `# ${output.key}\n`);
+  }
+  await send('complete', {
+    type: 'CompleteCycle',
+    cycleId: station.cycleId,
+    artifacts,
+    commit: commit as CommitSha,
+  });
 };
 
 describe('Cell over the socket', () => {
@@ -312,5 +408,78 @@ describe('Cell over the socket', () => {
     const types = await eventTypes(socket);
     expect(types).not.toContain('inspection_finished');
     expect(types).not.toContain('cycle_failed');
+  });
+
+  it('delivers a fixture Work order end to end: scripted stations, the real delivery through startCell', async () => {
+    await startFactory(['echo inspected'], false);
+    const client = socketClient();
+    await client.call('hello', {
+      cellId: CELL,
+      version: 'test',
+      projects: ['software-factory'],
+      runners: ['claude'],
+      capabilities: [],
+      slots: 1,
+    });
+    const mainSha = git(origin, 'rev-parse', 'HEAD');
+    const created: Array<{ branch: string; base: string; title: string }> = [];
+    const github: GithubPort = {
+      findPr: async () => undefined,
+      createPr: async (input) => {
+        created.push(input);
+        return { url: 'https://example.test/software-factory/pull/1' };
+      },
+    };
+    const loopErrors: string[] = [];
+
+    // The scripted station claims the Inspection through the socket; its gate passes.
+    const inspection = (await client.call('claim', { cellId: CELL, waitMs: 0 }))
+      .job as Job;
+    expect(inspection.kind).toBe('run_inspection');
+    await playStation(client, inspection, mainSha, mainSha);
+
+    // The build's checkpoint lands on the work branch; the scripted station claims the build and
+    // completes it on that commit. The Factory then queues the delivery.
+    git(origin, 'checkout', '-q', '-b', 'factory/todo-1', 'main');
+    const workCommit = commitFile(origin, 'feature.txt', 'built\n');
+    git(origin, 'checkout', '-q', 'main');
+    const build = (await client.call('claim', { cellId: CELL, waitMs: 0 }))
+      .job as Job;
+    expect(build.kind).toBe('run_operator_station');
+    await playStation(client, build, mainSha, workCommit);
+
+    // The Cell starts its own claim loop: it claims the queued delivery and runs it for real.
+    const running: RunningCell = await startCell({
+      client,
+      cellId: CELL,
+      config: ONE_SLOT,
+      cellDataDir,
+      system: createSystemAdapter(),
+      clock: systemClock,
+      version: 'test',
+      timing: { heartbeatMs: 200, claimWaitMs: 0, idlePauseMs: 50 },
+      githubFor: () => github,
+      onError: (error, context) => {
+        loopErrors.push(`${context}: ${String(error)}`);
+      },
+    });
+
+    try {
+      const types = await waitForEvents(client, (seen) =>
+        seen.includes('delivery_finished'),
+      );
+      expect(types).not.toContain('delivery_failed');
+      expect(loopErrors).toEqual([]);
+    } finally {
+      running.stop();
+    }
+    const detail = await client.call('orderDetail', { orderId: ORDER });
+    expect(detail.order.status).toBe('delivered');
+    expect(created).toEqual([
+      expect.objectContaining({ branch: 'factory/todo-1', base: 'main' }),
+    ]);
+    expect(git(origin, 'rev-list', '--count', 'main..factory/todo-1')).toBe(
+      '1',
+    );
   });
 });
