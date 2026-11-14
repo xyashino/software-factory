@@ -36,6 +36,7 @@ export const createOrder = (
       dependsOn: command.dependsOn,
       line: command.line,
       baseBranch: command.baseBranch,
+      ...(command.plan === undefined ? {} : { plan: command.plan }),
     },
   ];
   return ok(events);

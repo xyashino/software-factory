@@ -317,6 +317,8 @@ describe('toProjection: shape and determinism', () => {
     'line',
     'priority',
     'depends_on',
+    'plan',
+    'base_branch',
     'last_seq',
     'status',
     'holder',

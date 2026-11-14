@@ -4,12 +4,14 @@ import type { Clock } from '@repo/factory-core/ports/clock';
 import type { GitMirror } from '@repo/factory-core/ports/git-mirror';
 import type { PrStatePort } from '@repo/factory-core/ports/pr-state';
 import { sqliteArchive } from '@repo/factory-db/archive';
+import { drizzleOf } from '@repo/factory-db/db';
 import { sqliteCellStore } from '@repo/factory-db/cells-table';
 import { sqliteSupervisorTokenStore } from '@repo/factory-db/supervisor-tokens-table';
 import { exportFactory } from '@repo/factory-db/export-import';
 import { sqliteIntakeStore } from '@repo/factory-db/intake-table';
 import { sqliteJoinTokenStore } from '@repo/factory-db/join-tokens-table';
 import { MIGRATIONS_DIR, migrate } from '@repo/factory-db/migrate';
+import { rebuildOn } from '@repo/factory-db/rebuild-projections';
 import {
   sqliteProjectStore,
   sqliteProjectionReader,
@@ -27,6 +29,7 @@ import {
   type Definitions,
 } from '@repo/factory-definitions/load';
 import { createRuntime, type Runtime } from './composition';
+import { projectionOf } from './admin';
 import { ulidIds } from './ids';
 import { DEFINITIONS_ROOT } from './paths';
 import {
@@ -86,6 +89,9 @@ const realTimers: Timers = {
   },
 };
 
+/** The migration that adds the Order Plan columns (migrations/0003_order_plan.sql). */
+const ORDER_PLAN_MIGRATION = '0003_order_plan.sql';
+
 /**
  * Opens a Factory data directory as the single writer (STORAGE §1): takes the writer lock first, so a
  * second process is refused before the database is touched; migrates the schema; loads the
@@ -97,7 +103,11 @@ export const openRuntime = (options: OpenRuntimeOptions): OpenedRuntime => {
   let database: Database | undefined;
   try {
     database = openDatabase(join(options.dataDir, DATABASE_FILE_NAME));
-    migrate(database, MIGRATIONS_DIR);
+    const applied = migrate(database, MIGRATIONS_DIR);
+    // Migration 0003 adds `orders.plan` and `orders.base_branch`: a rebuild fills them for existing rows (STORAGE §6).
+    if (applied.includes(ORDER_PLAN_MIGRATION)) {
+      rebuildOn(drizzleOf(database), projectionOf);
+    }
     const definitions: Definitions = unwrapDefinitions(
       loadDefinitions(options.definitionsRoot ?? DEFINITIONS_ROOT),
     );

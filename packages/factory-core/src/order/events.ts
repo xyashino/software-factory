@@ -12,6 +12,7 @@ import {
   resumeIdSchema,
   stationIdSchema,
   todoIdSchema,
+  planSlugSchema,
 } from '../ids';
 import {
   isMachineIndependentId,
@@ -190,6 +191,8 @@ const orderCreatedSchema = z
     dependsOn: z.array(orderIdSchema).max(64),
     line: pinnedLineSchema,
     baseBranch: shortText,
+    /** The Order Plan this Work order is a member of (CORE §12.1); absent for a plain todo. */
+    plan: planSlugSchema.optional(),
   })
   .strict();
 const specUpdatedSchema = z

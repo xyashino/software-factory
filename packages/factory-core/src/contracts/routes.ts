@@ -6,6 +6,9 @@ import {
   adminRebuildResponseSchema,
   answerRequestSchema,
   boardResponseSchema,
+  planDetailRequestSchema,
+  planDetailResponseSchema,
+  planListResponseSchema,
   cancelRequestSchema,
   cellRevokeRequestSchema,
   cellRevokeResponseSchema,
@@ -87,6 +90,16 @@ export const ROUTES = {
     path: 'supervisor/board',
     request: emptyRequestSchema,
     response: boardResponseSchema,
+  },
+  plans: {
+    path: 'supervisor/plans',
+    request: emptyRequestSchema,
+    response: planListResponseSchema,
+  },
+  planDetail: {
+    path: 'supervisor/plan',
+    request: planDetailRequestSchema,
+    response: planDetailResponseSchema,
   },
   orderDetail: {
     path: 'supervisor/order',

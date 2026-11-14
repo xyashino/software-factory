@@ -4,7 +4,16 @@ import type {
   RouteName,
   RouteResponse,
 } from '@repo/factory-core/contracts/routes';
-import type { CellId, OrderId, ProjectId } from '@repo/factory-core/ids';
+import type {
+  CellId,
+  OrderId,
+  PlanId,
+  ProjectId,
+} from '@repo/factory-core/ids';
+import { resolveDeps } from '@repo/factory-core/queue/deps';
+import { boardStatusWithDeps } from '@repo/factory-core/queue/deps';
+import type { PlanProjection } from '@repo/factory-core/plan/projection';
+import { resolveBase } from './job-builder';
 import {
   orderCommandSchema,
   type OrderCommand,
@@ -47,6 +56,39 @@ type Handlers = {
   ) => Promise<RouteResponse<K>>;
 };
 
+/** The board's summary of one Order Plan (CORE §12.3, PROTOCOL §10). */
+const planRow = (plan: PlanProjection) => ({
+  planId: plan.planId as PlanId,
+  projectId: plan.projectId,
+  slug: plan.slug,
+  branch: plan.branch,
+  baseBranch: plan.baseBranch,
+  phase: plan.phase,
+  holder: plan.holder,
+  nextKind: plan.nextKind,
+  jobKind: plan.jobKind,
+  memberCount: plan.members.length,
+  prUrl: plan.prUrl,
+  prState: plan.prState,
+  andonReason: plan.andonReason,
+  updatedAt: plan.updatedAt,
+});
+
+/**
+ * What blocks a Work order on the board: its dependencies (`waiting_deps`, `deps_broken`) or an
+ * Andon. Null when nothing does. The dependency overlay is the queue's own (CORE §8, §12.4).
+ */
+const blockerOf = (
+  row: OrderProjection,
+  rows: readonly OrderProjection[],
+  depPolicy: 'delivered' | 'merged' | undefined,
+): string | null => {
+  const deps = resolveDeps(row, rows, depPolicy ?? 'delivered');
+  const overlay = boardStatusWithDeps(row.status, row.nextKind, deps);
+  if (overlay === 'waiting_deps' || overlay === 'deps_broken') return overlay;
+  return row.andonReason ? 'andon' : null;
+};
+
 const boardRow = (row: OrderProjection) => ({
   orderId: row.orderId,
   projectId: row.projectId,
@@ -55,6 +97,9 @@ const boardRow = (row: OrderProjection) => ({
   line: row.line,
   priority: row.priority,
   status: row.status,
+  plan: row.plan,
+  baseBranch: row.baseBranch,
+  dependsOn: row.dependsOn,
   holder: row.holder,
   nextKind: row.nextKind,
   jobKind: row.jobKind,
@@ -182,6 +227,52 @@ export const createOperations = (
     board: async () => ({
       orders: (await ports.projections.orders()).map(boardRow),
     }),
+    plans: async () => ({
+      plans: (await ports.projections.plans()).map(planRow),
+    }),
+    planDetail: async (request) => {
+      const plans = await ports.projections.plans();
+      const plan = plans.find(
+        (candidate) => candidate.planId === request.planId,
+      );
+      if (!plan) throw notFound();
+      const rows = await ports.projections.orders();
+      const policies = new Map(
+        (await ports.projects.list()).map((project) => [
+          project.projectId,
+          project.depPolicy,
+        ]),
+      );
+      return {
+        plan: planRow(plan),
+        members: plan.members.map((member) => {
+          const row = rows.find(
+            (candidate) => candidate.orderId === member.orderId,
+          );
+          return {
+            orderId: member.orderId,
+            todoId: member.todoId,
+            after: member.after ?? null,
+            state: member.state,
+            status: row?.status ?? null,
+            baseBranch: row
+              ? resolveBase(
+                  {
+                    plan: row.plan ?? undefined,
+                    dependsOn: row.dependsOn,
+                    baseBranch: row.baseBranch,
+                  },
+                  rows,
+                )
+              : null,
+            prUrl: row?.prUrl ?? null,
+            blocker: row
+              ? blockerOf(row, rows, policies.get(row.projectId))
+              : null,
+          };
+        }),
+      };
+    },
     orderDetail: async (request) => {
       const events = await ports.events.load(request.orderId);
       const row = (await ports.projections.orders()).find(

@@ -10,7 +10,7 @@ describe('the orders row mapping', () => {
       const events = fixtureEvents(fixture);
       const last = events[events.length - 1];
       if (!last) throw new Error('a fixture has events');
-      const projection = projectRow(foldAll(events), {
+      const projection = projectRow.order(foldAll(events), {
         lastSeq: last.seq,
         createdAt: events[0]?.at ?? 0,
         updatedAt: last.at,
@@ -24,7 +24,7 @@ describe('the orders row mapping', () => {
     const events = fixtureEvents(SCENARIO_FIXTURES[0]!);
     const last = events[events.length - 1]!;
     const row = orderRowOf(
-      projectRow(foldAll(events), {
+      projectRow.order(foldAll(events), {
         lastSeq: last.seq,
         createdAt: 0,
         updatedAt: last.at,

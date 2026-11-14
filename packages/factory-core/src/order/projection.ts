@@ -1,4 +1,11 @@
-import type { CellId, OrderId, ProjectId, StationId, TodoId } from '../ids';
+import type {
+  CellId,
+  OrderId,
+  PlanSlug,
+  ProjectId,
+  StationId,
+  TodoId,
+} from '../ids';
 import { findStation, stationIndex } from '../line/snapshot';
 import type { AndonReason, JobKind } from './events';
 import { latestCycle } from './evolve-helpers';
@@ -29,6 +36,8 @@ export interface OrderProjection {
   line: string;
   priority: Priority;
   dependsOn: OrderId[];
+  plan: PlanSlug | null;
+  baseBranch: string;
   lastSeq: number;
   status: BoardStatus;
   holder: Holder['kind'];
@@ -120,6 +129,8 @@ export const toProjection = (
     line: state.line.name,
     priority: state.priority,
     dependsOn: state.dependsOn,
+    plan: state.plan ?? null,
+    baseBranch: state.baseBranch,
     lastSeq: meta.lastSeq,
     status: boardStatus(state),
     holder: holderOf(state).kind,

@@ -8,6 +8,7 @@ import {
 } from '@repo/factory-core/testing';
 import { drizzleOf } from '../db';
 import { loadOrders } from '../orders-table';
+import { loadPlans } from '../plans-table';
 import { MIGRATIONS_DIR, migrate } from '../migrate';
 import { openDatabase, openSqliteEventStore } from '../sqlite-event-store';
 import { seedProject } from './helpers';
@@ -22,6 +23,7 @@ const sqliteUnderTest =
       store: openSqliteEventStore(db),
       seedProject: async () => seedProject(db),
       orders: async () => loadOrders(drizzleOf(db)),
+      plans: async () => loadPlans(drizzleOf(db)),
       close: async () => db.close(),
     };
   };

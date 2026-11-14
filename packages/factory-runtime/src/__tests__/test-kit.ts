@@ -335,7 +335,7 @@ export const world = (overrides: Partial<RuntimeConfig> = {}): World => {
     intake,
     git,
     prState,
-    projections: { orders: () => events.orders() },
+    projections: { orders: () => events.orders(), plans: () => events.plans() },
     projects,
     blobs,
     leases,
