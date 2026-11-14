@@ -1,6 +1,6 @@
 ---
-status: todo
-priority: medium
+status: blocked
+priority: low
 depends_on: [v2-16-portability]
 workflow: standard
 ---
