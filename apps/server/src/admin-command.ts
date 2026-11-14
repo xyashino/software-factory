@@ -15,7 +15,10 @@ const OPERATIONS = [
   'export',
   'import',
   'rebuild-projections',
+  'recover',
 ] as const;
+/** Operations that take no file argument. */
+const NO_FILE = new Set<Operation>(['rebuild-projections', 'recover']);
 type Operation = (typeof OPERATIONS)[number];
 
 const isOperation = (name: string | undefined): name is Operation =>
@@ -84,7 +87,7 @@ export const runAdminCommand = async (
 ): Promise<number> => {
   const [name, file] = args;
   if (name === 'token') return runTokenCommand(args.slice(1), dataDir);
-  if (!isOperation(name) || (name !== 'rebuild-projections' && !file)) {
+  if (!isOperation(name) || (!NO_FILE.has(name) && !file)) {
     console.error(adminUsage);
     return 2;
   }
@@ -126,6 +129,9 @@ export const runAdminCommand = async (
         break;
       case 'rebuild-projections':
         console.log(JSON.stringify({ rows: await admin.rebuildProjections() }));
+        break;
+      case 'recover':
+        console.log(JSON.stringify(await admin.recover()));
         break;
     }
     return 0;

@@ -23,6 +23,7 @@ import {
   startCycle,
   submitVerdict,
 } from './decide-cycle';
+import { recoverOrder } from './decide-recovery';
 import {
   answer,
   askQuestion,
@@ -92,5 +93,7 @@ export const decide = (
       return reportDelivery(state, command, ctx);
     case 'RecordPrState':
       return recordPrState(state, command, ctx);
+    case 'RecoverOrder':
+      return recoverOrder(state, command, ctx);
   }
 };

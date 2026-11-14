@@ -212,12 +212,19 @@ describe('factory-operator process', () => {
   });
 
   it('starts in under 100 ms, the median of five runs after a warm-up', async () => {
-    // Wall-clock budget: only meaningful on a quiet host. When the whole
-    // workspace runs its suites in parallel (turbo test) the spawn time is
-    // dominated by CPU contention, so the budget is skipped there.
+    // Wall-clock budget: only meaningful on a quiet host. Inside a turbo run
+    // (TURBO_HASH is set) every package's suite starts at once and the spawn
+    // time is dominated by CPU contention, which the 1-minute load average
+    // reports too late. CI enforces the budget in a step that runs this suite
+    // alone.
+    // turbo sets TURBO_HASH itself on every task; it is a marker, not a cache input.
+    // eslint-disable-next-line turbo/no-undeclared-env-vars
+    const insideTurbo = process.env.TURBO_HASH !== undefined;
     const busy = (loadavg()[0] ?? 0) > cpus().length / 2;
-    if (busy) {
-      console.log('startup budget skipped: host load is above half the cores');
+    if (insideTurbo || busy) {
+      console.log(
+        `startup budget skipped: ${insideTurbo ? 'running inside turbo' : 'host load is above half the cores'}`,
+      );
       return;
     }
     await stubCell({ ok: true, result: {} });

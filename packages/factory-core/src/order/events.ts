@@ -413,6 +413,28 @@ const prStateChangedSchema = z
     state: z.enum(['open', 'merged', 'closed']),
   })
   .strict();
+const recoveredCheckpointSchema = z
+  .object({
+    commit: commitShaSchema,
+    afterStation: stationIdSchema.nullable(),
+  })
+  .strict();
+const recoveredDeliverySchema = z
+  .object({
+    prUrl,
+    commit: commitShaSchema,
+    state: z.enum(['open', 'merged', 'closed']),
+  })
+  .strict();
+/** CORE §3.3: a fresh Work order rebuilt from git (STORAGE §8). Additive in schema version 2. */
+const orderRecoveredSchema = z
+  .object({
+    type: z.literal('order_recovered'),
+    passedStations: z.array(stationIdSchema).min(1).max(64),
+    checkpoint: recoveredCheckpointSchema,
+    delivery: recoveredDeliverySchema.optional(),
+  })
+  .strict();
 
 /** Every event of CORE §3.3, discriminated by `type`. */
 export const orderEventSchema = z.discriminatedUnion('type', [
@@ -442,6 +464,7 @@ export const orderEventSchema = z.discriminatedUnion('type', [
   deliveryFinishedSchema,
   deliveryFailedSchema,
   prStateChangedSchema,
+  orderRecoveredSchema,
 ]);
 
 /** The envelope every stored event carries (CORE §3.1). Schema version 2 is the current one. */

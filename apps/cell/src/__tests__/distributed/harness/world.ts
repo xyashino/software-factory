@@ -91,7 +91,7 @@ export interface World {
 }
 
 /** The environment every process of the suite runs in: the fake shims first, the suite's timings. */
-const suiteEnv = (ghDir: string): Record<string, string> => ({
+export const suiteEnv = (ghDir: string): Record<string, string> => ({
   PATH: `${FAKE_BIN}:${process.env.PATH ?? ''}`,
   FAKE_GH_DIR: ghDir,
   FACTORY_LEASE_TTL_MS: String(SUITE_TIMING.leaseTtlMs),

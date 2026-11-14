@@ -144,6 +144,11 @@ export const HTTP_ROUTES = {
     path: '/v1/admin/rebuild-projections',
     auth: 'supervisor',
   },
+  adminRecover: {
+    method: 'POST',
+    path: '/v1/admin/recover',
+    auth: 'supervisor',
+  },
   hello: { method: 'POST', path: '/v1/cell/hello', auth: 'cell' },
   claim: { method: 'POST', path: '/v1/cell/claim', auth: 'cell' },
   heartbeat: { method: 'POST', path: '/v1/cell/heartbeat', auth: 'cell' },

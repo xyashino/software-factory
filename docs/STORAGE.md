@@ -368,25 +368,47 @@ Three tools, from cheapest to most portable:
 
 ## 8. Rebuild from git (last resort, no backup at all)
 
-Best-effort recovery when the database is gone and no backup exists:
+Best-effort recovery when the database is gone and no backup exists. Run it with
+`factory admin recover [--project <id>]` (socket) or `factory-server admin recover` (offline, the
+server must be stopped). It is idempotent: a second run appends nothing.
 
-1. Intake recreates every Work order from `todos/*.md` at `origin/<baseBranch>`.
-2. For each `factory/<todoId>` branch, the newest commit whose trailers say
-   `Factory-Outcome: passed` (PROTOCOL §8.2) gives the last passed Station and the checkpoint
-   commit. An open PR for the branch marks the Work order delivered.
-   Plans are recovered the same way: intake recreates each plan from the `plan:` todos, and the
-   `plan_branch` job finds an existing `feat/<slug>` and records its tip, so no second branch is made
-   (PROTOCOL §4). An open `feat/<slug> → <baseBranch>` PR is found by `plan_pr`.
-3. The runtime appends `order_recovered { passedStations, checkpoint }`. Artifacts of passed
-   Stations are not in git, so the Work order resumes from the first Station whose inputs cannot be
-   recovered, on top of the checkpoint code.
+1. **Intake.** `syncProject` runs first and recreates every Work order from `todos/*.md` at
+   `origin/<baseBranch>`. A todo that was merged is gone from the base branch and gets no order.
+2. **Branch scan.** For each Work order without a job ever claimed (epoch 0, no Cycle), read the
+   branch `factory/<todoId>` on the mirror, newest commit first. The first commit whose message has
+   the trailers `Factory-Order`, `Factory-Station` and `Factory-Outcome: passed` (PROTOCOL §8.2)
+   is the checkpoint. `passedStations` is the pinned Line's Stations up to and including
+   `Factory-Station`. `Factory-Order` is only checked to be present: a rebuilt database has new
+   OrderIds. Commits without the trailers (failed, blocked or handed over Cycles, or none) are
+   skipped. A branch with no such commit recovers nothing and the Work order starts from its first
+   Station, as a new one does.
+3. **PR check.** The PR for the branch is looked up on the host (`gh pr list --head`). An open or
+   merged PR makes the Work order delivered: the checkpoint becomes the branch tip the PR was
+   opened from, all Stations count as passed, and `delivery` records the PR and its state. A closed
+   PR without merge does not count.
+4. **Append.** The runtime submits `RecoverOrder` with the command id
+   `recover:<orderId>:<checkpoint sha>`, which appends `order_recovered` (CORE §4.3 rule 11). The
+   next job is the first Station after `passedStations`, on the checkpoint commit (CORE §6).
 
-What this cannot recover: Work orders whose PR was merged (their todo is gone from the base branch,
-which is correct: they are finished), the "unique for all time" memory of old `TodoId`s, questions,
-notes and budgets.
+Plans are recovered the same way: intake recreates each plan from the `plan:` todos, and the
+`plan_branch` job finds an existing `feat/<slug>` and records its tip, so no second branch is made
+(PROTOCOL §4). An open `feat/<slug> → <baseBranch>` PR is found by `plan_pr`. 3. The runtime appends
+`order_recovered { passedStations, checkpoint }`. Artifacts of passed
 
-`order_recovered` is specified in CORE when milestone M8 starts (ROADMAP). Whether outputs should
-also be committed to a side ref so recovery is complete is OPEN-QUESTIONS Q7.
+Limits, which are the honest cost of git-only recovery:
+
+- Artifacts of the passed Stations are not in git, so the Work order resumes from the first Station
+  that has not passed. Its Cycle gets no inputs from the recovered Stations (CORE §6).
+- Work orders whose PR was merged are not recovered: their todo is gone from the base branch, which
+  is correct, they are finished.
+- Lost: the "unique for all time" memory of old `TodoId`s, questions, notes, budgets, retry and
+  restart counters, leases and Cells.
+- A Station that passed but whose commit was never pushed is not recovered (the push comes before
+  the command, PROTOCOL §8.2 step 5).
+
+Whether outputs should also be committed to a side ref so recovery is complete is OPEN-QUESTIONS
+Q7. The test of the recovery (`git-recovery.test.ts`) shows that the resume works without it, so the
+default stands.
 
 ## 9. Migrations
 

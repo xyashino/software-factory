@@ -195,9 +195,9 @@ opens the database and no network listener is needed.
 
 | Todo                      | Depends on              | Scope                                                                                                   |
 | :------------------------ | :---------------------- | :------------------------------------------------------------------------------------------------------ |
-| `factory-m8-backup`       | M4                      | Litestream example in `deploy/`, restore runbook                                                        |
-| `factory-m8-move`         | `factory-m8-backup`, M7 | Test: export from Factory A mid-run, import into Factory B, Cells re-joined, every Work order completes |
-| `factory-m8-git-recovery` | M7                      | `order_recovered` (CORE amendment) + rebuild from git (STORAGE §8)                                      |
+| `factory-m8-backup`       | M4                      | Litestream example in `deploy/`, restore runbook. **Done** (`v2-16-portability`)                        |
+| `factory-m8-move`         | `factory-m8-backup`, M7 | Test: export from Factory A mid-run, import into Factory B, Cells re-joined, every Work order completes. **Done** |
+| `factory-m8-git-recovery` | M7                      | `order_recovered` (CORE §4.3 rule 11, §5.2) + rebuild from git (STORAGE §8). **Done**                   |
 
 ## M9. Cut-over
 

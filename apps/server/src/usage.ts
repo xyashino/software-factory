@@ -1,4 +1,4 @@
-export const usage = `usage: factory-server [--data-dir <path>] [--once | admin <backup|export|import|rebuild-projections> [file] | admin token create <name>]
+export const usage = `usage: factory-server [--data-dir <path>] [--once | admin <backup|export|import|rebuild-projections|recover> [file] | admin token create <name>]
 
 Runs the Factory: the single writer of the data directory (default $FACTORY_DATA_DIR, else
 ~/.local/share/factory). Serves the runtime on <data-dir>/factory.sock (mode 0600). No TCP listener
@@ -14,7 +14,7 @@ admin    One-shot admin operation on a data directory no server runs on (STORAGE
          backup and export write a new file; import needs an empty database.
 `;
 
-export const adminUsage = `usage: factory-server admin <backup|export|import|rebuild-projections> [file]
+export const adminUsage = `usage: factory-server admin <backup|export|import|rebuild-projections|recover> [file]
        factory-server admin token create <name>
 
   token create <name>
@@ -24,4 +24,5 @@ export const adminUsage = `usage: factory-server admin <backup|export|import|reb
   import <file>     load an export into an empty data directory, then expire active leases
   rebuild-projections
                     rebuild the orders table from the events
+  recover           rebuild Work orders from git after the database is lost (STORAGE §8)
 `;

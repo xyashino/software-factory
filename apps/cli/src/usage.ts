@@ -26,6 +26,7 @@ with no server running, a write or a read runs one command under the writer lock
   factory admin backup <file>               write an online SQLite backup (STORAGE §7)
   factory admin export <file>               write the Factory export (STORAGE §7)
   factory admin rebuild-projections         rebuild projections from the event log (STORAGE §7)
+  factory admin recover [--project <id>]    rebuild Work orders from git after a lost database (STORAGE §8)
 
 Global: --data-dir <path>, --json, --no-color. Settings come from flags, then FACTORY_DATA_DIR,
 then the config file (FACTORY_CONFIG or ~/.config/factory/config.json), then the defaults.

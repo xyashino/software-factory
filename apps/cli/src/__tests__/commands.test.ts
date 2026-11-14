@@ -8,13 +8,14 @@ import {
 import { usage } from '../usage';
 
 describe('factory admin command tree', () => {
-  it('registers backup, export, import and rebuild-projections subcommands', () => {
+  it('registers backup, export, import, rebuild-projections and recover subcommands', () => {
     const subCommands = adminCommand.subCommands as Record<string, unknown>;
     expect(Object.keys(subCommands).sort()).toEqual([
       'backup',
       'export',
       'import',
       'rebuild-projections',
+      'recover',
     ]);
   });
 
@@ -22,6 +23,7 @@ describe('factory admin command tree', () => {
     expect(usage).toContain('factory admin backup <file>');
     expect(usage).toContain('factory admin export <file>');
     expect(usage).toContain('factory admin rebuild-projections');
+    expect(usage).toContain('factory admin recover [--project <id>]');
     expect(usage).toContain('factory sync');
   });
 });
