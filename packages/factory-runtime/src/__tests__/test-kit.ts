@@ -7,6 +7,7 @@ import {
   fakeIntakeStore,
   fakeLeaseStore,
   fakePrState,
+  fakeProjectStore,
 } from '@repo/factory-core/testing';
 import type { ArchivePort } from '@repo/factory-core/ports/archive';
 import type { FakeClock } from '@repo/factory-core/testing';
@@ -21,10 +22,6 @@ import {
 import type { OrderCommand } from '@repo/factory-core/order/commands';
 import type { Actor } from '@repo/factory-core/order/events';
 import type { Clock } from '@repo/factory-core/ports/clock';
-import type {
-  ProjectRecord,
-  ProjectStore,
-} from '@repo/factory-core/ports/projects';
 import type { SignalStore, NewSignal } from '@repo/factory-core/ports/signals';
 import type { Signal } from '@repo/factory-core/contracts/cell';
 import type {
@@ -255,10 +252,6 @@ export const memorySignals = (): SignalStore & { all(): NewSignal[] } => {
   };
 };
 
-export const memoryProjects = (records: ProjectRecord[]): ProjectStore => ({
-  list: async () => records,
-});
-
 /** A writer that is held until a test releases it. */
 export class NotHeld extends Error {}
 
@@ -288,6 +281,7 @@ export interface World {
   events: ReturnType<typeof fakeEventStore>;
   blobs: ReturnType<typeof fakeBlobStore>;
   leases: ReturnType<typeof fakeLeaseStore>;
+  projects: ReturnType<typeof fakeProjectStore>;
   cells: ReturnType<typeof memoryCells>;
   signals: ReturnType<typeof memorySignals>;
   joinTokens: ReturnType<typeof memoryJoinTokens>;
@@ -307,6 +301,24 @@ export const world = (overrides: Partial<RuntimeConfig> = {}): World => {
   const events = fakeEventStore();
   const blobs = fakeBlobStore();
   const leases = fakeLeaseStore();
+  const projects = fakeProjectStore(
+    [
+      {
+        projectId: PROJECT,
+        repoUrl: REPO,
+        baseBranch: 'main',
+        maxRunning: 2,
+        depPolicy: 'delivered',
+      },
+    ],
+    {
+      // Work orders come from the event store's projection, as the SQLite store reads its tables.
+      statusesOf: async (projectId) =>
+        (await events.orders())
+          .filter((row) => row.projectId === projectId)
+          .map((row) => row.status),
+    },
+  );
   const cells = memoryCells();
   const signals = memorySignals();
   const joinTokens = memoryJoinTokens();
@@ -324,15 +336,7 @@ export const world = (overrides: Partial<RuntimeConfig> = {}): World => {
     git,
     prState,
     projections: { orders: () => events.orders() },
-    projects: memoryProjects([
-      {
-        projectId: PROJECT,
-        repoUrl: REPO,
-        baseBranch: 'main',
-        maxRunning: 2,
-        depPolicy: 'delivered',
-      },
-    ]),
+    projects,
     blobs,
     leases,
     cells,
@@ -349,6 +353,7 @@ export const world = (overrides: Partial<RuntimeConfig> = {}): World => {
   return {
     joinTokens,
     supervisorTokens,
+    projects,
     clock,
     timers,
     events,

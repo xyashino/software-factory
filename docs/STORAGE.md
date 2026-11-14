@@ -254,6 +254,13 @@ CREATE TABLE intake (
 );
 ```
 
+**`projects` is mutable configuration, not an event stream.** The registry (PROTOCOL §3.1) is written by
+`add`, `set` and `remove`, each under the writer lock. A change writes no event and is in no Traveler.
+Its rows are part of the export and import (§7, `projects.jsonl`), and a projection rebuild does not
+touch them. `remove` refuses a project that has any `orders`, `events` or `intake` row, so a project
+with history is never deleted; `set` refuses a `base_branch` change while a Work order of the project is
+not terminal. `repo_url` never changes in place.
+
 **Dependencies are an overlay, not a column.** When the queue or the board is read, each row with
 `next_kind = 'job'` gets `deps` from the rows of the Work orders in `depends_on` and the project's
 `dep_policy` (CORE §8): `satisfied`, `waiting` (board status `waiting_deps`) or `broken`

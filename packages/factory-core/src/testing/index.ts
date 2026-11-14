@@ -10,3 +10,4 @@ export * from './store-contract';
 export * from './lease-contract';
 export * from './blob-contract';
 export * from './scenario-fixtures';
+export * from './project-contract';

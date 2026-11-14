@@ -4,7 +4,7 @@ import type { WireError } from '@repo/factory-core/contracts/errors';
 export const describeFailure = (error: WireError): string => {
   switch (error.code) {
     case 'not_found':
-      return 'not found: no such work order, Cell or token';
+      return 'not found: no such work order, Cell, token or project';
     case 'stale_epoch':
       return `stale epoch: the job was taken over (current epoch ${error.current})`;
     case 'not_live':

@@ -256,3 +256,74 @@ export const adminArchiveResponseSchema = z
 export const adminRebuildResponseSchema = z
   .object({ rows: z.number().int().min(0) })
   .strict();
+
+/**
+ * The project registry (PROTOCOL §3.1). A branch name is one token: no whitespace, no leading `-`.
+ * `repoUrl` is required on add only; a set body that names it is refused (the schema is strict).
+ */
+const branchName = z
+  .string()
+  .min(1)
+  .max(255)
+  .regex(/^\S+$/, 'a branch name has no whitespace')
+  .refine(
+    (name) => !name.startsWith('-'),
+    'a branch name does not start with -',
+  );
+
+export const depPolicySchema = z.enum(['delivered', 'merged']);
+
+const maxRunningSchema = z.number().int().positive();
+
+export const projectRecordSchema = z
+  .object({
+    projectId: projectIdSchema,
+    repoUrl: z.string().min(1).max(2048),
+    baseBranch: branchName,
+    maxRunning: maxRunningSchema,
+    depPolicy: depPolicySchema,
+  })
+  .strict();
+
+export const projectListResponseSchema = z
+  .object({ projects: z.array(projectRecordSchema) })
+  .strict();
+
+export const projectAddRequestSchema = z
+  .object({
+    projectId: projectIdSchema,
+    repoUrl: z.string().min(1).max(2048),
+    baseBranch: branchName.default('main'),
+    maxRunning: maxRunningSchema.default(2),
+    depPolicy: depPolicySchema.default('delivered'),
+  })
+  .strict();
+
+/** A patch of at least one field: an empty `set` changes nothing and is refused as invalid. */
+export const projectSetRequestSchema = z
+  .object({
+    projectId: projectIdSchema,
+    baseBranch: branchName.optional(),
+    maxRunning: maxRunningSchema.optional(),
+    depPolicy: depPolicySchema.optional(),
+  })
+  .strict()
+  .refine(
+    (request) =>
+      request.baseBranch !== undefined ||
+      request.maxRunning !== undefined ||
+      request.depPolicy !== undefined,
+    'set at least one of baseBranch, maxRunning, depPolicy',
+  );
+
+export const projectRemoveRequestSchema = z
+  .object({ projectId: projectIdSchema })
+  .strict();
+
+export const projectResponseSchema = z
+  .object({ project: projectRecordSchema })
+  .strict();
+
+export const projectRemoveResponseSchema = z
+  .object({ projectId: projectIdSchema, removed: z.literal(true) })
+  .strict();

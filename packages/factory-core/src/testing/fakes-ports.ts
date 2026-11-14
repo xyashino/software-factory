@@ -14,6 +14,13 @@ import type { GitMirror, TodoFile } from '../ports/git-mirror';
 import type { IntakeRecord, IntakeStore } from '../ports/intake';
 import type { Lease, LeaseStore } from '../ports/lease-store';
 import type { PrState, PrStatePort } from '../ports/pr-state';
+import type {
+  ProjectPatch,
+  ProjectRecord,
+  ProjectStore,
+  ProjectStoreResult,
+} from '../ports/projects';
+import type { BoardStatus } from '../order/status';
 
 export interface FakeBlobStoreOptions {
   /**
@@ -178,5 +185,106 @@ export const fakePrState = (): FakePrState => {
       if (!state) throw new Error(`no fake state for ${prUrl}`);
       return state;
     },
+  };
+};
+
+/** The board statuses after which a Work order no longer holds its project's base branch (CORE §4.2). */
+const TERMINAL_STATUSES: ReadonlySet<BoardStatus> = new Set([
+  'delivered',
+  'merged',
+  'cancelled',
+]);
+
+/**
+ * What a project already has in history, as the test sets it: the guards of `remove` and `set` read
+ * these, so a contract case can say "this project has an order" without a runtime (PROTOCOL §3.1).
+ */
+export interface ProjectHistorySeed {
+  /** A Work order of the project, in this board status. */
+  seedOrder(projectId: ProjectId, status: BoardStatus): Promise<void>;
+  /** An event whose order belongs to the project. */
+  seedEvent(projectId: ProjectId): Promise<void>;
+  /** An intake row of the project. */
+  seedIntake(projectId: ProjectId): Promise<void>;
+}
+
+/** Where a fake project store reads a project's Work orders from, besides the ones seeded by hand. */
+export interface ProjectOrderSource {
+  /** The board status of every Work order of the project. */
+  statusesOf(projectId: ProjectId): Promise<readonly BoardStatus[]>;
+}
+
+const byProjectId = (a: ProjectRecord, b: ProjectRecord): number =>
+  a.projectId < b.projectId ? -1 : a.projectId > b.projectId ? 1 : 0;
+
+/** An in-memory `ProjectStore` with the guards of the SQLite store (PROTOCOL §3.1). */
+export const fakeProjectStore = (
+  initial: readonly ProjectRecord[] = [],
+  source?: ProjectOrderSource,
+): ProjectStore & ProjectHistorySeed => {
+  const records = new Map<ProjectId, ProjectRecord>(
+    initial.map((record) => [record.projectId, { ...record }]),
+  );
+  const orders = new Map<ProjectId, BoardStatus[]>();
+  const events = new Map<ProjectId, number>();
+  const intake = new Map<ProjectId, number>();
+  const ordersOf = async (
+    projectId: ProjectId,
+  ): Promise<readonly BoardStatus[]> => [
+    ...(orders.get(projectId) ?? []),
+    ...((await source?.statusesOf(projectId)) ?? []),
+  ];
+  const hasHistory = async (projectId: ProjectId): Promise<boolean> =>
+    (await ordersOf(projectId)).length > 0 ||
+    (events.get(projectId) ?? 0) > 0 ||
+    (intake.get(projectId) ?? 0) > 0;
+  const holdsBase = async (projectId: ProjectId): Promise<boolean> =>
+    (await ordersOf(projectId)).some(
+      (status) => !TERMINAL_STATUSES.has(status),
+    );
+  const count = (map: Map<ProjectId, number>, projectId: ProjectId): void => {
+    map.set(projectId, (map.get(projectId) ?? 0) + 1);
+  };
+  return {
+    list: async () =>
+      [...records.values()].sort(byProjectId).map((record) => ({ ...record })),
+    add: async (project): Promise<ProjectStoreResult> => {
+      if (records.has(project.projectId))
+        return { ok: false, reason: 'exists' };
+      records.set(project.projectId, { ...project });
+      return { ok: true };
+    },
+    set: async (
+      projectId,
+      patch: ProjectPatch,
+    ): Promise<ProjectStoreResult> => {
+      const record = records.get(projectId);
+      if (!record) return { ok: false, reason: 'missing' };
+      const changesBase =
+        patch.baseBranch !== undefined &&
+        patch.baseBranch !== record.baseBranch;
+      if (changesBase && (await holdsBase(projectId))) {
+        return { ok: false, reason: 'base_branch_busy' };
+      }
+      records.set(projectId, {
+        ...record,
+        baseBranch: patch.baseBranch ?? record.baseBranch,
+        maxRunning: patch.maxRunning ?? record.maxRunning,
+        depPolicy: patch.depPolicy ?? record.depPolicy,
+      });
+      return { ok: true };
+    },
+    remove: async (projectId): Promise<ProjectStoreResult> => {
+      if (!records.has(projectId)) return { ok: false, reason: 'missing' };
+      if (await hasHistory(projectId))
+        return { ok: false, reason: 'has_history' };
+      records.delete(projectId);
+      return { ok: true };
+    },
+    seedOrder: async (projectId, status) => {
+      orders.set(projectId, [...(orders.get(projectId) ?? []), status]);
+    },
+    seedEvent: async (projectId) => count(events, projectId),
+    seedIntake: async (projectId) => count(intake, projectId),
   };
 };

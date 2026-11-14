@@ -19,6 +19,12 @@ import { notFound, RuntimeError } from './errors';
 import { heartbeat } from './heartbeat';
 import type { IntakeReport } from './intake';
 import { createJoinToken, revokeJoinToken } from './join-tokens';
+import {
+  addProject,
+  listProjects,
+  removeProject,
+  setProject,
+} from './projects';
 import type { RuntimePorts } from './ports';
 
 /** Per-call options a transport passes: the claim long-poll ends when its request ends. */
@@ -276,6 +282,13 @@ export const createOperations = (
       await revokeJoinToken(ports, request.joinTokenId);
       return { joinTokenId: request.joinTokenId, revoked: true as const };
     },
+    projectList: () => listProjects(ports),
+    projectAdd: (request) => addProject(ports, request),
+    projectSet: (request) => {
+      const { projectId, ...patch } = request;
+      return setProject(ports, projectId, patch);
+    },
+    projectRemove: (request) => removeProject(ports, request.projectId),
     adminExport: async () => {
       const bytes = await ports.exportArchive();
       return {
