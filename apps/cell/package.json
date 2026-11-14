@@ -15,11 +15,13 @@
     "test": "bun --bun vitest run"
   },
   "dependencies": {
-    "@repo/factory-core": "workspace:*"
+    "@repo/factory-core": "workspace:*",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@repo/eslint-config": "workspace:*",
     "@repo/typescript-config": "workspace:*",
+    "@types/bun": "catalog:",
     "@types/node": "catalog:",
     "eslint": "catalog:",
     "typescript": "catalog:",

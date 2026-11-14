@@ -268,6 +268,9 @@ importers:
       '@repo/factory-core':
         specifier: workspace:*
         version: link:../../packages/factory-core
+      zod:
+        specifier: 'catalog:'
+        version: 4.6.7
     devDependencies:
       '@repo/eslint-config':
         specifier: workspace:*
@@ -275,6 +278,9 @@ importers:
       '@repo/typescript-config':
         specifier: workspace:*
         version: link:../../packages/typescript-config
+      '@types/bun':
+        specifier: 'catalog:'
+        version: 1.4.4
       '@types/node':
         specifier: 'catalog:'
         version: 26.6.4
