@@ -6,6 +6,7 @@ import {
   type OpenedRuntime,
 } from '@repo/factory-runtime/open-runtime';
 import { startSocketListener, type SocketListener } from './socket/listener';
+import { runOnce } from './once';
 import { usage } from './usage';
 
 /** The socket inside the data directory (PROTOCOL §2). */
@@ -14,6 +15,23 @@ export const SOCKET_FILE_NAME = 'factory.sock';
 /** The data directory: `$FACTORY_DATA_DIR`, else `~/.local/share/factory` (STORAGE §1). */
 export const dataDirFromEnv = (env: NodeJS.ProcessEnv): string =>
   env.FACTORY_DATA_DIR ?? join(homedir(), '.local', 'share', 'factory');
+
+/**
+ * The data directory: `--data-dir <path>` (or `--data-dir=<path>`) wins over `$FACTORY_DATA_DIR`,
+ * which wins over `~/.local/share/factory` (STORAGE §1).
+ */
+export const resolveDataDir = (
+  argv: readonly string[],
+  env: NodeJS.ProcessEnv,
+): string => {
+  const index = argv.indexOf('--data-dir');
+  const inline = argv.find((arg) => arg.startsWith('--data-dir='));
+  const flag = inline?.slice('--data-dir='.length) ?? argv[index + 1];
+  if (index !== -1 || inline !== undefined) {
+    if (flag && flag.length > 0) return flag;
+  }
+  return dataDirFromEnv(env);
+};
 
 /**
  * `factory-server`: the single writer of a Factory data directory (STORAGE §1). It takes the writer
@@ -28,7 +46,14 @@ const main = async (): Promise<void> => {
     console.log(usage);
     return;
   }
-  const dataDir = dataDirFromEnv(process.env);
+  const dataDir = resolveDataDir(process.argv.slice(2), process.env);
+  if (process.argv.includes('--once')) {
+    const input = await Bun.stdin.text();
+    const result = await runOnce(dataDir, input);
+    console.log(JSON.stringify(result.output));
+    process.exitCode = result.exitCode;
+    return;
+  }
   const state: {
     stopping: boolean;
     opened?: OpenedRuntime;

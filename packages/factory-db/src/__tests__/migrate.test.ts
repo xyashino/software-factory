@@ -37,16 +37,22 @@ const STORAGE_TABLES = [
 ];
 
 describe('the migration runner', () => {
-  it('creates the eleven STORAGE tables and records the init migration on a fresh database', () => {
+  it('creates the eleven STORAGE tables and records every migration on a fresh database', () => {
     const db = openDatabase(':memory:');
 
     const applied = migrate(db, MIGRATIONS_DIR);
 
-    expect(applied).toEqual(['0001_init.sql']);
+    expect(applied).toEqual([
+      '0001_init.sql',
+      '0002_join_token_command_id.sql',
+    ]);
     expect(tableNames(db)).toEqual(
       [...STORAGE_TABLES, 'schema_migrations'].sort(),
     );
-    expect(appliedNames(db)).toEqual(['0001_init.sql']);
+    expect(appliedNames(db)).toEqual([
+      '0001_init.sql',
+      '0002_join_token_command_id.sql',
+    ]);
   });
 
   it('applies nothing on a second run', () => {
@@ -54,7 +60,10 @@ describe('the migration runner', () => {
     migrate(db, MIGRATIONS_DIR);
 
     expect(migrate(db, MIGRATIONS_DIR)).toEqual([]);
-    expect(appliedNames(db)).toEqual(['0001_init.sql']);
+    expect(appliedNames(db)).toEqual([
+      '0001_init.sql',
+      '0002_join_token_command_id.sql',
+    ]);
   });
 
   it('applies only the files that are new', () => {

@@ -14,6 +14,8 @@ import {
   sqliteProjectionReader,
 } from '@repo/factory-db/projects-table';
 import { sqliteCellStore } from '@repo/factory-db/cells-table';
+import { sqliteJoinTokenStore } from '@repo/factory-db/join-tokens-table';
+import { exportFactory } from '@repo/factory-db/export-import';
 import { acquireWriter, type WriterLock } from '@repo/factory-db/writer-lock';
 import {
   loadDefinitions,
@@ -87,6 +89,7 @@ export const openRuntime = (options: OpenRuntimeOptions): OpenedRuntime => {
       blobs: sqliteBlobStore(database, writer, gate),
       leases: sqliteLeaseStore(database, writer, gate),
       cells: sqliteCellStore(database, writer, gate),
+      joinTokens: sqliteJoinTokenStore(database, writer, gate),
       signals: sqliteSignalStore(database, writer, gate),
       clock,
       ids: ulidIds(clock),
@@ -94,6 +97,7 @@ export const openRuntime = (options: OpenRuntimeOptions): OpenedRuntime => {
       writer,
       definitions,
       config: { ...DEFAULT_CONFIG, ...options.config },
+      exportArchive: () => exportFactory(store, clock.now()),
     };
     const runtime = createRuntime(ports);
     const opened = database;

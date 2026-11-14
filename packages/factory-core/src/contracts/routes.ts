@@ -13,6 +13,16 @@ import {
   cellRevokeRequestSchema,
   cellRevokeResponseSchema,
   cellsListResponseSchema,
+  streamEventsRequestSchema,
+  streamEventsResponseSchema,
+  joinTokenCreateRequestSchema,
+  joinTokenCreateResponseSchema,
+  joinTokenListResponseSchema,
+  joinTokenRevokeRequestSchema,
+  joinTokenRevokeResponseSchema,
+  adminExportResponseSchema,
+  intakeSyncRequestSchema,
+  intakeSyncResponseSchema,
 } from './supervisor';
 import {
   blobGetRequestSchema,
@@ -113,6 +123,36 @@ export const ROUTES = {
     path: 'supervisor/cells/revoke',
     request: cellRevokeRequestSchema,
     response: cellRevokeResponseSchema,
+  },
+  supervisorEvents: {
+    path: 'supervisor/events',
+    request: streamEventsRequestSchema,
+    response: streamEventsResponseSchema,
+  },
+  intakeSync: {
+    path: 'supervisor/intake/sync',
+    request: intakeSyncRequestSchema,
+    response: intakeSyncResponseSchema,
+  },
+  joinTokenCreate: {
+    path: 'supervisor/join-tokens/create',
+    request: joinTokenCreateRequestSchema,
+    response: joinTokenCreateResponseSchema,
+  },
+  joinTokenList: {
+    path: 'supervisor/join-tokens',
+    request: emptyRequestSchema,
+    response: joinTokenListResponseSchema,
+  },
+  joinTokenRevoke: {
+    path: 'supervisor/join-tokens/revoke',
+    request: joinTokenRevokeRequestSchema,
+    response: joinTokenRevokeResponseSchema,
+  },
+  adminExport: {
+    path: 'supervisor/admin/export',
+    request: emptyRequestSchema,
+    response: adminExportResponseSchema,
   },
 } as const;
 

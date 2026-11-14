@@ -114,3 +114,89 @@ export const cellRevokeResponseSchema = z
   .strict();
 
 export const emptyRequestSchema = z.object({}).strict();
+
+/** The longest a `supervisorEvents` long-poll may hold the request open (PROTOCOL §3.1). */
+export const MAX_STREAM_WAIT_MS = 25_000;
+
+/**
+ * The event feed (PROTOCOL §3.1, `/v1/stream`): every stored event after `afterGlobalSeq`, oldest
+ * first. Held open up to `waitMs` when nothing newer exists, so `status --watch` and `log -f` follow
+ * the server without polling tight loops.
+ */
+export const streamEventsRequestSchema = z
+  .object({
+    afterGlobalSeq: z.number().int().min(0),
+    waitMs: z.number().int().min(0).max(MAX_STREAM_WAIT_MS).optional(),
+  })
+  .strict();
+
+export const streamEventsResponseSchema = z
+  .object({
+    events: z.array(storedEventSchema),
+    nextSeq: z.number().int().min(0),
+  })
+  .strict();
+
+/**
+ * Runs intake now (PROTOCOL §3.1, `/v1/intake/sync`). Intake is idempotent, so the answer does not
+ * depend on the `commandId`; the id is still sent on every POST (PROTOCOL §3.1).
+ */
+export const intakeSyncRequestSchema = z
+  .object({ commandId: z.string().min(1).max(128) })
+  .strict();
+
+export const intakeSyncResponseSchema = z
+  .object({ created: z.number().int().min(0) })
+  .strict();
+
+export const joinTokenCreateRequestSchema = z
+  .object({
+    commandId: z.string().min(1).max(128),
+    name: z.string().min(1).max(128),
+    ttlSeconds: z
+      .number()
+      .int()
+      .positive()
+      .max(365 * 24 * 60 * 60)
+      .optional(),
+  })
+  .strict();
+
+/** The plain token appears only in this answer (PROTOCOL §1). */
+export const joinTokenCreateResponseSchema = z
+  .object({
+    joinTokenId: z.string().min(1),
+    name: z.string(),
+    token: z.string().min(1),
+    expiresAt: z.number().int().nullable(),
+  })
+  .strict();
+
+export const joinTokenListResponseSchema = z
+  .object({
+    tokens: z.array(
+      z
+        .object({
+          joinTokenId: z.string().min(1),
+          name: z.string(),
+          createdAt: z.number().int(),
+          expiresAt: z.number().int().nullable(),
+          revokedAt: z.number().int().nullable(),
+        })
+        .strict(),
+    ),
+  })
+  .strict();
+
+export const joinTokenRevokeRequestSchema = z
+  .object({ joinTokenId: z.string().min(1).max(64) })
+  .strict();
+
+export const joinTokenRevokeResponseSchema = z
+  .object({ joinTokenId: z.string().min(1), revoked: z.literal(true) })
+  .strict();
+
+/** The export archive (STORAGE §7.3), base64 so it crosses the JSON socket. */
+export const adminExportResponseSchema = z
+  .object({ base64: z.string(), bytes: z.number().int().min(0) })
+  .strict();

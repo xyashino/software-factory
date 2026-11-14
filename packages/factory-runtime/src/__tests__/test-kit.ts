@@ -32,6 +32,10 @@ import {
   loadDefinitions,
   type Definitions,
 } from '@repo/factory-definitions/load';
+import type {
+  JoinTokenRecord,
+  JoinTokenStore,
+} from '@repo/factory-core/ports/join-tokens';
 import { DEFINITIONS_ROOT } from '../paths';
 import { createRuntime, type Runtime } from '../composition';
 import {
@@ -142,6 +146,46 @@ const toSignal = (row: NewSignal & { ackedAt: number | null }): Signal =>
         text: row.text,
       };
 
+/** An in-memory join token table; hashes are kept as the store receives them. */
+export const memoryJoinTokens = (): JoinTokenStore & {
+  all(): JoinTokenRecord[];
+  hashes(): string[];
+} => {
+  const rows = new Map<string, JoinTokenRecord>();
+  const hashes: string[] = [];
+  const commands = new Set<string>();
+  return {
+    all: () => [...rows.values()],
+    hashes: () => hashes,
+    create: async ({
+      joinTokenId,
+      tokenHash,
+      name,
+      createdAt,
+      expiresAt,
+      commandId,
+    }) => {
+      hashes.push(tokenHash);
+      commands.add(commandId);
+      rows.set(joinTokenId, {
+        joinTokenId,
+        name,
+        createdAt,
+        expiresAt,
+        revokedAt: null,
+      });
+    },
+    createdForCommand: async (commandId) => commands.has(commandId),
+    list: async () => [...rows.values()],
+    revoke: async (joinTokenId, at) => {
+      const row = rows.get(joinTokenId);
+      if (!row) return false;
+      rows.set(joinTokenId, { ...row, revokedAt: row.revokedAt ?? at });
+      return true;
+    },
+  };
+};
+
 export const memorySignals = (): SignalStore & { all(): NewSignal[] } => {
   let rows: (NewSignal & { ackedAt: number | null })[] = [];
   return {
@@ -191,6 +235,7 @@ export interface World {
   leases: ReturnType<typeof fakeLeaseStore>;
   cells: ReturnType<typeof memoryCells>;
   signals: ReturnType<typeof memorySignals>;
+  joinTokens: ReturnType<typeof memoryJoinTokens>;
   writer: ReturnType<typeof heldWriter>;
   ports: RuntimePorts;
   runtime: Runtime;
@@ -205,6 +250,7 @@ export const world = (overrides: Partial<RuntimeConfig> = {}): World => {
   const leases = fakeLeaseStore();
   const cells = memoryCells();
   const signals = memorySignals();
+  const joinTokens = memoryJoinTokens();
   const writer = heldWriter();
   const ports: RuntimePorts = {
     events,
@@ -221,6 +267,7 @@ export const world = (overrides: Partial<RuntimeConfig> = {}): World => {
     blobs,
     leases,
     cells,
+    joinTokens,
     signals,
     clock,
     ids: ulidIds(clock as Clock),
@@ -228,8 +275,10 @@ export const world = (overrides: Partial<RuntimeConfig> = {}): World => {
     writer,
     definitions: shippedDefinitions(),
     config: { ...DEFAULT_CONFIG, ...overrides },
+    exportArchive: async () => new TextEncoder().encode('export-bytes'),
   };
   return {
+    joinTokens,
     clock,
     timers,
     events,

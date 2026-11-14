@@ -429,9 +429,29 @@ The Cell exits when every job is released. A Cell that simply vanishes is handle
 through the writer lock, runs intake, scheduling, the reaper and leases, and listens on the local Unix
 socket by default. Remote deployments add an optional TCP HTTP/SSE listener on the same server.
 `factory-cell` runs execution cells as socket clients; they never open the database. A CLI write
-while the server runs goes through the socket to that server. If no server runs, a one-shot write takes
-the writer lock and runs the runtime in-process for that command. `factory-server admin …` (token create,
-backup, import, rebuild-projections) operates on the server's database.
+while the server runs goes through the socket to that server. If no server runs, the CLI runs
+`factory-server --once --data-dir <dir>` as a subprocess: it reads one `{route, request}` JSON object
+on stdin, takes the writer lock, runs that route, prints `{ok, response | error}` on stdout and exits
+(`0` ok, `1` failed, `2` refused, `3` writer held). The lock is released when the process exits, so
+the CLI never opens the database itself. A read with no server runs the same way. `factory run` starts
+the long-running server in the foreground and forwards SIGINT and SIGTERM to it.
+
+Local socket routes beyond the HTTP table above: `supervisor/events` is the socket form of
+`/v1/stream` (a long-poll: it answers at once with the stored events after `afterGlobalSeq`, else holds
+up to 25 s for the next commit); `supervisor/join-tokens` (list), `…/create` (the token is returned once)
+and `…/revoke`; `supervisor/admin/export` returns the export archive base64-encoded in JSON. A create
+carries its `commandId`: a replay of the same command is refused as `precondition`, so a retry never
+makes a second token. Intake sync (`/v1/intake/sync`, socket `supervisor/intake/sync`) is served and
+answers `{ created }`; until intake is wired (v2-10) it refuses with `precondition` and changes nothing,
+which `factory sync` prints.
+
+Configuration (`apps/cli`): settings come from the flag, then `FACTORY_DATA_DIR`, then the config file
+(`$FACTORY_CONFIG`, else `$XDG_CONFIG_HOME/factory/config.json`, with the keys `dataDir`, `serverBin` and
+`color`), then the default `~/.local/share/factory`. `NO_COLOR` set to a non-empty value, `--no-color`
+and `"color": false` turn colour off. The config file holds no state; it is never a second database.
+
+`factory-server admin …` (token create, backup, import, rebuild-projections) operates on the server's
+database.
 
 ## 11. Failure matrix
 

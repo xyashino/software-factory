@@ -15,6 +15,7 @@ import type { CommandHandler } from './command-handler';
 import { RuntimeError, notFound } from './errors';
 import { heartbeat } from './heartbeat';
 import { hello, assertCell, revokeCell } from './cells';
+import { createJoinToken, revokeJoinToken } from './join-tokens';
 import { longPollClaim, type ClaimDeps } from './claim';
 import type { RuntimePorts } from './ports';
 
@@ -225,6 +226,54 @@ export const createOperations = (
     cellRevoke: async (request) => {
       await revokeCell(ports, request.cellId);
       return { cellId: request.cellId, revoked: true as const };
+    },
+    supervisorEvents: async (request, options) => {
+      // Held like a claim: answers at once when newer events exist, else waits for a commit.
+      const waitMs = request.waitMs ?? 0;
+      const deadline = ports.clock.now() + waitMs;
+      for (;;) {
+        const events = await ports.events.feed(request.afterGlobalSeq, 500);
+        const last = events[events.length - 1];
+        if (last) return { events, nextSeq: last.globalSeq };
+        const remaining = deadline - ports.clock.now();
+        if (remaining <= 0 || options.signal?.aborted) {
+          return { events: [], nextSeq: request.afterGlobalSeq };
+        }
+        await claimDeps.notifier.waitFor(
+          Math.min(remaining, ports.config.claimTickMs),
+          options.signal,
+        );
+      }
+    },
+    intakeSync: async () => {
+      if (!ports.intake) {
+        throw new RuntimeError({
+          code: 'precondition',
+          detail: 'intake is not built yet (v2-10): nothing was synced',
+        });
+      }
+      return ports.intake.sync();
+    },
+    joinTokenCreate: (request) => createJoinToken(ports, request),
+    joinTokenList: async () => ({
+      tokens: (await ports.joinTokens.list()).map((token) => ({
+        joinTokenId: token.joinTokenId,
+        name: token.name,
+        createdAt: token.createdAt,
+        expiresAt: token.expiresAt,
+        revokedAt: token.revokedAt,
+      })),
+    }),
+    joinTokenRevoke: async (request) => {
+      await revokeJoinToken(ports, request.joinTokenId);
+      return { joinTokenId: request.joinTokenId, revoked: true as const };
+    },
+    adminExport: async () => {
+      const bytes = await ports.exportArchive();
+      return {
+        base64: Buffer.from(bytes).toString('base64'),
+        bytes: bytes.byteLength,
+      };
     },
   };
 
