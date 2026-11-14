@@ -93,6 +93,17 @@ distributed mode, remote clients and Cells use the server's HTTP/SSE API. The sa
 and workflow apply in both modes. A completed Job may continue on the same Cell without a queue
 round trip when the runtime can safely do so.
 
+## Order Plan
+
+Todos that declare `plan: <slug>` and chain with `depends_on` form an **Order Plan**: a stack of Work
+orders `WO_1 -> WO_2 -> WO_3`, each delivered as a small PR on the plan branch `feat/<slug>`, plus one
+PR `feat/<slug> -> main` that the Factory opens itself. The Factory creates the branch first, builds
+each Work order on its predecessor's branch as soon as that one is delivered, opens a draft plan PR
+once the root is merged, and marks it ready when every member is merged. Each Work order still
+travels through its own Line as described above. The end-to-end flow and the GitHub settings it
+needs (merge commits for sub-PRs, delete head branches on merge) are in
+[ORDER-PLAN.md](ORDER-PLAN.md); the contracts are [CORE.md](CORE.md) §12.
+
 For the detailed contracts and edge cases, see [PLAN.md](PLAN.md) (architecture and end-to-end flows),
 [CORE.md](CORE.md) (Work order state and `nextJob`), and [PROTOCOL.md](PROTOCOL.md) (Cell Jobs,
 leases, and communication).
