@@ -13,7 +13,7 @@ trustPolicyExclude:
   - semver@6.3.1
 
 catalog:
-  '@eslint/js': 10.0.1
+  '@eslint/js': 9.39.5
   '@types/bun': 1.4.4
   '@types/node': 26.6.4
   '@vitest/coverage-v8': 5.1.0
@@ -34,7 +34,7 @@ catalog:
   picocolors: 1.1.1
   prettier: 3.9.10
   turbo: 2.11.10
-  typescript: 7.0.2
+  typescript: 6.0.3
   typescript-eslint: 8.72.2
   vitest: 5.1.0
   yaml: 2.9.1
