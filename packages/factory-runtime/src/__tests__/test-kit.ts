@@ -3,8 +3,12 @@ import {
   fakeClock,
   fakeBlobStore,
   fakeEventStore,
+  fakeGitMirror,
+  fakeIntakeStore,
   fakeLeaseStore,
+  fakePrState,
 } from '@repo/factory-core/testing';
+import type { ArchivePort } from '@repo/factory-core/ports/archive';
 import type { FakeClock } from '@repo/factory-core/testing';
 import {
   orderIdOf,
@@ -227,6 +231,16 @@ export const heldWriter = (): WriterGuard & { held: boolean } => {
   return guard;
 };
 
+/** Archive operations need a real database (apps/server, factory-db); a unit test must not reach them. */
+const unusedArchive: ArchivePort = {
+  backup: () => Promise.reject(new Error('archive is not used in this test')),
+  exportTo: () => Promise.reject(new Error('archive is not used in this test')),
+  importFrom: () =>
+    Promise.reject(new Error('archive is not used in this test')),
+  rebuildProjections: () =>
+    Promise.reject(new Error('archive is not used in this test')),
+};
+
 export interface World {
   clock: FakeClock;
   timers: ManualTimers;
@@ -237,6 +251,9 @@ export interface World {
   signals: ReturnType<typeof memorySignals>;
   joinTokens: ReturnType<typeof memoryJoinTokens>;
   writer: ReturnType<typeof heldWriter>;
+  intake: ReturnType<typeof fakeIntakeStore>;
+  git: ReturnType<typeof fakeGitMirror>;
+  prState: ReturnType<typeof fakePrState>;
   ports: RuntimePorts;
   runtime: Runtime;
 }
@@ -252,8 +269,16 @@ export const world = (overrides: Partial<RuntimeConfig> = {}): World => {
   const signals = memorySignals();
   const joinTokens = memoryJoinTokens();
   const writer = heldWriter();
+  const intake = fakeIntakeStore();
+  const git = fakeGitMirror();
+  const prState = fakePrState();
   const ports: RuntimePorts = {
     events,
+    feed: events,
+    archive: unusedArchive,
+    intake,
+    git,
+    prState,
     projections: { orders: () => events.orders() },
     projects: memoryProjects([
       {
@@ -287,6 +312,9 @@ export const world = (overrides: Partial<RuntimeConfig> = {}): World => {
     cells,
     signals,
     writer,
+    intake,
+    git,
+    prState,
     ports,
     runtime: createRuntime(ports),
   };

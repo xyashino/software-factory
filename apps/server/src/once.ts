@@ -5,9 +5,10 @@ import {
 } from '@repo/factory-core/contracts/errors';
 import { isRuntimeError } from '@repo/factory-runtime/errors';
 import {
-  openRuntime,
   WriterHeldError,
+  type OpenedRuntime,
 } from '@repo/factory-runtime/open-runtime';
+import { openForAdmin } from './admin-command';
 
 /** Exit codes of `factory-server --once` (PROTOCOL §10): the CLI tells them apart. */
 export const ONCE_EXIT = {
@@ -30,9 +31,9 @@ export const runOnce = async (
   dataDir: string,
   stdin: string,
 ): Promise<{ exitCode: number; output: OnceOutput }> => {
-  let opened: ReturnType<typeof openRuntime>;
+  let opened: OpenedRuntime;
   try {
-    opened = openRuntime({ dataDir });
+    opened = openForAdmin(dataDir);
   } catch (error) {
     if (error instanceof WriterHeldError) {
       return {

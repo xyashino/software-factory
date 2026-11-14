@@ -1,21 +1,25 @@
 import { join } from 'node:path';
 import { Database } from 'bun:sqlite';
 import type { Clock } from '@repo/factory-core/ports/clock';
+import type { GitMirror } from '@repo/factory-core/ports/git-mirror';
+import type { PrStatePort } from '@repo/factory-core/ports/pr-state';
+import { sqliteArchive } from '@repo/factory-db/archive';
+import { sqliteCellStore } from '@repo/factory-db/cells-table';
+import { exportFactory } from '@repo/factory-db/export-import';
+import { sqliteIntakeStore } from '@repo/factory-db/intake-table';
+import { sqliteJoinTokenStore } from '@repo/factory-db/join-tokens-table';
 import { MIGRATIONS_DIR, migrate } from '@repo/factory-db/migrate';
-import { sqliteBlobStore } from '@repo/factory-db/sqlite-blob-store';
-import { sqliteLeaseStore } from '@repo/factory-db/sqlite-lease-store';
-import {
-  openDatabase,
-  openSqliteEventStore,
-} from '@repo/factory-db/sqlite-event-store';
-import { sqliteSignalStore } from '@repo/factory-db/signals-table';
 import {
   sqliteProjectStore,
   sqliteProjectionReader,
 } from '@repo/factory-db/projects-table';
-import { sqliteCellStore } from '@repo/factory-db/cells-table';
-import { sqliteJoinTokenStore } from '@repo/factory-db/join-tokens-table';
-import { exportFactory } from '@repo/factory-db/export-import';
+import { sqliteSignalStore } from '@repo/factory-db/signals-table';
+import { sqliteBlobStore } from '@repo/factory-db/sqlite-blob-store';
+import {
+  openDatabase,
+  openSqliteEventStore,
+} from '@repo/factory-db/sqlite-event-store';
+import { sqliteLeaseStore } from '@repo/factory-db/sqlite-lease-store';
 import { acquireWriter, type WriterLock } from '@repo/factory-db/writer-lock';
 import {
   loadDefinitions,
@@ -23,13 +27,13 @@ import {
 } from '@repo/factory-definitions/load';
 import { createRuntime, type Runtime } from './composition';
 import { ulidIds } from './ids';
+import { DEFINITIONS_ROOT } from './paths';
 import {
   DEFAULT_CONFIG,
   type RuntimeConfig,
   type RuntimePorts,
   type Timers,
 } from './ports';
-import { DEFINITIONS_ROOT } from './paths';
 
 /** The database file inside the data directory (STORAGE §1, `factory.db`). */
 export const DATABASE_FILE_NAME = 'factory.db';
@@ -44,7 +48,24 @@ export interface OpenRuntimeOptions {
   config?: Partial<RuntimeConfig>;
   clock?: Clock;
   timers?: Timers;
+  /** The git mirror adapter (apps/server). Without one, intake fails with a clear message. */
+  git?: GitMirror;
+  /** The PR state adapter (apps/server). Without one, the PR poll fails with a clear message. */
+  prState?: PrStatePort;
 }
+
+const notConfigured = (what: string): Error =>
+  new Error(`${what} is not configured for this runtime`);
+
+/** Stands in for a git mirror when the caller gave none: every use says what is missing. */
+const unconfiguredGit: GitMirror = {
+  sync: () => Promise.reject(notConfigured('a git mirror')),
+  todoFiles: () => Promise.reject(notConfigured('a git mirror')),
+};
+
+const unconfiguredPrState: PrStatePort = {
+  read: () => Promise.reject(notConfigured('a PR state reader')),
+};
 
 export interface OpenedRuntime {
   runtime: Runtime;
@@ -98,6 +119,11 @@ export const openRuntime = (options: OpenRuntimeOptions): OpenedRuntime => {
       definitions,
       config: { ...DEFAULT_CONFIG, ...options.config },
       exportArchive: () => exportFactory(store, clock.now()),
+      intake: sqliteIntakeStore(database, writer, gate),
+      git: options.git ?? unconfiguredGit,
+      prState: options.prState ?? unconfiguredPrState,
+      feed: store,
+      archive: sqliteArchive(database, store, writer),
     };
     const runtime = createRuntime(ports);
     const opened = database;

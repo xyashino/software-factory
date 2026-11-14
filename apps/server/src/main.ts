@@ -1,12 +1,12 @@
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import {
-  openRuntime,
   WriterHeldError,
   type OpenedRuntime,
 } from '@repo/factory-runtime/open-runtime';
-import { startSocketListener, type SocketListener } from './socket/listener';
+import { openForAdmin, runAdminCommand } from './admin-command';
 import { runOnce } from './once';
+import { startSocketListener, type SocketListener } from './socket/listener';
 import { usage } from './usage';
 
 /** The socket inside the data directory (PROTOCOL §2). */
@@ -33,6 +33,20 @@ export const resolveDataDir = (
   return dataDirFromEnv(env);
 };
 
+const stripDataDirFlag = (argv: readonly string[]): string[] => {
+  const result: string[] = [];
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index]!;
+    if (arg === '--data-dir') {
+      index += 1;
+      continue;
+    }
+    if (arg.startsWith('--data-dir=')) continue;
+    result.push(arg);
+  }
+  return result;
+};
+
 /**
  * `factory-server`: the single writer of a Factory data directory (STORAGE §1). It takes the writer
  * lock, runs the runtime's boot grace and reaper, serves the socket, and shuts down cleanly on
@@ -46,12 +60,18 @@ const main = async (): Promise<void> => {
     console.log(usage);
     return;
   }
-  const dataDir = resolveDataDir(process.argv.slice(2), process.env);
-  if (process.argv.includes('--once')) {
+  const rawArgs = process.argv.slice(2);
+  const dataDir = resolveDataDir(rawArgs, process.env);
+  if (rawArgs.includes('--once')) {
     const input = await Bun.stdin.text();
     const result = await runOnce(dataDir, input);
     console.log(JSON.stringify(result.output));
     process.exitCode = result.exitCode;
+    return;
+  }
+  const positional = stripDataDirFlag(rawArgs);
+  if (positional[0] === 'admin') {
+    process.exitCode = await runAdminCommand(positional.slice(1), dataDir);
     return;
   }
   const state: {
@@ -73,7 +93,7 @@ const main = async (): Promise<void> => {
 
   let opened: OpenedRuntime;
   try {
-    opened = openRuntime({ dataDir });
+    opened = openForAdmin(dataDir);
   } catch (error) {
     if (error instanceof WriterHeldError) {
       console.error(

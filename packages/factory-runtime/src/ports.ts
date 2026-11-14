@@ -1,13 +1,18 @@
 import type { Definitions } from '@repo/factory-definitions/load';
-import type { EventStore } from '@repo/factory-core/ports/event-store';
+import type { ArchivePort } from '@repo/factory-core/ports/archive';
 import type { BlobStore } from '@repo/factory-core/ports/blob-store';
-import type { LeaseStore } from '@repo/factory-core/ports/lease-store';
-import type { ProjectStore } from '@repo/factory-core/ports/projects';
-import type { ProjectionReader } from '@repo/factory-core/ports/projection-reader';
-import type { SignalStore } from '@repo/factory-core/ports/signals';
 import type { CellStore } from '@repo/factory-core/ports/cells';
-import type { JoinTokenStore } from '@repo/factory-core/ports/join-tokens';
 import type { Clock } from '@repo/factory-core/ports/clock';
+import type { EventFeed } from '@repo/factory-core/ports/event-feed';
+import type { EventStore } from '@repo/factory-core/ports/event-store';
+import type { GitMirror } from '@repo/factory-core/ports/git-mirror';
+import type { IntakeStore } from '@repo/factory-core/ports/intake';
+import type { JoinTokenStore } from '@repo/factory-core/ports/join-tokens';
+import type { LeaseStore } from '@repo/factory-core/ports/lease-store';
+import type { PrStatePort } from '@repo/factory-core/ports/pr-state';
+import type { ProjectionReader } from '@repo/factory-core/ports/projection-reader';
+import type { ProjectStore } from '@repo/factory-core/ports/projects';
+import type { SignalStore } from '@repo/factory-core/ports/signals';
 import type { RuntimeIds } from './ids';
 
 /**
@@ -43,6 +48,14 @@ export interface RuntimeConfig {
   logTailChars: number;
   /** The Operator's own CLI, listed in every prompt (PROTOCOL §3.3). */
   operatorCommands: string[];
+  /** Intake poll interval (ROADMAP M4). 0 turns the timer off; `sync` still works. */
+  intakePollMs: number;
+  /** PR state poll interval for delivered Work orders. 0 turns the timer off. */
+  prPollMs: number;
+  /** Cut-over flag (ROADMAP M9): only todos with `factory: v2` become Work orders. */
+  v2Only: boolean;
+  /** How long the event feed waits for a commit before it reads again. */
+  feedPollMs: number;
 }
 
 export const DEFAULT_CONFIG: RuntimeConfig = {
@@ -63,16 +76,11 @@ export const DEFAULT_CONFIG: RuntimeConfig = {
     'factory-operator block --reason "<why>" --handover <file>',
     'factory-operator context',
   ],
+  intakePollMs: 60_000,
+  prPollMs: 300_000,
+  v2Only: true,
+  feedPollMs: 1_000,
 };
-
-/**
- * Intake (PROTOCOL §3.1, CORE §5): reads the todos at the base branch and writes the Work orders.
- * It is wired by the intake slice (v2-10). Until a runner is wired, `intakeSync` refuses.
- */
-export interface IntakeRunner {
-  /** Runs one intake pass now; `created` counts the Work orders it opened. */
-  sync(): Promise<{ created: number }>;
-}
 
 /** Everything the runtime receives from outside. It opens nothing itself. */
 export interface RuntimePorts {
@@ -92,6 +100,14 @@ export interface RuntimePorts {
   config: RuntimeConfig;
   /** The export archive of the whole Factory (STORAGE §7.3); the database adapter builds it. */
   exportArchive(): Promise<Uint8Array>;
-  /** The intake runner, once v2-10 wires it. Absent means intake is not built in this server. */
-  intake?: IntakeRunner;
+  /** Intake rows: what each todo file looked like at its last sync (STORAGE §4). */
+  intake: IntakeStore;
+  /** The projects' bare mirrors (PROTOCOL §3.0). Behind a port: the runtime runs no git itself. */
+  git: GitMirror;
+  /** The pull request state reader for delivered Work orders (ROADMAP M4). */
+  prState: PrStatePort;
+  /** The event feed behind `GET /v1/stream` (PROTOCOL §3.1). */
+  feed: EventFeed;
+  /** Backup, export, import and projection rebuild (STORAGE §7). */
+  archive: ArchivePort;
 }

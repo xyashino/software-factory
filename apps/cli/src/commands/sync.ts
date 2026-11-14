@@ -8,8 +8,7 @@ import {
 } from '../context';
 
 /**
- * `factory sync` runs intake now (PROTOCOL §3.1, `/v1/intake/sync`). The server answers with the
- * Work orders it opened; while intake is not wired (v2-10) it refuses and changes nothing.
+ * `factory sync` runs intake now (PROTOCOL §3.1, `/v1/supervisor/intake/sync`).
  */
 export const syncCommand = defineCommand({
   meta: {
