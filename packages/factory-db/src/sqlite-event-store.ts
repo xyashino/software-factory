@@ -21,7 +21,7 @@ import { commands, type EventRecord, events, orders } from './schema';
 import { writeMutex } from './write-mutex';
 
 /** The envelope version this store writes (CORE §11). */
-const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 2;
 
 /** The columns a stored event is read back as. `type` is not needed: the payload carries it. */
 const EVENT_SELECT = {

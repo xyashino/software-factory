@@ -1,85 +1,92 @@
 import type { Database } from 'bun:sqlite';
-import type { JobId, OrderId, CellId } from '@repo/factory-core/ids';
+import { and, asc, eq, inArray, lte } from 'drizzle-orm';
+import type { CellId, JobId, OrderId } from '@repo/factory-core/ids';
 import type { Lease, LeaseStore } from '@repo/factory-core/ports/lease-store';
+import { drizzleOf, type FactoryDatabase } from './db';
+import { type LeaseRecord, leases } from './schema';
 import type { StatementGate } from './sqlite-event-store';
 import type { WriterLock } from './writer-lock';
 
-interface LeaseRow {
-  order_id: string;
-  job_id: string;
-  cell_id: string;
-  epoch: number;
-  expires_at: number;
-}
-
-const leaseOf = (row: LeaseRow): Lease => ({
-  orderId: row.order_id as OrderId,
-  jobId: row.job_id as JobId,
-  cellId: row.cell_id as CellId,
+const leaseOf = (row: LeaseRecord): Lease => ({
+  orderId: row.orderId as OrderId,
+  jobId: row.jobId as JobId,
+  cellId: row.cellId as CellId,
   epoch: row.epoch,
-  expiresAt: row.expires_at,
+  expiresAt: row.expiresAt,
 });
 
+const selectLeases = (orm: FactoryDatabase) => orm.select().from(leases);
+
 /**
- * The `LeaseStore` over the `leases` table (STORAGE §4). `cell_id` holds the Cell id; the
- * `cells` row it references is written at `hello`. Each method is one statement section on the
- * gate, so it runs at once inside a claim transaction and queues behind the mutex otherwise.
+ * The `LeaseStore` over the `leases` table (STORAGE §4). `cell_id` references the `cells` row, which
+ * is written at `hello`. Writes assert the writer lock and run through the statement gate, so they
+ * queue behind the write mutex unless they are already inside a transaction.
  */
 export const sqliteLeaseStore = (
   db: Database,
   writer: WriterLock,
   gate: StatementGate,
 ): LeaseStore => {
-  const rowsOf = (sql: string, params: (string | number)[]): Lease[] =>
-    db
-      .query<LeaseRow, (string | number)[]>(sql)
-      .all(...params)
-      .map(leaseOf);
-
+  const orm = drizzleOf(db);
   return {
     insert: (lease) =>
       gate.run(() => {
         writer.assertHeld();
-        db.run(
-          'INSERT INTO leases (order_id, job_id, cell_id, epoch, expires_at) VALUES (?, ?, ?, ?, ?)',
-          [
-            lease.orderId,
-            lease.jobId,
-            lease.cellId,
-            lease.epoch,
-            lease.expiresAt,
-          ],
-        );
+        orm
+          .insert(leases)
+          .values({
+            orderId: lease.orderId,
+            jobId: lease.jobId,
+            cellId: lease.cellId,
+            epoch: lease.epoch,
+            expiresAt: lease.expiresAt,
+          })
+          .run();
       }),
     extend: (cellId, jobIds: readonly JobId[], expiresAt) =>
       gate.run(() => {
         writer.assertHeld();
-        const statement = db.query(
-          'UPDATE leases SET expires_at = ? WHERE cell_id = ? AND job_id = ?',
-        );
-        for (const jobId of jobIds) {
-          statement.run(expiresAt, cellId, jobId);
-        }
+        if (jobIds.length === 0) return;
+        orm
+          .update(leases)
+          .set({ expiresAt })
+          .where(
+            and(eq(leases.cellId, cellId), inArray(leases.jobId, [...jobIds])),
+          )
+          .run();
       }),
     expired: (now) =>
       gate.run(() =>
-        rowsOf(
-          'SELECT * FROM leases WHERE expires_at <= ? ORDER BY expires_at, order_id',
-          [now],
-        ),
+        selectLeases(orm)
+          .where(lte(leases.expiresAt, now))
+          .orderBy(asc(leases.expiresAt), asc(leases.orderId))
+          .all()
+          .map(leaseOf),
       ),
     list: () =>
-      gate.run(() => rowsOf('SELECT * FROM leases ORDER BY order_id', [])),
+      gate.run(() =>
+        selectLeases(orm).orderBy(asc(leases.orderId)).all().map(leaseOf),
+      ),
     forCell: (cellId) =>
       gate.run(() =>
-        rowsOf('SELECT * FROM leases WHERE cell_id = ? ORDER BY order_id', [
-          cellId,
-        ]),
+        selectLeases(orm)
+          .where(eq(leases.cellId, cellId))
+          .orderBy(asc(leases.orderId))
+          .all()
+          .map(leaseOf),
       ),
     delete: (orderId) =>
       gate.run(() => {
         writer.assertHeld();
-        db.run('DELETE FROM leases WHERE order_id = ?', [orderId]);
+        orm.delete(leases).where(eq(leases.orderId, orderId)).run();
+      }),
+    bootGrace: (now, ttl) =>
+      gate.run(() => {
+        writer.assertHeld();
+        orm
+          .update(leases)
+          .set({ expiresAt: now + ttl })
+          .run();
       }),
   };
 };

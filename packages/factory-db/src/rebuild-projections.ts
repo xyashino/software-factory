@@ -49,7 +49,7 @@ const foldPage = (
   }
 };
 
-const rebuildOn = (db: FactoryDatabase, project: ProjectRow): number => {
+export const rebuildOn = (db: FactoryDatabase, project: ProjectRow): number => {
   db.delete(orders).run();
   const foldings = new Map<OrderId, Folding>();
   let afterGlobalSeq = 0;
