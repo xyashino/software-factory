@@ -1,7 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { Database } from 'bun:sqlite';
-import { asc, eq, gt } from 'drizzle-orm';
-import type { OrderId } from '@repo/factory-core/ids';
+import { and, asc, eq, gt, notLike } from 'drizzle-orm';
+import { type OrderId, type PlanId, isPlanId } from '@repo/factory-core/ids';
 import {
   type OrderEvent,
   type StoredEvent,
@@ -9,15 +9,24 @@ import {
   storedEventSchema,
 } from '@repo/factory-core/order/events';
 import { upcastEvent } from '@repo/factory-core/order/upcast';
+import {
+  type PlanEvent,
+  type StoredPlanEvent,
+  planEventSchema,
+  planStoredEventSchema,
+} from '@repo/factory-core/plan/events';
 import type {
   AppendInput,
   AppendResult,
   EventStore,
+  PlanAppendInput,
+  PlanAppendResult,
   StoreTx,
 } from '@repo/factory-core/ports/event-store';
 import { type FactoryDatabase, drizzleOf } from './db';
 import { upsertOrder } from './orders-table';
-import { commands, type EventRecord, events, orders } from './schema';
+import { upsertPlan } from './plans-table';
+import { commands, type EventRecord, events, orders, plans } from './schema';
 import { writeMutex } from './write-mutex';
 
 /** The envelope version this store writes (CORE §11). */
@@ -68,8 +77,28 @@ export const openDatabase = (file: string): Database => {
   return db;
 };
 
+/** A stored plan row back to the plan envelope. Plan events are written at the current schema only. */
+const storedPlanOf = (row: EventRow): StoredPlanEvent => {
+  const parsed = planStoredEventSchema.safeParse({
+    schemaVersion: row.schemaVersion,
+    seq: row.seq,
+    globalSeq: row.globalSeq,
+    planId: row.orderId,
+    at: row.at,
+    actor: JSON.parse(row.actor) as unknown,
+    commandId: row.commandId,
+    ...(row.epoch === null ? {} : { epoch: row.epoch }),
+    event: JSON.parse(row.payload) as unknown,
+  });
+  if (!parsed.success) {
+    throw new Error(`stored plan event ${row.globalSeq} is unreadable`);
+  }
+  return parsed.data;
+};
+
 /** A stored row back to the current envelope. A row that does not upcast is an error, never skipped. */
-const storedOf = (row: EventRow): StoredEvent => {
+const storedOf = (row: EventRow): StoredEvent | StoredPlanEvent => {
+  if (isPlanId(row.orderId)) return storedPlanOf(row);
   const raw = {
     schemaVersion: row.schemaVersion,
     seq: row.seq,
@@ -97,18 +126,42 @@ const loadRows = (db: FactoryDatabase, orderId: OrderId): StoredEvent[] =>
     .where(eq(events.orderId, orderId))
     .orderBy(asc(events.seq))
     .all()
-    .map(storedOf);
+    .map((row) => storedOf(row) as StoredEvent);
 
-/** Events after a global position, in global order. Shared with the projection rebuild. */
+const loadPlanRows = (db: FactoryDatabase, planId: PlanId): StoredPlanEvent[] =>
+  db
+    .select(EVENT_SELECT)
+    .from(events)
+    .where(eq(events.orderId, planId))
+    .orderBy(asc(events.seq))
+    .all()
+    .map(storedPlanOf);
+
+/** The `order_id` of a plan stream always has the `:plan:` infix; a Work order id never does (CORE §2). */
+const PLAN_STREAM = '%:plan:%';
+
+/**
+ * Events after a global position, in global order, of both stream kinds. Shared with the projection
+ * rebuild, which folds every stream. `orderStreamsOnly` leaves the plan streams out in SQL, so a page
+ * is never shorter than `limit` because a plan event was dropped after the limit.
+ */
 export const feedRows = (
   db: FactoryDatabase,
   afterGlobalSeq: number,
   limit: number,
-): StoredEvent[] =>
+  orderStreamsOnly = false,
+): (StoredEvent | StoredPlanEvent)[] =>
   db
     .select(EVENT_SELECT)
     .from(events)
-    .where(gt(events.globalSeq, afterGlobalSeq))
+    .where(
+      orderStreamsOnly
+        ? and(
+            gt(events.globalSeq, afterGlobalSeq),
+            notLike(events.orderId, PLAN_STREAM),
+          )
+        : gt(events.globalSeq, afterGlobalSeq),
+    )
     .orderBy(asc(events.globalSeq))
     .limit(limit)
     .all()
@@ -202,17 +255,88 @@ const appendOn = (db: FactoryDatabase, input: AppendInput): AppendResult => {
 };
 
 /**
+ * One append to a plan stream inside an open write transaction (CORE §12.3, STORAGE §3). The same
+ * steps as `appendOn`: replay, then the plan's own seq, then the facts, the `plans` row and the command.
+ */
+const appendPlanOn = (
+  db: FactoryDatabase,
+  input: PlanAppendInput,
+): PlanAppendResult => {
+  const replay = storedResponse(db, input.commandId);
+  if (replay) {
+    return {
+      kind: 'replayed',
+      response: JSON.parse(replay.response) as unknown,
+    };
+  }
+  const currentSeq =
+    db
+      .select({ lastSeq: plans.lastSeq })
+      .from(plans)
+      .where(eq(plans.planId, input.planId))
+      .get()?.lastSeq ?? 0;
+  if (currentSeq !== input.expectedSeq) {
+    return { kind: 'conflict', currentSeq };
+  }
+  const lastSeq = input.expectedSeq + input.events.length;
+  if (input.projection.lastSeq !== lastSeq) {
+    throw new Error(
+      `projection lastSeq ${input.projection.lastSeq} must equal the last appended seq ${lastSeq}`,
+    );
+  }
+  const stored = input.events.map((event: PlanEvent, index) => {
+    planEventSchema.parse(event);
+    const seq = input.expectedSeq + index + 1;
+    const inserted = db
+      .insert(events)
+      .values({
+        orderId: input.planId,
+        seq,
+        at: input.at,
+        actor: JSON.stringify(input.actor),
+        commandId: input.commandId,
+        epoch: input.epoch ?? null,
+        schemaVersion: SCHEMA_VERSION,
+        type: event.type,
+        payload: JSON.stringify(event),
+      })
+      .returning({ globalSeq: events.globalSeq })
+      .get();
+    return planStoredEventSchema.parse({
+      schemaVersion: SCHEMA_VERSION,
+      seq,
+      globalSeq: inserted?.globalSeq,
+      planId: input.planId,
+      at: input.at,
+      actor: input.actor,
+      commandId: input.commandId,
+      ...(input.epoch !== undefined ? { epoch: input.epoch } : {}),
+      event,
+    });
+  });
+
+  upsertPlan(db, input.projection);
+  db.insert(commands)
+    .values({
+      commandId: input.commandId,
+      orderId: input.planId,
+      firstSeq: input.expectedSeq + 1,
+      lastSeq,
+      response: JSON.stringify(input.response ?? null),
+      at: input.at,
+    })
+    .run();
+  return { kind: 'appended', events: stored };
+};
+
+/**
  * Runs one `tx.append` in a savepoint, so a failing append leaves the outer transaction usable.
  * Savepoints are raw SQL on the connection; Drizzle runs the statements inside them.
  */
-const appendInSavepoint = (
-  raw: Database,
-  db: FactoryDatabase,
-  input: AppendInput,
-): AppendResult => {
+const appendInSavepoint = <R>(raw: Database, run: () => R): R => {
   raw.exec('SAVEPOINT append');
   try {
-    const result = appendOn(db, input);
+    const result = run();
     raw.exec('RELEASE append');
     return result;
   } catch (error) {
@@ -259,13 +383,19 @@ export const openSqliteEventStore = (db: Database): SqliteEventStore => {
     inWriteTransaction(() => {
       const tx: StoreTx = {
         load: async (orderId) => loadRows(orm, orderId),
-        append: async (input) => appendInSavepoint(db, orm, input),
+        append: async (input) =>
+          appendInSavepoint(db, () => appendOn(orm, input)),
+        loadPlan: async (planId) => loadPlanRows(orm, planId),
+        appendPlan: async (input) =>
+          appendInSavepoint(db, () => appendPlanOn(orm, input)),
       };
       return fn(tx);
     });
 
   return {
     load: (orderId) => writes.run(async () => loadRows(orm, orderId)),
+    loadPlan: (planId) => writes.run(async () => loadPlanRows(orm, planId)),
+    appendPlan: (input) => transaction((tx) => tx.appendPlan(input)),
     response: (commandId) =>
       writes.run(async () => {
         const row = storedResponse(orm, commandId);
@@ -274,7 +404,9 @@ export const openSqliteEventStore = (db: Database): SqliteEventStore => {
           : undefined;
       }),
     feed: (afterGlobalSeq, limit) =>
-      writes.run(async () => feedRows(orm, afterGlobalSeq, limit)),
+      writes.run(
+        async () => feedRows(orm, afterGlobalSeq, limit, true) as StoredEvent[],
+      ),
     append: (input) => transaction((tx) => tx.append(input)),
     transaction,
     exclusive: (section) => inWriteTransaction(async () => section(orm)),

@@ -43,6 +43,13 @@ export type HttpRouteName = MappedRoute | keyof typeof HTTP_EXTRA_ROUTES;
 /** The HTTP route of every mapped socket route, and the extra ones (PROTOCOL §3.1, §3.2). */
 export const HTTP_ROUTES = {
   board: { method: 'GET', path: '/v1/board', auth: 'supervisor' },
+  plans: { method: 'GET', path: '/v1/plans', auth: 'supervisor' },
+  planDetail: {
+    method: 'GET',
+    path: '/v1/plans/:id',
+    auth: 'supervisor',
+    params: { id: 'planId' },
+  },
   orderDetail: {
     method: 'GET',
     path: '/v1/orders/:id',

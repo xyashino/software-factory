@@ -11,6 +11,7 @@ import {
   cellIdSchema,
   type BlobRef,
   type CycleId,
+  planSlugSchema,
 } from '../ids';
 import {
   artifactsSchema,
@@ -44,6 +45,7 @@ const createOrderSchema = z
     dependsOn,
     line: pinnedLineSchema,
     baseBranch: shortText,
+    plan: planSlugSchema.optional(),
   })
   .strict();
 const updateSpecSchema = z

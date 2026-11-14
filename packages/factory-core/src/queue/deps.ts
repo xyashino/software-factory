@@ -1,4 +1,4 @@
-import type { OrderId } from '../ids';
+import type { OrderId, PlanSlug } from '../ids';
 import type { Next } from '../order/next';
 import type { OrderProjection } from '../order/projection';
 import type { BoardStatus } from '../order/status';
@@ -8,11 +8,32 @@ export type DepPolicy = 'delivered' | 'merged';
 
 export type DepState = 'satisfied' | 'waiting' | 'broken';
 
-/** The fields of another Work order a dependency outcome reads. */
-export type DepRow = Pick<OrderProjection, 'orderId' | 'status' | 'prState'>;
+/** The fields of another Work order a dependency outcome reads. `plan` is absent or null for a plain order. */
+export type DepRow = Pick<OrderProjection, 'orderId' | 'status' | 'prState'> & {
+  plan?: PlanSlug | null;
+};
+
+/** The dependent entry: its `depends_on` and, when it is a plan member, its plan (CORE §12.4). */
+export interface DepEntry {
+  dependsOn: readonly OrderId[];
+  plan?: PlanSlug | null;
+}
 
 /** Board status with the dependency overlay (STORAGE §4). Base statuses never carry these. */
 export type OverlayStatus = BoardStatus | 'waiting_deps' | 'deps_broken';
+
+/**
+ * CORE §12.4: an in-plan predecessor is satisfied once it is delivered with its PR not closed (or
+ * merged); a closed PR and a cancelled predecessor break the dependent. Never silently satisfied.
+ */
+const stackedOutcomeOf = (row: DepRow): DepState => {
+  if (row.status === 'cancelled') return 'broken';
+  if (row.status === 'merged') return 'satisfied';
+  if (row.status === 'delivered') {
+    return row.prState === 'closed' ? 'broken' : 'satisfied';
+  }
+  return 'waiting';
+};
 
 const outcomeOf = (row: DepRow, depPolicy: DepPolicy): DepState => {
   if (row.status === 'cancelled') return 'broken';
@@ -26,20 +47,23 @@ const outcomeOf = (row: DepRow, depPolicy: DepPolicy): DepState => {
 
 /**
  * CORE §8 dependency outcome of one Work order. A dependency that names no row in `others` is
- * satisfied (v1 parity). Any broken dependency makes the whole entry broken; else any waiting one
- * makes it waiting. The CORE §8 rule that a reopened dependency does not stop a started dependent
- * is not special-cased here: the outcome reads the rows as given, so the caller decides which rows
- * to pass.
+ * satisfied (v1 parity). A dependency that is a member of the same plan uses the stacked outcome
+ * (CORE §12.4); any other uses `depPolicy`. Any broken dependency makes the whole entry broken; else
+ * any waiting one makes it waiting. The CORE §8 rule that a reopened dependency does not stop a
+ * started dependent is not special-cased here: the outcome reads the rows as given, so the caller
+ * decides which rows to pass.
  */
 export const resolveDeps = (
-  entry: { dependsOn: readonly OrderId[] },
+  entry: DepEntry,
   others: readonly DepRow[],
   depPolicy: DepPolicy,
 ): DepState => {
   const byId = new Map(others.map((row) => [row.orderId, row]));
   const outcomes = entry.dependsOn.map((orderId) => {
     const row = byId.get(orderId);
-    return row ? outcomeOf(row, depPolicy) : 'satisfied';
+    if (!row) return 'satisfied';
+    if (entry.plan && row.plan === entry.plan) return stackedOutcomeOf(row);
+    return outcomeOf(row, depPolicy);
   });
   if (outcomes.includes('broken')) return 'broken';
   if (outcomes.includes('waiting')) return 'waiting';

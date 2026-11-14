@@ -1,6 +1,7 @@
 import { asc } from 'drizzle-orm';
 import type {
   OrderId,
+  PlanSlug,
   ProjectId,
   StationId,
   TodoId,
@@ -29,6 +30,8 @@ export const orderRowOf = (projection: OrderProjection): OrderRow => ({
   line: projection.line,
   priority: projection.priority,
   dependsOn: JSON.stringify(projection.dependsOn),
+  plan: projection.plan,
+  baseBranch: projection.baseBranch,
   lastSeq: projection.lastSeq,
   status: projection.status,
   holder: projection.holder,
@@ -68,6 +71,8 @@ export const projectionOfRow = (row: OrderRow): OrderProjection => {
     line: row.line,
     priority: row.priority as Priority,
     dependsOn: JSON.parse(row.dependsOn) as OrderId[],
+    plan: row.plan as PlanSlug | null,
+    baseBranch: row.baseBranch,
     lastSeq: row.lastSeq,
     status: row.status as BoardStatus,
     holder: row.holder as Holder['kind'],

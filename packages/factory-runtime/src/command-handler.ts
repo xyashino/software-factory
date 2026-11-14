@@ -21,6 +21,11 @@ import { selectClaimable } from '@repo/factory-core/queue/select';
 import { refusal, RuntimeError, unavailable } from './errors';
 import { buildJob } from './job-builder';
 import { orderLocks } from './order-lock';
+import {
+  createPlanCommands,
+  type PlanCommandRequest,
+  type PlanCommandResult,
+} from './plan-commands';
 import { readQueue, cellView } from './queue';
 import type { RuntimePorts } from './ports';
 import {
@@ -82,6 +87,8 @@ export interface CommandHandler {
    * asks to skip refusals; otherwise a refusal throws RuntimeError.
    */
   submit(request: CommandRequest): Promise<CommandResult | undefined>;
+  /** Runs a command on an Order Plan stream (CORE §12.3). A refusal throws RuntimeError. */
+  submitPlan(request: PlanCommandRequest): Promise<PlanCommandResult>;
 }
 
 /** The state a decided command leaves; a decided command always leaves one. */
@@ -104,6 +111,7 @@ export const createCommandHandler = (
   const locks = orderLocks();
   const { events, blobs, leases, signals, ids, clock, writer, config } = ports;
   const jobPorts = { blobs, definitions: ports.definitions, config };
+  const planCommands = createPlanCommands(ports, onCommit);
 
   const projectFor = async (projectId: string) => {
     const project = (await ports.projects.list()).find(
@@ -223,7 +231,13 @@ export const createCommandHandler = (
       const spec = nextJob(before);
       if (spec.kind !== 'job')
         throw new Error('a claim decided on a state with no job');
-      next = await buildJob(jobPorts, stateOf(working), project, spec.job);
+      next = await buildJob(
+        jobPorts,
+        stateOf(working),
+        project,
+        spec.job,
+        await ports.projections.orders(),
+      );
       lease = leaseFor(
         request.orderId,
         stateOf(working),
@@ -265,6 +279,7 @@ export const createCommandHandler = (
               stateOf(claimed),
               project,
               spec.job,
+              await ports.projections.orders(),
             );
             working = claimed;
             lease = leaseFor(request.orderId, stateOf(claimed), cellId);
@@ -377,6 +392,11 @@ export const createCommandHandler = (
           const outcome = await commit(prepared);
           if (outcome.kind === 'appended') {
             onCommit();
+            // CORE §12.7: a plan member's state change is reported to its plan after the Work order's commit.
+            await planCommands.reportMember(
+              prepared.projection,
+              prepared.events.map((event) => event.type),
+            );
             return {
               dryRun: false,
               events: prepared.events,
@@ -395,5 +415,5 @@ export const createCommandHandler = (
     });
   };
 
-  return { submit };
+  return { submit, submitPlan: planCommands.submit };
 };

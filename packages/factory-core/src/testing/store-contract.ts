@@ -3,18 +3,25 @@
 // failing check throws a plain Error.
 import {
   type OrderId,
+  type PlanId,
+  type PlanSlug,
   type ProjectId,
   type TodoId,
   orderIdOf,
+  planIdOf,
+  planSlugSchema,
   projectIdSchema,
   todoIdSchema,
 } from '../ids';
 import type { Actor, OrderEvent, StoredEvent } from '../order/events';
 import type { OrderProjection } from '../order/projection';
+import type { PlanEvent } from '../plan/events';
+import type { PlanProjection } from '../plan/projection';
 import type {
   AppendInput,
   AppendResult,
   EventStore,
+  PlanAppendInput,
 } from '../ports/event-store';
 import { created, cycleStarted, jobClaimed } from './event-builders';
 import { assertSame } from './harness';
@@ -32,6 +39,8 @@ export interface StoreUnderTest {
   seedProject(projectId: ProjectId): Promise<void>;
   /** Every `orders` row, sorted by order id. */
   orders(): Promise<OrderProjection[]>;
+  /** Every `plans` row, sorted by plan id. */
+  plans(): Promise<PlanProjection[]>;
   close(): Promise<void>;
 }
 
@@ -56,6 +65,8 @@ const rowOf = (
   line: 'factory-default',
   priority: 'medium',
   dependsOn: [],
+  plan: null,
+  baseBranch: 'main',
   lastSeq,
   status: 'queued',
   holder: 'queue',
@@ -84,6 +95,59 @@ const freshCommand = (): string => {
 
 const createdOf = (name: string): OrderEvent =>
   created({ todoId: todoOf(name) });
+
+const PLAN_SLUG: PlanSlug = planSlugSchema.parse('xyz');
+const PLAN_ID: PlanId = planIdOf(PROJECT, PLAN_SLUG);
+const planCreated = (): PlanEvent => ({
+  type: 'plan_created',
+  projectId: PROJECT,
+  slug: PLAN_SLUG,
+  branch: 'feat/xyz',
+  baseBranch: 'main',
+});
+
+/** A plan row as the core projection would write it after `lastSeq` events (CORE §12.3). */
+const planRowOf = (lastSeq: number): PlanProjection => ({
+  planId: PLAN_ID,
+  projectId: PROJECT,
+  slug: PLAN_SLUG,
+  branch: 'feat/xyz',
+  baseBranch: 'main',
+  lastSeq,
+  phase: 'branching',
+  holder: 'queue',
+  nextKind: 'job',
+  jobKind: 'plan_branch',
+  members: [],
+  branchCommit: null,
+  prUrl: null,
+  prState: null,
+  lastCellId: null,
+  avoidCells: [],
+  andonReason: null,
+  createdAt: AT,
+  updatedAt: lastSeq * AT,
+});
+
+/** An append to plan `xyz` expecting `expectedSeq` already folded. */
+const planAppendOf = (
+  expectedSeq: number,
+  events: PlanEvent[],
+  over: Partial<PlanAppendInput> = {},
+): PlanAppendInput => {
+  const lastSeq = expectedSeq + events.length;
+  return {
+    planId: PLAN_ID,
+    commandId: freshCommand(),
+    expectedSeq,
+    actor: FACTORY,
+    at: AT * lastSeq,
+    events,
+    projection: planRowOf(lastSeq),
+    response: { lastSeq },
+    ...over,
+  };
+};
 
 /** An append of `events` to order `name`, expecting `expectedSeq` already folded. */
 const appendOf = (
@@ -561,6 +625,82 @@ export const defineEventStoreContract = (
             seqsOf(await store.load(orderOf('todo-a'))),
             [1],
             'the command wrote once',
+          );
+        }),
+    );
+
+    runner.it(
+      'appends a plan stream from sequence 1 and loads it back in order',
+      () =>
+        withStore(create, async ({ store, plans }) => {
+          const result = await store.appendPlan(
+            planAppendOf(0, [planCreated()]),
+          );
+          if (result.kind !== 'appended')
+            throw new Error(`expected appended, got ${result.kind}`);
+          assertSame(
+            result.events.map((stored) => stored.seq),
+            [1],
+            'the plan starts at 1',
+          );
+          assertSame(
+            (await store.loadPlan(PLAN_ID)).map((stored) => stored.event.type),
+            ['plan_created'],
+            'loadPlan returns the plan events',
+          );
+          assertSame(
+            (await plans()).map((row) => row.lastSeq),
+            [1],
+            'the plans row is written in the same append',
+          );
+        }),
+    );
+
+    runner.it('replays a plan command and refuses a stale expectedSeq', () =>
+      withStore(create, async ({ store }) => {
+        const first = planAppendOf(0, [planCreated()], {
+          commandId: 'plan-create',
+        });
+        assertSame(
+          (await store.appendPlan(first)).kind,
+          'appended',
+          'first append',
+        );
+        assertSame(
+          (await store.appendPlan({ ...first, expectedSeq: 0 })).kind,
+          'replayed',
+          'the same command id replays',
+        );
+        assertSame(
+          await store.appendPlan(
+            planAppendOf(0, [{ type: 'plan_cancelled', reason: 'x' }]),
+          ),
+          { kind: 'conflict', currentSeq: 1 },
+          'a stale expectedSeq conflicts',
+        );
+        assertSame(
+          (await store.loadPlan(PLAN_ID)).length,
+          1,
+          'the replay and the conflict wrote nothing',
+        );
+      }),
+    );
+
+    runner.it(
+      'keeps plan streams out of Work order loads and the order feed',
+      () =>
+        withStore(create, async ({ store }) => {
+          await store.append(appendOf('todo-a', 0, [createdOf('todo-a')]));
+          await store.appendPlan(planAppendOf(0, [planCreated()]));
+          assertSame(
+            seqsOf(await store.load(orderOf('todo-a'))),
+            [1],
+            'the Work order stream holds its own events',
+          );
+          assertSame(
+            (await store.feed(0, 10)).map((stored) => stored.orderId),
+            [orderOf('todo-a')],
+            'the order feed skips plan streams',
           );
         }),
     );

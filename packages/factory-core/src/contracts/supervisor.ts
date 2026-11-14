@@ -4,6 +4,7 @@ import {
   cellIdSchema,
   commitShaSchema,
   orderIdSchema,
+  planIdSchema,
   projectIdSchema,
   stationIdSchema,
   todoIdSchema,
@@ -37,11 +38,62 @@ export const boardRowSchema = z
     prUrl: z.string().nullable(),
     prState: z.string().nullable(),
     updatedAt: z.number().int(),
+    /** The Order Plan this Work order belongs to (CORE §12.1), or null. */
+    plan: z.string().nullable(),
+    /** The base branch the Work order was created on (CORE §12.5). */
+    baseBranch: z.string(),
+    dependsOn: z.array(orderIdSchema),
   })
   .passthrough();
 
 export const boardResponseSchema = z
   .object({ orders: z.array(boardRowSchema) })
+  .strict();
+
+/** One Order Plan's row on the board (CORE §12.3, STORAGE §4). */
+export const planRowSchema = z
+  .object({
+    planId: planIdSchema,
+    projectId: z.string(),
+    slug: z.string(),
+    branch: z.string(),
+    baseBranch: z.string(),
+    phase: z.string(),
+    holder: z.string(),
+    nextKind: z.string(),
+    jobKind: z.string().nullable(),
+    memberCount: z.number().int(),
+    prUrl: z.string().nullable(),
+    prState: z.string().nullable(),
+    andonReason: z.string().nullable(),
+    updatedAt: z.number().int(),
+  })
+  .strict();
+
+/** One member of a plan, in chain order, with its board status and what blocks it (PROTOCOL §10). */
+export const planMemberSchema = z
+  .object({
+    orderId: orderIdSchema,
+    todoId: z.string(),
+    after: orderIdSchema.nullable(),
+    state: z.string(),
+    status: z.string().nullable(),
+    baseBranch: z.string().nullable(),
+    prUrl: z.string().nullable(),
+    blocker: z.string().nullable(),
+  })
+  .strict();
+
+export const planListResponseSchema = z
+  .object({ plans: z.array(planRowSchema) })
+  .strict();
+
+export const planDetailRequestSchema = z
+  .object({ planId: planIdSchema })
+  .strict();
+
+export const planDetailResponseSchema = z
+  .object({ plan: planRowSchema, members: z.array(planMemberSchema) })
   .strict();
 
 export const orderDetailRequestSchema = z

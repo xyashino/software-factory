@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { OrderId } from '../../ids';
+import { planSlugSchema, type OrderId, type PlanSlug } from '../../ids';
 import type { BoardStatus } from '../../order/status';
 import { type DepRow, boardStatusWithDeps, resolveDeps } from '../deps';
 import { orderOf } from './builders';
@@ -127,5 +127,51 @@ describe('boardStatusWithDeps: the dependency overlay', () => {
     expect(boardStatusWithDeps('queued', 'await_supervisor', 'broken')).toBe(
       'queued',
     );
+  });
+});
+
+describe('resolveDeps: stacked outcome of an in-plan predecessor (CORE §12.4)', () => {
+  const XYZ: PlanSlug = planSlugSchema.parse('xyz');
+  const stacked = (
+    depRow: DepRow,
+    depPlan: PlanSlug | null = XYZ,
+    entryPlan: PlanSlug | null = XYZ,
+  ) =>
+    resolveDeps(
+      { dependsOn: [DEP], plan: entryPlan },
+      [{ ...depRow, plan: depPlan }],
+      'merged',
+    );
+
+  it('is satisfied by a delivered predecessor whose PR is open, even under the merged policy', () => {
+    expect(stacked(row('delivered', 'open'))).toBe('satisfied');
+  });
+
+  it('is broken by a delivered predecessor whose PR was closed unmerged', () => {
+    expect(stacked(row('delivered', 'closed'))).toBe('broken');
+  });
+
+  it('is broken by a cancelled predecessor', () => {
+    expect(stacked(row('cancelled'))).toBe('broken');
+  });
+
+  it('is satisfied by a merged predecessor', () => {
+    expect(stacked(row('merged', 'merged'))).toBe('satisfied');
+  });
+
+  it('is waiting while the predecessor is still queued or running', () => {
+    expect(stacked(row('running'))).toBe('waiting');
+    expect(stacked(row('queued'))).toBe('waiting');
+  });
+
+  it('keeps depPolicy for a dependency outside the plan', () => {
+    expect(stacked(row('delivered', 'open'), null)).toBe('waiting');
+    expect(stacked(row('delivered', 'open'), null, null)).toBe('waiting');
+  });
+
+  it('keeps depPolicy when the dependency is in another plan', () => {
+    const other = planSlugSchema.parse('abc');
+    // Under the merged policy an open delivered PR waits; the stacked rule would satisfy it.
+    expect(stacked(row('delivered', 'open'), other)).toBe('waiting');
   });
 });
