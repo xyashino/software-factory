@@ -42,6 +42,23 @@ describe('pickTodo', () => {
     expect(scan.pick?.todoPath).toBe('todos/next.md');
   });
 
+  it('never picks a todo marked factory: v2, even when it is the only ready one', () => {
+    const root = scratchRoot({
+      'a-v2.md': todoText('todo', 'priority: high\nfactory: v2\n'),
+      'b-v1.md': todoText('todo', 'priority: low\n'),
+    });
+    const scan = pickTodo(root, [], workflows);
+    expect(scan.pick?.todoPath).toBe('todos/b-v1.md');
+    expect(scan.skipped).toEqual([]);
+    const only = scratchRoot({ 'a-v2.md': todoText('todo', 'factory: v2\n') });
+    expect(pickTodo(only, [], workflows).pick).toBeUndefined();
+  });
+
+  it('still picks a todo with another factory value', () => {
+    const root = scratchRoot({ 'a.md': todoText('todo', 'factory: v1\n') });
+    expect(pickTodo(root, [], workflows).pick?.todoPath).toBe('todos/a.md');
+  });
+
   it('waits for dependencies that are not delivered', () => {
     const root = scratchRoot({
       'first.md': todoText('todo'),

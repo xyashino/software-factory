@@ -328,6 +328,12 @@ whole number of milliseconds. Unset, the defaults above apply; production sets n
 distributed suite (`pnpm --filter @repo/factory-cell test:distributed`) runs with short timings. A
 self-fence that is not below the TTL is refused at start (`apps/server/src/runtime-config.ts`).
 
+**Cut-over flag.** `FACTORY_V2_ONLY` (`1` or `0`, `RuntimeConfig.v2Only`) is a Factory setting, not a
+timing knob. Unset means `1`: intake turns only todos with `factory: v2` in their frontmatter into Work
+orders and skips the rest silently, because v1 owns them (ROADMAP M9; v1's `pick-todo.ts` skips the
+same todos). `0` makes v2 take every todo, and is for after the trial only, once v1 is frozen. Any other
+value is refused at start. Trial runbook: [TRIAL.md](TRIAL.md).
+
 ### 5.2 Claim
 
 One SQLite transaction (`BEGIN IMMEDIATE`, STORAGE §3):
