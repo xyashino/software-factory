@@ -59,7 +59,9 @@ const envArgs = (env: Readonly<Record<string, string>>): string[] =>
  * Runs the Operator in a Herdr pane: one workspace per task (as v1 did), a tab for the Operator in it,
  * the agent, the typed text, the read and the close.
  */
-export const createHerdrPane = (options: { exec?: HerdrExec } = {}): PaneDriver => {
+export const createHerdrPane = (
+  options: { exec?: HerdrExec } = {},
+): PaneDriver => {
   const exec = options.exec ?? execHerdr;
   const ok = async (args: readonly string[]): Promise<HerdrOutcome> => {
     const outcome = await exec(args);

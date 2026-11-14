@@ -50,7 +50,14 @@ describe('herdr pane driver', () => {
       '--no-focus',
     ]);
     expect(calls[1]).toEqual(
-      expect.arrayContaining(['tab', 'create', '--workspace', 'w1', '--cwd', '/work']),
+      expect.arrayContaining([
+        'tab',
+        'create',
+        '--workspace',
+        'w1',
+        '--cwd',
+        '/work',
+      ]),
     );
     expect(calls[1]).toContain('FACTORY_OPERATOR_SOCKET=/s.sock');
     expect(calls[2]).toEqual([
