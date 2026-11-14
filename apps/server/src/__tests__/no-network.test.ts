@@ -85,4 +85,38 @@ describe('factory-server network surface', () => {
     expect(held.size).toBeGreaterThan(0);
     expect([...held].filter((inode) => listening.has(inode))).toEqual([]);
   });
+
+  it('opens a TCP listener on the bind address only when remote mode is on', async () => {
+    dataDir = mkdtempSync(join(tmpdir(), 'factory-network-remote-'));
+    seedProject(dataDir, {
+      projectId: 'software-factory',
+      repoUrl: 'https://example.test/software-factory.git',
+    });
+    const child = Bun.spawn(['bun', MAIN], {
+      env: {
+        ...process.env,
+        FACTORY_DATA_DIR: dataDir,
+        FACTORY_REMOTE: '1',
+        FACTORY_BIND: '127.0.0.1:0',
+      },
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+    children.push(child);
+    const socketPath = join(dataDir, 'factory.sock');
+    const tcpHeld = (): number => {
+      const held = socketInodesOf(child.pid);
+      const listening = listeningTcpInodes();
+      return [...held].filter((inode) => listening.has(inode)).length;
+    };
+    for (
+      let waited = 0;
+      waited < 10_000 && !(existsSync(socketPath) && tcpHeld() > 0);
+      waited += 50
+    ) {
+      await Bun.sleep(50);
+    }
+
+    expect(tcpHeld()).toBe(1);
+  });
 });

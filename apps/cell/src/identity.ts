@@ -68,6 +68,24 @@ export const deleteIdentity = (dataDir: string): void => {
 };
 
 /**
+ * The identity a remote Cell runs as (PROTOCOL §1). A stored credential is reused, so the Cell keeps its
+ * id and warm worktrees across restarts. Without one, `enroll` joins the Factory, which names the Cell,
+ * and the answer is stored at once. A Cell that was rejected with 401 is enrolled again the same way.
+ */
+export const ensureCredential = async (
+  dataDir: string,
+  enroll: () => Promise<{ cellId: CellId; credential: string }>,
+): Promise<{ cellId: CellId; credential: string }> => {
+  const stored = readIdentity(dataDir);
+  if (stored?.credential !== undefined) {
+    return { cellId: stored.cellId, credential: stored.credential };
+  }
+  const joined = await enroll();
+  writeIdentity(dataDir, joined);
+  return joined;
+};
+
+/**
  * The stored identity, or a new one made by `newCellId` and stored at once. Calling it again returns the
  * same identity until the file is deleted.
  */

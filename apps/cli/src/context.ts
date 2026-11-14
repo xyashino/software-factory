@@ -1,6 +1,7 @@
 import type { FactoryClient } from '@repo/factory-core/contracts/client';
 import { WireFailure } from '@repo/factory-core/contracts/errors';
 import { newCommandId } from './client/command-id';
+import { remoteFactoryClient } from './client/remote';
 import { factoryClientFor } from './client/transport';
 import {
   ConfigError,
@@ -65,6 +66,28 @@ export interface Context {
   now(): number;
 }
 
+/**
+ * The client of the settings in force: the socket in local mode, HTTP in remote mode. Remote mode
+ * needs its token; it never reads or writes the local data directory.
+ */
+const clientFor = (settings: Settings): FactoryClient => {
+  if (settings.remoteUrl === undefined) {
+    return factoryClientFor({
+      dataDir: settings.dataDir,
+      serverBin: settings.serverBin,
+    });
+  }
+  if (settings.token === undefined) {
+    throw new ConfigError(
+      'FACTORY_TOKEN is needed when FACTORY_URL (or remoteUrl) selects a remote server',
+    );
+  }
+  return remoteFactoryClient({
+    baseUrl: settings.remoteUrl,
+    token: settings.token,
+  });
+};
+
 /** Builds the context of one invocation: config, settings, transport and colours. */
 export const createContext = (
   flags: GlobalFlags,
@@ -77,10 +100,7 @@ export const createContext = (
     file,
     defaultServerBin: DEFAULT_SERVER_BIN,
   });
-  const client = factoryClientFor({
-    dataDir: settings.dataDir,
-    serverBin: settings.serverBin,
-  });
+  const client = clientFor(settings);
   return {
     settings,
     json: flags.json === true,

@@ -29,6 +29,42 @@ export const openForAdmin = (dataDir: string): OpenedRuntime =>
   });
 
 /**
+ * `factory-server admin token create <name>` (PROTOCOL §1): creates a supervisor token through the
+ * runtime, the only way one is created. The plain token is printed once, on stdout, with its name;
+ * only its hash is stored. No network route creates one.
+ */
+const runTokenCommand = async (
+  args: readonly string[],
+  dataDir: string,
+): Promise<number> => {
+  const [verb, name] = args;
+  if (verb !== 'create' || !name || name.length > 128) {
+    console.error(adminUsage);
+    return 2;
+  }
+  let opened: OpenedRuntime;
+  try {
+    opened = openForAdmin(dataDir);
+  } catch (error) {
+    if (error instanceof WriterHeldError) {
+      console.error(
+        `factory-server admin: ${error.lockFile} is held by a running factory-server; stop it to create a token`,
+      );
+      return 1;
+    }
+    throw error;
+  }
+  try {
+    console.log(
+      JSON.stringify(await opened.runtime.remote.createSupervisorToken(name)),
+    );
+    return 0;
+  } finally {
+    opened.close();
+  }
+};
+
+/**
  * `factory-server admin <backup|export|import|rebuild-projections> [file]`: one shot against a data
  * directory that no server runs on. The writer lock decides: a running server makes this fail with
  * a pointer to the socket route (`factory admin`), which runs the same operation inside that server.
@@ -39,6 +75,7 @@ export const runAdminCommand = async (
   dataDir: string,
 ): Promise<number> => {
   const [name, file] = args;
+  if (name === 'token') return runTokenCommand(args.slice(1), dataDir);
   if (!isOperation(name) || (name !== 'rebuild-projections' && !file)) {
     console.error(adminUsage);
     return 2;

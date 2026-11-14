@@ -13,6 +13,7 @@ import type { PrStatePort } from '@repo/factory-core/ports/pr-state';
 import type { ProjectionReader } from '@repo/factory-core/ports/projection-reader';
 import type { ProjectStore } from '@repo/factory-core/ports/projects';
 import type { SignalStore } from '@repo/factory-core/ports/signals';
+import type { SupervisorTokenStore } from '@repo/factory-core/ports/supervisor-tokens';
 import type { RuntimeIds } from './ids';
 
 /**
@@ -91,6 +92,8 @@ export interface RuntimePorts {
   leases: LeaseStore;
   cells: CellStore;
   joinTokens: JoinTokenStore;
+  /** Supervisor tokens by hash (PROTOCOL §1): the remote Supervisor credential. */
+  supervisorTokens: SupervisorTokenStore;
   signals: SignalStore;
   clock: Clock;
   ids: RuntimeIds;

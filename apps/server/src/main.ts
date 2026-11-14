@@ -6,6 +6,8 @@ import {
 } from '@repo/factory-runtime/open-runtime';
 import { openForAdmin, runAdminCommand } from './admin-command';
 import { runOnce } from './once';
+import { startHttpListener, type HttpListener } from './http/listener';
+import { remoteConfigFrom, type RemoteConfig } from './http/config';
 import { startSocketListener, type SocketListener } from './socket/listener';
 import { usage } from './usage';
 
@@ -74,16 +76,26 @@ const main = async (): Promise<void> => {
     process.exitCode = await runAdminCommand(positional.slice(1), dataDir);
     return;
   }
+  let remote: RemoteConfig;
+  try {
+    remote = remoteConfigFrom(process.env);
+  } catch (error) {
+    console.error(`factory-server: ${(error as Error).message}`);
+    process.exitCode = 2;
+    return;
+  }
   const state: {
     stopping: boolean;
     opened?: OpenedRuntime;
     listener?: SocketListener;
+    http?: HttpListener;
   } = { stopping: false };
 
   const shutdown = async (signal: string): Promise<void> => {
     if (state.stopping) return;
     state.stopping = true;
     console.log(`factory-server: ${signal}, shutting down`);
+    await state.http?.stop();
     await state.listener?.stop();
     state.opened?.close();
     process.exit(0);
@@ -113,6 +125,14 @@ const main = async (): Promise<void> => {
   });
   state.listener = listener;
   console.log(`factory-server: listening on ${listener.socketPath}`);
+  if (remote.enabled) {
+    state.http = startHttpListener({
+      runtime: opened.runtime,
+      hostname: remote.hostname,
+      port: remote.port,
+    });
+    console.log(`factory-server: remote listening on ${state.http.url}`);
+  }
 };
 
 if (import.meta.main) {

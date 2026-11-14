@@ -107,6 +107,11 @@ export const submitCommandRequestSchema = z
     epoch: z.number().int().min(1),
     command: orderCommandSchema,
     dryRun: z.boolean().optional(),
+    /**
+     * The job the command is for. The remote route carries it in the path (PROTOCOL §3.2), so a remote
+     * client needs it here; the socket and the runtime ignore it, since the order and epoch fence the command.
+     */
+    jobId: jobIdSchema.optional(),
   })
   .strict();
 
@@ -137,6 +142,27 @@ export const blobGetResponseSchema = z
   .strict();
 
 export const blobPutResponseSchema = z.object({ ref: blobRefSchema }).strict();
+
+/**
+ * `POST /v1/cell/join` (PROTOCOL §3.2): the join token enrolls a Cell and gets it a credential. The
+ * credential is returned once; the runtime keeps its hash. Remote only: the socket has no join.
+ */
+export const joinRequestSchema = z
+  .object({
+    joinToken: z.string().min(16).max(256),
+    name: z.string().min(1).max(128),
+  })
+  .strict();
+
+export const joinResponseSchema = z
+  .object({
+    cellId: cellIdSchema,
+    credential: z.string().min(32).max(256),
+  })
+  .strict();
+
+export type JoinRequest = z.infer<typeof joinRequestSchema>;
+export type JoinResponse = z.infer<typeof joinResponseSchema>;
 
 export type CommandResult = z.infer<typeof commandResultSchema>;
 export type Hello = z.infer<typeof helloRequestSchema>;

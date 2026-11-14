@@ -33,6 +33,8 @@ const cellConfigSchema = z
     cell_data_dir: z.string().min(1).optional(),
     /** Worktrees kept on disk before the least recently used are evicted. */
     worktree_limit: z.number().int().min(1).max(256).default(8),
+    /** Remote mode (PROTOCOL §2): the Factory's HTTP address. Unset means the local socket. */
+    factory_url: z.string().url().optional(),
   })
   .strict();
 
@@ -44,6 +46,7 @@ export interface CellConfig {
   factoryDataDir?: string;
   cellDataDir?: string;
   worktreeLimit: number;
+  factoryUrl?: string;
 }
 
 /** Parses the TOML text of a config file. Unknown keys and wrong types are refused, with the path named. */
@@ -64,6 +67,7 @@ export const parseConfig = (text: string): CellConfig => {
     factoryDataDir: data.factory_data_dir,
     cellDataDir: data.cell_data_dir,
     worktreeLimit: data.worktree_limit,
+    ...(data.factory_url !== undefined ? { factoryUrl: data.factory_url } : {}),
   };
 };
 

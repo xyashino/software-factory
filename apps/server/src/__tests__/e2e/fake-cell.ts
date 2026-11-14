@@ -57,6 +57,7 @@ export const createFakeCell = (
     client.call('submitCommand', {
       cellId,
       orderId: job.orderId,
+      jobId: job.jobId,
       commandId: `${job.jobId}:${step}`,
       epoch: job.epoch,
       command,

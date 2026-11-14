@@ -64,4 +64,17 @@ export const sqliteJoinTokenStore = (
       );
       return result.changes > 0;
     }),
+  findActive: (tokenHash, at) =>
+    gate.run(() => {
+      const row = db
+        .query<{ join_token_id: string; token_hash: string }, [string, number]>(
+          `SELECT join_token_id, token_hash FROM join_tokens
+           WHERE token_hash = ? AND revoked_at IS NULL
+             AND (expires_at IS NULL OR expires_at > ?)`,
+        )
+        .get(tokenHash, at);
+      return row
+        ? { tokenHash: row.token_hash, joinTokenId: row.join_token_id }
+        : undefined;
+    }),
 });

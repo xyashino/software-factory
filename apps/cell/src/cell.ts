@@ -42,6 +42,11 @@ export interface CellOptions {
   onError?: (error: unknown, context: string) => void;
   /** The GitHub port for a worktree directory. Defaults to the `gh` CLI; tests inject a fake. */
   githubFor?: (cwd: string) => GithubPort;
+  /**
+   * The Factory refused this Cell's credential (401). The Cell stops its own jobs at once (`stop`), then
+   * the caller joins again as a new Cell (PROTOCOL §1). Called at most once.
+   */
+  onUnauthorized?: () => void;
 }
 
 export interface RunningCell {
@@ -88,6 +93,14 @@ export const startCell = async (options: CellOptions): Promise<RunningCell> => {
 
   const registry = createJobRegistry();
   const stations = createRegistry();
+  let rejected = false;
+  // A refused credential ends this Cell's work at once; the caller then joins again as a new Cell.
+  const unauthorized = (): void => {
+    if (rejected) return;
+    rejected = true;
+    stop();
+    options.onUnauthorized?.();
+  };
   const heartbeat = createHeartbeat({
     client,
     cellId,
@@ -99,6 +112,7 @@ export const startCell = async (options: CellOptions): Promise<RunningCell> => {
         new Error(`no heartbeat since ${lastOkAt}; every job is stopped`),
         'self-fence',
       ),
+    onUnauthorized: unauthorized,
   });
 
   const jobContext: JobContext = {
@@ -140,6 +154,7 @@ export const startCell = async (options: CellOptions): Promise<RunningCell> => {
       sleep,
       runJob: (job, signal) => runJob(jobContext, job, signal),
       onError: options.onError,
+      onUnauthorized: unauthorized,
     }),
   );
 
