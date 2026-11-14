@@ -35,6 +35,11 @@ const cellConfigSchema = z
     worktree_limit: z.number().int().min(1).max(256).default(8),
     /** Remote mode (PROTOCOL §2): the Factory's HTTP address. Unset means the local socket. */
     factory_url: z.string().url().optional(),
+    /**
+     * Runs every Operator station headless (the runner's print mode, no Herdr pane). Off by default:
+     * Lines run their Operators in panes. Tests turn it on to run real Cell processes without Herdr.
+     */
+    headless_operators: z.boolean().default(false),
   })
   .strict();
 
@@ -47,6 +52,7 @@ export interface CellConfig {
   cellDataDir?: string;
   worktreeLimit: number;
   factoryUrl?: string;
+  headlessOperators: boolean;
 }
 
 /** Parses the TOML text of a config file. Unknown keys and wrong types are refused, with the path named. */
@@ -67,6 +73,7 @@ export const parseConfig = (text: string): CellConfig => {
     factoryDataDir: data.factory_data_dir,
     cellDataDir: data.cell_data_dir,
     worktreeLimit: data.worktree_limit,
+    headlessOperators: data.headless_operators,
     ...(data.factory_url !== undefined ? { factoryUrl: data.factory_url } : {}),
   };
 };

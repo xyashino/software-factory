@@ -17,8 +17,12 @@ export interface SlotOptions {
   /** Pause after an empty or failed claim, and while fenced. */
   idlePauseMs: number;
   sleep: (ms: number) => Promise<void>;
-  /** Runs one claimed job to its end. The slot is free again when it returns or throws. */
-  runJob: (job: Job, signal: AbortSignal) => Promise<void>;
+  /**
+   * Runs one claimed job to its end. It resolves with the continuation the Factory handed back, the job
+   * of the same Work order this Cell already holds (PROTOCOL §4), or null. The slot is free again when it
+   * returns or throws.
+   */
+  runJob: (job: Job, signal: AbortSignal) => Promise<Job | null>;
   onError?: (error: unknown, context: string) => void;
   /** The Factory refused the credential (401): this slot stops, and the Cell joins again. */
   onUnauthorized?: () => void;
@@ -59,13 +63,55 @@ export const runSlot = async (options: SlotOptions): Promise<void> => {
       continue;
     }
 
-    const handle = options.registry.start(job.jobId);
-    try {
-      await options.runJob(job, handle.signal);
-    } catch (error) {
-      options.onError?.(error, `job ${job.jobId}`);
-    } finally {
-      options.registry.finish(job.jobId);
+    // A continuation runs in this slot at once: the Factory already holds its lease for this Cell.
+    let current: Job | null = job;
+    while (current) {
+      const next = await runClaimed(options, current);
+      if (options.isStopped() || options.isFenced()) {
+        if (next !== null) await releaseUnstarted(options, next);
+        break;
+      }
+      current = next;
     }
+  }
+};
+
+/**
+ * A continuation this Cell will not run (it is stopping) is released at once, so the Work order goes back
+ * to the queue for the next Cell (PROTOCOL §9: no Cycle started yet, `ReleaseJob`). A fenced Cell sends
+ * nothing (PROTOCOL §5.4): its lease lapses and the reaper takes the job back.
+ */
+const releaseUnstarted = async (
+  options: SlotOptions,
+  job: Job,
+): Promise<void> => {
+  if (options.isFenced()) return;
+  try {
+    await options.client.call('submitCommand', {
+      cellId: options.cellId,
+      jobId: job.jobId,
+      orderId: job.orderId,
+      commandId: `${job.jobId}:release`,
+      epoch: job.epoch,
+      command: { type: 'ReleaseJob' },
+    });
+  } catch (error) {
+    options.onError?.(error, `release job ${job.jobId}`);
+  }
+};
+
+/** Runs one claimed job in the registry, so the heartbeat keeps its lease while it runs. */
+const runClaimed = async (
+  options: SlotOptions,
+  job: Job,
+): Promise<Job | null> => {
+  const handle = options.registry.start(job.jobId);
+  try {
+    return await options.runJob(job, handle.signal);
+  } catch (error) {
+    options.onError?.(error, `job ${job.jobId}`);
+    return null;
+  } finally {
+    options.registry.finish(job.jobId);
   }
 };

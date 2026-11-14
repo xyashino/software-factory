@@ -81,3 +81,20 @@ Repo-wide rules in `.nitpick/config.ts` still apply.
    projections.
 6. Distributed behaviour (takeover, partition, duplicate requests, a Cell leaving) **MUST** have an
    automated test with at least two Cell processes (ROADMAP M7).
+
+### 6.1 The distributed suite
+
+`apps/cell/src/__tests__/distributed/` runs real processes: one `factory-server`, N `factory-cell`s, a
+fake runner and a fake `gh` on `PATH`, and a hostile proxy in front of each Cell's HTTP connection.
+
+- Run it with `pnpm --filter @repo/factory-cell test:distributed`. It has its own vitest config: files
+  run one at a time, no retries. The default `test` script leaves it out.
+- `harness/` holds the plumbing: `factory-proc` (server), `cell-proc` (Cell and its config), `tcp-proxy`
+  (`delay`, `dropRequests`, `dropResponses`, `cut`, `heal`; counts, never random drops), `world` (temp
+  root, fixture repository, seeded project, join tokens), `fake-runner` and `fake-bin/` (`claude`,
+  `cursor-agent`, `gh`). Every child runs in its own session, so a kill takes its runner with it.
+- The fake runner plays a role by the prompt's first line (`You are the Builder ...`). Scenarios come
+  from the test: `done`, `verdict-pass`, `block`, `silent` (hangs), `hand-over-on-request`. A list gives a
+  scenario per run, in order.
+- No fixed sleeps: tests wait on the event feed, the board, the branch on the remote, or a process exit.
+- The suite is one CI job (`distributed`) on every PR, and a soak job that runs it 20 times in a row.

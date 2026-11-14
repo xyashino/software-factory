@@ -125,6 +125,7 @@ export const startCell = async (options: CellOptions): Promise<RunningCell> => {
     stations,
     takeSignals: (jobId) => registry.takeSignals(jobId),
     ...(options.pane ? { pane: options.pane } : {}),
+    headlessOperators: config.headlessOperators,
     githubFor: options.githubFor ?? ((cwd) => createGithubAdapter(cwd)),
   };
 

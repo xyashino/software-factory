@@ -52,6 +52,7 @@ describe('a refused credential on the claim loop', () => {
       sleep: async () => undefined,
       runJob: async (job: Job) => {
         ran.push(job.jobId);
+        return null;
       },
       onError,
       onUnauthorized,
@@ -82,7 +83,7 @@ describe('a refused credential on the claim loop', () => {
       waitMs: MAX_CLAIM_WAIT_MS,
       idlePauseMs: 1,
       sleep: async () => undefined,
-      runJob: async () => undefined,
+      runJob: async () => null,
       onUnauthorized,
     });
 

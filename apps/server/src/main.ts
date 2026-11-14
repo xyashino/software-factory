@@ -8,6 +8,7 @@ import { openForAdmin, runAdminCommand } from './admin-command';
 import { runOnce } from './once';
 import { startHttpListener, type HttpListener } from './http/listener';
 import { remoteConfigFrom, type RemoteConfig } from './http/config';
+import { runtimeConfigFrom } from './runtime-config';
 import { startSocketListener, type SocketListener } from './socket/listener';
 import { usage } from './usage';
 
@@ -77,8 +78,10 @@ const main = async (): Promise<void> => {
     return;
   }
   let remote: RemoteConfig;
+  let timing: ReturnType<typeof runtimeConfigFrom>;
   try {
     remote = remoteConfigFrom(process.env);
+    timing = runtimeConfigFrom(process.env);
   } catch (error) {
     console.error(`factory-server: ${(error as Error).message}`);
     process.exitCode = 2;
@@ -105,7 +108,7 @@ const main = async (): Promise<void> => {
 
   let opened: OpenedRuntime;
   try {
-    opened = openForAdmin(dataDir);
+    opened = openForAdmin(dataDir, timing);
   } catch (error) {
     if (error instanceof WriterHeldError) {
       console.error(

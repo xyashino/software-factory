@@ -16,6 +16,7 @@ import {
   type ShellContext,
 } from '../workspace/shell';
 import { putLog, submit, tailOf, type JobContext } from './send';
+import { workspaceDetailOf } from './workspace-detail';
 
 /** A station without its own timeout gets this much per command (the runtime's inspection default). */
 export const DEFAULT_INSPECTION_TIMEOUT_MS = 600_000;
@@ -73,7 +74,7 @@ export const runInspection = async (
       {
         type: 'ReportWorkspaceFailed',
         stage: prepared.stage,
-        detail: prepared.detail.slice(0, MAX_DETAIL_CHARS),
+        detail: workspaceDetailOf(prepared.stage, prepared.detail),
         logBlob,
       },
       signal,

@@ -23,7 +23,13 @@
     },
     "test": {
       "dependsOn": ["^build"],
-      "env": ["FACTORY_PROPERTY_RUNS"]
+      "env": [
+        "FACTORY_PROPERTY_RUNS",
+        "PATH",
+        "FAKE_GH_DIR",
+        "FAKE_RUNNER_LOG",
+        "FAKE_RUNNER_SCENARIOS"
+      ]
     },
     "test:coverage": {
       "outputs": ["coverage/**"]

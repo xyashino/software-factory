@@ -13,6 +13,7 @@ import {
 import { ROUTES, type RouteName } from '@repo/factory-core/contracts/routes';
 import type { CellId, JobId } from '@repo/factory-core/ids';
 import type { Runtime } from '@repo/factory-runtime/composition';
+import { isRuntimeError } from '@repo/factory-runtime/errors';
 import { streamResponse } from '../socket/serve';
 import { failureResponse, jsonResponse, refusedResponse } from '../wire';
 
@@ -123,7 +124,17 @@ const serveRoute = async (
     delete input.jobId;
     if (caller.kind !== 'cell')
       return refusedResponse({ code: 'unauthorized' });
-    input.orderId = await runtime.remote.orderOfJob(caller.cellId, jobId);
+    // The Cell's lease names the Work order of its job. A job whose lease is gone keeps the order the body
+    // names: the runtime's epoch guard then refuses the command with stale_epoch, as the socket does (PROTOCOL §11).
+    const held = await runtime.remote
+      .orderOfJob(caller.cellId, jobId)
+      .catch((error: unknown) => {
+        if (isRuntimeError(error) && error.wire.code === 'not_found') {
+          return undefined;
+        }
+        throw error;
+      });
+    if (held !== undefined) input.orderId = held;
   }
 
   const parsed = ROUTES[route].request.safeParse(input);

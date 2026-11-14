@@ -28,6 +28,13 @@ export interface JobContext {
   takeSignals?: (jobId: JobId) => Signal[];
   /** Optional Herdr pane driver for non-headless Operator stations. */
   pane?: PaneDriver;
+  /** Runs every Operator station headless, whatever its Line says (config `headless_operators`). */
+  headlessOperators?: boolean;
+  /**
+   * Told the continuation a job-ending command handed back (PROTOCOL §4). Set per job by `runJob`, which
+   * returns it to the slot so the Cell runs it.
+   */
+  onContinuation?: (next: Job) => void;
   /** The GitHub port for a repo, opened on a directory of its worktree. Tests inject a fake. */
   githubFor: (cwd: string) => GithubPort;
 }
@@ -84,6 +91,7 @@ export const submit = async (
   if (signal.aborted) throw new JobStopped(String(signal.reason));
   const answer = await ctx.client.call('submitCommand', {
     cellId: ctx.cellId,
+    jobId: job.jobId,
     orderId: job.orderId,
     commandId: commandIdOf({
       cellId: ctx.cellId,
@@ -95,6 +103,7 @@ export const submit = async (
     command,
     ...(options.dryRun ? { dryRun: true } : {}),
   });
+  if (answer.next) ctx.onContinuation?.(answer.next);
   return answer;
 };
 

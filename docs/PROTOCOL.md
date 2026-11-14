@@ -223,6 +223,11 @@ includes `next`, a lost response and a retry give the Cell the same job. The wor
 the Line keeps moving without a queue round trip. The runtime MAY skip this when a higher-priority
 Work order is waiting.
 
+The Cell runs the continuation in the same slot, before it claims again. A Cell that is stopping or
+fenced will not run it: a stopping Cell releases it at once with `ReleaseJob` (§9), a fenced Cell
+sends nothing (§5.4) and lets the lease lapse. A `ReleaseJob` never returns a continuation: the Work
+order goes back to the queue, not to the Cell that released it.
+
 ## 5. Leases and fencing
 
 ### 5.1 Numbers
@@ -238,6 +243,13 @@ Work order is waiting.
 All four are Factory settings, returned to Cells by `hello`. Self-fence MUST stay below the TTL.
 A Factory that is unreachable for longer than the self-fence window costs every in-flight Cycle
 (§11); raise TTL and self-fence together if Factory restarts are slow (OPEN-QUESTIONS Q16).
+
+**Test knobs.** `factory-server` reads five environment variables, one per setting above:
+`FACTORY_LEASE_TTL_MS`, `FACTORY_HEARTBEAT_MS`, `FACTORY_REAPER_MS`, `FACTORY_SELF_FENCE_MS` and
+`FACTORY_CLAIM_TICK_MS` (the claim re-read interval, `DEFAULT_CONFIG.claimTickMs`). Each takes a positive
+whole number of milliseconds. Unset, the defaults above apply; production sets none of them. The
+distributed suite (`pnpm --filter @repo/factory-cell test:distributed`) runs with short timings. A
+self-fence that is not below the TTL is refused at start (`apps/server/src/runtime-config.ts`).
 
 ### 5.2 Claim
 

@@ -52,9 +52,10 @@ export default [
     },
   },
   {
-    // The e2e tests boot a real factory-server and runtime on a temp socket: the one place a Cell
-    // test may import them. Everything else in the restriction above still applies.
-    files: ['src/__tests__/e2e/**/*.ts'],
+    // The e2e tests boot a real factory-server and runtime on a temp socket, and the distributed suite
+    // runs real factory-server and factory-cell processes: the places a Cell test may import them.
+    // Everything else in the restriction above still applies.
+    files: ['src/__tests__/e2e/**/*.ts', 'src/__tests__/distributed/**/*.ts'],
     rules: {
       'no-restricted-imports': [
         'error',

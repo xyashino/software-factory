@@ -20,6 +20,18 @@ import type { JobContext } from './send';
 
 const STATION_TICK_MS = 1_000;
 
+/** The job as a headless Operator station: the Cell runs it through the runner's print mode. */
+const asHeadless = (job: Job): Job =>
+  job.station?.operator === undefined
+    ? job
+    : {
+        ...job,
+        station: {
+          ...job.station,
+          operator: { ...job.station.operator, headless: true },
+        },
+      };
+
 /** An unknown job kind this Cell does not run. */
 export class UnsupportedJobKind extends Error {
   constructor(kind: string) {
@@ -90,14 +102,23 @@ export const runJob = async (
   ctx: JobContext,
   job: Job,
   signal: AbortSignal,
-): Promise<void> => {
+): Promise<Job | null> => {
+  // The continuation the job's last command hands back, captured by `submit` (PROTOCOL §4).
+  let continuation: Job | null = null;
+  const jobCtx: JobContext = {
+    ...ctx,
+    onContinuation: (next) => {
+      continuation = next;
+    },
+  };
   try {
     switch (job.kind) {
       case 'run_inspection':
-        await runInspection(ctx, job, signal);
-        return;
-      case 'run_operator_station':
-        await runOperatorStation(job, {
+        await runInspection(jobCtx, job, signal);
+        return continuation;
+      case 'run_operator_station': {
+        const station = ctx.headlessOperators ? asHeadless(job) : job;
+        return await runOperatorStation(station, {
           client: ctx.client,
           cellId: ctx.cellId,
           dataDir: ctx.cellDataDir,
@@ -106,7 +127,7 @@ export const runJob = async (
           git: runGit,
           workspace: (current) =>
             prepareWorkspace({ job: current, dataDir: ctx.cellDataDir }),
-          runners: runnersFor(job, ctx.cellDataDir),
+          runners: runnersFor(station, ctx.cellDataDir),
           spawn: spawnHeadless,
           ...(ctx.pane ? { pane: ctx.pane } : {}),
           timing: {
@@ -118,10 +139,10 @@ export const runJob = async (
           signal,
           takeSignals: () => ctx.takeSignals?.(job.jobId) ?? [],
         });
-        return;
+      }
       case 'deliver':
-        await runDeliver(ctx, job, signal);
-        return;
+        await runDeliver(jobCtx, job, signal);
+        return continuation;
       default:
         throw new UnsupportedJobKind(job.kind);
     }
