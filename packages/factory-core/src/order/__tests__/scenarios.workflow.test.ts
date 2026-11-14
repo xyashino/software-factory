@@ -49,7 +49,7 @@ describe('the feature workflow on v2 events', () => {
     inspect(s, true).nextJob(deliverJob(commitOf(5)));
     s.when(claim())
       .thenTypes(['job_claimed'])
-      .and(reportDelivered(commitOf(6)), actors.worker(1))
+      .and(reportDelivered(commitOf(6)), actors.cell(1))
       .nextJob({ kind: 'done' });
   });
 
@@ -69,8 +69,8 @@ describe('the feature workflow on v2 events', () => {
     judge(s, true, 2).nextJob(operatorJob('build', 1, firstCause, commitOf(2)));
   });
 
-  it('gives the worker a fresh attempt with gate failures after a red gate, then audits', () => {
-    // v1: "gives the worker a fresh attempt with gate failures after a red gate, then audits"
+  it('gives the cell a fresh attempt with gate failures after a red gate, then audits', () => {
+    // v1: "gives the cell a fresh attempt with gate failures after a red gate, then audits"
     const s = given([created()]);
     passOperator(s, 2);
     passOperator(s, 4);

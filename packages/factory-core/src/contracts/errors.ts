@@ -3,7 +3,7 @@ import type { DomainError } from '../order/commands';
 
 /**
  * The wire form of every refusal (PROTOCOL §3.5). A domain refusal keeps its shape; the transport
- * adds `unavailable` (503, after the retry budget) and `unauthorized` (a revoked or unknown Worker).
+ * adds `unavailable` (503, after the retry budget) and `unauthorized` (a revoked or unknown Cell).
  */
 export const wireErrorSchema = z.discriminatedUnion('code', [
   z.object({ code: z.literal('not_found') }).strict(),

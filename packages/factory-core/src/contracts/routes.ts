@@ -10,9 +10,9 @@ import {
   reopenRequestSchema,
   reprioritiseRequestSchema,
   resumeRequestSchema,
-  workerRevokeRequestSchema,
-  workerRevokeResponseSchema,
-  workersListResponseSchema,
+  cellRevokeRequestSchema,
+  cellRevokeResponseSchema,
+  cellsListResponseSchema,
 } from './supervisor';
 import {
   blobGetRequestSchema,
@@ -27,7 +27,7 @@ import {
   helloRequestSchema,
   helloResponseSchema,
   submitCommandRequestSchema,
-} from './worker';
+} from './cell';
 
 /**
  * The one route table (PROTOCOL §3). The server dispatches on it and the socket client calls it,
@@ -35,22 +35,22 @@ import {
  */
 export const ROUTES = {
   hello: {
-    path: 'worker/hello',
+    path: 'cell/hello',
     request: helloRequestSchema,
     response: helloResponseSchema,
   },
   claim: {
-    path: 'worker/claim',
+    path: 'cell/claim',
     request: claimRequestSchema,
     response: claimResponseSchema,
   },
   heartbeat: {
-    path: 'worker/heartbeat',
+    path: 'cell/heartbeat',
     request: heartbeatRequestSchema,
     response: heartbeatResponseSchema,
   },
   submitCommand: {
-    path: 'worker/command',
+    path: 'cell/command',
     request: submitCommandRequestSchema,
     response: commandResultSchema,
   },
@@ -104,15 +104,15 @@ export const ROUTES = {
     request: reopenRequestSchema,
     response: commandResultSchema,
   },
-  workersList: {
-    path: 'supervisor/workers',
+  cellsList: {
+    path: 'supervisor/cells',
     request: emptyRequestSchema,
-    response: workersListResponseSchema,
+    response: cellsListResponseSchema,
   },
-  workerRevoke: {
-    path: 'supervisor/workers/revoke',
-    request: workerRevokeRequestSchema,
-    response: workerRevokeResponseSchema,
+  cellRevoke: {
+    path: 'supervisor/cells/revoke',
+    request: cellRevokeRequestSchema,
+    response: cellRevokeResponseSchema,
   },
 } as const;
 

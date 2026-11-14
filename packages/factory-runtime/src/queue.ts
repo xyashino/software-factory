@@ -1,10 +1,10 @@
-import type { ProjectId, WorkerId } from '@repo/factory-core/ids';
+import type { ProjectId, CellId } from '@repo/factory-core/ids';
 import type { OrderProjection } from '@repo/factory-core/order/projection';
 import { resolveDeps, type DepPolicy } from '@repo/factory-core/queue/deps';
 import type {
   Limits,
   QueueEntry,
-  WorkerView,
+  CellView,
 } from '@repo/factory-core/queue/types';
 import type { ProjectRecord } from '@repo/factory-core/ports/projects';
 import type { RuntimePorts } from './ports';
@@ -35,8 +35,8 @@ const entryOf = (
   deps,
   progressed: row.progressed,
   resumed: row.resumed,
-  ...(row.lastWorkerId ? { lastWorkerId: row.lastWorkerId } : {}),
-  avoidWorkers: row.avoidWorkers.filter((avoid) => avoid.until > now),
+  ...(row.lastCellId ? { lastCellId: row.lastCellId } : {}),
+  avoidCells: row.avoidCells.filter((avoid) => avoid.until > now),
 });
 
 /**
@@ -68,7 +68,7 @@ export const readQueue = async (
     perProjectRunning[projectId] = {
       max: project.maxRunning,
       running: rows.filter(
-        (row) => row.projectId === projectId && row.holder === 'worker',
+        (row) => row.projectId === projectId && row.holder === 'cell',
       ).length,
     };
   }
@@ -80,9 +80,9 @@ export const readQueue = async (
   };
 };
 
-/** The Worker's offer as `selectClaimable` reads it: free slots are its slots less its live leases. */
-export const workerView = (
-  workerId: WorkerId,
+/** The Cell's offer as `selectClaimable` reads it: free slots are its slots less its live leases. */
+export const cellView = (
+  cellId: CellId,
   info: {
     projects: string[];
     runners: string[];
@@ -90,8 +90,8 @@ export const workerView = (
     slots: number;
   },
   heldLeases: number,
-): WorkerView => ({
-  workerId,
+): CellView => ({
+  cellId,
   projects: info.projects as ProjectId[],
   runners: info.runners,
   capabilities: info.capabilities,

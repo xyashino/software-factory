@@ -1,4 +1,4 @@
-import type { WorkerId, OrderId, ProjectId, StationId, TodoId } from '../ids';
+import type { CellId, OrderId, ProjectId, StationId, TodoId } from '../ids';
 import { findStation, stationIndex } from '../line/snapshot';
 import type { AndonReason, JobKind } from './events';
 import { latestCycle } from './evolve-helpers';
@@ -6,7 +6,7 @@ import type { Next } from './next';
 import { type BoardStatus, type Holder, boardStatus, holderOf } from './status';
 import type { Priority, WorkOrderState } from './state';
 
-/** A workspace failure keeps its worker out of the queue for this long (CORE §8). A core constant. */
+/** A workspace failure keeps its cell out of the queue for this long (CORE §8). A core constant. */
 export const WORKSPACE_COOLDOWN_MS = 10 * 60 * 1000;
 
 /**
@@ -40,8 +40,8 @@ export interface OrderProjection {
   stationIndex: number | null;
   progressed: boolean;
   resumed: boolean;
-  lastWorkerId: WorkerId | null;
-  avoidWorkers: { workerId: WorkerId; until: number }[];
+  lastCellId: CellId | null;
+  avoidCells: { cellId: CellId; until: number }[];
   andonReason: AndonReason | null;
   prUrl: string | null;
   prState: 'open' | 'merged' | 'closed' | null;
@@ -77,28 +77,26 @@ const stationRef = (
   return { id, index, runner: station.runner, requires: station.requires };
 };
 
-const avoidWorkersOf = (
-  state: WorkOrderState,
-): OrderProjection['avoidWorkers'] => {
-  const until = new Map<WorkerId, number>();
+const avoidCellsOf = (state: WorkOrderState): OrderProjection['avoidCells'] => {
+  const until = new Map<CellId, number>();
   state.workspaceFailures.forEach((failure) => {
     until.set(
-      failure.workerId,
+      failure.cellId,
       Math.max(
-        until.get(failure.workerId) ?? 0,
+        until.get(failure.cellId) ?? 0,
         failure.at + WORKSPACE_COOLDOWN_MS,
       ),
     );
   });
-  return [...until].map(([workerId, expires]) => ({
-    workerId,
+  return [...until].map(([cellId, expires]) => ({
+    cellId,
     until: expires,
   }));
 };
 
-const lastWorkerIdOf = (state: WorkOrderState): WorkerId | null =>
-  latestCycle(state)?.workerId ??
-  state.workspaceFailures[state.workspaceFailures.length - 1]?.workerId ??
+const lastCellIdOf = (state: WorkOrderState): CellId | null =>
+  latestCycle(state)?.cellId ??
+  state.workspaceFailures[state.workspaceFailures.length - 1]?.cellId ??
   null;
 
 /**
@@ -135,8 +133,8 @@ export const toProjection = (
       (cycleId) => cycleId !== undefined,
     ),
     resumed: state.resumedWaiting,
-    lastWorkerId: lastWorkerIdOf(state),
-    avoidWorkers: avoidWorkersOf(state),
+    lastCellId: lastCellIdOf(state),
+    avoidCells: avoidCellsOf(state),
     andonReason: state.andon?.reason ?? null,
     prUrl: state.delivery?.prUrl ?? null,
     prState: state.delivery?.state ?? null,

@@ -13,7 +13,7 @@ import {
   sqliteProjectStore,
   sqliteProjectionReader,
 } from '@repo/factory-db/projects-table';
-import { sqliteWorkerStore } from '@repo/factory-db/workers-table';
+import { sqliteCellStore } from '@repo/factory-db/cells-table';
 import { acquireWriter, type WriterLock } from '@repo/factory-db/writer-lock';
 import {
   loadDefinitions,
@@ -86,7 +86,7 @@ export const openRuntime = (options: OpenRuntimeOptions): OpenedRuntime => {
       projects: sqliteProjectStore(database, gate),
       blobs: sqliteBlobStore(database, writer, gate),
       leases: sqliteLeaseStore(database, writer, gate),
-      workers: sqliteWorkerStore(database, writer, gate),
+      cells: sqliteCellStore(database, writer, gate),
       signals: sqliteSignalStore(database, writer, gate),
       clock,
       ids: ulidIds(clock),

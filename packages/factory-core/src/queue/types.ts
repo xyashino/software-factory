@@ -1,4 +1,4 @@
-import type { OrderId, ProjectId, WorkerId } from '../ids';
+import type { OrderId, ProjectId, CellId } from '../ids';
 import type { JobSpec, Next } from '../order/next';
 import type { Priority } from '../order/state';
 import type { Holder } from '../order/status';
@@ -18,13 +18,13 @@ export interface QueueEntry {
   deps: 'satisfied' | 'waiting' | 'broken'; // computed when the queue is read, from the other Work orders
   progressed: boolean; // at least one Station passed
   resumed: boolean; // WorkOrderState.resumedWaiting
-  lastWorkerId?: WorkerId;
-  avoidWorkers: { workerId: WorkerId; until: number }[]; // cooldown after a workspace failure (never permanent)
+  lastCellId?: CellId;
+  avoidCells: { cellId: CellId; until: number }[]; // cooldown after a workspace failure (never permanent)
 }
 
-/** CORE §8: what a Worker offers when it asks for work. */
-export interface WorkerView {
-  workerId: WorkerId;
+/** CORE §8: what a Cell offers when it asks for work. */
+export interface CellView {
+  cellId: CellId;
   projects: ProjectId[];
   runners: string[];
   capabilities: string[];

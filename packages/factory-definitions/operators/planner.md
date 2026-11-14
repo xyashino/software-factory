@@ -17,7 +17,7 @@ You are the Planner for task {{taskId}}, attempt {{attemptId}}. You plan; you do
 
 ## Instructions
 
-1. Read the task. Read `.nitpick/agents/worker.md` and the rules in the `.nitpick/config.ts` rules tree that apply to the change.
+1. Read the task. Read `.nitpick/agents/cell.md` and the rules in the `.nitpick/config.ts` rules tree that apply to the change.
 2. Explore the codebase enough to name the files, modules and tests the change touches.
 3. Write the plan: goal, files to change, steps in order, tests to add, proof to collect.
 4. If complex, keep the plan short. Name the rules that apply by path.

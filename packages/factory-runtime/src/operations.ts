@@ -1,4 +1,4 @@
-import type { CommandResult } from '@repo/factory-core/contracts/worker';
+import type { CommandResult } from '@repo/factory-core/contracts/cell';
 import type {
   ParsedRequest,
   RouteName,
@@ -9,12 +9,12 @@ import {
   type OrderCommand,
 } from '@repo/factory-core/order/commands';
 import type { Actor } from '@repo/factory-core/order/events';
-import type { OrderId, WorkerId } from '@repo/factory-core/ids';
+import type { OrderId, CellId } from '@repo/factory-core/ids';
 import type { OrderProjection } from '@repo/factory-core/order/projection';
 import type { CommandHandler } from './command-handler';
 import { RuntimeError, notFound } from './errors';
 import { heartbeat } from './heartbeat';
-import { hello, assertWorker, revokeWorker } from './workers';
+import { hello, assertCell, revokeCell } from './cells';
 import { longPollClaim, type ClaimDeps } from './claim';
 import type { RuntimePorts } from './ports';
 
@@ -62,7 +62,7 @@ const boardRow = (row: OrderProjection) => ({
 });
 
 /**
- * Commands an Operator sends through its Worker (PROTOCOL §3.3). The Worker forwards them with the
+ * Commands an Operator sends through its Cell (PROTOCOL §3.3). The Cell forwards them with the
  * Operator's actor and Cycle, so `decide` sees the actor the command requires (CORE §5.2).
  */
 const OPERATOR_COMMANDS = new Set([
@@ -72,15 +72,15 @@ const OPERATOR_COMMANDS = new Set([
   'LeaveNote',
 ]);
 
-/** The actor a Worker's command is run as: the Operator of its Cycle, or the Worker itself. */
-export const actorOfWorkerCommand = (
-  workerId: WorkerId,
+/** The actor a Cell's command is run as: the Operator of its Cycle, or the Cell itself. */
+export const actorOfCellCommand = (
+  cellId: CellId,
   command: OrderCommand,
 ): Actor => {
   if (OPERATOR_COMMANDS.has(command.type) && 'cycleId' in command) {
-    return { kind: 'operator', workerId, cycleId: command.cycleId };
+    return { kind: 'operator', cellId, cycleId: command.cycleId };
   }
-  return { kind: 'worker', workerId };
+  return { kind: 'cell', cellId };
 };
 
 const requireResult = (result: CommandResult | undefined): CommandResult => {
@@ -118,23 +118,23 @@ export const createOperations = (
     claim: (request, options) =>
       longPollClaim(
         claimDeps,
-        request.workerId,
+        request.cellId,
         request.waitMs,
         options.signal,
       ).then((job) => ({ job })),
     heartbeat: (request) => heartbeat(ports, request),
     submitCommand: async (request) => {
-      await assertWorker(ports, request.workerId);
+      await assertCell(ports, request.cellId);
       const command = orderCommandSchema.parse(request.command);
       return requireResult(
         await handler.submit({
           orderId: request.orderId,
           commandId: request.commandId,
           command,
-          actor: actorOfWorkerCommand(request.workerId, command),
+          actor: actorOfCellCommand(request.cellId, command),
           epoch: request.epoch,
           ...(request.dryRun !== undefined ? { dryRun: request.dryRun } : {}),
-          continueFor: request.workerId,
+          continueFor: request.cellId,
         }),
       );
     },
@@ -214,17 +214,17 @@ export const createOperations = (
           ? { noteBlob: request.noteBlob }
           : {}),
       }),
-    workersList: async () => ({
-      workers: (await ports.workers.list()).map((worker) => ({
-        workerId: worker.workerId,
-        name: worker.name,
-        lastSeenAt: worker.lastSeenAt,
-        revokedAt: worker.revokedAt,
+    cellsList: async () => ({
+      cells: (await ports.cells.list()).map((cell) => ({
+        cellId: cell.cellId,
+        name: cell.name,
+        lastSeenAt: cell.lastSeenAt,
+        revokedAt: cell.revokedAt,
       })),
     }),
-    workerRevoke: async (request) => {
-      await revokeWorker(ports, request.workerId);
-      return { workerId: request.workerId, revoked: true as const };
+    cellRevoke: async (request) => {
+      await revokeCell(ports, request.cellId);
+      return { cellId: request.cellId, revoked: true as const };
     },
   };
 

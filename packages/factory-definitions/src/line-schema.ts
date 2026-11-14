@@ -10,7 +10,7 @@ import { zodErrors, type DefinitionError } from './errors';
 import { parseYaml } from './frontmatter';
 import type { Source } from './operator-profile';
 
-/** Runner names with an adapter. Only the name is checked here; adapters live in the Worker. */
+/** Runner names with an adapter. Only the name is checked here; adapters live in the Cell. */
 export const RUNNERS: readonly string[] = [
   'claude',
   'codex',
@@ -66,7 +66,7 @@ export interface OperatorPool {
 /** Fields every Station shares, schema v2. */
 interface StationBase {
   id: string;
-  /** capability tags a Worker must have to run this Station */
+  /** capability tags a Cell must have to run this Station */
   requires: string[];
   onFail?: OnFail;
   maxRestarts: number;

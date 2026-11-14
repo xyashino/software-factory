@@ -99,7 +99,7 @@ export const reprioritise = (
   return ok([{ type: 'priority_changed', priority: command.priority }]);
 };
 
-/** The claim endpoint: the queue hands the Work order's next job to a Worker (CORE §5.2, §6). */
+/** The claim endpoint: the queue hands the Work order's next job to a Cell (CORE §5.2, §6). */
 export const claimJob = (
   state: WorkOrderState,
   command: CommandOf<'ClaimJob'>,
@@ -120,7 +120,7 @@ export const claimJob = (
   const { kind } = next.job;
   if (next.job.kind === 'deliver') {
     return ok([
-      { type: 'job_claimed', jobId, kind, workerId: command.workerId, epoch },
+      { type: 'job_claimed', jobId, kind, cellId: command.cellId, epoch },
     ]);
   }
   const cycleId = cycleIdSchema.parse(ctx.ids.next());
@@ -129,7 +129,7 @@ export const claimJob = (
       type: 'job_claimed',
       jobId,
       kind,
-      workerId: command.workerId,
+      cellId: command.cellId,
       epoch,
       cycleId,
     },
@@ -141,7 +141,7 @@ export const reportWorkspaceFailed = (
   command: CommandOf<'ReportWorkspaceFailed'>,
   ctx: DecideContext,
 ): Decision => {
-  const denied = requireActor(ctx, ['worker']);
+  const denied = requireActor(ctx, ['cell']);
   if (denied) return err(denied);
   const fence = fenced(state, ctx);
   if (!fence.ok) return fence;
@@ -174,18 +174,16 @@ export const expireLease = (
   return ok(loseJob(state, fence.value, 'lease_expired', 'the lease expired'));
 };
 
-/** The Worker leaves its job on purpose; the job is lost as `worker_left` (CORE §5.2). */
+/** The Cell leaves its job on purpose; the job is lost as `cell_left` (CORE §5.2). */
 export const releaseJob = (
   state: WorkOrderState,
   ctx: DecideContext,
 ): Decision => {
-  const denied = requireActor(ctx, ['worker']);
+  const denied = requireActor(ctx, ['cell']);
   if (denied) return err(denied);
   const fence = fenced(state, ctx);
   if (!fence.ok) return fence;
-  return ok(
-    loseJob(state, fence.value, 'worker_left', 'the worker left the job'),
-  );
+  return ok(loseJob(state, fence.value, 'cell_left', 'the cell left the job'));
 };
 
 export const reportDelivery = (
@@ -193,7 +191,7 @@ export const reportDelivery = (
   command: CommandOf<'ReportDelivery'>,
   ctx: DecideContext,
 ): Decision => {
-  const denied = requireActor(ctx, ['worker']);
+  const denied = requireActor(ctx, ['cell']);
   if (denied) return err(denied);
   const fence = fenced(state, ctx);
   if (!fence.ok) return fence;

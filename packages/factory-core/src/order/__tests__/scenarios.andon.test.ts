@@ -111,9 +111,9 @@ const andonCases: AndonCase[] = [
     start: () => given([created()]),
     drive: (s) => {
       s.when(claim()).apply();
-      s.when(reportWorkspaceFailed(), actors.worker(1)).apply();
+      s.when(reportWorkspaceFailed(), actors.cell(1)).apply();
       s.when(claim()).apply();
-      s.when(reportWorkspaceFailed(), actors.worker(1)).apply();
+      s.when(reportWorkspaceFailed(), actors.cell(1)).apply();
     },
     next: { stationId: 'plan' },
   },
@@ -122,7 +122,7 @@ const andonCases: AndonCase[] = [
     start: () => given(deliveringEvents()),
     drive: (s) => {
       s.when(claim()).apply();
-      s.when(reportDeliveryFailed(), actors.worker(1)).apply();
+      s.when(reportDeliveryFailed(), actors.cell(1)).apply();
     },
     next: { deliver: true },
   },
@@ -375,7 +375,7 @@ describe('a lost Cycle restarts, and each budget runs out on its own', () => {
     const { started, cycle } = beginJob(s);
 
     const handed = started
-      .and(handOverCycle(cycle, commitOf(9)), actors.worker(1))
+      .and(handOverCycle(cycle, commitOf(9)), actors.cell(1))
       .thenTypes(['cycle_handed_over'])
       .apply();
 
@@ -402,11 +402,11 @@ describe('a lost Cycle restarts, and each budget runs out on its own', () => {
     passOperator(s, 2);
     const first = beginJob(s);
     first.started
-      .and(handOverCycle(first.cycle, commitOf(9)), actors.worker(1))
+      .and(handOverCycle(first.cycle, commitOf(9)), actors.cell(1))
       .apply();
     const second = beginJob(s);
     second.started
-      .and(handOverCycle(second.cycle, commitOf(10)), actors.worker(1))
+      .and(handOverCycle(second.cycle, commitOf(10)), actors.cell(1))
       .apply();
 
     s.nextJob(andonOf('restart_failed'));
@@ -460,7 +460,7 @@ describe('a question survives a block and reaches the resumed Cycle', () => {
     [
       'FailCycle',
       (cycle: CycleId) => failCycle(cycle, 'crashed'),
-      () => actors.worker(1),
+      () => actors.cell(1),
     ],
     [
       'BlockCycle',
@@ -470,9 +470,9 @@ describe('a question survives a block and reaches the resumed Cycle', () => {
     [
       'HandOverCycle',
       (cycle: CycleId) => handOverCycle(cycle),
-      () => actors.worker(1),
+      () => actors.cell(1),
     ],
-    ['ReleaseJob', () => releaseJob(), () => actors.worker(1)],
+    ['ReleaseJob', () => releaseJob(), () => actors.cell(1)],
     ['ExpireLease', () => expireLease(), () => actors.factory],
   ] as const)(
     'abandons the open question when %s ends the Cycle',

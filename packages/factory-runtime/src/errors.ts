@@ -30,7 +30,7 @@ export const refusal = (error: DomainError): RuntimeError =>
 export const unavailable = (): RuntimeError =>
   new RuntimeError({ code: 'unavailable' });
 
-/** The Worker is unknown or revoked. */
+/** The Cell is unknown or revoked. */
 export const unauthorized = (): RuntimeError =>
   new RuntimeError({ code: 'unauthorized' });
 

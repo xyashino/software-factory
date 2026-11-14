@@ -12,7 +12,7 @@ import {
   questionAsked,
   questionIdOf,
   stationOf,
-  workerIdOf,
+  cellIdOf,
 } from './builders';
 import {
   begun,
@@ -24,11 +24,11 @@ import {
   stateOf,
 } from './histories';
 
-const worker = (epoch: number, id = 1) =>
-  contextOf({ kind: 'worker', workerId: workerIdOf(id) }, { epoch });
+const cell = (epoch: number, id = 1) =>
+  contextOf({ kind: 'cell', cellId: cellIdOf(id) }, { epoch });
 const operator = (cycle: number, epoch: number) =>
   contextOf(
-    { kind: 'operator', workerId: workerIdOf(1), cycleId: cycleIdOf(cycle) },
+    { kind: 'operator', cellId: cellIdOf(1), cycleId: cycleIdOf(cycle) },
     { epoch },
   );
 const plannedEvents = (): OrderEvent[] => [
@@ -62,7 +62,7 @@ describe('StartCycle', () => {
       promptBlob: blobOf(6),
     };
 
-    const result = decide(state, command, worker(1));
+    const result = decide(state, command, cell(1));
 
     expect(result).toEqual({
       ok: true,
@@ -92,7 +92,7 @@ describe('StartCycle', () => {
     const result = decide(
       state,
       { type: 'StartCycle', baseCommit: commitOf(2) },
-      worker(2),
+      cell(2),
     );
 
     expect(result).toMatchObject({
@@ -117,7 +117,7 @@ describe('StartCycle', () => {
     const result = decide(
       state,
       { type: 'StartCycle', baseCommit: commitOf(9) },
-      worker(2),
+      cell(2),
     );
 
     expect(result).toEqual({
@@ -127,7 +127,7 @@ describe('StartCycle', () => {
   });
 
   it('refuses a second start of the same Cycle', () => {
-    const result = decide(stateOf(plannedEvents()), startCommand, worker(1));
+    const result = decide(stateOf(plannedEvents()), startCommand, cell(1));
 
     expect(result).toEqual({
       ok: false,
@@ -138,7 +138,7 @@ describe('StartCycle', () => {
   it('refuses a delivery job, which has no Station', () => {
     const state = stateOf([...deliveringEvents(), claim(5, 'deliver')]);
 
-    const result = decide(state, startCommand, worker(5));
+    const result = decide(state, startCommand, cell(5));
 
     expect(result).toEqual({
       ok: false,
@@ -152,7 +152,7 @@ describe('StartCycle', () => {
   it('refuses a prompt that does not exist', () => {
     const state = stateOf([created(), claim(1)]);
     const ctx = contextOf(
-      { kind: 'worker', workerId: workerIdOf(1) },
+      { kind: 'cell', cellId: cellIdOf(1) },
       { epoch: 1, missing: [blobOf(6)] },
     );
 
@@ -171,7 +171,7 @@ describe('StartCycle', () => {
   it('refuses a stale epoch', () => {
     const state = stateOf([created(), claim(1)]);
 
-    const result = decide(state, startCommand, worker(2));
+    const result = decide(state, startCommand, cell(2));
 
     expect(result).toEqual({
       ok: false,
@@ -266,7 +266,7 @@ describe('CompleteCycle', () => {
 
   it('refuses an artifact that does not exist', () => {
     const ctx = contextOf(
-      { kind: 'operator', workerId: workerIdOf(1), cycleId: cycleIdOf(1) },
+      { kind: 'operator', cellId: cellIdOf(1), cycleId: cycleIdOf(1) },
       { epoch: 1, missing: [blobOf(2)] },
     );
 
@@ -280,7 +280,7 @@ describe('CompleteCycle', () => {
 
   it('refuses an empty artifact', () => {
     const ctx = contextOf(
-      { kind: 'operator', workerId: workerIdOf(1), cycleId: cycleIdOf(1) },
+      { kind: 'operator', cellId: cellIdOf(1), cycleId: cycleIdOf(1) },
       { epoch: 1, empty: [blobOf(2)] },
     );
 
@@ -303,14 +303,14 @@ describe('CompleteCycle', () => {
     ]);
   });
 
-  it('refuses a worker actor', () => {
-    const result = decide(stateOf(plannedEvents()), complete(), worker(1));
+  it('refuses a cell actor', () => {
+    const result = decide(stateOf(plannedEvents()), complete(), cell(1));
 
     expect(result).toEqual({
       ok: false,
       error: {
         code: 'precondition',
-        detail: 'actor worker may not run this command',
+        detail: 'actor cell may not run this command',
       },
     });
   });
@@ -406,7 +406,7 @@ describe('SubmitVerdict', () => {
 
   it('refuses feedback that does not exist', () => {
     const ctx = contextOf(
-      { kind: 'operator', workerId: workerIdOf(1), cycleId: cycleIdOf(3) },
+      { kind: 'operator', cellId: cellIdOf(1), cycleId: cycleIdOf(3) },
       { epoch: 3, missing: [blobOf(4)] },
     );
 
@@ -468,7 +468,7 @@ describe('ReportInspection', () => {
   });
 
   it('records the results of an Inspection', () => {
-    const result = decide(stateOf(inspectionEvents()), report(true), worker(4));
+    const result = decide(stateOf(inspectionEvents()), report(true), cell(4));
 
     expect(result).toMatchObject({
       ok: true,
@@ -481,7 +481,7 @@ describe('ReportInspection', () => {
   it('refuses a Station that is not an Inspection', () => {
     const command = { ...report(true), cycleId: cycleIdOf(1) };
 
-    const result = decide(stateOf(plannedEvents()), command, worker(1));
+    const result = decide(stateOf(plannedEvents()), command, cell(1));
 
     expect(result).toEqual({
       ok: false,
@@ -494,7 +494,7 @@ describe('ReportInspection', () => {
 
   it('refuses a log that does not exist', () => {
     const ctx = contextOf(
-      { kind: 'worker', workerId: workerIdOf(1) },
+      { kind: 'cell', cellId: cellIdOf(1) },
       { epoch: 4, missing: [blobOf(5)] },
     );
 
@@ -515,7 +515,7 @@ describe('ReportInspection', () => {
       claim(4, 'run_inspection'),
     ]);
 
-    const result = decide(state, report(true), worker(4));
+    const result = decide(state, report(true), cell(4));
 
     expect(result).toEqual({
       ok: false,
@@ -524,7 +524,7 @@ describe('ReportInspection', () => {
   });
 
   it('refuses a stale epoch', () => {
-    const result = decide(stateOf(inspectionEvents()), report(true), worker(3));
+    const result = decide(stateOf(inspectionEvents()), report(true), cell(3));
 
     expect(result).toEqual({
       ok: false,
@@ -542,7 +542,7 @@ describe('FailCycle', () => {
   };
 
   it('fails a running Cycle', () => {
-    const result = decide(stateOf(plannedEvents()), fail, worker(1));
+    const result = decide(stateOf(plannedEvents()), fail, cell(1));
 
     expect(result).toEqual({
       ok: true,
@@ -561,7 +561,7 @@ describe('FailCycle', () => {
   it('abandons the open question before it fails the Cycle', () => {
     const state = stateOf([...plannedEvents(), questionAsked()]);
 
-    const result = decide(state, fail, worker(1));
+    const result = decide(state, fail, cell(1));
 
     expect(result.ok && result.value.map((event) => event.type)).toEqual([
       'question_abandoned',
@@ -572,7 +572,7 @@ describe('FailCycle', () => {
   it('refuses a Cycle that never started', () => {
     const state = stateOf([created(), claim(1)]);
 
-    const result = decide(state, fail, worker(1));
+    const result = decide(state, fail, cell(1));
 
     expect(result).toEqual({
       ok: false,
@@ -581,7 +581,7 @@ describe('FailCycle', () => {
   });
 
   it('refuses a stale epoch', () => {
-    const result = decide(stateOf(plannedEvents()), fail, worker(2));
+    const result = decide(stateOf(plannedEvents()), fail, cell(2));
 
     expect(result).toEqual({
       ok: false,
@@ -638,7 +638,7 @@ describe('BlockCycle', () => {
       detail: 'the runner asked a question',
     };
 
-    const result = decide(stateOf(plannedEvents()), runtime, worker(1));
+    const result = decide(stateOf(plannedEvents()), runtime, cell(1));
 
     expect(result).toMatchObject({
       ok: true,
@@ -650,7 +650,7 @@ describe('BlockCycle', () => {
 
   it('refuses a handover that does not exist', () => {
     const ctx = contextOf(
-      { kind: 'operator', workerId: workerIdOf(1), cycleId: cycleIdOf(1) },
+      { kind: 'operator', cellId: cellIdOf(1), cycleId: cycleIdOf(1) },
       { epoch: 1, missing: [blobOf(4)] },
     );
 
@@ -695,7 +695,7 @@ describe('HandOverCycle', () => {
   };
 
   it('hands the running Cycle over', () => {
-    const result = decide(stateOf(plannedEvents()), handover, worker(1));
+    const result = decide(stateOf(plannedEvents()), handover, cell(1));
 
     expect(result).toEqual({
       ok: true,
@@ -712,7 +712,7 @@ describe('HandOverCycle', () => {
 
   it('refuses a handover that does not exist', () => {
     const ctx = contextOf(
-      { kind: 'worker', workerId: workerIdOf(1) },
+      { kind: 'cell', cellId: cellIdOf(1) },
       { epoch: 1, missing: [blobOf(4)] },
     );
 
@@ -727,7 +727,7 @@ describe('HandOverCycle', () => {
   it('refuses a Cycle that never started', () => {
     const state = stateOf([created(), claim(1)]);
 
-    const result = decide(state, handover, worker(1));
+    const result = decide(state, handover, cell(1));
 
     expect(result).toEqual({
       ok: false,
@@ -736,7 +736,7 @@ describe('HandOverCycle', () => {
   });
 
   it('refuses a stale epoch', () => {
-    const result = decide(stateOf(plannedEvents()), handover, worker(2));
+    const result = decide(stateOf(plannedEvents()), handover, cell(2));
 
     expect(result).toEqual({
       ok: false,
@@ -756,7 +756,7 @@ describe('RecordUsage', () => {
 
   it('records usage of a Cycle that already ended, without an epoch', () => {
     const state = stateOf([...plannedEvents(), cycleFailed()]);
-    const ctx = contextOf({ kind: 'worker', workerId: workerIdOf(1) });
+    const ctx = contextOf({ kind: 'cell', cellId: cellIdOf(1) });
 
     const result = decide(state, usage, ctx);
 
@@ -776,7 +776,7 @@ describe('RecordUsage', () => {
   });
 
   it('refuses usage for a Cycle that is not in the history', () => {
-    const ctx = contextOf({ kind: 'worker', workerId: workerIdOf(1) });
+    const ctx = contextOf({ kind: 'cell', cellId: cellIdOf(1) });
 
     const result = decide(
       stateOf(plannedEvents()),
@@ -787,8 +787,8 @@ describe('RecordUsage', () => {
     expect(result).toEqual({ ok: false, error: { code: 'not_found' } });
   });
 
-  it('refuses usage from a Worker that did not run the Cycle', () => {
-    const ctx = contextOf({ kind: 'worker', workerId: workerIdOf(2) });
+  it('refuses usage from a Cell that did not run the Cycle', () => {
+    const ctx = contextOf({ kind: 'cell', cellId: cellIdOf(2) });
 
     const result = decide(stateOf(plannedEvents()), usage, ctx);
 
@@ -796,7 +796,7 @@ describe('RecordUsage', () => {
       ok: false,
       error: {
         code: 'precondition',
-        detail: 'only the Worker that ran the Cycle records usage',
+        detail: 'only the Cell that ran the Cycle records usage',
       },
     });
   });
