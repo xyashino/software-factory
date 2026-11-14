@@ -6,6 +6,7 @@ import type {
   CycleId,
   JobId,
   OrderId,
+  PlanSlug,
   ProjectId,
   QuestionId,
   ResumeId,
@@ -106,6 +107,8 @@ export interface WorkOrderState {
   priority: Priority;
   dependsOn: OrderId[];
   line: LineSnapshot; // pinned, never re-read from disk
+  baseBranch: string; // pinned at creation: the project's base, or the plan's (CORE §12.5)
+  plan?: PlanSlug; // the Order Plan this Work order belongs to (CORE §12.1)
 
   phase: Phase;
   cycles: CycleState[]; // start order

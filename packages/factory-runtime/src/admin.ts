@@ -1,5 +1,7 @@
 import type { OrderId } from '@repo/factory-core/ids';
 import { nextJob } from '@repo/factory-core/order/next-job';
+import { toPlanProjection } from '@repo/factory-core/plan/projection';
+import { planNextJob } from '@repo/factory-core/plan/next-job';
 import { toProjection } from '@repo/factory-core/order/projection';
 import type {
   ArchiveCounts,
@@ -10,8 +12,12 @@ import type { RuntimePorts } from './ports';
 import { foldHistory } from './state';
 
 /** The projection of a folded Work order, with its next job (STORAGE §6): the rebuild's row function. */
-export const projectionOf: ProjectionOf = (state, meta) =>
-  toProjection(state, { ...meta, next: nextJob(state) });
+export const projectionOf: ProjectionOf = {
+  order: (state, meta) =>
+    toProjection(state, { ...meta, next: nextJob(state) }),
+  plan: (state, meta) =>
+    toPlanProjection(state, { ...meta, next: planNextJob(state) }),
+};
 
 /** Local admin operations (PROTOCOL §3.1, STORAGE §7). Each one needs the writer lock. */
 export interface RuntimeAdmin {

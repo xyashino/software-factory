@@ -5,8 +5,13 @@ import {
   type StoredEvent,
   storedEventSchema,
 } from '@repo/factory-core/order/events';
+import {
+  planStoredEventSchema,
+  type StoredPlanEvent,
+} from '@repo/factory-core/plan/events';
+import type { ProjectionOf } from '@repo/factory-core/ports/archive';
 import type { FactoryDatabase } from './db';
-import { type ProjectRow, rebuildOn } from './rebuild-projections';
+import { rebuildOn } from './rebuild-projections';
 import { blobs, type ProjectRecord, events, projects } from './schema';
 import { putBlobOn, readBlobOn } from './sqlite-blob-store';
 import {
@@ -45,6 +50,16 @@ export interface ImportResult {
   orders: number;
 }
 
+/** An event line as the envelope it is: a plan stream line carries `planId`, a Work order line `orderId`. */
+const envelopeOf = (value: unknown): StoredEvent | StoredPlanEvent => {
+  const plan = planStoredEventSchema.safeParse(value);
+  return plan.success ? plan.data : storedEventSchema.parse(value);
+};
+
+/** The stream an envelope belongs to: the `order_id` column stores both kinds of stream id. */
+const streamOf = (envelope: StoredEvent | StoredPlanEvent): string =>
+  'planId' in envelope ? envelope.planId : envelope.orderId;
+
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
@@ -67,8 +82,8 @@ const parseLines = (bytes: Uint8Array, name: string): unknown[] =>
     });
 
 /** Every stored event, in global order, read a page at a time. */
-const allEvents = (orm: FactoryDatabase): StoredEvent[] => {
-  const all: StoredEvent[] = [];
+const allEvents = (orm: FactoryDatabase): (StoredEvent | StoredPlanEvent)[] => {
+  const all: (StoredEvent | StoredPlanEvent)[] = [];
   let after = 0;
   for (;;) {
     const page = feedRows(orm, after, PAGE);
@@ -200,7 +215,7 @@ const ensureEmpty = (orm: FactoryDatabase): void => {
 const importOn = (
   orm: FactoryDatabase,
   archive: Uint8Array,
-  project: ProjectRow,
+  project: ProjectionOf,
   importedAt: number,
 ): ImportResult => {
   const files = new Map<string, Uint8Array>();
@@ -220,10 +235,10 @@ const importOn = (
   const projectValues = parseLines(requireEntry(files, PROJECTS), PROJECTS).map(
     projectOf,
   );
-  // Each event line is checked against the envelope schema, and its payload is kept as written.
+  // Each event line is checked against its envelope schema (a plan line carries `planId`), and its payload is kept as written.
   const stored = parseLines(requireEntry(files, EVENTS), EVENTS).map(
     (value) => ({
-      envelope: storedEventSchema.parse(value),
+      envelope: envelopeOf(value),
       payload: (value as { event: unknown }).event,
     }),
   );
@@ -260,7 +275,7 @@ const importOn = (
       .insert(events)
       .values({
         globalSeq: envelope.globalSeq,
-        orderId: envelope.orderId,
+        orderId: streamOf(envelope),
         seq: envelope.seq,
         at: envelope.at,
         actor: JSON.stringify(envelope.actor),
@@ -291,7 +306,7 @@ const importOn = (
 export const importFactory = (
   store: SqliteEventStore,
   archive: Uint8Array,
-  project: ProjectRow,
+  project: ProjectionOf,
   importedAt: number,
 ): Promise<ImportResult> =>
   store.exclusive((orm) => importOn(orm, archive, project, importedAt));

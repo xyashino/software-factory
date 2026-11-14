@@ -8,6 +8,7 @@ defineEventStoreContract({ describe, it }, 'in-memory fake', async () => {
     store,
     seedProject: async () => undefined,
     orders: () => store.orders(),
+    plans: () => store.plans(),
     close: async () => undefined,
   };
 });

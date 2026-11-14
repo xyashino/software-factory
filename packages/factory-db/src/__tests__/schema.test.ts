@@ -6,7 +6,7 @@ import { MIGRATIONS_DIR, migrate } from '../migrate';
 import * as schema from '../schema';
 import { openDatabase } from '../sqlite-event-store';
 
-/** The eleven tables of STORAGE §4, by their SQL names. */
+/** The twelve tables of STORAGE §4 (with `plans`, migration 0003), by their SQL names. */
 const STORAGE_TABLES = [
   'blobs',
   'cells',
@@ -16,6 +16,7 @@ const STORAGE_TABLES = [
   'join_tokens',
   'leases',
   'orders',
+  'plans',
   'projects',
   'signals',
   'supervisor_tokens',

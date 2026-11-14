@@ -55,3 +55,36 @@ export const parseOrderId = (
   if (!match) return undefined;
   return { projectId: match[1] as ProjectId, todoId: match[2] as TodoId };
 };
+
+/** CORE §12.1: a plan slug, the frontmatter `plan:` value and the tail of a PlanId. */
+const PLAN_SLUG = /^[a-z0-9][a-z0-9-]{0,63}$/;
+const PLAN_ID = /^([a-z0-9][a-z0-9-]{0,127}):plan:([a-z0-9][a-z0-9-]{0,63})$/;
+
+export const planSlugSchema = z.string().regex(PLAN_SLUG).brand<'PlanSlug'>();
+export const planIdSchema = z
+  .string()
+  .regex(PLAN_ID)
+  .refine(isMachineIndependentId, 'id must not name a machine-local value')
+  .brand<'PlanId'>();
+
+export type PlanSlug = z.infer<typeof planSlugSchema>;
+export type PlanId = z.infer<typeof planIdSchema>;
+
+/** `<projectId>:plan:<slug>`, the stream id of an Order Plan (CORE §12.3). */
+export const planIdOf = (projectId: ProjectId, slug: PlanSlug): PlanId =>
+  `${projectId}:plan:${slug}` as PlanId;
+
+/** True for a PlanId, false for an OrderId. The two never collide: a PlanId has two colons. */
+export const isPlanId = (text: string): text is PlanId => PLAN_ID.test(text);
+
+/** Splits a PlanId back into its parts. Undefined when the text is not a PlanId. */
+export const parsePlanId = (
+  text: string,
+): { projectId: ProjectId; slug: PlanSlug } | undefined => {
+  const match = PLAN_ID.exec(text);
+  if (!match) return undefined;
+  return { projectId: match[1] as ProjectId, slug: match[2] as PlanSlug };
+};
+
+/** The plan branch name (CORE §12.1). */
+export const planBranchOf = (slug: PlanSlug): string => `feat/${slug}`;

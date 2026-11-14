@@ -17,11 +17,15 @@ import {
   importFactory,
 } from '../export-import';
 import {
+  PLAN_ID,
   appendHistory,
+  appendPlanHistory,
   openMigratedDatabase,
   openSeededStore,
+  planEvents,
   projectRow,
   rawOrders,
+  rawPlans,
 } from './helpers';
 import { drizzleOf } from '../db';
 import { blobs, projects } from '../schema';
@@ -261,5 +265,19 @@ describe('export and import', () => {
     await expect(
       importFactory(target, tampered, projectRow, 2),
     ).rejects.toThrow(/does not match the last event/);
+  });
+  it('round-trips a plan stream: identical plan events and plans table', async () => {
+    const { db, store } = openSeededStore();
+    await appendPlanHistory(store, planEvents());
+    const exported = await exportFactory(store, 42);
+
+    const target = openMigratedDatabase();
+    const targetStore = openSqliteEventStore(target);
+    await importFactory(targetStore, exported, projectRow, 99);
+
+    expect(await targetStore.loadPlan(PLAN_ID)).toEqual(
+      await store.loadPlan(PLAN_ID),
+    );
+    expect(rawPlans(target)).toBe(rawPlans(db));
   });
 });

@@ -178,6 +178,8 @@ describe('command loop', () => {
                 kind: 'conflict' as const,
                 currentSeq: 0,
               }),
+              loadPlan: tx.loadPlan,
+              appendPlan: tx.appendPlan,
             });
           }),
       },
@@ -212,6 +214,8 @@ describe('command loop', () => {
           w.events.transaction((tx) =>
             fn({
               load: tx.load,
+              loadPlan: tx.loadPlan,
+              appendPlan: tx.appendPlan,
               append: async (input) => {
                 const result = await tx.append(input);
                 if (result.kind === 'conflict') conflicts += 1;

@@ -1,4 +1,10 @@
-import type { ProjectId, CellId } from '@repo/factory-core/ids';
+import {
+  planIdOf,
+  type CellId,
+  type PlanId,
+  type ProjectId,
+} from '@repo/factory-core/ids';
+import type { PlanProjection } from '@repo/factory-core/plan/projection';
 import type { OrderProjection } from '@repo/factory-core/order/projection';
 import { resolveDeps, type DepPolicy } from '@repo/factory-core/queue/deps';
 import type {
@@ -8,6 +14,21 @@ import type {
 } from '@repo/factory-core/queue/types';
 import type { ProjectRecord } from '@repo/factory-core/ports/projects';
 import type { RuntimePorts } from './ports';
+
+/**
+ * CORE §12.6: the root of a plan waits until the plan has its branch (`phase` not `branching`). A
+ * member whose plan has no row yet waits too: intake creates the plan before its members, so this is a race.
+ */
+const rootGated = (
+  row: OrderProjection,
+  plansById: ReadonlyMap<PlanId, PlanProjection>,
+): boolean => {
+  if (row.plan === null) return false;
+  const plan = plansById.get(planIdOf(row.projectId, row.plan));
+  if (!plan) return true;
+  const isRoot = plan.members[0]?.orderId === row.orderId;
+  return isRoot && plan.phase === 'branching';
+};
 
 /** The queue as `selectClaimable` reads it: every Work order with its dependency state (CORE §8). */
 export interface Queue {
@@ -51,6 +72,9 @@ export const readQueue = async (
   const rows = replace
     ? stored.map((row) => (row.orderId === replace.orderId ? replace : row))
     : stored;
+  const plansById = new Map<PlanId, PlanProjection>(
+    (await ports.projections.plans()).map((plan) => [plan.planId, plan]),
+  );
   const projects = new Map(
     (await ports.projects.list()).map((project) => [
       project.projectId,
@@ -61,7 +85,8 @@ export const readQueue = async (
   const entries = rows.map((row) => {
     const policy: DepPolicy =
       projects.get(row.projectId)?.depPolicy ?? 'delivered';
-    return entryOf(row, resolveDeps(row, rows, policy), now);
+    const deps = resolveDeps(row, rows, policy);
+    return entryOf(row, rootGated(row, plansById) ? 'waiting' : deps, now);
   });
   const perProjectRunning: Limits['perProjectRunning'] = {};
   for (const [projectId, project] of projects) {

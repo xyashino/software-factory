@@ -4,7 +4,9 @@ import type { BlobRef, CommitSha } from '@repo/factory-core/ids';
 import { findStation } from '@repo/factory-core/line/snapshot';
 import { resolveCycleContext } from '@repo/factory-core/order/context';
 import type { JobSpec } from '@repo/factory-core/order/next';
+import type { OrderProjection } from '@repo/factory-core/order/projection';
 import type { WorkOrderState } from '@repo/factory-core/order/state';
+import { planBranchOf } from '@repo/factory-core/ids';
 import type { ProjectRecord } from '@repo/factory-core/ports/projects';
 import type { BlobStore } from '@repo/factory-core/ports/blob-store';
 import type { Line, LineStation } from '@repo/factory-definitions/line-schema';
@@ -53,9 +55,30 @@ const lineOf = (definitions: Definitions, name: string): Line => {
 
 const baseOf = (
   base: CommitSha | 'branch_base',
-  project: ProjectRecord,
+  branchBase: string,
 ): CommitSha | { branchBase: string } =>
-  base === 'branch_base' ? { branchBase: project.baseBranch } : base;
+  base === 'branch_base' ? { branchBase } : base;
+
+/**
+ * The branch a Work order builds on, resolved when the job is built (CORE §12.5, never stored):
+ * - a plain Work order: its pinned `baseBranch`, not the project's current one;
+ * - a plan member with no in-plan predecessor (the root), or whose predecessor's PR is merged: `feat/<slug>`;
+ * - a plan member whose predecessor is delivered with its PR not merged: `factory/<predecessorTodoId>`.
+ */
+export const resolveBase = (
+  state: Pick<WorkOrderState, 'plan' | 'dependsOn' | 'baseBranch'>,
+  rows: readonly OrderProjection[],
+): string => {
+  if (state.plan === undefined) return state.baseBranch;
+  const plan = state.plan;
+  const predecessor = state.dependsOn
+    .map((orderId) => rows.find((row) => row.orderId === orderId))
+    .find((row) => row?.plan === plan);
+  if (predecessor === undefined || predecessor.prState === 'merged') {
+    return planBranchOf(plan);
+  }
+  return `factory/${predecessor.todoId}`;
+};
 
 /**
  * The Job a claimed job becomes (PROTOCOL §4). `spec` is the job `nextJob` named before the claim,
@@ -67,6 +90,7 @@ export const buildJob = async (
   state: WorkOrderState,
   project: ProjectRecord,
   spec: JobSpec,
+  rows: readonly OrderProjection[] = [],
 ): Promise<Job> => {
   const active = state.activeJob;
   if (!active) {
@@ -74,6 +98,7 @@ export const buildJob = async (
   }
   const next: { kind: 'job'; job: JobSpec } = { kind: 'job', job: spec };
   const line = lineOf(ports.definitions, state.line.name);
+  const branchBase = resolveBase(state, rows);
   const common = {
     jobId: active.jobId,
     orderId: state.orderId,
@@ -81,7 +106,7 @@ export const buildJob = async (
     epoch: active.epoch,
     repo: {
       url: project.repoUrl,
-      baseBranch: project.baseBranch,
+      baseBranch: branchBase,
       branch: `factory/${state.todoId}`,
     },
     workspace: {
@@ -118,7 +143,7 @@ export const buildJob = async (
       detail: `station ${stationId} is not in line ${line.name}`,
     });
   }
-  const base = baseOf(next.job.base, project);
+  const base = baseOf(next.job.base, branchBase);
   const stationBase = {
     stationId,
     cycleId: active.cycleId ?? stationCycleMissing(),

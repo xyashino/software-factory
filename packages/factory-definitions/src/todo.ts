@@ -2,8 +2,10 @@ import { basename } from 'node:path';
 import { z } from 'zod';
 import {
   orderIdOf,
+  planSlugSchema,
   todoIdSchema,
   type OrderId,
+  type PlanSlug,
   type ProjectId,
   type TodoId,
 } from '@repo/factory-core/ids';
@@ -24,10 +26,19 @@ export type TodoPriority = (typeof PRIORITIES)[number];
  * - `unparseable`: no or bad frontmatter, bad YAML, a schema failure, a bad file name;
  * - `unknown_line`: names a Line that does not exist;
  * - `reused_id`: its OrderId already exists, e.g. a delivered todo re-added;
- * - `line_conflict`: `line` and `workflow` are both set and differ.
+ * - `line_conflict`: `line` and `workflow` are both set and differ;
+ * - `plan_invalid`: the todo's Order Plan is not a linear chain (CORE §12.2), so no member is created;
+ * - `plan_closed`: the todo names a plan that is finished or cancelled (CORE §12.1), set by intake;
+ * - `plan_changed`: the `plan` or in-plan `depends_on` of an existing member changed, set by intake.
  */
 export type TodoDiagnosticKind =
-  'unparseable' | 'unknown_line' | 'reused_id' | 'line_conflict';
+  | 'unparseable'
+  | 'unknown_line'
+  | 'reused_id'
+  | 'line_conflict'
+  | 'plan_invalid'
+  | 'plan_closed'
+  | 'plan_changed';
 
 /** One problem with one todo file. `file` is relative to the repo root. */
 export interface TodoDiagnostic {
@@ -47,6 +58,8 @@ export interface Todo {
   priority: TodoPriority;
   /** OrderIds of the todos this one waits for, same project */
   dependsOn: OrderId[];
+  /** the Order Plan this todo belongs to (CORE §12.1); absent for a plain todo */
+  plan?: PlanSlug;
   /** the Line name the todo selects */
   line: string;
   /** `factory: v2` marks a todo for the v2 intake during the trial (ROADMAP M9) */
@@ -76,6 +89,7 @@ const todoFrontmatter = z.object({
   line: z.string().min(1, 'must not be empty').optional(),
   workflow: z.string().min(1, 'must not be empty').optional(),
   factory: z.literal('v2', { error: 'must be v2' }).optional(),
+  plan: planSlugSchema.optional(),
 });
 
 /** A todo's id is its file name without `.md`, which must be a valid TodoId. */
@@ -157,6 +171,7 @@ export const parseTodo = (
     status: data.status,
     priority: data.priority,
     dependsOn: data.depends_on.map((dep) => orderIdOf(projectId, dep)),
+    ...(data.plan === undefined ? {} : { plan: data.plan }),
     line,
     ...(data.factory === undefined ? {} : { factory: data.factory }),
     body: split.body,

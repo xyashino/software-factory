@@ -89,15 +89,55 @@ export const orders = sqliteTable(
     createdAt: integer('created_at').notNull(),
     /** `at` of the last event. */
     updatedAt: integer('updated_at').notNull(),
+    /** The Order Plan this Work order is a member of (CORE §12.1); null for a plain todo (migration 0003). */
+    plan: text('plan'),
+    /** The base branch the Work order was created on (CORE §12.5; migration 0003). */
+    baseBranch: text('base_branch').notNull().default(''),
   },
   (table) => [
     unique('orders_project_todo').on(table.projectId, table.todoId),
+    index('orders_plan').on(table.projectId, table.plan),
     index('orders_queue').on(
       table.holder,
       table.nextKind,
       table.priority,
       table.createdAt,
     ),
+  ],
+);
+
+/** The projection of one Order Plan (CORE §12.3, STORAGE §4); the stream id is `planId`. */
+export const plans = sqliteTable(
+  'plans',
+  {
+    planId: text('plan_id').primaryKey(),
+    projectId: text('project_id')
+      .notNull()
+      .references(() => projects.projectId),
+    slug: text('slug').notNull(),
+    branch: text('branch').notNull(),
+    baseBranch: text('base_branch').notNull(),
+    lastSeq: integer('last_seq').notNull(),
+    phase: text('phase').notNull(),
+    holder: text('holder').notNull(),
+    nextKind: text('next_kind').notNull(),
+    jobKind: text('job_kind'),
+    /** JSON [{ orderId, todoId, after?, state }] in chain order, root first. */
+    members: text('members').notNull().default('[]'),
+    branchCommit: text('branch_commit'),
+    prUrl: text('pr_url'),
+    prState: text('pr_state'),
+    lastCellId: text('last_cell_id'),
+    /** JSON [{ cellId, until }]. */
+    avoidCells: text('avoid_cells').notNull().default('[]'),
+    andonReason: text('andon_reason'),
+    createdAt: integer('created_at').notNull(),
+    /** `at` of the last event. */
+    updatedAt: integer('updated_at').notNull(),
+  },
+  (table) => [
+    unique('plans_project_slug').on(table.projectId, table.slug),
+    index('plans_queue').on(table.holder, table.nextKind, table.createdAt),
   ],
 );
 
@@ -199,6 +239,8 @@ export type EventRecord = typeof events.$inferSelect;
 export type NewEventRecord = typeof events.$inferInsert;
 export type OrderRecord = typeof orders.$inferSelect;
 export type NewOrderRecord = typeof orders.$inferInsert;
+export type PlanRecord = typeof plans.$inferSelect;
+export type NewPlanRecord = typeof plans.$inferInsert;
 export type CommandRecord = typeof commands.$inferSelect;
 export type NewCommandRecord = typeof commands.$inferInsert;
 export type JoinTokenRecord = typeof joinTokens.$inferSelect;

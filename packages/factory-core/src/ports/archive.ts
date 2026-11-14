@@ -1,11 +1,23 @@
 import type { WorkOrderState } from '../order/state';
 import type { OrderProjection } from '../order/projection';
+import type { PlanState } from '../plan/state';
+import type { PlanProjection } from '../plan/projection';
 
-/** Folds a Work order into its `orders` row, given the row's bookkeeping (STORAGE §6). */
-export type ProjectionOf = (
-  state: WorkOrderState,
-  meta: { lastSeq: number; createdAt: number; updatedAt: number },
-) => OrderProjection;
+/** The bookkeeping of a row beyond its folded state (STORAGE §6). */
+export interface RowMeta {
+  lastSeq: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
+/**
+ * Folds a stream into its row: `order` for a Work order (`orders`), `plan` for an Order Plan
+ * (`plans`). The caller binds the core projection functions and the `next` of each stream.
+ */
+export interface ProjectionOf {
+  order(state: WorkOrderState, meta: RowMeta): OrderProjection;
+  plan(state: PlanState, meta: RowMeta): PlanProjection;
+}
 
 /** What a backup or an export holds, counted, so the caller can report it. */
 export interface ArchiveCounts {

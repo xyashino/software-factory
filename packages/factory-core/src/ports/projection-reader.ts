@@ -1,4 +1,5 @@
 import type { OrderProjection } from '../order/projection';
+import type { PlanProjection } from '../plan/projection';
 
 /**
  * The read side of the `orders` projection (STORAGE §4). The runtime reads the board and the queue
@@ -7,4 +8,6 @@ import type { OrderProjection } from '../order/projection';
 export interface ProjectionReader {
   /** Every Work order row, sorted by order id. */
   orders(): Promise<OrderProjection[]>;
+  /** Every Order Plan row, sorted by plan id. */
+  plans(): Promise<PlanProjection[]>;
 }

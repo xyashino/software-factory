@@ -10,6 +10,8 @@ import type { ProjectionReader } from '@repo/factory-core/ports/projection-reade
 import type { OrderProjection } from '@repo/factory-core/order/projection';
 import { drizzleOf } from './db';
 import { loadOrders } from './orders-table';
+import { loadPlans } from './plans-table';
+import type { PlanProjection } from '@repo/factory-core/plan/projection';
 import { projects } from './schema';
 import type { StatementGate } from './sqlite-event-store';
 import type { WriterLock } from './writer-lock';
@@ -152,5 +154,6 @@ export const sqliteProjectionReader = (
   const orm = drizzleOf(db);
   return {
     orders: (): Promise<OrderProjection[]> => gate.run(() => loadOrders(orm)),
+    plans: (): Promise<PlanProjection[]> => gate.run(() => loadPlans(orm)),
   };
 };

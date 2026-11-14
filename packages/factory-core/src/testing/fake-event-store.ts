@@ -1,47 +1,62 @@
-import type { OrderId } from '../ids';
+import type { OrderId, PlanId } from '../ids';
 import {
   type OrderEvent,
   type StoredEvent,
   storedEventSchema,
 } from '../order/events';
 import type { OrderProjection } from '../order/projection';
+import {
+  planStoredEventSchema,
+  type PlanEvent,
+  type StoredPlanEvent,
+} from '../plan/events';
+import type { PlanProjection } from '../plan/projection';
 import type {
   AppendInput,
   AppendResult,
   EventStore,
+  PlanAppendInput,
+  PlanAppendResult,
   StoreTx,
 } from '../ports/event-store';
 
-/** The in-memory `EventStore`, plus the `orders` read the contract suite needs. */
+/** The in-memory `EventStore`, plus the projection reads the contract suite needs. */
 export type FakeEventStore = EventStore & {
   orders(): Promise<OrderProjection[]>;
+  plans(): Promise<PlanProjection[]>;
 };
 
 /** What a command stored, so a replay returns the same response. */
 interface CommandRecord {
-  orderId: OrderId;
+  orderId: OrderId | PlanId;
   response: unknown;
   firstSeq: number;
   lastSeq: number;
   at: number;
 }
 
+/** A stored event of either stream kind. */
+type AnyStored = StoredEvent | StoredPlanEvent;
+
 /** The whole store as data. Transactions work on a copy and replace the committed one on commit. */
 interface Snapshot {
-  events: StoredEvent[];
+  events: AnyStored[];
   orders: Map<OrderId, OrderProjection>;
+  plans: Map<PlanId, PlanProjection>;
   commands: Map<string, CommandRecord>;
 }
 
 const emptySnapshot = (): Snapshot => ({
   events: [],
   orders: new Map(),
+  plans: new Map(),
   commands: new Map(),
 });
 
 const copyOf = (snapshot: Snapshot): Snapshot => ({
   events: [...snapshot.events],
   orders: new Map(snapshot.orders),
+  plans: new Map(snapshot.plans),
   commands: new Map(snapshot.commands),
 });
 
@@ -119,7 +134,59 @@ const applyAppend = (snapshot: Snapshot, input: AppendInput): AppendResult => {
 };
 
 const loadFrom = (snapshot: Snapshot, orderId: OrderId): StoredEvent[] =>
-  snapshot.events.filter((stored) => stored.orderId === orderId);
+  snapshot.events.filter(
+    (stored): stored is StoredEvent =>
+      !('planId' in stored) && stored.orderId === orderId,
+  );
+
+const loadPlanFrom = (snapshot: Snapshot, planId: PlanId): StoredPlanEvent[] =>
+  snapshot.events.filter(
+    (stored): stored is StoredPlanEvent =>
+      'planId' in stored && stored.planId === planId,
+  );
+
+/** One append to a plan stream: the same rules as `applyAppend`, against the plan's own seq. */
+const applyPlanAppend = (
+  snapshot: Snapshot,
+  input: PlanAppendInput,
+): PlanAppendResult => {
+  const replay = snapshot.commands.get(input.commandId);
+  if (replay) return { kind: 'replayed', response: replay.response };
+  const currentSeq = snapshot.plans.get(input.planId)?.lastSeq ?? 0;
+  if (currentSeq !== input.expectedSeq) {
+    return { kind: 'conflict', currentSeq };
+  }
+  const lastSeq = input.expectedSeq + input.events.length;
+  if (input.projection.lastSeq !== lastSeq) {
+    throw new Error(
+      `projection lastSeq ${input.projection.lastSeq} must equal the last appended seq ${lastSeq}`,
+    );
+  }
+  const firstGlobal = snapshot.events.length + 1;
+  const stored = input.events.map((event: PlanEvent, index) =>
+    planStoredEventSchema.parse({
+      schemaVersion: 2,
+      seq: input.expectedSeq + index + 1,
+      globalSeq: firstGlobal + index,
+      planId: input.planId,
+      at: input.at,
+      actor: input.actor,
+      commandId: input.commandId,
+      ...(input.epoch !== undefined ? { epoch: input.epoch } : {}),
+      event,
+    }),
+  );
+  snapshot.events.push(...stored);
+  snapshot.plans.set(input.planId, input.projection);
+  snapshot.commands.set(input.commandId, {
+    orderId: input.planId,
+    response: input.response,
+    firstSeq: input.expectedSeq + 1,
+    lastSeq,
+    at: input.at,
+  });
+  return { kind: 'appended', events: stored };
+};
 
 /**
  * An `EventStore` in memory. Writes (`append`, `transaction`) run one at a time. A transaction
@@ -136,6 +203,8 @@ export const fakeEventStore = (): FakeEventStore => {
       const tx: StoreTx = {
         load: async (orderId) => loadFrom(staged, orderId),
         append: async (input) => applyAppend(staged, input),
+        loadPlan: async (planId) => loadPlanFrom(staged, planId),
+        appendPlan: async (input) => applyPlanAppend(staged, input),
       };
       const value = await fn(tx);
       committed = staged;
@@ -144,16 +213,25 @@ export const fakeEventStore = (): FakeEventStore => {
 
   return {
     load: async (orderId) => loadFrom(committed, orderId),
+    loadPlan: async (planId) => loadPlanFrom(committed, planId),
+    appendPlan: (input) => transaction((tx) => tx.appendPlan(input)),
     response: async (commandId) => {
       const record = committed.commands.get(commandId);
       return record ? { response: record.response } : undefined;
     },
     feed: async (afterGlobalSeq, limit) =>
       committed.events
-        .filter((stored) => stored.globalSeq > afterGlobalSeq)
+        .filter(
+          (stored): stored is StoredEvent =>
+            !('planId' in stored) && stored.globalSeq > afterGlobalSeq,
+        )
         .slice(0, limit),
     append: (input) => transaction((tx) => tx.append(input)),
     transaction,
     orders: async () => [...committed.orders.values()].sort(byOrderId),
+    plans: async () =>
+      [...committed.plans.values()].sort((a, b) =>
+        a.planId < b.planId ? -1 : a.planId === b.planId ? 0 : 1,
+      ),
   };
 };

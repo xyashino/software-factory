@@ -30,6 +30,8 @@ const createOrder = (stored: StoredEvent, ev: Created): WorkOrderState => ({
   priority: ev.priority,
   dependsOn: ev.dependsOn,
   line: ev.line.snapshot,
+  baseBranch: ev.baseBranch,
+  ...(ev.plan === undefined ? {} : { plan: ev.plan }),
   phase: { kind: 'stations', index: 0 },
   cycles: [],
   lastPassed: {},

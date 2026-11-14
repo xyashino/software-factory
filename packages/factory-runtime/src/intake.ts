@@ -1,13 +1,17 @@
 import { createHash } from 'node:crypto';
 import {
   orderIdOf,
+  planIdOf,
   type BlobRef,
   type CommitSha,
   type OrderId,
+  type PlanId,
   type ProjectId,
   type TodoId,
 } from '@repo/factory-core/ids';
 import type { OrderCommand } from '@repo/factory-core/order/commands';
+import type { PlanCommand } from '@repo/factory-core/plan/commands';
+import type { PlanProjection } from '@repo/factory-core/plan/projection';
 import type { Spec } from '@repo/factory-core/order/events';
 import type { ProjectRecord } from '@repo/factory-core/ports/projects';
 import type { IntakeRecord } from '@repo/factory-core/ports/intake';
@@ -21,6 +25,7 @@ import {
 } from '@repo/factory-definitions/todo-hash';
 import type { CommandHandler } from './command-handler';
 import { isRuntimeError } from './errors';
+import { memberStateOf } from './plan-commands';
 import type { RuntimePorts } from './ports';
 
 /** What one intake pass did to one project (PROTOCOL §3.1, `POST /v1/intake/sync`). */
@@ -96,7 +101,11 @@ const refusalDetail = (error: unknown): string | undefined => {
  * - a runnable `todo` with no Work order → `CreateOrder`;
  * - a changed spec → `UpdateSpec` before the first claim; after it, a `spec_drift` diagnostic only;
  * - `cancelled`, or a file that is gone → `Cancel` before the first claim; after it, a diagnostic;
- * - an unparseable todo, or one whose id is used by a finished Work order → a diagnostic, no command.
+ * - an unparseable todo, or one whose id is used by a finished Work order → a diagnostic, no command;
+ * - a delivered or merged Work order whose todo is unchanged on the base branch → recorded silently;
+ * - a plan (CORE §12.7): `CreatePlan` before its first member, members `CreateOrder{plan}` then
+ *   `AddPlanMember` in chain order, a closed plan or a changed `plan` → a diagnostic, and the member
+ *   states are reconciled with the plan at the end of the pass.
  *
  * Every command id derives from the todo and its hash, so a replayed pass changes nothing. The
  * caller holds the writer lock. A refusal becomes a diagnostic; any other error ends the pass, and
@@ -192,6 +201,55 @@ export const syncProject = async (
       .submit({ orderId, commandId, command: body, actor: { kind: 'factory' } })
       .then(() => undefined);
 
+  const planCommand = (
+    planId: PlanId,
+    commandId: string,
+    body: PlanCommand,
+  ): Promise<void> =>
+    handler
+      .submitPlan({
+        planId,
+        commandId,
+        command: body,
+        actor: { kind: 'factory' },
+      })
+      .then(() => undefined);
+
+  const planRows = async (): Promise<Map<PlanId, PlanProjection>> =>
+    new Map(
+      (await ports.projections.plans()).map((plan) => [plan.planId, plan]),
+    );
+  const latestRows = async (): Promise<Map<OrderId, OrderProjection>> =>
+    new Map(
+      (await ports.projections.orders()).map((row) => [row.orderId, row]),
+    );
+  // A plan that finished or whose PR is ready takes no new member (CORE §12.1).
+  const closed = (plan: PlanProjection | undefined): boolean =>
+    plan !== undefined &&
+    (plan.phase === 'completed' ||
+      plan.phase === 'cancelled' ||
+      plan.phase === 'ready');
+  const planOfOrder = new Map(rows.map((row) => [row.orderId, row.plan]));
+
+  // The plan before its first member (CORE §12.7). Its id is the plan's slug, so a replay is a no-op.
+  let plans = await planRows();
+  for (const [slug, chain] of scan.planChains) {
+    const planId = planIdOf(projectId, slug);
+    if (plans.has(planId)) continue;
+    const root = chain[0];
+    if (!root) continue;
+    await attempt(root.todoId, () =>
+      planCommand(planId, `intake:${projectId}:plan:${slug}`, {
+        type: 'CreatePlan',
+        planId,
+        projectId,
+        slug,
+        baseBranch: project.baseBranch,
+      }),
+    );
+  }
+  plans = await planRows();
+
   for (const todo of scan.todos) {
     const text = textOf.get(todo.file) ?? '';
     const hash = todoContentHash(text);
@@ -230,6 +288,21 @@ export const syncProject = async (
     }
 
     if (!order) {
+      if (
+        todo.plan !== undefined &&
+        closed(plans.get(planIdOf(projectId, todo.plan)))
+      ) {
+        await record(
+          todo.todoId,
+          hash,
+          diagnose(
+            todo.todoId,
+            'plan_closed',
+            `plan ${todo.plan} is closed; no Work order is created`,
+          ),
+        );
+        continue;
+      }
       const diagnostic = await attempt(todo.todoId, async () => {
         const loaded = ports.definitions.lines.get(todo.line);
         if (!loaded) throw new Error(`unknown line ${todo.line}`);
@@ -255,6 +328,7 @@ export const syncProject = async (
             snapshot: loaded.snapshot,
           },
           baseBranch: project.baseBranch,
+          ...(todo.plan === undefined ? {} : { plan: todo.plan }),
         });
         report.created.push(todo.todoId);
       });
@@ -263,10 +337,30 @@ export const syncProject = async (
     }
 
     if (TERMINAL.has(order.status)) {
+      // CORE §12.7: a plan member delivered or merged while its todo stays on main is not a reuse.
+      if (
+        (order.status === 'delivered' || order.status === 'merged') &&
+        row?.contentHash === hash
+      ) {
+        await record(todo.todoId, hash, null);
+        continue;
+      }
       const diagnostic = diagnose(
         todo.todoId,
         'reused_id',
         `order ${order.orderId} is ${order.status}; pick a new name`,
+      );
+      await record(todo.todoId, row?.contentHash ?? hash, diagnostic);
+      continue;
+    }
+
+    if ((order.plan ?? null) !== (todo.plan ?? null)) {
+      const diagnostic = diagnose(
+        todo.todoId,
+        'plan_changed',
+        order.plan === null
+          ? 'the Work order was created outside a plan; its plan cannot change'
+          : `the Work order belongs to plan ${order.plan}; its plan cannot change`,
       );
       await record(todo.todoId, row?.contentHash ?? hash, diagnostic);
       continue;
@@ -287,16 +381,102 @@ export const syncProject = async (
       await record(todo.todoId, row.contentHash, diagnostic);
       continue;
     }
+    // A plan member keeps its in-plan dependency (CORE §12.1); a changed one is reported, not applied.
+    const inPlan = (dep: OrderId): boolean =>
+      order.plan !== null && planOfOrder.get(dep) === order.plan;
+    const keptInPlan = order.dependsOn.filter(inPlan);
+    const sameInPlan =
+      todo.dependsOn.filter(inPlan).join(',') === keptInPlan.join(',');
+    if (order.plan !== null && !sameInPlan) {
+      report.diagnostics.push({
+        todoId: todo.todoId,
+        kind: 'plan_changed',
+        message: `the in-plan depends_on of plan ${order.plan} changed; it is ignored`,
+      });
+    }
+    const dependsOn =
+      order.plan === null
+        ? todo.dependsOn
+        : [...todo.dependsOn.filter((dep) => !inPlan(dep)), ...keptInPlan];
     const diagnostic = await attempt(todo.todoId, async () => {
       await command(order.orderId, `${prefix}:${hash}`, {
         type: 'UpdateSpec',
         spec: await specOf(ports, todo, text),
         priority: todo.priority,
-        dependsOn: todo.dependsOn,
+        dependsOn,
       });
       report.updated.push(todo.todoId);
     });
     await record(todo.todoId, hash, diagnostic);
+  }
+
+  // CORE §12.7 create, the second half: each member joins its plan in chain order, after its predecessor.
+  // A member that could not be created this pass stops its plan's chain here; the next pass resumes it.
+  const current = await latestRows();
+  plans = await planRows();
+  for (const [slug, chain] of scan.planChains) {
+    const planId = planIdOf(projectId, slug);
+    const plan = plans.get(planId);
+    if (!plan) continue;
+    let after: OrderId | undefined;
+    for (const todo of chain) {
+      if (!current.has(todo.orderId)) break;
+      const member = plan.members.find(
+        (candidate) => candidate.orderId === todo.orderId,
+      );
+      if (member) {
+        if (member.after !== after) {
+          diagnose(
+            todo.todoId,
+            'plan_changed',
+            `member order of plan ${slug} has another predecessor; it is ignored`,
+          );
+        }
+      } else if (closed(plan)) {
+        break;
+      } else {
+        const text = textOf.get(todo.file) ?? '';
+        const added = await attempt(todo.todoId, () =>
+          planCommand(
+            planId,
+            `${idPrefix(projectId, todo.todoId)}:${todoContentHash(text)}:plan-member`,
+            {
+              type: 'AddPlanMember',
+              orderId: todo.orderId,
+              todoId: todo.todoId,
+              ...(after === undefined ? {} : { after }),
+            },
+          ),
+        );
+        if (added !== null) break;
+      }
+      after = todo.orderId;
+    }
+  }
+
+  // CORE §12.7 reconcile: a member state the plan has not heard of is reported now (a crash may have lost it).
+  const latest = await latestRows();
+  for (const plan of await ports.projections.plans()) {
+    if (plan.phase === 'completed' || plan.phase === 'cancelled') continue;
+    for (const member of plan.members) {
+      const order = latest.get(member.orderId);
+      if (!order) continue;
+      const state = memberStateOf(order);
+      if (state === member.state) continue;
+      try {
+        await planCommand(
+          plan.planId,
+          `${order.orderId}:${order.lastSeq}:plan`,
+          {
+            type: 'RecordMemberState',
+            orderId: order.orderId,
+            state,
+          },
+        );
+      } catch (error) {
+        if (!isRuntimeError(error)) throw error;
+      }
+    }
   }
 
   // Todo files that could not become Work orders this pass: keep the old hash so a fix is seen as a change.
