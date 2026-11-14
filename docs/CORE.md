@@ -6,7 +6,9 @@ on every machine. This is what makes R1 (portability) and R4 (determinism) hold.
 
 ## 1. Shape
 
-The core revolves around one aggregate, the **Work order**, and four functions:
+The core revolves around one aggregate, the **Work order**, and four functions. A second, much
+smaller aggregate, the **Order Plan** (§12), groups Work orders into a stacked chain and is driven by
+the same four functions over its own state, events and commands.
 
 ```ts
 // Is this intent allowed, and which facts does it produce?
@@ -47,6 +49,7 @@ factory-core/src/
 │   ├── context.ts         # resolveCycleContext
 │   ├── status.ts          # holder + board status derivation
 │   └── projection.ts      # toProjection(state): the `orders` row (STORAGE §4)
+├── plan/                  # Order Plan aggregate (§12): events, state, evolve, decide, next-job, projection
 ├── queue/
 │   └── select.ts          # selectClaimable
 ├── cycle/                 # Cell-side pure policy (never imported by factory-runtime)
@@ -63,6 +66,8 @@ factory-core/src/
 | `ProjectId`                                  | slug, e.g. `software-factory`                         | configuration                                                                                       |
 | `TodoId`                                     | the todo file name without `.md`                      | the repo                                                                                            |
 | `OrderId`                                    | `<projectId>:<todoId>`                                | intake (deterministic, so re-intake is idempotent)                                                  |
+| `PlanSlug`                                   | `^[a-z0-9][a-z0-9-]{0,63}$`, the todo's `plan:` value | the todo author (§12.1)                                                                             |
+| `PlanId`                                     | `<projectId>:plan:<slug>`                             | intake (deterministic, like `OrderId`)                                                              |
 | `StationId`                                  | the Station's `id` in its Line                        | the Line definition                                                                                 |
 | `CellId`                                     | ULID                                                  | factory-runtime, at remote `join` (PROTOCOL §1)                                                     |
 | `JobId`, `CycleId`, `ResumeId`, `QuestionId` | ULID                                                  | factory-runtime (`Ids` port), passed into `decide` via `DecideContext`                              |
@@ -71,7 +76,12 @@ factory-core/src/
 | `epoch`                                      | positive integer, per Work order, strictly increasing | factory-runtime, on every claim                                                                     |
 
 An `OrderId` is never used as a git ref or a directory name (it contains `:`). Branches and worktrees
-are named after the `TodoId` (PROTOCOL §8–9).
+are named after the `TodoId` (PROTOCOL §8–9). The one branch not named after a `TodoId` is a plan
+branch, `feat/<slug>` (§12).
+
+A `TodoId` MUST NOT contain `:`. This keeps every `PlanId` apart from every `OrderId`: the two share
+the stream column of the `events` table (STORAGE §4), and a stream is a Work order or a plan by the
+`:plan:` infix. Intake reports a todo file whose name contains `:` as a diagnostic and creates nothing.
 
 A `TodoId` is unique per project for all time: a todo re-added after its Work order was delivered or
 cancelled gets a diagnostic at intake, not a second Work order. To run the same work again, add a
@@ -88,7 +98,7 @@ interface StoredEvent {
   schemaVersion: 2;
   seq: number; // per Work order, 1-based, gapless
   globalSeq: number; // Factory-wide order, for feeds and export
-  orderId: OrderId;
+  orderId: OrderId | PlanId; // the stream id: a Work order's Traveler, or an Order Plan's (§12)
   at: number; // Factory clock (ms); the only time the core ever sees
   actor:
     | { kind: 'factory' }
@@ -98,9 +108,12 @@ interface StoredEvent {
     | { kind: 'supervisor'; name: string };
   commandId: string; // idempotency key of the command that produced it
   epoch?: number; // the lease epoch the write was made under (cell and operator actors)
-  event: OrderEvent;
+  event: OrderEvent | PlanEvent; // PlanEvent only on a PlanId stream (§12.3)
 }
 ```
+
+The field keeps the name `orderId` so stored envelopes and the `events.order_id` column do not
+change. Every `OrderEvent` is on an `OrderId` stream and every `PlanEvent` on a `PlanId` stream.
 
 ### 3.2 Rules for every event
 
@@ -115,12 +128,12 @@ interface StoredEvent {
 
 **Lifecycle**
 
-| Event              | Payload                                                                                                                                         | Notes                                 |
-| :----------------- | :---------------------------------------------------------------------------------------------------------------------------------------------- | :------------------------------------ |
-| `order_created`    | `projectId, todoId, spec { title, type, bodyBlob, contentHash }, priority, dependsOn: OrderId[], line { name, hash, snapshotBlob }, baseBranch` | The Line is **pinned** here (§4.4).   |
-| `spec_updated`     | `spec, priority, dependsOn, line?`                                                                                                              | Only before the first job is claimed. |
-| `priority_changed` | `priority`                                                                                                                                      | Any time before delivery.             |
-| `cancelled`        | `reason`                                                                                                                                        | Terminal.                             |
+| Event              | Payload                                                                                                                                                          | Notes                                                                             |
+| :----------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------- | :-------------------------------------------------------------------------------- |
+| `order_created`    | `projectId, todoId, spec { title, type, bodyBlob, contentHash }, priority, dependsOn: OrderId[], line { name, hash, snapshotBlob }, baseBranch, plan?: PlanSlug` | The Line is **pinned** here (§4.4). `plan` is set once and never changes (§12.1). |
+| `spec_updated`     | `spec, priority, dependsOn, line?`                                                                                                                               | Only before the first job is claimed.                                             |
+| `priority_changed` | `priority`                                                                                                                                                       | Any time before delivery.                                                         |
+| `cancelled`        | `reason`                                                                                                                                                         | Terminal.                                                                         |
 
 **Scheduling**
 
@@ -196,6 +209,9 @@ type ResumeMode =
 | `delivery_failed`   | `jobId, detail`                                |                                           |
 | `pr_state_changed`  | `prUrl, state: 'open' \| 'merged' \| 'closed'` | From intake polling GitHub.               |
 
+The plan events (`plan_created`, `plan_branch_created`, …) belong to the Order Plan stream and are
+listed in §12.3, not here.
+
 ## 4. State
 
 ### 4.1 WorkOrderState
@@ -208,6 +224,9 @@ interface WorkOrderState {
   priority: 'high' | 'medium' | 'low';
   dependsOn: OrderId[];
   line: LineSnapshot; // pinned, never re-read from disk
+  baseBranch: string; // from `order_created`; the project's base branch at creation. A plan member's
+  //                     real base is resolved per job (§12.5) and is never stored
+  plan?: PlanSlug; // from `order_created`; absent for a Work order outside any plan
 
   phase: Phase;
   cycles: CycleState[]; // start order
@@ -321,7 +340,8 @@ bounds that wait (§9.2), so a question can never hold a Cell forever.
 
 Board status: `queued`, `waiting_deps`, `deps_broken`, `running`, `waiting_answer`, `andon`,
 `delivering`, `delivered`, `merged`, `cancelled`. `waiting_deps` and `deps_broken` need other Work
-orders, so they are computed when the queue is read (STORAGE §4), not here.
+orders, so they are computed when the queue is read (STORAGE §4), not here. For a plan member
+`waiting_deps` also covers a plan branch that does not exist yet (§12.6).
 
 ### 4.3 Evolve rules (the non-obvious ones)
 
@@ -409,7 +429,7 @@ before calling it.
 
 | Command                 | Actor                                        | Preconditions (else error)                                                                                   | Emits                                                                    |
 | :---------------------- | :------------------------------------------- | :----------------------------------------------------------------------------------------------------------- | :----------------------------------------------------------------------- |
-| `CreateOrder`           | factory (intake)                             | Work order does not exist                                                                                    | `order_created`                                                          |
+| `CreateOrder`           | factory (intake)                             | Work order does not exist                                                                                    | `order_created` (with `plan` when the todo declares one, §12.1)          |
 | `UpdateSpec`            | factory (intake)                             | no job ever claimed; not terminal                                                                            | `spec_updated`                                                           |
 | `Cancel`                | supervisor, mechanic (M10), factory (intake) | not delivered                                                                                                | `cancelled` (+ `job_lost{cancelled}` and `cycle_failed{lost}` if active) |
 | `Reprioritise`          | supervisor                                   | not terminal                                                                                                 | `priority_changed`                                                       |
@@ -517,6 +537,9 @@ Notes on the order:
 - Row 5 sits above rows 6–13, so a `resumed` or `reopened` is always answered before the outcome of
   the old Cycle is looked at again.
 - Row 16 is idempotent by contract: a delivery job first looks for an existing PR for the branch.
+- `nextJob` never sees a plan. A plan member's base **branch** (§12.5) is resolved by the runtime
+  when it builds the `Job` (PROTOCOL §4), from the member's plan and its predecessor's PR state. The
+  `JobSpec` and its `base: CommitSha | 'branch_base'` are the same as for any Work order.
 
 ## 7. Cycle context
 
@@ -578,7 +601,9 @@ interface QueueEntry {
   runner?: string; // for Operator stations
   requiredCapabilities: string[]; // the Station's `requires` tags (e.g. 'docker', 'gpu')
   dependsOn: OrderId[];
+  plan?: PlanSlug; // plan members only: selects the stacked outcome for in-plan dependencies
   deps: 'satisfied' | 'waiting' | 'broken'; // computed when the queue is read, from the other Work orders
+  //                                           (and, for a plan root, the plan's branch, §12.6)
   progressed: boolean; // at least one Station passed
   resumed: boolean; // WorkOrderState.resumedWaiting
   lastCellId?: CellId;
@@ -624,6 +649,15 @@ Dependency policy:
   `merged` and its PR was closed unmerged. The dependent shows as `deps_broken` on the board and is
   never claimed; it never silently counts as satisfied. The Supervisor fixes the todo or cancels.
 - A dependency that is reopened after its dependent already started does not stop the dependent.
+- **Stacked dependency (plan members).** A `dependsOn` entry that is a member of the **same plan**
+  does not follow the project's policy. It is **satisfied** when the predecessor is `delivered` and
+  its PR is not `closed` (whether `open` or `merged`), whatever `depPolicy` says. It is **broken**
+  when the predecessor is `cancelled` or its PR was closed unmerged, so the dependent shows
+  `deps_broken`. Before the predecessor is delivered the dependent is `waiting`. The satisfied
+  check only gates the dependent's first claim; once any job of the dependent was claimed, only
+  `broken` stops it, so a predecessor reopened later (rule above) does not stop it either. A
+  dependency outside the plan keeps the rules above, including `depPolicy`
+  (OPEN-QUESTIONS Q22). The full plan rules are §12.4.
 
 ## 9. Cycle runtime (Cell side)
 
@@ -689,12 +723,299 @@ Each one is a property test (fast-check) over random command sequences, plus nam
   versions go through `upcast.ts` on read. Stored rows are never rewritten.
 - The Line snapshot carries its own `snapshotVersion` with its own upcaster.
 - Adding an optional field is not a version bump. Renaming, removing or changing meaning is.
+- Order Plans change no existing event's meaning. `order_created.plan` is a new optional field, so
+  Work orders stored without it still read, and `schemaVersion` stays 2. The plan events (§12.3) are
+  new types on a new kind of stream. The new Work order projection columns (`plan`, `base_branch`)
+  are folded from existing events and `plan`, and are rebuilt, not migrated (STORAGE §6).
 
-## 12. Testing
+## 12. Order Plan
+
+An **Order Plan** is a chain of Work orders `WO_1 → WO_2 → WO_3` that is built as a **stack of PRs**
+on a **plan branch** `feat/<slug>`, and delivered to the project's base branch as **one** PR
+`feat/<slug> → <baseBranch>` that the Factory opens itself. The guide with the end-to-end flow and
+the GitHub settings it needs is [ORDER-PLAN.md](ORDER-PLAN.md).
+
+```text
+main
+ └─ feat/xyz                      ← plan branch, created by the Factory from project.baseBranch
+     ├─ WO_1  factory/wo-1  → PR into feat/xyz
+     ├─ WO_2  factory/wo-2  → PR into factory/wo-1 (into feat/xyz once WO_1 is merged)
+     └─ WO_3  factory/wo-3  → PR into factory/wo-2 (…)
+ feat/xyz → main: draft PR opened once WO_1 is merged into feat/xyz; marked ready when all are merged
+```
+
+Each member is an ordinary Work order (Line, Cycles, delivery, Andon). The plan adds three things: a
+way to declare the chain (§12.1–12.2), a base branch per member (§12.4–12.5), and an aggregate that
+creates the branch and the plan PR (§12.3, §12.7).
+
+### 12.1 Declaration
+
+A todo may carry the optional frontmatter field `plan: <slug>`, with
+`slug` matching `^[a-z0-9][a-z0-9-]{0,63}$`. The plan branch is `feat/<slug>`. Plan todos live on
+`project.baseBranch` and intake reads them there, exactly as it reads any todo.
+
+- The slug is unique per project for all time, like a `TodoId` (§2). Once a plan is `completed` or
+  `cancelled`, or its PR is `ready`, a todo that names it gets the diagnostic `plan_closed` and
+  creates nothing.
+- `plan` is fixed when the Work order is created (`order_created.plan`). A later change of the
+  field, or of the member's in-plan `depends_on` entry, on an existing member is ignored and
+  reported as the diagnostic `plan_changed`.
+- A todo without `plan` is unaffected by anything in this section.
+
+### 12.2 Linear chain
+
+Within one plan, the members form a single chain:
+
+- every member has **at most one** `depends_on` entry that names a todo of the same plan;
+- **exactly one** member, the root, has none;
+- no member depends on a todo of **another plan** (a `depends_on` entry that names a member of a
+  different plan is invalid; a dependency on a todo that is in no plan is an ordinary dependency);
+- there is no cycle.
+
+Intake validates this over all the plan's todos in the scan. A branch (two members sharing one
+in-plan predecessor), a second root, a cycle or a cross-plan dependency makes **every todo of that
+plan** carry the diagnostic `plan_invalid` (the detail names the offence), and **no Work order and no
+plan** is created for it until the todos are fixed. For a plan that already exists, an invalid scan
+creates no further member and changes none of the existing ones. Dependencies outside the plan keep
+the normal rules (§8).
+
+### 12.3 The Order Plan aggregate
+
+An Order Plan has its own Traveler, with stream id `PlanId = <projectId>:plan:<slug>`, and is driven by
+`decide` / `nextJob` like a Work order (RULES §1.2). It is created by intake before its first member.
+
+```ts
+interface PlanState {
+  planId: PlanId;
+  projectId: ProjectId;
+  slug: PlanSlug;
+  branch: string; // 'feat/<slug>'
+  baseBranch: string; // the project's base branch when the plan was created
+  phase: PlanPhase;
+  members: PlanMember[]; // chain order, root first
+  branchCommit?: CommitSha; // set by plan_branch_created
+  pr?: { url: string; state: 'open' | 'merged' | 'closed' };
+  activeJob?: {
+    jobId: JobId;
+    kind: PlanJobKind;
+    cellId: CellId;
+    epoch: number;
+  };
+  epoch: number; // the last issued epoch, 0 before any claim
+  failures: { cellId: CellId; jobId: JobId; at: number }[]; // consecutive plan job failures
+  andon?: { reason: PlanAndonReason; detail: string; at: number };
+  resumedWaiting: boolean;
+}
+
+type PlanPhase =
+  | { kind: 'branching' } // plan_created, no branch yet
+  | { kind: 'active' } // the branch exists; no plan PR yet
+  | { kind: 'pr_open' } // the draft (or ready) plan PR exists and is not merged
+  | { kind: 'ready' } // the plan PR was marked ready
+  | { kind: 'completed' } // the plan PR was merged
+  | { kind: 'cancelled'; reason: string };
+
+interface PlanMember {
+  orderId: OrderId;
+  todoId: TodoId;
+  after?: OrderId; // the in-plan predecessor; absent for the root
+  state: 'open' | 'delivered' | 'merged' | 'closed' | 'cancelled';
+}
+
+type PlanJobKind = 'plan_branch' | 'plan_pr' | 'plan_pr_ready';
+type PlanAndonReason = 'plan_job_failed' | 'plan_pr_closed';
+```
+
+`member.state` is the member Work order's state as the plan last heard it: `open` (not delivered),
+`delivered` (PR open), `merged`, `closed` (PR closed unmerged) or `cancelled`. The plan is a separate
+stream, so it cannot read the member rows inside its own `decide`; the **runtime** reports changes with
+`RecordMemberState` (§12.7). Because the plan only reads its own state, `decide`, `evolve` and
+`nextJob` stay pure and the `plans` projection is a function of the plan's events alone.
+
+**Events** (the catalogue of a plan Traveler; all follow §3.2):
+
+| Event                       | Payload                                                               | Notes                                                                                                      |
+| :-------------------------- | :-------------------------------------------------------------------- | :--------------------------------------------------------------------------------------------------------- |
+| `plan_created`              | `projectId, slug, branch, baseBranch`                                 | `branch = 'feat/' + slug`. Phase `branching`.                                                              |
+| `plan_member_added`         | `orderId, todoId, after?`                                             | Appended to `members` (§12.2: a member is added after the last one, or is the root).                       |
+| `plan_member_state_changed` | `orderId, state`                                                      | The runtime's report of a member's state (§12.7).                                                          |
+| `plan_branch_created`       | `commit`                                                              | `feat/<slug>` exists on the remote at `commit`. Phase `active`.                                            |
+| `plan_pr_opened`            | `prUrl`                                                               | The draft plan PR exists. Phase `pr_open`.                                                                 |
+| `plan_pr_ready`             | —                                                                     | The plan PR was marked ready. Phase `ready`.                                                               |
+| `plan_pr_state_changed`     | `prUrl, state: 'open' \| 'merged' \| 'closed'`                        | From polling GitHub, like `pr_state_changed`.                                                              |
+| `plan_completed`            | —                                                                     | **Decision event**: `decide(RecordPlanPrState{merged})` appends it with the state change. Terminal.        |
+| `plan_cancelled`            | `reason`                                                              | Terminal.                                                                                                  |
+| `job_claimed`               | `jobId, kind: PlanJobKind, cellId, epoch`                             | Same event as §3.3; `epoch = previous + 1`.                                                                |
+| `job_lost`                  | `jobId, epoch, reason: 'lease_expired' \| 'cell_left' \| 'cancelled'` | Same event as §3.3.                                                                                        |
+| `plan_job_failed`           | `jobId, kind, detail`                                                 | A plan job ended without its result. Ends the job and counts in `failures`.                                |
+| `andon_raised`              | `reason: PlanAndonReason, detail`                                     | Decision event, as §3.3.                                                                                   |
+| `resumed`                   | `resumeId, by, mode: { kind: 'retry_station' }`                       | Clears the Andon and `failures`; for `plan_pr_closed` also forgets the closed PR (phase back to `active`). |
+
+`schemaVersion`, `seq`, `globalSeq`, `commandId`, `epoch` and `actor` work as in §3.1: a Cell writes
+a plan event only under the epoch of its plan job.
+
+**Evolve rules.** A job-ending event (`plan_branch_created`, `plan_pr_opened`, `plan_pr_ready`,
+`plan_job_failed`, `job_lost`) clears `activeJob`. `plan_branch_created`, `plan_pr_opened` and
+`plan_pr_ready` clear `failures`. `job_claimed` sets `activeJob` and `epoch` and clears
+`resumedWaiting`. `plan_member_state_changed` sets that member's `state` only (a `merged` member
+never goes back: later reports for it are inert). `plan_pr_state_changed` sets `pr.state`.
+
+**Commands.**
+
+| Command                     | Actor                    | Preconditions (else error)                                                                                                          | Emits                                                    |
+| :-------------------------- | :----------------------- | :---------------------------------------------------------------------------------------------------------------------------------- | :------------------------------------------------------- |
+| `CreatePlan`                | factory (intake)         | the plan does not exist                                                                                                             | `plan_created`                                           |
+| `AddPlanMember`             | factory (intake)         | phase `branching`, `active` or `pr_open`; no member of that `orderId`; `after` is the last member, or absent and `members` is empty | `plan_member_added`                                      |
+| `RecordMemberState`         | factory (runtime)        | the member exists; the state differs from the recorded one                                                                          | `plan_member_state_changed`                              |
+| `ClaimJob`                  | factory (claim endpoint) | holder `queue`; `nextJob` is `job`                                                                                                  | `job_claimed{epoch+1}`                                   |
+| `ReportPlanBranch`          | cell                     | epoch matches; job kind `plan_branch`                                                                                               | `plan_branch_created`                                    |
+| `ReportPlanPr`              | cell                     | epoch matches; job kind `plan_pr`; **the root member is `merged`**                                                                  | `plan_pr_opened`                                         |
+| `ReportPlanReady`           | cell                     | epoch matches; job kind `plan_pr_ready`; **every member is `merged`**                                                               | `plan_pr_ready`                                          |
+| `ReportPlanJobFailed`       | cell                     | epoch matches                                                                                                                       | `plan_job_failed`                                        |
+| `RecordPlanPrState`         | factory (intake)         | `pr` set; the state differs                                                                                                         | `plan_pr_state_changed` (+ `plan_completed` on `merged`) |
+| `ExpireLease`, `ReleaseJob` | as §5.2                  | as §5.2, on the plan's `activeJob`                                                                                                  | `job_lost`                                               |
+| `Resume`                    | supervisor, mechanic     | `andon` set                                                                                                                         | `resumed`                                                |
+| `Cancel`                    | supervisor, mechanic     | phase not terminal                                                                                                                  | `plan_cancelled` (+ `job_lost{cancelled}` if active)     |
+
+`Cancel` of a plan does not delete `feat/<slug>` or close any PR. The runtime then issues `Cancel` for
+every member that is not yet `delivered`; members already delivered stay as they are and the Supervisor
+closes their PRs on GitHub. A member that was cancelled leaves its dependents `deps_broken`
+(§8), so the only repair in v2.0 for a plan with a cancelled member is to cancel the plan.
+
+**`nextJob` for a plan.** A pure function of `PlanState`:
+
+```ts
+type PlanNext =
+  | { kind: 'done' } // completed or cancelled
+  | { kind: 'await_supervisor'; cause: 'andon' }
+  | { kind: 'raise_andon'; reason: PlanAndonReason; detail: string }
+  | { kind: 'wait_cell'; jobId: JobId; epoch: number }
+  | { kind: 'wait_external' } // nothing to run until a member or the plan PR changes state
+  | { kind: 'job'; job: { kind: PlanJobKind } }; // concrete JobId and epoch are assigned on ClaimJob
+```
+
+| #   | Condition                                                      | Result                        |
+| :-- | :------------------------------------------------------------- | :---------------------------- |
+| 1   | phase `completed` or `cancelled`                               | `done`                        |
+| 2   | `activeJob` set                                                | `wait_cell`                   |
+| 3   | `andon` set                                                    | `await_supervisor`            |
+| 4   | `failures.length ≥ 2`                                          | `raise_andon plan_job_failed` |
+| 5   | `pr.state = 'closed'` (closed unmerged)                        | `raise_andon plan_pr_closed`  |
+| 6   | phase `branching`                                              | `job plan_branch`             |
+| 7   | phase `active`, the root member is `merged`                    | `job plan_pr`                 |
+| 8   | phase `pr_open`, every member `merged`                         | `job plan_pr_ready`           |
+| 9   | anything else (members still running, a PR waiting for review) | `wait_external`               |
+
+Row 7 is the only way a plan PR gets opened, and its condition is the root's `merged` state, so a plan
+PR is never opened before the root is merged. Row 8 is reached with at least one member (the chain is
+never empty once a plan has a branch, because a plan is only created together with its root). Plan
+jobs are idempotent by contract (PROTOCOL §4): a retry or a takeover finds the branch or the PR and
+reports it instead of creating a second one.
+
+**Projection** (`plans`, STORAGE §4): `toProjection(planState)` gives the row: phase, members in chain
+order with their states, branch and PR state, and the same `holder` / `next_kind` / `job_kind` columns as
+an `orders` row (`holder` is `queue`, `cell`, `supervisor`, `members` for `wait_external`, or `none`).
+Plan jobs sort ahead of Work order jobs in the queue (priority `high`, §12.6).
+
+### 12.4 Stacked dependency
+
+Inside a plan, a member's in-plan predecessor is satisfied when it is **`delivered` and its PR is not
+`closed`**; the dependent need not wait for the merge. A predecessor whose PR was **closed unmerged**
+makes the dependent `deps_broken` (never silently satisfied). This replaces `project.depPolicy` for
+in-plan dependencies only, and is the stacked outcome in §8 (OPEN-QUESTIONS Q22). The root is the
+exception: it has no in-plan predecessor but is gated by the plan branch (§12.6).
+
+Why: a stack needs the predecessor's branch to exist and to be pushed, which is true from delivery;
+waiting for a merge would serialise the chain on code review and defeat the stack.
+
+### 12.5 Base of a plan Work order
+
+The runtime resolves the base **branch** when it builds a job; it is **not stored** on the Work order:
+
+| The member is…                                                         | Base branch                   |
+| :--------------------------------------------------------------------- | :---------------------------- |
+| the root                                                               | `feat/<slug>`                 |
+| any member whose in-plan predecessor's PR is `merged`                  | `feat/<slug>`                 |
+| any member whose predecessor is `delivered` and its PR is not `merged` | `factory/<predecessorTodoId>` |
+
+"The predecessor's PR is `merged`" is the state in `orders.pr_state`; a reopened predecessor keeps
+its `delivery`, so its dependents keep building on `factory/<predecessorTodoId>` while it is rework.
+Station jobs use the base as `branch_base`, so the first job of a member starts from its tip. The
+`deliver` job rebases the member's branch onto the base and opens its PR **against the base** (PROTOCOL
+§4, §8.3). A non-plan Work order always uses its pinned `baseBranch`, never the project's current
+one.
+
+### 12.6 Queue rules for plans
+
+- A Work order is claimable only when its `deps` are `satisfied` (§8). For the **root** of a plan,
+  `deps` is also `waiting` until the plan row says `phase ≠ branching` (the branch exists). A plan
+  whose Andon is not resolved therefore keeps its root waiting.
+- A member's first claim needs its in-plan predecessor `delivered` with a PR not `closed` (§12.4).
+- Plan jobs are queue entries too (`kind: 'plan'`): priority `high`, no runner, no required
+  capability, and they do not count against the project's `maxRunning` (they run for seconds and need
+  no worktree). They are claimed and fenced exactly like Work order jobs: a lease and an epoch,
+  heartbeats, the reaper (PROTOCOL §5).
+
+### 12.7 Runtime duties
+
+The runtime keeps the two kinds of stream consistent. All of it is idempotent and replayable:
+
+- **Create.** Intake creates the plan (`CreatePlan`), then each member in chain order
+  (`CreateOrder` with `plan`, then `AddPlanMember`). Replaying a scan creates nothing twice.
+- **Report member states.** After any event of a member that changes its state (`delivery_finished`,
+  `pr_state_changed`, `cancelled`), the runtime appends `RecordMemberState` to the plan stream under
+  the command id `<memberOrderId>:<member seq>:plan`. A start-up pass reconciles every non-terminal
+  plan against its member rows, so a crash between the two appends loses nothing. The two appends are
+  separate transactions: the plan may lag its members for a moment but never contradicts them.
+- **Poll the plan PR.** `pr-poll` polls `pr.url` like a member's PR: `RecordPlanPrState`.
+  `merged` yields `plan_completed`.
+- **Build the plan PR text.** For `plan_pr` and `plan_pr_ready` the runtime renders title and body
+  (the sub-PR list with titles, links and states) into a blob placed in the job.
+- **Todos.** Each sub-PR removes its own todo on `feat/<slug>` (the deliver commit does it, PROTOCOL
+  §8.3). The todos leave `main` with the final plan PR. Until then they are still on `main`, unchanged:
+  intake MUST NOT report a plan Work order that is `delivered` or `merged` and whose todo content hash
+  is unchanged as `reused_id`; it records it silently. A changed todo for such an order is still a
+  diagnostic.
+
+### 12.8 Reopen inside a stack
+
+§8 stands: a reopened predecessor does not stop a dependent that has started. If the rewritten
+predecessor (a new delivery commit, force-pushed to `factory/<predecessorTodoId>`) makes the
+dependent's delivery rebase conflict, the deliver job reports `delivery_failed` and the Andon goes to
+the Supervisor (via the Mechanic, §4.3). There is **no automatic restack in v2.0**
+(OPEN-QUESTIONS Q24). A deliver job whose base branch no longer exists on the remote (for example,
+the predecessor was merged and its branch deleted in between) also reports `delivery_failed`; a
+`Resume` rebuilds the job with the now-correct base (`feat/<slug>`).
+
+### 12.9 Merge strategy
+
+Sub-PRs into `feat/<slug>` are merged with a **merge commit**, and their head branch is **deleted on
+merge**. GitHub then retargets the next PR in the stack to `feat/<slug>`, and the commit the Cell
+delivered is unchanged, so the stack does not conflict. **Squash is only for the final PR into
+`main`.** The Cell still squashes each member's own checkpoints into one commit at delivery
+(OPEN-QUESTIONS Q12); that is per Work order and is unrelated to how its PR is merged. The repository
+settings this needs are in [ORDER-PLAN.md](ORDER-PLAN.md) (OPEN-QUESTIONS Q23).
+
+### 12.10 Invariants
+
+| ID  | Invariant                                                                                                                                                                                                                         |
+| :-- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| P1  | **One PR per member.** Each member has at most one PR (delivery finds the PR for its branch before opening one) and the plan has at most one live plan PR: a second `plan_pr_opened` needs a closed PR and a `Resume` in between. |
+| P2  | **No early plan PR.** `plan_pr_opened` is applied only when the root member's `state` is `merged`; a Cell cannot open it earlier (`ReportPlanPr` is refused).                                                                     |
+| P3  | **Root waits for the branch.** A root Work order is never claimable while its plan's phase is `branching`.                                                                                                                        |
+| P4  | **Linear chain.** In every created plan, each member has at most one in-plan predecessor and exactly one has none; `members` has no duplicate.                                                                                    |
+| P5  | **Ready means merged.** `plan_pr_ready` is applied only after `plan_pr_opened`, and only when every member is `merged`; `plan_completed` only after `plan_pr_opened`.                                                             |
+| P6  | **Plan fencing.** The single-writer and monotone-epoch rules (I4, I5) and "late facts are inert" (I3, for a job that ended) hold for plan streams: at most one `activeJob`, strictly increasing `epoch`.                          |
+| P7  | **No silent stop for plans.** For every non-terminal plan state, `nextJob ≠ done`; `raise_andon` is followed by `await_supervisor`; after `resumed`, `nextJob` is not the Andon it cleared.                                       |
+
+P1–P7 are property-tested with I1–I9 (RULES §1.4); P3 is a queue test over a generated set of plan and
+member rows.
+
+## 13. Testing
 
 | Level    | What                                                                                                                            | Tool                               |
 | :------- | :------------------------------------------------------------------------------------------------------------------------------ | :--------------------------------- |
-| Unit     | `evolve` per event, `decide` per command and per error, `nextJob` per table row, `select` ordering                              | vitest                             |
+| Unit     | `evolve` per event, `decide` per command and per error, `nextJob` per table row (§6 and §12.3), `select` ordering               | vitest                             |
 | Scenario | `given(events).when(command).then(events)` and `given(events).nextJob(expected)`; every v1 scenario rewritten here (ROADMAP M1) | vitest + harness in `core/testing` |
-| Property | I1–I9, I11 over generated command sequences against a generated Line                                                            | fast-check                         |
+| Property | I1–I9, I11 and P1–P7 over generated command sequences against a generated Line (and generated plans)                            | fast-check                         |
 | Contract | One suite run against the fake and the SQLite `EventStore` (I10, concurrency)                                                   | vitest                             |

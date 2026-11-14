@@ -68,31 +68,39 @@ heartbeat, submit command, and read/write blobs.
 These operations are available through `FactoryClient` in both modes. In remote mode they map to the
 HTTP routes below; local mode sends the same operations over the Unix socket to `factory-server`.
 
-| Method                    | Path                           | Purpose                                                                                                                                             |
-| :------------------------ | :----------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET`                     | `/v1/board`                    | Queue projection: every open Work order, plus terminal ones updated in the last 7 days (`?all=1` for everything), with status, holder, Station, age |
-| `GET`                     | `/v1/orders/:id`               | Work order detail: state summary, Cycles, open question, Andon, checkpoint                                                                          |
-| `GET`                     | `/v1/orders/:id/events?after=` | The Work order's Traveler                                                                                                                           |
-| `GET`                     | `/v1/blobs/:ref`               | A blob (prompt, artifact, log, Handover)                                                                                                            |
-| `POST`                    | `/v1/orders/:id/answer`        | `Answer`                                                                                                                                            |
-| `POST`                    | `/v1/orders/:id/resume`        | `Resume` (`--note`, `--from <station>`, `--grant <n>`)                                                                                              |
-| `POST`                    | `/v1/orders/:id/reopen`        | `Reopen` (`--from <station>`, `--note`)                                                                                                             |
-| `POST`                    | `/v1/orders/:id/nudge`         | `Nudge`                                                                                                                                             |
-| `POST`                    | `/v1/orders/:id/cancel`        | `Cancel`                                                                                                                                            |
-| `POST`                    | `/v1/orders/:id/priority`      | `Reprioritise`                                                                                                                                      |
-| `POST`                    | `/v1/intake/sync`              | Run intake now instead of waiting for the next poll                                                                                                 |
-| `GET`                     | `/v1/cells`                    | Cells, their last heartbeat, slots, current jobs                                                                                                    |
-| `DELETE`                  | `/v1/cells/:id`                | Revoke a Cell                                                                                                                                       |
-| `POST` / `GET` / `DELETE` | `/v1/join-tokens`              | Create (returns the token once) / list / revoke join tokens                                                                                         |
-| `GET`                     | `/v1/projects`                 | Project registry: every registered project, with its base branch, max running and dependency policy                                                 |
-| `POST`                    | `/v1/projects`                 | Register a project: `projectId`, `repoUrl`, `baseBranch`, `maxRunning`, `depPolicy`. Refused as `precondition` when the id exists                   |
-| `POST`                    | `/v1/projects/:id`             | Change `baseBranch`, `maxRunning` or `depPolicy` (at least one). `repoUrl` cannot change (remove and re-add). Rules below                           |
-| `DELETE`                  | `/v1/projects/:id`             | Remove a project. Refused as `precondition` while it has any Work order, event or intake row                                                        |
-| `GET`                     | `/v1/stream`                   | Server-sent events: every stored event from `Last-Event-ID` (= `globalSeq`)                                                                         |
-| `GET`                     | `/v1/admin/export`             | Remote export endpoint. Import is a local runtime admin operation, never an HTTP route.                                                             |
+| Method                    | Path                           | Purpose                                                                                                                                                     |
+| :------------------------ | :----------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET`                     | `/v1/board`                    | Queue projection: every open Work order, plus terminal ones updated in the last 7 days (`?all=1` for everything), with status, holder, Station, age         |
+| `GET`                     | `/v1/orders/:id`               | Work order detail: state summary, Cycles, open question, Andon, checkpoint                                                                                  |
+| `GET`                     | `/v1/orders/:id/events?after=` | The Work order's Traveler                                                                                                                                   |
+| `GET`                     | `/v1/plans`                    | Order Plans of every project: slug, project, phase, member count, plan PR state, Andon (CORE §12). Socket path `supervisor/plans`                           |
+| `GET`                     | `/v1/plans/:slug?project=`     | One plan: members in chain order, each with board status, base branch, PR link and blocker, plus the plan PR and Andon. Socket path `supervisor/plans/show` |
+| `GET`                     | `/v1/blobs/:ref`               | A blob (prompt, artifact, log, Handover)                                                                                                                    |
+| `POST`                    | `/v1/orders/:id/answer`        | `Answer`                                                                                                                                                    |
+| `POST`                    | `/v1/orders/:id/resume`        | `Resume` (`--note`, `--from <station>`, `--grant <n>`)                                                                                                      |
+| `POST`                    | `/v1/orders/:id/reopen`        | `Reopen` (`--from <station>`, `--note`)                                                                                                                     |
+| `POST`                    | `/v1/orders/:id/nudge`         | `Nudge`                                                                                                                                                     |
+| `POST`                    | `/v1/orders/:id/cancel`        | `Cancel`                                                                                                                                                    |
+| `POST`                    | `/v1/orders/:id/priority`      | `Reprioritise`                                                                                                                                              |
+| `POST`                    | `/v1/intake/sync`              | Run intake now instead of waiting for the next poll                                                                                                         |
+| `GET`                     | `/v1/cells`                    | Cells, their last heartbeat, slots, current jobs                                                                                                            |
+| `DELETE`                  | `/v1/cells/:id`                | Revoke a Cell                                                                                                                                               |
+| `POST` / `GET` / `DELETE` | `/v1/join-tokens`              | Create (returns the token once) / list / revoke join tokens                                                                                                 |
+| `GET`                     | `/v1/projects`                 | Project registry: every registered project, with its base branch, max running and dependency policy                                                         |
+| `POST`                    | `/v1/projects`                 | Register a project: `projectId`, `repoUrl`, `baseBranch`, `maxRunning`, `depPolicy`. Refused as `precondition` when the id exists                           |
+| `POST`                    | `/v1/projects/:id`             | Change `baseBranch`, `maxRunning` or `depPolicy` (at least one). `repoUrl` cannot change (remove and re-add). Rules below                                   |
+| `DELETE`                  | `/v1/projects/:id`             | Remove a project. Refused as `precondition` while it has any Work order, event or intake row                                                                |
+| `GET`                     | `/v1/stream`                   | Server-sent events: every stored event from `Last-Event-ID` (= `globalSeq`)                                                                                 |
+| `GET`                     | `/v1/admin/export`             | Remote export endpoint. Import is a local runtime admin operation, never an HTTP route.                                                                     |
 
 Every `POST` carries a `commandId` generated by the CLI (a ULID per invocation, reused on its own
 retries).
+
+**Order Plans.** The board row of a Work order gains `plan`, `baseBranch` and `dependsOn`. The
+`resume` and `cancel` routes also accept a `PlanId` (`<projectId>:plan:<slug>`, CORE §2) in place of an
+order id and then run `Resume` or `Cancel` on the plan (CORE §12.3); `factory plan status` prints that
+id next to an Andon. The plan routes are read-only; plans are created by intake, never by a request.
+In remote and `--once` mode they are the same operations over the same contracts (RULES §6.5).
 
 Project registry (`/v1/projects`). The socket paths are `supervisor/projects` (list),
 `supervisor/projects/add`, `supervisor/projects/set` and `supervisor/projects/remove`; each takes the
@@ -152,7 +160,8 @@ exit code for anything rejected at any stage.
 
 `StartCycle`, `ReportWorkspaceFailed`, `CompleteCycle`, `SubmitVerdict`, `ReportInspection`,
 `FailCycle`, `BlockCycle`, `HandOverCycle`, `AskQuestion`, `LeaveNote`, `RecordUsage`, `ReleaseJob`,
-`ReportDelivery` (CORE §5.2).
+`ReportDelivery` (CORE §5.2), and for plan jobs `ReportPlanBranch`, `ReportPlanPr`, `ReportPlanReady`,
+`ReportPlanJobFailed` and `ReleaseJob` (CORE §12.3).
 
 ### 3.5 Errors
 
@@ -171,12 +180,21 @@ exit code for anything rejected at any stage.
 ```ts
 interface Job {
   jobId: JobId;
-  orderId: OrderId;
+  orderId: OrderId | PlanId; // the stream the job belongs to; a PlanId for the three plan_* kinds
   projectId: ProjectId;
   epoch: number;
-  kind: 'run_operator_station' | 'run_inspection' | 'deliver';
-  repo: { url: string; baseBranch: string; branch: string }; // branch = factory/<todoId>
-  base: CommitSha | { branchBase: string }; // CORE 'branch_base' → { branchBase: baseBranch }; resolved by the Cell at fetch time
+  kind:
+    | 'run_operator_station'
+    | 'run_inspection'
+    | 'deliver'
+    | 'plan_branch'
+    | 'plan_pr'
+    | 'plan_pr_ready';
+  repo: { url: string; baseBranch: string; branch: string };
+  // Work order job: branch = factory/<todoId>; baseBranch = the project's base branch, or for a plan
+  //   member the resolved plan base: `feat/<slug>` or `factory/<predecessorTodoId>` (CORE §12.5).
+  // plan job: branch = feat/<slug>; baseBranch = the plan's baseBranch.
+  base: CommitSha | { branchBase: string }; // CORE 'branch_base' → { branchBase: repo.baseBranch }; resolved by the Cell at fetch time
   workspace: {
     dir: string;
     sync: string[];
@@ -219,8 +237,43 @@ interface Job {
     commitMessage: string;
     removeTodo: string;
   };
+  plan?: {
+    // plan_* jobs only
+    slug: string;
+    title: string; // PR title
+    bodyBlob?: BlobRef; // plan_pr / plan_pr_ready: the PR body, listing the sub-PRs (CORE §12.7)
+    prUrl?: string; // plan_pr_ready: the PR to mark ready
+  };
 }
 ```
+
+**Plan jobs.** `plan_branch`, `plan_pr` and `plan_pr_ready` belong to an Order Plan (CORE §12). They
+are claimed, leased, heartbeated and fenced like any other job (§5): `job_claimed` with a new epoch on
+the plan stream, a lease row, the reaper, `stale_epoch` on a late write. They have no Station, no
+Cycle, no worktree and no `workspace` block: the Cell only fetches its mirror and talks to `git` and
+the GitHub adapter. A job that cannot finish reports `ReportPlanJobFailed`; two in a row raise the
+plan's Andon. All three are **idempotent**, so a retry or a takeover never creates a second branch or
+PR.
+
+| Kind            | The Cell…                                                                                                                                                                  | Reports                       | Runs when                                                       |
+| :-------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :---------------------------- | :-------------------------------------------------------------- |
+| `plan_branch`   | fetches; if `refs/heads/feat/<slug>` is absent, creates it at `origin/<baseBranch>` and pushes it **without force**; if present, uses its current tip                      | `ReportPlanBranch { commit }` | before the root's first job (the root is not claimable earlier) |
+| `plan_pr`       | looks for a PR with head `feat/<slug>` and base `<baseBranch>` (open or already merged); if none, opens a **draft** PR with `plan.title` and `plan.bodyBlob` (sub-PR list) | `ReportPlanPr { prUrl }`      | once the root member is `merged`                                |
+| `plan_pr_ready` | updates the PR body from `plan.bodyBlob` and marks the PR ready for review; already ready is a success                                                                     | `ReportPlanReady`             | once every member is `merged`                                   |
+
+Before the push of `plan_branch` the Cell dry-runs `ReportPlanBranch` (`dryRun`, §8.2 step 4), so a
+fenced Cell never creates the branch. `--force` is never used for a plan branch; a push rejected
+because the branch appeared meanwhile is a success if it is the branch the job would have created
+(same base), else `ReportPlanJobFailed`.
+
+**Deliver of a plan member.** For a Work order that belongs to a plan, `repo.baseBranch` is the plan
+base of CORE §12.5. The Cell uses it as `branch_base` for every Station job and for `deliver`:
+rebase the branch onto `origin/<repo.baseBranch>`, squash, remove the todo, push, and open the PR
+**with that base** (`gh pr create --base <repo.baseBranch>`), or find the existing open PR for the
+branch. If the existing PR targets another base (the predecessor was merged and GitHub retargeted it,
+or the reverse), the Cell leaves it: GitHub owns the retarget and the PR is the same PR. A missing
+base branch on the remote or a rebase conflict (for example after a reopened predecessor was
+rewritten) is `delivery_failed`.
 
 `cycle_started.baseCommit` records the commit the Cell actually resolved, so every later Cycle that
 refers to "its base" is exact.
@@ -339,6 +392,11 @@ reported as `stale` in the heartbeat response, which is the Cell's cue to stop i
 ### 8.1 Refs
 
 - One branch per Work order: `factory/<todoId>`, created from `origin/<baseBranch>` at the first job.
+  For a plan member the first job creates it from the plan base instead: `origin/feat/<slug>` or
+  `origin/factory/<predecessorTodoId>` (CORE §12.5).
+- One branch per Order Plan: `feat/<slug>`, created by the `plan_branch` job from
+  `origin/<baseBranch>` (§4). The Factory never force-pushes it and never deletes it; the Work order
+  PRs merge into it (CORE §12.9). A Work order whose todo contains no `plan` never touches `feat/*`.
 - WIP of failed Cycles, for the Supervisor only: `factory-wip/<todoId>/<cycleId>`. (A separate
   namespace: git cannot hold `factory/<todoId>` and `factory/<todoId>/…` at the same time.)
 - The Cell's scratch directory `.cell/` in the worktree (inputs, outputs) is excluded through the
@@ -387,7 +445,12 @@ check.
   (`git rebase` then `reset --soft`), message from the Line's `deliver.commit` artifact, remove the
   todo file in the same commit if it is still there, then dry-run `ReportDelivery`, push as in
   §8.2 step 5, open the PR (or find the existing open one), `ReportDelivery`. A rebase conflict is
-  `delivery_failed`.
+  `delivery_failed`. For a plan member `<baseBranch>` is the job's `repo.baseBranch` (§4): the PR is
+  opened against `feat/<slug>` or `factory/<predecessorTodoId>`, and the todo is removed on that line
+  of history, so it leaves the plan branch with the sub-PR and leaves the project's base branch with
+  the final plan PR.
+- **Plan jobs** (`plan_branch`, `plan_pr`, `plan_pr_ready`): §4. They touch only `feat/<slug>` and the
+  plan PR, never a `factory/*` branch, and need no worktree.
 
 After delivery the pre-squash checkpoint commits are no longer reachable from the branch. Their shas
 stay in the Traveler as history; a reopened Work order builds on the delivery commit (CORE §4.3
@@ -431,6 +494,9 @@ a cleaned 2 KiB tail (ANSI stripped, v1 logic), `ReportInspection`.
 
 `deliver`: §8.3 delivery.
 
+`plan_branch`, `plan_pr`, `plan_pr_ready`: fetch the mirror, then §4 (Plan jobs). A leaving Cell
+lets such a job finish if it ends within 5 min, else `ReleaseJob`, like delivery.
+
 **Leaving** (`SIGTERM`, or the device going away on purpose): stop claiming, then for each job:
 
 | Job state                            | Action                                                                                                                                                  | Result                                                                       |
@@ -444,26 +510,28 @@ The Cell exits when every job is released. A Cell that simply vanishes is handle
 
 ## 10. Supervisor CLI (`factory`)
 
-| Command                                                                                                          | Purpose                                                                                       |
-| :--------------------------------------------------------------------------------------------------------------- | :-------------------------------------------------------------------------------------------- |
-| `factory run`                                                                                                    | Start the server (core): owns the database, intake, scheduling, reaper, listens on the socket |
-| `factory status [--watch] [--all]`                                                                               | The board; `--watch` follows the runtime event feed locally or `/v1/stream` remotely          |
-| `factory show <order>`                                                                                           | Work order detail, Cycles, Andon, Handover                                                    |
-| `factory log <order> [-f]`                                                                                       | The Traveler, optionally followed                                                             |
-| `factory answer <order> "<text>"`                                                                                | Answer the open (or abandoned, unanswered) question                                           |
-| `factory resume <order> [--note "..."] [--from <station>] [--grant <n>]`                                         | Resume an Andon                                                                               |
-| `factory reopen <order> --from <station> [--note "..."]`                                                         | Send a delivered, unmerged Work order back for rework                                         |
-| `factory nudge <order> "<text>"`                                                                                 | Type into a live Operator's pane                                                              |
-| `factory cancel <order>` / `factory prio <order> <level>`                                                        |                                                                                               |
-| `factory sync`                                                                                                   | Run intake now                                                                                |
-| `factory cells [rm <id>]`                                                                                        | List or revoke Cells                                                                          |
-| `factory cells token create [--ttl <d>] \| ls \| rm <id>`                                                        | Manage join tokens                                                                            |
-| `factory project ls`                                                                                             | List the registered projects                                                                  |
-| `factory project add <id> --repo <url> [--base-branch <b>] [--dep-policy delivered\|merged] [--max-running <n>]` | Register a project (§3.1). A Cell serves it only if its config lists it                       |
-| `factory project set <id> [--base-branch <b>] [--dep-policy delivered\|merged] [--max-running <n>]`              | Change a project (§3.1); `--base-branch` is refused while it has an open Work order           |
-| `factory project rm <id>`                                                                                        | Remove a project with no history (§3.1)                                                       |
-| `factory check`                                                                                                  | Offline: validate Operator profiles, Lines and templates (no Factory needed)                  |
-| `factory admin export <file>`                                                                                    | STORAGE §7                                                                                    |
+| Command                                                                                                          | Purpose                                                                                         |
+| :--------------------------------------------------------------------------------------------------------------- | :---------------------------------------------------------------------------------------------- |
+| `factory run`                                                                                                    | Start the server (core): owns the database, intake, scheduling, reaper, listens on the socket   |
+| `factory status [--watch] [--all]`                                                                               | The board; `--watch` follows the runtime event feed locally or `/v1/stream` remotely            |
+| `factory show <order>`                                                                                           | Work order detail, Cycles, Andon, Handover                                                      |
+| `factory log <order> [-f]`                                                                                       | The Traveler, optionally followed                                                               |
+| `factory answer <order> "<text>"`                                                                                | Answer the open (or abandoned, unanswered) question                                             |
+| `factory resume <order> [--note "..."] [--from <station>] [--grant <n>]`                                         | Resume an Andon                                                                                 |
+| `factory reopen <order> --from <station> [--note "..."]`                                                         | Send a delivered, unmerged Work order back for rework                                           |
+| `factory nudge <order> "<text>"`                                                                                 | Type into a live Operator's pane                                                                |
+| `factory cancel <order>` / `factory prio <order> <level>`                                                        |                                                                                                 |
+| `factory sync`                                                                                                   | Run intake now                                                                                  |
+| `factory plan ls`                                                                                                | List Order Plans: slug, project, member count, plan PR state (CORE §12)                         |
+| `factory plan status <slug> [--project <id>]`                                                                    | The chain in order: board status, base branch, PR link and blocker per member, plus the plan PR |
+| `factory cells [rm <id>]`                                                                                        | List or revoke Cells                                                                            |
+| `factory cells token create [--ttl <d>] \| ls \| rm <id>`                                                        | Manage join tokens                                                                              |
+| `factory project ls`                                                                                             | List the registered projects                                                                    |
+| `factory project add <id> --repo <url> [--base-branch <b>] [--dep-policy delivered\|merged] [--max-running <n>]` | Register a project (§3.1). A Cell serves it only if its config lists it                         |
+| `factory project set <id> [--base-branch <b>] [--dep-policy delivered\|merged] [--max-running <n>]`              | Change a project (§3.1); `--base-branch` is refused while it has an open Work order             |
+| `factory project rm <id>`                                                                                        | Remove a project with no history (§3.1)                                                         |
+| `factory check`                                                                                                  | Offline: validate Operator profiles, Lines and templates (no Factory needed)                    |
+| `factory admin export <file>`                                                                                    | STORAGE §7                                                                                      |
 
 `factory-server` is the core process: `factory run` is its local start command. It owns the database
 through the writer lock, runs intake, scheduling, the reaper and leases, and listens on the local Unix
@@ -489,6 +557,13 @@ Configuration (`apps/cli`): settings come from the flag, then `FACTORY_DATA_DIR`
 (`$FACTORY_CONFIG`, else `$XDG_CONFIG_HOME/factory/config.json`, with the keys `dataDir`, `serverBin` and
 `color`), then the default `~/.local/share/factory`. `NO_COLOR` set to a non-empty value, `--no-color`
 and `"color": false` turn colour off. The config file holds no state; it is never a second database.
+
+`factory plan ls` and `factory plan status` are read operations (§3.1) and support `--json`. `plan
+status` prints one line per member, for example
+`wo-1 [merged] -> wo-2 [delivered, PR into factory/wo-1] -> wo-3 [running]`, then the plan PR and the
+plan's Andon with the `factory resume|cancel <planId>` command that clears it. `--project` is
+optional while the slug is unique across the registered projects, else required. Local, remote and
+`--once` modes give the same output (RULES §6.5).
 
 `factory-server admin …` (token create, backup, import, rebuild-projections) operates on the server's
 database.

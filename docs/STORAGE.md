@@ -140,7 +140,7 @@ CREATE TABLE projects (
 
 CREATE TABLE events (
   global_seq     INTEGER PRIMARY KEY AUTOINCREMENT,
-  order_id       TEXT NOT NULL,
+  order_id       TEXT NOT NULL,                         -- the stream id: an OrderId, or a PlanId (`<projectId>:plan:<slug>`, CORE §12)
   seq            INTEGER NOT NULL,
   at             INTEGER NOT NULL,
   actor          TEXT NOT NULL,                         -- JSON
@@ -163,6 +163,8 @@ CREATE TABLE orders (
   line                   TEXT NOT NULL,
   priority               TEXT NOT NULL,
   depends_on             TEXT NOT NULL,                 -- JSON array of order ids
+  plan                   TEXT,                          -- plan slug (`order_created.plan`); null outside a plan
+  base_branch            TEXT NOT NULL,                 -- `order_created.baseBranch`, pinned; a plan member's real base is resolved per job, never stored
   last_seq               INTEGER NOT NULL,
   status                 TEXT NOT NULL,                 -- board status (CORE §4.2), before dependency overlay
   holder                 TEXT NOT NULL,                 -- 'queue' | 'cell' | 'supervisor' | 'none'
@@ -184,6 +186,33 @@ CREATE TABLE orders (
   UNIQUE (project_id, todo_id)
 );
 CREATE INDEX orders_queue ON orders (holder, next_kind, priority, created_at);
+CREATE INDEX orders_plan ON orders (project_id, plan);
+
+-- Projection of the Order Plan aggregate (CORE §12). Same rules as `orders`: rebuildable, written in
+-- the append transaction, every column a pure function of the plan's own events (core `toProjection`).
+CREATE TABLE plans (
+  plan_id          TEXT PRIMARY KEY,                    -- `<projectId>:plan:<slug>`, the stream id in `events.order_id`
+  project_id       TEXT NOT NULL REFERENCES projects,
+  slug             TEXT NOT NULL,
+  branch           TEXT NOT NULL,                       -- 'feat/<slug>'
+  base_branch      TEXT NOT NULL,
+  last_seq         INTEGER NOT NULL,
+  phase            TEXT NOT NULL,                       -- 'branching' | 'active' | 'pr_open' | 'ready' | 'completed' | 'cancelled'
+  holder           TEXT NOT NULL,                       -- 'queue' | 'cell' | 'supervisor' | 'members' | 'none'
+  next_kind        TEXT NOT NULL,                       -- CORE §12.3 PlanNext.kind
+  job_kind         TEXT,                                -- 'plan_branch' | 'plan_pr' | 'plan_pr_ready', when next_kind = 'job'
+  members          TEXT NOT NULL DEFAULT '[]',          -- JSON [{ orderId, todoId, after?, state }] in chain order, root first
+  branch_commit    TEXT,                                -- plan_branch_created.commit
+  pr_url           TEXT,
+  pr_state         TEXT,                                -- 'open' | 'merged' | 'closed'
+  last_cell_id     TEXT,
+  avoid_cells      TEXT NOT NULL DEFAULT '[]',          -- JSON [{ cellId, until }], from the plan's failures (as `orders`)
+  andon_reason     TEXT,                                -- 'plan_job_failed' | 'plan_pr_closed'
+  created_at       INTEGER NOT NULL,
+  updated_at       INTEGER NOT NULL,                    -- `at` of the last event
+  UNIQUE (project_id, slug)
+);
+CREATE INDEX plans_queue ON plans (holder, next_kind, created_at);
 
 CREATE TABLE commands (
   command_id  TEXT PRIMARY KEY,
@@ -265,6 +294,16 @@ not terminal. `repo_url` never changes in place.
 `next_kind = 'job'` gets `deps` from the rows of the Work orders in `depends_on` and the project's
 `dep_policy` (CORE §8): `satisfied`, `waiting` (board status `waiting_deps`) or `broken`
 (`deps_broken`). Nothing about another Work order is ever stored in a row, so a rebuild is exact.
+For a row with a `plan`, an in-plan dependency uses the stacked outcome instead of `dep_policy`
+(`delivered` with a `pr_state` that is not `closed` is satisfied; `closed` or `cancelled` is broken;
+CORE §8, §12.4), and the plan's root is `waiting` while its `plans` row has `phase = 'branching'`
+(CORE §12.6). That is the only place a Work order row is read together with a `plans` row.
+
+**Plans and Work orders are separate streams.** A plan's `members` column holds the members' states
+as the plan last heard them (CORE §12.3); the runtime reports changes through `RecordMemberState` in
+its own transaction (CORE §12.7), so one append never writes two streams. `plans` rows are written by
+the same append transaction (§3, step 4) as the plan's events, with `INSERT` on `plan_created`.
+`commands.order_id` holds the stream id too.
 
 There is no `archived` flag: the board hides terminal Work orders by `updated_at` (PROTOCOL §3.1).
 
@@ -286,11 +325,16 @@ OPEN-QUESTIONS Q17.
 
 ## 6. Projections
 
-- `orders` is the only projection in v2.0. It is updated inside the append transaction (§3).
-- The fold is `toProjection` in `factory-core` (pure). `factory-db` only stores the row.
-- Runtime admin operation `rebuild-projections` truncates `orders`, reads `events`
-  in `global_seq` order, folds each Work order with `evolve` + `toProjection`, and writes the rows.
-  It MUST produce an identical table; a test asserts this on every scenario fixture.
+- `orders` and `plans` are the projections in v2.0. Each is updated inside the append transaction (§3)
+  of its own stream.
+- The fold is `toProjection` in `factory-core` (pure; one for Work orders, one for plans). `factory-db`
+  only stores the row.
+- Runtime admin operation `rebuild-projections` truncates `orders` and `plans`, reads `events`
+  in `global_seq` order, folds each Work order with `evolve` + `toProjection` and each plan with its
+  own `evolve` + `toProjection` (a `PlanId` stream is told apart by the `:plan:` infix), and writes the
+  rows. It MUST produce identical tables; a test asserts this on every scenario fixture. The new
+  `orders.plan` and `orders.base_branch` columns come from `order_created`, so a migration adds them
+  and a rebuild fills them for existing Work orders.
 - Adding a projection = a migration in `factory-db` + a pure fold in `factory-core`; never a change
   to events.
 
@@ -317,7 +361,8 @@ Three tools, from cheapest to most portable:
 
    Import: runtime admin operation `import <file>`, run against the target local or remote runtime,
    into an **empty database only**: insert projects, blobs and events unchanged, rebuild projections,
-   then append `ExpireLease` as the importing runtime for each Work order that had an active job.
+   then append `ExpireLease` as the importing runtime for each Work order **and each plan** that had an
+   active job.
    Leases, tokens, Cells, signals and the idempotency table are not exported. In remote mode, create a
    supervisor token and join token, then let the Cells join again; local mode uses no such tokens.
 
@@ -329,6 +374,9 @@ Best-effort recovery when the database is gone and no backup exists:
 2. For each `factory/<todoId>` branch, the newest commit whose trailers say
    `Factory-Outcome: passed` (PROTOCOL §8.2) gives the last passed Station and the checkpoint
    commit. An open PR for the branch marks the Work order delivered.
+   Plans are recovered the same way: intake recreates each plan from the `plan:` todos, and the
+   `plan_branch` job finds an existing `feat/<slug>` and records its tip, so no second branch is made
+   (PROTOCOL §4). An open `feat/<slug> → <baseBranch>` PR is found by `plan_pr`.
 3. The runtime appends `order_recovered { passedStations, checkpoint }`. Artifacts of passed
    Stations are not in git, so the Work order resumes from the first Station whose inputs cannot be
    recovered, on top of the checkpoint code.
