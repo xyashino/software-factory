@@ -1,8 +1,11 @@
-import type { CellId, JobId, OrderId } from '../ids';
+import type { CellId, JobId, OrderId, PlanId } from '../ids';
 
-/** The lease held by the Cell running the active job of a Work order (STORAGE §4, `leases`). */
+/** The stream a lease belongs to: a Work order, or an Order Plan running a plan job (PROTOCOL §4). */
+export type LeaseStreamId = OrderId | PlanId;
+
+/** The lease held by the Cell running the active job of a Work order or a plan (STORAGE §4, `leases`). */
 export interface Lease {
-  orderId: OrderId;
+  orderId: LeaseStreamId;
   jobId: JobId;
   cellId: CellId;
   epoch: number;
@@ -25,7 +28,7 @@ export interface LeaseStore {
   /** The leases one Cell holds (heartbeat, revocation, slot count). */
   forCell(cellId: CellId): Promise<Lease[]>;
   /** Removes the lease of an order. Deleting a missing lease is a no-op. */
-  delete(orderId: OrderId): Promise<void>;
+  delete(orderId: LeaseStreamId): Promise<void>;
   /** Boot grace (PROTOCOL §5.1): every lease's expiry becomes `now + ttl`. */
   bootGrace(now: number, ttl: number): Promise<void>;
 }

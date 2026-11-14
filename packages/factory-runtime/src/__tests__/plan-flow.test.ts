@@ -127,29 +127,24 @@ describe('intake of an Order Plan (CORE §12.2, §12.7)', () => {
 });
 
 describe('the root of a plan waits for the branch (CORE §12.6, P3)', () => {
-  it('is not claimable until plan_branch_created, then is claimed on feat/xyz', async () => {
+  it('offers the plan_branch job first, not the root, then the root on feat/xyz', async () => {
     const w = world();
     w.git.setTodos(chainTodos());
     await w.runtime.sync();
     await helloCell(w, CELL);
+    const planId = (await planOf(w))!.planId;
 
     const early = await w.runtime.call('claim', { cellId: CELL, waitMs: 0 });
-    expect(early.job).toBeNull();
+    expect(early.job).toMatchObject({ kind: 'plan_branch', orderId: planId });
+    const branchJob = early.job!;
 
     const plans = createPlanCommands(w.ports, () => undefined);
-    const planId = (await planOf(w))!.planId;
-    await plans.submit({
-      planId,
-      commandId: 'plan-claim-branch',
-      command: { type: 'ClaimJob', cellId: CELL },
-      actor: { kind: 'factory' },
-    });
     await plans.submit({
       planId,
       commandId: 'plan-branch',
       command: { type: 'ReportPlanBranch', commit: COMMIT },
       actor: { kind: 'cell', cellId: CELL },
-      epoch: 1,
+      epoch: branchJob.epoch,
     });
     expect((await planOf(w))?.phase).toBe('active');
 

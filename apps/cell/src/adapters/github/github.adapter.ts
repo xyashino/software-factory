@@ -4,15 +4,17 @@ import type { GithubPort, PrRef } from '../../ports/github.port';
 
 const prListSchema = z.array(
   z.object({
-    number: z.number().int(),
     url: z.string().min(1),
     state: z.string(),
+    isDraft: z.boolean(),
   }),
 );
 
-export const execGh: GhRunner = (args, cwd) =>
+const prViewSchema = z.object({ isDraft: z.boolean() });
+
+export const execGh: GhRunner = (args, cwd, input) =>
   new Promise((resolve) => {
-    execFile(
+    const child = execFile(
       'gh',
       args,
       { cwd, maxBuffer: 10 * 1024 * 1024 },
@@ -22,6 +24,7 @@ export const execGh: GhRunner = (args, cwd) =>
         resolve({ code, stdout: String(stdout), stderr: String(stderr) });
       },
     );
+    if (input !== undefined) child.stdin?.end(input);
   });
 
 export interface GhResult {
@@ -30,8 +33,15 @@ export interface GhResult {
   stderr: string;
 }
 
-/** Runs `gh` with an argument array (no shell). Never throws; callers check `code`. */
-export type GhRunner = (args: string[], cwd: string) => Promise<GhResult>;
+/**
+ * Runs `gh` with an argument array (no shell), with `input` on its stdin when given. Never throws;
+ * callers check `code`.
+ */
+export type GhRunner = (
+  args: string[],
+  cwd: string,
+  input?: string,
+) => Promise<GhResult>;
 
 const requireOk = (what: string, result: GhResult): void => {
   if (result.code !== 0) {
@@ -55,20 +65,49 @@ export const createGithubAdapter = (
   run: GhRunner = execGh,
 ): GithubPort => {
   return {
-    async findPr(branch) {
+    async findPr(head, base) {
+      // Every state: a merged or closed PR is found too, so the plan can tell it apart from no PR.
       const result = await run(
-        ['pr', 'list', '--head', branch, '--json', 'number,url,state'],
+        [
+          'pr',
+          'list',
+          '--head',
+          head,
+          ...(base === undefined ? [] : ['--base', base]),
+          '--state',
+          'all',
+          '--json',
+          'url,state,isDraft',
+        ],
         cwd,
       );
       requireOk('gh pr list', result);
-      const [first] = prListSchema.parse(JSON.parse(result.stdout));
-      if (first === undefined) return undefined;
-      const pr: PrRef = {
-        number: first.number,
-        url: first.url,
-        state: toPrState(first.state),
-      };
-      return pr;
+      const found = prListSchema
+        .parse(JSON.parse(result.stdout))
+        .map((pr): PrRef => ({
+          url: pr.url,
+          state: toPrState(pr.state),
+          draft: pr.isDraft,
+        }));
+      return found.find((pr) => pr.state === 'open') ?? found[0];
+    },
+
+    async markReady(prUrl) {
+      const view = await run(['pr', 'view', prUrl, '--json', 'isDraft'], cwd);
+      requireOk('gh pr view', view);
+      if (!prViewSchema.parse(JSON.parse(view.stdout)).isDraft) return;
+      const ready = await run(['pr', 'ready', prUrl], cwd);
+      requireOk('gh pr ready', ready);
+    },
+
+    async updateBody(prUrl, body) {
+      // The body goes on stdin, so no text is ever part of a command line.
+      const result = await run(
+        ['pr', 'edit', prUrl, '--body-file', '-'],
+        cwd,
+        body,
+      );
+      requireOk('gh pr edit', result);
     },
 
     async createPr({ branch, base, title, body, draft }) {

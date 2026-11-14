@@ -4,7 +4,6 @@ import type {
   CellId,
   CommitSha,
   JobId,
-  OrderId,
   ProjectId,
   TodoId,
 } from '../ids';
@@ -12,7 +11,7 @@ import type { BlobStore } from '../ports/blob-store';
 import type { Clock } from '../ports/clock';
 import type { GitMirror, TodoFile } from '../ports/git-mirror';
 import type { IntakeRecord, IntakeStore } from '../ports/intake';
-import type { Lease, LeaseStore } from '../ports/lease-store';
+import type { Lease, LeaseStore, LeaseStreamId } from '../ports/lease-store';
 import type { PrState, PrStatePort } from '../ports/pr-state';
 import type {
   ProjectPatch,
@@ -84,7 +83,7 @@ export const fakeBlobStore = (
 
 /** An in-memory `LeaseStore`. Leases are keyed by order, like the `leases` table. */
 export const fakeLeaseStore = (): LeaseStore => {
-  const leases = new Map<OrderId, Lease>();
+  const leases = new Map<LeaseStreamId, Lease>();
   const ofCell = (cellId: CellId): Lease[] =>
     [...leases.values()].filter((lease) => lease.cellId === cellId);
   const byExpiry = (a: Lease, b: Lease): number =>

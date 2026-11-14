@@ -12,6 +12,7 @@ import type { PaneDriver } from '../ports';
 import type { GithubPort } from '../ports/github.port';
 import type { SystemPort } from '../ports/system.port';
 import { commandIdOf } from '../factory-client';
+import { orderIdOf } from './job-shape';
 
 /** What a job needs from the Cell: the client, the identity, the system, and the local directories. */
 export interface JobContext {
@@ -92,10 +93,10 @@ export const submit = async (
   const answer = await ctx.client.call('submitCommand', {
     cellId: ctx.cellId,
     jobId: job.jobId,
-    orderId: job.orderId,
+    orderId: orderIdOf(job),
     commandId: commandIdOf({
       cellId: ctx.cellId,
-      orderId: job.orderId,
+      orderId: orderIdOf(job),
       epoch: job.epoch,
       command,
     }),
@@ -104,7 +105,7 @@ export const submit = async (
     ...(options.dryRun ? { dryRun: true } : {}),
   });
   if (answer.next) ctx.onContinuation?.(answer.next);
-  return answer;
+  return { events: answer.events as OrderEvent[] };
 };
 
 /**

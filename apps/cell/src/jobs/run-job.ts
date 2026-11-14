@@ -14,6 +14,7 @@ import { cycleDirName } from '../names';
 import { spawnHeadless } from '../runners/headless';
 import { prepareWorkspace } from '../workspace';
 import { runDeliver } from './deliver';
+import { runPlanJob } from './plan';
 import { runInspection } from './run-inspection';
 import { runOperatorStation, type RunnerLaunch } from './run-operator-station';
 import type { JobContext } from './send';
@@ -94,8 +95,8 @@ const runnersFor = (
 };
 
 /**
- * Dispatches a claimed job by its kind: `run_inspection`, `run_operator_station`, and `deliver`.
- * Any other kind throws `UnsupportedJobKind` before a command is sent, so its lease lapses and the
+ * Dispatches a claimed job by its kind: `run_inspection`, `run_operator_station`, `deliver`, and the three
+ * plan kinds. Any other kind throws `UnsupportedJobKind` before a command is sent, so its lease lapses and the
  * reaper takes it back. The job's log directory is removed when the job ends, whatever the outcome.
  */
 export const runJob = async (
@@ -143,6 +144,12 @@ export const runJob = async (
       case 'deliver':
         await runDeliver(jobCtx, job, signal);
         return continuation;
+      case 'plan_branch':
+      case 'plan_pr':
+      case 'plan_pr_ready':
+        // A plan job has no continuation: its report ends it, and the next job is the plan's to offer (PROTOCOL §4).
+        await runPlanJob(jobCtx, job, signal);
+        return null;
       default:
         throw new UnsupportedJobKind(job.kind);
     }

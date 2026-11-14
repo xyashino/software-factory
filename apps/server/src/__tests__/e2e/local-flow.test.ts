@@ -171,7 +171,7 @@ describe('restart mid-order', () => {
     if (!job) throw new Error('expected the plan job');
     job = await cell.run(job);
     job = job ? await cell.run(job) : null;
-    const orderId = job?.orderId;
+    const orderId = job?.orderId as OrderId | undefined;
     if (!orderId) throw new Error('expected a claimed build job');
     await listener?.stop();
     listener = undefined;

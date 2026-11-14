@@ -1,6 +1,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Job } from '@repo/factory-core/contracts/job';
+import { workspaceOf } from '../jobs/job-shape';
 import { ensureMirror, GIT_TIMEOUT_MS } from './mirror';
 import { syncAndSetup } from './cache';
 import { pickEvictions, USED_MARKER } from './lru';
@@ -71,7 +72,8 @@ export const prepareWorkspace = async (
     detail,
     log: concatBytes(transcript),
   });
-  const timeoutMs = job.workspace.timeoutMs;
+  const workspace = workspaceOf(job);
+  const timeoutMs = workspace.timeoutMs;
 
   const mirror = await ensureMirror(ctx.shell, {
     cellDataDir: ctx.cellDataDir,
@@ -111,7 +113,7 @@ export const prepareWorkspace = async (
   const root = worktreeRootOf(ctx.cellDataDir, mirror.path);
   let worktree: string;
   try {
-    worktree = worktreePathOf(root, job.workspace.dir);
+    worktree = worktreePathOf(root, workspace.dir);
   } catch (error) {
     return fail(
       'worktree',
@@ -144,8 +146,8 @@ export const prepareWorkspace = async (
   const prepared = await syncAndSetup(ctx.shell, {
     worktree,
     commit: headSha,
-    sync: job.workspace.sync,
-    setup: job.workspace.setup,
+    sync: workspace.sync,
+    setup: workspace.setup,
     timeoutMs,
     record: note,
   });

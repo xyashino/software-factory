@@ -3,7 +3,13 @@ import {
   MAX_CLAIM_WAIT_MS,
   type HelloResponse,
 } from '@repo/factory-core/contracts/cell';
-import type { CellId } from '@repo/factory-core/ids';
+import type { Job } from '@repo/factory-core/contracts/job';
+import {
+  isPlanId,
+  type CellId,
+  type JobId,
+  type PlanId,
+} from '@repo/factory-core/ids';
 import type { CellConfig } from './config';
 import { createRegistry } from './cycle/registry';
 import type { GithubPort } from './ports/github.port';
@@ -143,6 +149,30 @@ export const startCell = async (options: CellOptions): Promise<RunningCell> => {
     registry.abortAll('the Cell is stopping');
   };
 
+  // The plan jobs running here, so a leaving Cell can let them finish or release them (PROTOCOL §9).
+  const heldPlans = new Map<JobId, Job>();
+  const runHeld = (job: Job, signal: AbortSignal): Promise<Job | null> => {
+    if (!isPlanId(job.orderId)) return runJob(jobContext, job, signal);
+    heldPlans.set(job.jobId, job);
+    return runJob(jobContext, job, signal).finally(() => {
+      heldPlans.delete(job.jobId);
+    });
+  };
+  const releasePlan = async (job: Job): Promise<void> => {
+    try {
+      await client.call('submitCommand', {
+        cellId,
+        planId: job.orderId as PlanId,
+        jobId: job.jobId,
+        commandId: `${job.jobId}:release`,
+        epoch: job.epoch,
+        command: { type: 'ReleaseJob', jobId: job.jobId, epoch: job.epoch },
+      });
+    } catch (error) {
+      options.onError?.(error, `release plan job ${job.jobId}`);
+    }
+  };
+
   const slots = Array.from({ length: config.slots }, () =>
     runSlot({
       client,
@@ -153,7 +183,7 @@ export const startCell = async (options: CellOptions): Promise<RunningCell> => {
       waitMs,
       idlePauseMs,
       sleep,
-      runJob: (job, signal) => runJob(jobContext, job, signal),
+      runJob: runHeld,
       onError: options.onError,
       onUnauthorized: unauthorized,
     }),
@@ -175,6 +205,16 @@ export const startCell = async (options: CellOptions): Promise<RunningCell> => {
       stopping = true;
       leaving ??= leaveCell({
         registry: stations,
+        plans: {
+          held: () => [...heldPlans.values()],
+          release: releasePlan,
+          abort: (job) => {
+            registry.abort(
+              job.jobId,
+              'the Cell left; the plan job was released',
+            );
+          },
+        },
         sleep,
         now: () => options.clock.now(),
         pollMs,

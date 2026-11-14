@@ -1,3 +1,4 @@
+import { isPlanId, type PlanId } from '@repo/factory-core/ids';
 import type { CommandHandler } from './command-handler';
 import { isRuntimeError } from './errors';
 import type { RuntimePorts } from './ports';
@@ -18,13 +19,28 @@ export const reapOnce = async (
   const expired = await ports.leases.expired(ports.clock.now());
   for (const lease of expired) {
     try {
-      await handler.submit({
-        orderId: lease.orderId,
-        commandId: `reap:${lease.jobId}`,
-        command: { type: 'ExpireLease' },
-        actor: { kind: 'factory' },
-        epoch: lease.epoch,
-      });
+      if (isPlanId(lease.orderId)) {
+        // A plan job's lease: the plan stream names the job and epoch it ends (CORE §12.3).
+        await handler.submitPlan({
+          planId: lease.orderId as PlanId,
+          commandId: `reap:${lease.jobId}`,
+          command: {
+            type: 'ExpireLease',
+            jobId: lease.jobId,
+            epoch: lease.epoch,
+          },
+          actor: { kind: 'factory' },
+          epoch: lease.epoch,
+        });
+      } else {
+        await handler.submit({
+          orderId: lease.orderId,
+          commandId: `reap:${lease.jobId}`,
+          command: { type: 'ExpireLease' },
+          actor: { kind: 'factory' },
+          epoch: lease.epoch,
+        });
+      }
     } catch (error) {
       if (!isRuntimeError(error) || !STALE_LEASE_CODES.has(error.wire.code)) {
         throw error;
