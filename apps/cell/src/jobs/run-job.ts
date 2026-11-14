@@ -13,13 +13,14 @@ import { runGit } from '../git';
 import { cycleDirName } from '../names';
 import { spawnHeadless } from '../runners/headless';
 import { prepareWorkspace } from '../workspace';
+import { runDeliver } from './deliver';
 import { runInspection } from './run-inspection';
 import { runOperatorStation, type RunnerLaunch } from './run-operator-station';
 import type { JobContext } from './send';
 
 const STATION_TICK_MS = 1_000;
 
-/** A job kind this Cell does not run yet (delivery comes in a later task). */
+/** An unknown job kind this Cell does not run. */
 export class UnsupportedJobKind extends Error {
   constructor(kind: string) {
     super(`this Cell does not run ${kind} jobs yet`);
@@ -81,8 +82,8 @@ const runnersFor = (
 };
 
 /**
- * Dispatches a claimed job by its kind. `run_inspection` and `run_operator_station` run here; any
- * other kind throws `UnsupportedJobKind` before a command is sent, so its lease lapses and the
+ * Dispatches a claimed job by its kind: `run_inspection`, `run_operator_station`, and `deliver`.
+ * Any other kind throws `UnsupportedJobKind` before a command is sent, so its lease lapses and the
  * reaper takes it back. The job's log directory is removed when the job ends, whatever the outcome.
  */
 export const runJob = async (
@@ -117,6 +118,9 @@ export const runJob = async (
           signal,
           takeSignals: () => ctx.takeSignals?.(job.jobId) ?? [],
         });
+        return;
+      case 'deliver':
+        await runDeliver(ctx, job, signal);
         return;
       default:
         throw new UnsupportedJobKind(job.kind);

@@ -6,8 +6,10 @@ import {
 import type { CellId } from '@repo/factory-core/ids';
 import type { CellConfig } from './config';
 import { createRegistry } from './cycle/registry';
+import type { GithubPort } from './ports/github.port';
 import type { SystemPort } from './ports/system.port';
 import type { ClockPort } from './ports/clock.port';
+import { createGithubAdapter } from './adapters/github/github.adapter';
 import { createJobRegistry } from './jobs/registry';
 import { runJob } from './jobs/run-job';
 import type { JobContext } from './jobs/send';
@@ -38,6 +40,8 @@ export interface CellOptions {
   timing?: CellTiming;
   sleep?: (ms: number) => Promise<void>;
   onError?: (error: unknown, context: string) => void;
+  /** The GitHub port for a worktree directory. Defaults to the `gh` CLI; tests inject a fake. */
+  githubFor?: (cwd: string) => GithubPort;
 }
 
 export interface RunningCell {
@@ -107,6 +111,7 @@ export const startCell = async (options: CellOptions): Promise<RunningCell> => {
     stations,
     takeSignals: (jobId) => registry.takeSignals(jobId),
     ...(options.pane ? { pane: options.pane } : {}),
+    githubFor: options.githubFor ?? ((cwd) => createGithubAdapter(cwd)),
   };
 
   let stopping = false;

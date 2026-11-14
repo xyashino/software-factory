@@ -9,6 +9,7 @@ import type { OrderCommand } from '@repo/factory-core/order/commands';
 import type { OrderEvent } from '@repo/factory-core/order/events';
 import type { StationRegistry } from '../cycle/registry';
 import type { PaneDriver } from '../ports';
+import type { GithubPort } from '../ports/github.port';
 import type { SystemPort } from '../ports/system.port';
 import { commandIdOf } from '../factory-client';
 
@@ -27,6 +28,8 @@ export interface JobContext {
   takeSignals?: (jobId: JobId) => Signal[];
   /** Optional Herdr pane driver for non-headless Operator stations. */
   pane?: PaneDriver;
+  /** The GitHub port for a repo, opened on a directory of its worktree. Tests inject a fake. */
+  githubFor: (cwd: string) => GithubPort;
 }
 
 /**
@@ -67,12 +70,16 @@ export const putLog = async (
   return ref;
 };
 
-/** Sends one command for the job's order, with its content-derived commandId. */
+/**
+ * Sends one command for the job's order, with its content-derived commandId. `dryRun` runs every check
+ * and appends nothing (PROTOCOL §8.2), so a Cell can learn that it may push before it does.
+ */
 export const submit = async (
   ctx: JobContext,
   job: Job,
   command: OrderCommand,
   signal: AbortSignal,
+  options: { dryRun?: boolean } = {},
 ): Promise<{ events: OrderEvent[] }> => {
   if (signal.aborted) throw new JobStopped(String(signal.reason));
   const answer = await ctx.client.call('submitCommand', {
@@ -86,6 +93,7 @@ export const submit = async (
     }),
     epoch: job.epoch,
     command,
+    ...(options.dryRun ? { dryRun: true } : {}),
   });
   return answer;
 };

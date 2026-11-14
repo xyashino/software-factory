@@ -3,7 +3,7 @@ export const usage = `usage: factory-cell [--help]
 A Cell runs Jobs for the Factory. It is a client of the running factory-server over
 $FACTORY_DATA_DIR/factory.sock: it says hello, claims one Job per slot, keeps its leases with
 one heartbeat loop, stops its jobs when it cannot reach the Factory for 45 s, and runs
-Inspections and Operator stations.
+Inspections, Operator stations and Deliveries.
 
 config:  ~/.config/factory-cell/config.toml (or $XDG_CONFIG_HOME/factory-cell/config.toml)
            slots = 2                   concurrent Jobs (default 2)

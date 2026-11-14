@@ -2,10 +2,12 @@
  * Test fixture, not a product entry point: `factory-server` over a seeded data directory. The Cell's
  * integration tests spawn it by path, so the Cell never imports the runtime (apps/cell lint).
  *
- * Usage: `bun serve-fixture.ts <dataDir> <repoUrl> [checksJson]`. It seeds one project (`software-factory`,
- * repo `repoUrl`) and one Order `software-factory:todo-1` whose line starts with an inspection
- * (`quality-gate`, the `checksJson` commands, default `["true"]`), then serves the socket like `main.ts`
- * does. The line is written under the data directory, so the shipped definitions stay untouched.
+ * Usage: `bun serve-fixture.ts <dataDir> <repoUrl> [checksJson] [continuation]`. It seeds one project
+ * (`software-factory`, repo `repoUrl`) and one Order `software-factory:todo-1` whose line starts with an
+ * inspection (`quality-gate`, the `checksJson` commands, default `["true"]`), then serves the socket like
+ * `main.ts` does. The line is written under the data directory, so the shipped definitions stay untouched.
+ * `continuation` (`true` by default) is the runtime's PROTOCOL §4 flag: `false` leaves every next job in
+ * the queue, so a test's own Cell claims it instead of receiving it from the command that ends a job.
  * Arguments, not environment variables: the turbo lint rule wants every env var declared.
  */
 import { createHash } from 'node:crypto';
@@ -75,9 +77,12 @@ const fixtureDefinitions = (dataDir: string, checks: string[]): string => {
 };
 
 const main = async (): Promise<void> => {
-  const [dataDir, repoUrl, checksJson = '["true"]'] = process.argv.slice(2);
+  const [dataDir, repoUrl, checksJson = '["true"]', continuation = 'true'] =
+    process.argv.slice(2);
   if (!dataDir || !repoUrl) {
-    throw new Error('usage: serve-fixture <dataDir> <repoUrl> [checksJson]');
+    throw new Error(
+      'usage: serve-fixture <dataDir> <repoUrl> [checksJson] [continuation]',
+    );
   }
   const checks = JSON.parse(checksJson) as string[];
 
@@ -86,6 +91,7 @@ const main = async (): Promise<void> => {
   const opened = openRuntime({
     dataDir,
     definitionsRoot: fixtureDefinitions(dataDir, checks),
+    config: { continuation: continuation === 'true' },
   });
   await opened.runtime.start();
 
