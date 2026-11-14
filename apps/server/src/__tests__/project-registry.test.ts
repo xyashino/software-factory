@@ -1,0 +1,233 @@
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import {
+  decodeHttpAnswer,
+  encodeHttpCall,
+} from '@repo/factory-core/contracts/http-codec';
+import {
+  WireFailure,
+  type WireError,
+} from '@repo/factory-core/contracts/errors';
+import type { RouteName } from '@repo/factory-core/contracts/routes';
+import { fakePrState } from '@repo/factory-core/testing';
+import {
+  openRuntime,
+  type OpenedRuntime,
+} from '@repo/factory-runtime/open-runtime';
+import { gitMirror } from '../adapters/git-mirror';
+import { createHttpApp } from '../http/app';
+import { socketFactoryClient } from '../socket/client';
+import { startSocketListener, type SocketListener } from '../socket/listener';
+import { createFixtureRepo, todoFile } from './e2e/fixture-repo';
+
+/**
+ * The project registry answers the same over the local socket, remote HTTP and `--once` (RULES §6.5).
+ * Each transport runs the same steps against a fresh data directory with no seeding, and the answers
+ * must be equal. The scenario is add, list, set, a duplicate add, intake, two refusals and a not-found.
+ */
+
+/** The server entry point, run as a real process for `--once`. */
+const MAIN = fileURLToPath(new URL('../main.ts', import.meta.url));
+
+interface Step {
+  route: RouteName;
+  request: unknown;
+}
+
+/** One answer, as a client sees it: the response, or the wire error of a refusal. */
+type Outcome =
+  { ok: true; response: unknown } | { ok: false; error: WireError };
+
+let root: string;
+let repo: string;
+let counter = 0;
+const prState = fakePrState();
+
+beforeAll(async () => {
+  root = mkdtempSync(join(tmpdir(), 'factory-registry-'));
+  repo = await createFixtureRepo(join(root, 'repo'), {
+    'add-login': todoFile({ title: 'Add login', v2: true }),
+  });
+});
+
+afterAll(() => {
+  rmSync(root, { recursive: true, force: true });
+});
+
+/** A data directory no earlier run touched: nothing is seeded and nothing is registered. */
+const freshDataDir = (transport: string): string => {
+  counter += 1;
+  return join(root, `${transport}-${counter}`);
+};
+
+const scenario = (repoUrl: string): Step[] => {
+  const demo = {
+    projectId: 'demo',
+    repoUrl,
+    baseBranch: 'main',
+    maxRunning: 2,
+    depPolicy: 'delivered',
+  };
+  return [
+    { route: 'projectAdd', request: demo },
+    { route: 'projectList', request: {} },
+    { route: 'projectSet', request: { projectId: 'demo', maxRunning: 3 } },
+    { route: 'projectAdd', request: demo },
+    { route: 'intakeSync', request: { projectId: 'demo' } },
+    {
+      route: 'projectSet',
+      request: { projectId: 'demo', baseBranch: 'develop' },
+    },
+    { route: 'projectRemove', request: { projectId: 'demo' } },
+    { route: 'projectSet', request: { projectId: 'ghost', maxRunning: 2 } },
+    { route: 'projectList', request: {} },
+  ];
+};
+
+const openFresh = (dataDir: string): OpenedRuntime =>
+  openRuntime({
+    dataDir,
+    git: gitMirror({ mirrorsDir: join(dataDir, 'mirrors') }),
+    prState,
+    config: { intakePollMs: 0, prPollMs: 0 },
+  });
+
+/** Runs a call and turns a refusal into its wire error; any other failure is a test failure. */
+const outcomeOf = async (call: () => Promise<unknown>): Promise<Outcome> => {
+  try {
+    return { ok: true, response: await call() };
+  } catch (error) {
+    if (error instanceof WireFailure) return { ok: false, error: error.error };
+    throw error;
+  }
+};
+
+/** The steps over the local socket, served the way factory-server serves it. */
+const overSocket = async (steps: Step[]): Promise<Outcome[]> => {
+  const dataDir = freshDataDir('socket');
+  const opened = openFresh(dataDir);
+  await opened.runtime.start();
+  const socketPath = join(dataDir, 'factory.sock');
+  const listener: SocketListener = startSocketListener({
+    runtime: opened.runtime,
+    socketPath,
+  });
+  const client = socketFactoryClient({ socketPath });
+  try {
+    const outcomes: Outcome[] = [];
+    for (const step of steps) {
+      outcomes.push(
+        await outcomeOf(() => client.call(step.route, step.request as never)),
+      );
+    }
+    return outcomes;
+  } finally {
+    await listener.stop();
+    opened.close();
+  }
+};
+
+/** The steps over remote HTTP, through the Hono app with a supervisor token (PROTOCOL §3). */
+const overHttp = async (steps: Step[]): Promise<Outcome[]> => {
+  const opened = openFresh(freshDataDir('http'));
+  await opened.runtime.start();
+  const app = createHttpApp(opened.runtime);
+  const { token } = await opened.runtime.remote.createSupervisorToken('dev');
+  try {
+    const outcomes: Outcome[] = [];
+    for (const step of steps) {
+      const call = encodeHttpCall(step.route, step.request as never);
+      const response = await app.request(call.path, {
+        method: call.method,
+        headers: {
+          authorization: `Bearer ${token}`,
+          ...(call.json !== undefined
+            ? { 'content-type': 'application/json' }
+            : {}),
+        },
+        body: call.json,
+      });
+      const bytes = new Uint8Array(await response.arrayBuffer());
+      outcomes.push(
+        await outcomeOf(async () =>
+          decodeHttpAnswer(
+            step.route,
+            step.request as never,
+            response.status,
+            bytes,
+          ),
+        ),
+      );
+    }
+    return outcomes;
+  } finally {
+    opened.close();
+  }
+};
+
+/** The steps through `factory-server --once`: one process per step, each takes the writer lock. */
+const overOnce = async (steps: Step[]): Promise<Outcome[]> => {
+  const dataDir = freshDataDir('once');
+  const outcomes: Outcome[] = [];
+  for (const step of steps) {
+    const child = Bun.spawn(['bun', MAIN, '--once', '--data-dir', dataDir], {
+      env: { ...process.env, FACTORY_DATA_DIR: '' },
+      stdin: new Blob([
+        JSON.stringify({ route: step.route, request: step.request }),
+      ]),
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+    await child.exited;
+    const body = JSON.parse(await new Response(child.stdout).text()) as
+      { ok: true; response: unknown } | { ok: false; error: WireError };
+    outcomes.push(
+      body.ok
+        ? { ok: true, response: body.response }
+        : { ok: false, error: body.error },
+    );
+  }
+  return outcomes;
+};
+
+describe('project registry over the three transports', () => {
+  it('answers the same steps the same way over the socket, HTTP and --once', async () => {
+    const steps = scenario(repo);
+
+    const socket = await overSocket(steps);
+    const http = await overHttp(steps);
+    const once = await overOnce(steps);
+
+    expect(http).toEqual(socket);
+    expect(once).toEqual(socket);
+  }, 120_000);
+
+  it('registers, changes and refuses as the PROTOCOL §3.1 rules say', async () => {
+    const outcomes = await overSocket(scenario(repo));
+    const refusal = (index: number) => {
+      const outcome = outcomes[index];
+      if (!outcome || outcome.ok) throw new Error(`step ${index} succeeded`);
+      return outcome.error;
+    };
+
+    expect(outcomes[0]).toMatchObject({
+      ok: true,
+      response: { project: { projectId: 'demo', maxRunning: 2 } },
+    });
+    expect(outcomes[2]).toMatchObject({
+      ok: true,
+      response: { project: { projectId: 'demo', maxRunning: 3 } },
+    });
+    expect(refusal(3).code).toBe('precondition');
+    expect(refusal(5).code).toBe('precondition');
+    expect(refusal(6).code).toBe('precondition');
+    expect(refusal(7)).toEqual({ code: 'not_found' });
+    expect(outcomes[8]).toMatchObject({
+      ok: true,
+      response: { projects: [{ projectId: 'demo', maxRunning: 3 }] },
+    });
+  }, 60_000);
+});

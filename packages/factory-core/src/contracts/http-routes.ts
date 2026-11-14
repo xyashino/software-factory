@@ -113,6 +113,20 @@ export const HTTP_ROUTES = {
     auth: 'supervisor',
     params: { id: 'joinTokenId' },
   },
+  projectList: { method: 'GET', path: '/v1/projects', auth: 'supervisor' },
+  projectAdd: { method: 'POST', path: '/v1/projects', auth: 'supervisor' },
+  projectSet: {
+    method: 'POST',
+    path: '/v1/projects/:id',
+    auth: 'supervisor',
+    params: { id: 'projectId' },
+  },
+  projectRemove: {
+    method: 'DELETE',
+    path: '/v1/projects/:id',
+    auth: 'supervisor',
+    params: { id: 'projectId' },
+  },
   adminExport: {
     method: 'GET',
     path: '/v1/admin/export',

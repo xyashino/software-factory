@@ -107,7 +107,7 @@ export const openRuntime = (options: OpenRuntimeOptions): OpenedRuntime => {
     const ports: RuntimePorts = {
       events: store,
       projections: sqliteProjectionReader(database, gate),
-      projects: sqliteProjectStore(database, gate),
+      projects: sqliteProjectStore(database, writer, gate),
       blobs: sqliteBlobStore(database, writer, gate),
       leases: sqliteLeaseStore(database, writer, gate),
       cells: sqliteCellStore(database, writer, gate),

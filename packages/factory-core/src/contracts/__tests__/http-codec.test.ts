@@ -8,6 +8,47 @@ const JOB = '01J0000000000000000000000J' as JobId;
 const ORDER = 'software-factory:todo-1' as OrderId;
 
 describe('encodeHttpCall', () => {
+  it('posts a project registration to the collection, with every field in the body', () => {
+    const call = encodeHttpCall('projectAdd', {
+      projectId: 'demo' as never,
+      repoUrl: 'https://example.test/demo.git',
+      baseBranch: 'main',
+      maxRunning: 2,
+      depPolicy: 'delivered',
+    });
+
+    expect(call.method).toBe('POST');
+    expect(call.path).toBe('/v1/projects');
+    expect(JSON.parse(call.json ?? '{}')).toEqual({
+      projectId: 'demo',
+      repoUrl: 'https://example.test/demo.git',
+      baseBranch: 'main',
+      maxRunning: 2,
+      depPolicy: 'delivered',
+    });
+  });
+
+  it('posts a project change to its own path, with the id moved out of the body', () => {
+    const call = encodeHttpCall('projectSet', {
+      projectId: 'demo' as never,
+      maxRunning: 3,
+    });
+
+    expect(call.method).toBe('POST');
+    expect(call.path).toBe('/v1/projects/demo');
+    expect(JSON.parse(call.json ?? '{}')).toEqual({ maxRunning: 3 });
+  });
+
+  it('deletes a project at its own path, with no body', () => {
+    const call = encodeHttpCall('projectRemove', {
+      projectId: 'demo' as never,
+    });
+
+    expect(call.method).toBe('DELETE');
+    expect(call.path).toBe('/v1/projects/demo');
+    expect(call.json).toBeUndefined();
+  });
+
   it('moves a path field out of the body into the path', () => {
     const call = encodeHttpCall('answer', {
       orderId: ORDER,
