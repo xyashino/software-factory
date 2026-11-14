@@ -11,7 +11,7 @@ import {
 import { cycleCauseSchema, jobKindSchema } from '../order/events';
 
 /**
- * A path the Worker resolves itself: relative to its worktree, never absolute, never climbing out.
+ * A path the Cell resolves itself: relative to its worktree, never absolute, never climbing out.
  * Absolute POSIX and Windows forms are refused (PROTOCOL §4, RULES §4.5).
  */
 const relativePath = z
@@ -104,7 +104,7 @@ const deliverSchema = z
   })
   .strict();
 
-/** A job a Worker runs: PROTOCOL §4, the shape the claim and the continuation return. */
+/** A job a Cell runs: PROTOCOL §4, the shape the claim and the continuation return. */
 export const jobSchema = z
   .object({
     jobId: jobIdSchema,

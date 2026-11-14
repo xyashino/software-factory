@@ -1,6 +1,6 @@
 import {
   blobRefSchema,
-  workerIdSchema,
+  cellIdSchema,
   commitShaSchema,
   cycleIdSchema,
   jobIdSchema,
@@ -32,7 +32,7 @@ const ulid = (letter: string, n: number): string =>
 
 export const cycleIdOf = (n: number) => cycleIdSchema.parse(ulid('C', n));
 export const jobIdOf = (n: number) => jobIdSchema.parse(ulid('J', n));
-export const workerIdOf = (n: number) => workerIdSchema.parse(ulid('K', n));
+export const cellIdOf = (n: number) => cellIdSchema.parse(ulid('K', n));
 export const resumeIdOf = (n: number) => resumeIdSchema.parse(ulid('R', n));
 export const questionIdOf = (n: number) => questionIdSchema.parse(ulid('Q', n));
 export const commitOf = (n: number) => commitShaSchema.parse(hex(n, 40));
@@ -146,7 +146,7 @@ export const jobClaimed = (
   type: 'job_claimed',
   jobId: jobIdOf(1),
   kind: 'run_operator_station',
-  workerId: workerIdOf(1),
+  cellId: cellIdOf(1),
   epoch: 1,
   cycleId: cycleIdOf(1),
   ...over,

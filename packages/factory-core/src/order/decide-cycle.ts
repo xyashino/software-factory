@@ -19,14 +19,14 @@ import type { WorkOrderState } from './state';
 /**
  * Starts the Cycle the claimed job was given. The job's spec comes from `nextJob` on the state
  * without its active job, which is the state the claim was decided on. A run-pinned base must match
- * the Worker's base; a `branch_base` takes the Worker's commit.
+ * the Cell's base; a `branch_base` takes the Cell's commit.
  */
 export const startCycle = (
   state: WorkOrderState,
   command: CommandOf<'StartCycle'>,
   ctx: DecideContext,
 ): Decision => {
-  const denied = requireActor(ctx, ['worker']);
+  const denied = requireActor(ctx, ['cell']);
   if (denied) return err(denied);
   const fence = fenced(state, ctx);
   if (!fence.ok) return fence;
@@ -150,7 +150,7 @@ export const reportInspection = (
   command: CommandOf<'ReportInspection'>,
   ctx: DecideContext,
 ): Decision => {
-  const denied = requireActor(ctx, ['worker']);
+  const denied = requireActor(ctx, ['cell']);
   if (denied) return err(denied);
   const fence = fenced(state, ctx);
   if (!fence.ok) return fence;
@@ -184,7 +184,7 @@ export const failCycle = (
   command: CommandOf<'FailCycle'>,
   ctx: DecideContext,
 ): Decision => {
-  const denied = requireActor(ctx, ['worker']);
+  const denied = requireActor(ctx, ['cell']);
   if (denied) return err(denied);
   const fence = fenced(state, ctx);
   if (!fence.ok) return fence;
@@ -212,7 +212,7 @@ export const blockCycle = (
   command: CommandOf<'BlockCycle'>,
   ctx: DecideContext,
 ): Decision => {
-  const denied = requireActor(ctx, ['operator', 'worker']);
+  const denied = requireActor(ctx, ['operator', 'cell']);
   if (denied) return err(denied);
   const fence = fenced(state, ctx);
   if (!fence.ok) return fence;
@@ -246,7 +246,7 @@ export const handOverCycle = (
   command: CommandOf<'HandOverCycle'>,
   ctx: DecideContext,
 ): Decision => {
-  const denied = requireActor(ctx, ['worker']);
+  const denied = requireActor(ctx, ['cell']);
   if (denied) return err(denied);
   const fence = fenced(state, ctx);
   if (!fence.ok) return fence;
@@ -268,23 +268,21 @@ export const handOverCycle = (
 
 /**
  * Usage arrives after the Cycle may have ended, so it has no epoch and no liveness check. Only the
- * Worker that ran the Cycle may record it (CORE §5.2).
+ * Cell that ran the Cycle may record it (CORE §5.2).
  */
 export const recordUsage = (
   state: WorkOrderState,
   command: CommandOf<'RecordUsage'>,
   ctx: DecideContext,
 ): Decision => {
-  const denied = requireActor(ctx, ['worker']);
+  const denied = requireActor(ctx, ['cell']);
   if (denied) return err(denied);
   const cycle = state.cycles.find(
     (candidate) => candidate.cycleId === command.cycleId,
   );
   if (!cycle) return err({ code: 'not_found' });
-  if (ctx.actor.kind !== 'worker' || ctx.actor.workerId !== cycle.workerId) {
-    return err(
-      precondition('only the Worker that ran the Cycle records usage'),
-    );
+  if (ctx.actor.kind !== 'cell' || ctx.actor.cellId !== cycle.cellId) {
+    return err(precondition('only the Cell that ran the Cycle records usage'));
   }
   const events: OrderEvent[] = [
     {

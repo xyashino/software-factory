@@ -1,17 +1,17 @@
 ---
 status: todo
 priority: high
-depends_on: [v2-11-worker-foundation]
+depends_on: [v2-11-cell-foundation]
 workflow: feature
 ---
 
-# v2-12: Worker — Operator stations, checkpoints, Operator socket, panes, leaving
+# v2-12: Cell — Operator stations, checkpoints, Operator socket, panes, leaving
 
 ## Objective
 
-Run Operator stations on a Worker: headless and Herdr-pane runners, the checkpoint procedure with
+Run Operator stations on a Cell: headless and Herdr-pane runners, the checkpoint procedure with
 dry run and force-with-lease, the local Operator socket, the Cycle runtime (watch, signals,
-question hold) and Handover when the Worker leaves.
+question hold) and Handover when the Cell leaves.
 
 ## Read first
 

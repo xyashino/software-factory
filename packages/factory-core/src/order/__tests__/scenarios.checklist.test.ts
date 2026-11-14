@@ -13,7 +13,7 @@ type Row =
 
 const NOT_APPLICABLE = {
   f1: 'v2 has no on-call operator that escalates to a human. The Andon holder is the Supervisor (CORE §10 I7), and no second operator runs.',
-  f2: 'The worktree check that stopped a second operator is a runtime check in the Worker, not core state (CORE §1).',
+  f2: 'The worktree check that stopped a second operator is a runtime check in the Cell, not core state (CORE §1).',
   keepsBlocked:
     'v2 has no on-call operator attempt. A blocked Cycle holds its Andon until the Supervisor resumes it (CORE §5.3).',
 } as const;
@@ -25,7 +25,7 @@ const checklist: Row[] = [
     ported: true,
   },
   {
-    name: 'gives the worker a fresh attempt with gate failures after a red gate, then audits',
+    name: 'gives the cell a fresh attempt with gate failures after a red gate, then audits',
     ported: true,
   },
   {
@@ -76,7 +76,7 @@ const checklist: Row[] = [
     reason: NOT_APPLICABLE.keepsBlocked,
   },
   {
-    name: 'never starts the operator for a question a worker asked a human',
+    name: 'never starts the operator for a question a cell asked a human',
     ported: true,
   },
 ];

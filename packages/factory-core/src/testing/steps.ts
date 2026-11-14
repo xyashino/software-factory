@@ -11,7 +11,7 @@ import {
   commitOf,
   PR_URL,
   stationOf,
-  workerIdOf,
+  cellIdOf,
 } from './event-builders';
 import {
   actors,
@@ -39,7 +39,7 @@ export const lastCycleOf = (scenario: Scenario): CycleId => {
 /** Command constructors: plain data, typed by the core's own command union. */
 export const claim = (n = 1): OrderCommand => ({
   type: 'ClaimJob',
-  workerId: workerIdOf(n),
+  cellId: cellIdOf(n),
 });
 
 export const startCycle = (baseCommit: CommitSha): OrderCommand => ({
@@ -242,7 +242,7 @@ export const beginJob = (
   const base =
     pending.job.base === 'branch_base' ? commitOf(1) : pending.job.base;
   return {
-    started: claimed.and(startCycle(base), actors.worker(1)),
+    started: claimed.and(startCycle(base), actors.cell(1)),
     cycle,
     stationId: pending.job.stationId,
   };
@@ -295,7 +295,7 @@ export const judge = (
 /** Runs the next Inspection; `passed` says whether the gate is green. */
 export const inspect = (scenario: Scenario, passed: boolean): Outcome => {
   const { started, cycle } = beginJob(scenario);
-  return started.and(reportInspection(cycle, passed), actors.worker(1)).apply();
+  return started.and(reportInspection(cycle, passed), actors.cell(1)).apply();
 };
 
 /** Runs the next operator Station into a failure of `reason`. */
@@ -304,7 +304,7 @@ export const failOperator = (
   reason: CommandOf<'FailCycle'>['reason'],
 ): Outcome => {
   const { started, cycle } = beginJob(scenario);
-  return started.and(failCycle(cycle, reason), actors.worker(1)).apply();
+  return started.and(failCycle(cycle, reason), actors.cell(1)).apply();
 };
 
 /** The Factory raises the Andon that `nextJob` asks for, as the runtime does (CORE §5.3). */

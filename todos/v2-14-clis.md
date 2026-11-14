@@ -10,8 +10,8 @@ workflow: feature
 ## Objective
 
 Implement `factory`, the Supervisor's command line, as a client of the running `factory-server` over the
-Unix socket, with a one-shot fallback when no server runs. This todo comes **before the Worker**
-(v2-11), so the Supervisor can drive and inspect the server from a real command line while the Worker is
+Unix socket, with a one-shot fallback when no server runs. This todo comes **before the Cell**
+(v2-11), so the Supervisor can drive and inspect the server from a real command line while the Cell is
 built. `factory-operator` is not here; it moves to v2-12 with the Operator socket it talks to. The CLI
 needs no network listener. The remote TCP adapter is added in `v2-18`.
 
@@ -29,7 +29,7 @@ needs no network listener. The remote TCP adapter is added in `v2-18`.
 
 1. `apps/cli`: every command of PROTOCOL §10 through the `FactoryClient` interface, bound to the socket
    adapter. Cover status `--watch` (server event feed), show, log `-f`, answer, resume, reopen, nudge,
-   cancel, prio, sync, workers, check and admin export. Keep one ULID `commandId` per invocation and
+   cancel, prio, sync, cells, check and admin export. Keep one ULID `commandId` per invocation and
    reuse it on retries. `factory check` remains offline via `factory-definitions`.
 2. Writes go through the socket to the running server. A CLI write while the server runs is not refused
    (OPEN-QUESTIONS Q19). If no server runs, a one-shot write starts `factory-server --once` as a

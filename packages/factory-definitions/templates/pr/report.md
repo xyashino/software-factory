@@ -1,5 +1,5 @@
 <details>
-<summary>Worker report</summary>
+<summary>Cell report</summary>
 
 {{excerpt}}
 

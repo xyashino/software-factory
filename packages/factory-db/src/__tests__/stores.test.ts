@@ -2,20 +2,20 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import type { BlobRef, JobId, OrderId, WorkerId } from '@repo/factory-core/ids';
+import type { BlobRef, JobId, OrderId, CellId } from '@repo/factory-core/ids';
 import { openSeededStore } from './helpers';
 import { blobRefOf, sqliteBlobStore } from '../sqlite-blob-store';
 import { sqliteLeaseStore } from '../sqlite-lease-store';
 import { sqliteSignalStore } from '../signals-table';
-import { sqliteWorkerStore } from '../workers-table';
+import { sqliteCellStore } from '../cells-table';
 import {
   acquireWriter,
   type WriterLock,
   WriterNotHeldError,
 } from '../writer-lock';
 
-const WORKER = '01J0000000000000000000000A' as WorkerId;
-const OTHER = '01J0000000000000000000000B' as WorkerId;
+const CELL = '01J0000000000000000000000A' as CellId;
+const OTHER = '01J0000000000000000000000B' as CellId;
 const ORDER = 'software-factory/todo-a' as OrderId;
 const JOB = '01J0000000000000000000000J' as JobId;
 const OTHER_JOB = '01J0000000000000000000000K' as JobId;
@@ -93,23 +93,23 @@ describe('blob store', () => {
 });
 
 describe('lease store', () => {
-  it('inserts, extends, lists and expires the leases of a worker', async () => {
+  it('inserts, extends, lists and expires the leases of a cell', async () => {
     const { db, store, writer } = setup();
-    const workers = sqliteWorkerStore(db, writer, store.gate);
-    await workers.hello({ workerId: WORKER, name: 'w', info: INFO, at: 0 });
+    const cells = sqliteCellStore(db, writer, store.gate);
+    await cells.hello({ cellId: CELL, name: 'w', info: INFO, at: 0 });
     const leases = sqliteLeaseStore(db, writer, store.gate);
 
     await leases.insert({
       orderId: ORDER,
       jobId: JOB,
-      workerId: WORKER,
+      cellId: CELL,
       epoch: 1,
       expiresAt: 100,
     });
 
-    expect(await leases.forWorker(WORKER)).toHaveLength(1);
-    expect(await leases.forWorker(OTHER)).toHaveLength(0);
-    await leases.extend(WORKER, [JOB], 500);
+    expect(await leases.forCell(CELL)).toHaveLength(1);
+    expect(await leases.forCell(OTHER)).toHaveLength(0);
+    await leases.extend(CELL, [JOB], 500);
     expect(await leases.expired(499)).toHaveLength(0);
     expect((await leases.expired(500))[0]?.orderId).toBe(ORDER);
     expect(await leases.list()).toHaveLength(1);
@@ -117,7 +117,7 @@ describe('lease store', () => {
     expect(await leases.list()).toHaveLength(0);
   });
 
-  it('refuses a lease for a Worker that has never said hello', async () => {
+  it('refuses a lease for a Cell that has never said hello', async () => {
     const { db, store, writer } = setup();
     const leases = sqliteLeaseStore(db, writer, store.gate);
 
@@ -125,7 +125,7 @@ describe('lease store', () => {
       leases.insert({
         orderId: ORDER,
         jobId: JOB,
-        workerId: OTHER,
+        cellId: OTHER,
         epoch: 1,
         expiresAt: 100,
       }),
@@ -160,23 +160,23 @@ describe('signal store', () => {
   });
 });
 
-describe('worker store', () => {
-  it('registers a worker once, revokes it, and keeps the first revocation', async () => {
+describe('cell store', () => {
+  it('registers a cell once, revokes it, and keeps the first revocation', async () => {
     const { db, store, writer } = setup();
-    const workers = sqliteWorkerStore(db, writer, store.gate);
-    await workers.hello({
-      workerId: WORKER,
+    const cells = sqliteCellStore(db, writer, store.gate);
+    await cells.hello({
+      cellId: CELL,
       name: 'laptop',
       info: INFO,
       at: 5,
     });
-    await workers.revoke(WORKER, 9);
-    await workers.revoke(WORKER, 12);
+    await cells.revoke(CELL, 9);
+    await cells.revoke(CELL, 12);
 
-    const record = await workers.get(WORKER);
+    const record = await cells.get(CELL);
 
     expect(record?.revokedAt).toBe(9);
     expect(record?.info?.runners).toEqual(['claude']);
-    expect(await workers.list()).toHaveLength(1);
+    expect(await cells.list()).toHaveLength(1);
   });
 });

@@ -3,7 +3,7 @@ import {
   blobRefSchema,
   orderIdSchema,
   stationIdSchema,
-  workerIdSchema,
+  cellIdSchema,
 } from '../ids';
 import {
   priorities,
@@ -90,12 +90,12 @@ export const reopenRequestSchema = supervisorBase
   .extend({ stationId: stationIdSchema, noteBlob: blobRefSchema.optional() })
   .strict();
 
-export const workersListResponseSchema = z
+export const cellsListResponseSchema = z
   .object({
-    workers: z.array(
+    cells: z.array(
       z
         .object({
-          workerId: workerIdSchema,
+          cellId: cellIdSchema,
           name: z.string(),
           lastSeenAt: z.number().int().nullable(),
           revokedAt: z.number().int().nullable(),
@@ -105,12 +105,12 @@ export const workersListResponseSchema = z
   })
   .strict();
 
-export const workerRevokeRequestSchema = z
-  .object({ workerId: workerIdSchema })
+export const cellRevokeRequestSchema = z
+  .object({ cellId: cellIdSchema })
   .strict();
 
-export const workerRevokeResponseSchema = z
-  .object({ workerId: workerIdSchema, revoked: z.literal(true) })
+export const cellRevokeResponseSchema = z
+  .object({ cellId: cellIdSchema, revoked: z.literal(true) })
   .strict();
 
 export const emptyRequestSchema = z.object({}).strict();

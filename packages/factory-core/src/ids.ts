@@ -20,7 +20,7 @@ export const orderIdSchema = z
   .refine(isMachineIndependentId, 'id must not name a machine-local value')
   .brand<'OrderId'>();
 export const stationIdSchema = slug.brand<'StationId'>();
-export const workerIdSchema = z.string().regex(ULID).brand<'WorkerId'>();
+export const cellIdSchema = z.string().regex(ULID).brand<'CellId'>();
 export const jobIdSchema = z.string().regex(ULID).brand<'JobId'>();
 export const cycleIdSchema = z.string().regex(ULID).brand<'CycleId'>();
 export const resumeIdSchema = z.string().regex(ULID).brand<'ResumeId'>();
@@ -35,7 +35,7 @@ export type ProjectId = z.infer<typeof projectIdSchema>;
 export type TodoId = z.infer<typeof todoIdSchema>;
 export type OrderId = z.infer<typeof orderIdSchema>;
 export type StationId = z.infer<typeof stationIdSchema>;
-export type WorkerId = z.infer<typeof workerIdSchema>;
+export type CellId = z.infer<typeof cellIdSchema>;
 export type JobId = z.infer<typeof jobIdSchema>;
 export type CycleId = z.infer<typeof cycleIdSchema>;
 export type ResumeId = z.infer<typeof resumeIdSchema>;

@@ -1,6 +1,6 @@
 import type { Job } from '@repo/factory-core/contracts/job';
-import type { CommandResult } from '@repo/factory-core/contracts/worker';
-import type { BlobRef, OrderId, WorkerId } from '@repo/factory-core/ids';
+import type { CommandResult } from '@repo/factory-core/contracts/cell';
+import type { BlobRef, OrderId, CellId } from '@repo/factory-core/ids';
 import type {
   Actor,
   OrderEvent,
@@ -21,7 +21,7 @@ import { selectClaimable } from '@repo/factory-core/queue/select';
 import { refusal, RuntimeError, unavailable } from './errors';
 import { buildJob } from './job-builder';
 import { orderLocks } from './order-lock';
-import { readQueue, workerView } from './queue';
+import { readQueue, cellView } from './queue';
 import type { RuntimePorts } from './ports';
 import {
   blobRefsIn,
@@ -31,7 +31,7 @@ import {
   lastSeqOf,
 } from './state';
 
-/** One command as the runtime receives it: from a Worker, the Supervisor or the factory itself. */
+/** One command as the runtime receives it: from a Cell, the Supervisor or the factory itself. */
 export interface CommandRequest {
   orderId: OrderId;
   commandId: string;
@@ -41,10 +41,10 @@ export interface CommandRequest {
   epoch?: number;
   dryRun?: boolean;
   /**
-   * A Worker whose command ends its job. When this Work order's next job is one that Worker can run,
+   * A Cell whose command ends its job. When this Work order's next job is one that Cell can run,
    * the runtime claims it in the same transaction and returns it as `next` (PROTOCOL §4).
    */
-  continueFor?: WorkerId;
+  continueFor?: CellId;
   /** `skip`: a refusal or an exhausted retry returns undefined instead of throwing (a claim's next candidate). */
   onRefusal?: 'throw' | 'skip';
 }
@@ -118,20 +118,20 @@ export const createCommandHandler = (
     return project;
   };
 
-  const workerCanRun = async (
-    workerId: WorkerId,
+  const cellCanRun = async (
+    cellId: CellId,
     orderId: OrderId,
     projection: OrderProjection,
   ): Promise<boolean> => {
-    const worker = await ports.workers.get(workerId);
-    if (!worker || worker.revokedAt !== null || !worker.info) return false;
-    const heldElsewhere = (await leases.forWorker(workerId)).filter(
+    const cell = await ports.cells.get(cellId);
+    if (!cell || cell.revokedAt !== null || !cell.info) return false;
+    const heldElsewhere = (await leases.forCell(cellId)).filter(
       (lease) => lease.orderId !== orderId,
     ).length;
     const queue = await readQueue(ports, projection);
     return selectClaimable(
       queue.entries,
-      workerView(workerId, worker.info, heldElsewhere),
+      cellView(cellId, cell.info, heldElsewhere),
       queue.limits,
     ).some((entry) => entry.orderId === orderId);
   };
@@ -139,14 +139,14 @@ export const createCommandHandler = (
   const leaseFor = (
     orderId: OrderId,
     state: WorkOrderState,
-    workerId: WorkerId,
+    cellId: CellId,
   ): Lease => {
     const active = state.activeJob;
     if (!active) throw new Error('a claim left no active job');
     return {
       orderId,
       jobId: active.jobId,
-      workerId,
+      cellId,
       epoch: active.epoch,
       expiresAt: clock.now() + config.leaseTtlMs,
     };
@@ -218,7 +218,7 @@ export const createCommandHandler = (
     const beforeJobId = before?.activeJob?.jobId;
 
     if (request.command.type === 'ClaimJob' && claimedJob && before) {
-      // The decision claimed the job itself: build what the Worker runs and lease it.
+      // The decision claimed the job itself: build what the Cell runs and lease it.
       const project = await projectFor(stateOf(working).projectId);
       const spec = nextJob(before);
       if (spec.kind !== 'job')
@@ -227,7 +227,7 @@ export const createCommandHandler = (
       lease = leaseFor(
         request.orderId,
         stateOf(working),
-        request.command.workerId,
+        request.command.cellId,
       );
     } else if (
       !request.dryRun &&
@@ -237,13 +237,13 @@ export const createCommandHandler = (
       nextJob(stateOf(working)).kind === 'job'
     ) {
       // Continuation: tried on a copy, so a claim that cannot be built leaves the command's own events.
-      const workerId = request.continueFor;
+      const cellId = request.continueFor;
       const beforeClaim = working;
       const spec = nextJob(stateOf(beforeClaim));
       const canRun =
         spec.kind === 'job' &&
-        (await workerCanRun(
-          workerId,
+        (await cellCanRun(
+          cellId,
           request.orderId,
           preview(stateOf(beforeClaim), lastSeq + beforeClaim.events.length),
         ));
@@ -251,7 +251,7 @@ export const createCommandHandler = (
         try {
           const claim = decide(
             stateOf(beforeClaim),
-            { type: 'ClaimJob', workerId },
+            { type: 'ClaimJob', cellId },
             decideContext({ now, ids, actor: { kind: 'factory' } }, new Map()),
           );
           if (claim.ok) {
@@ -264,7 +264,7 @@ export const createCommandHandler = (
               spec.job,
             );
             working = claimed;
-            lease = leaseFor(request.orderId, stateOf(claimed), workerId);
+            lease = leaseFor(request.orderId, stateOf(claimed), cellId);
           }
         } catch (error) {
           if (!(error instanceof RuntimeError)) throw error;

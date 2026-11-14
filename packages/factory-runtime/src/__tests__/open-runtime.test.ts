@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { WorkerId } from '@repo/factory-core/ids';
+import type { CellId } from '@repo/factory-core/ids';
 import { MIGRATIONS_DIR, migrate } from '@repo/factory-db/migrate';
 import { openDatabase } from '@repo/factory-db/sqlite-event-store';
 import { WriterHeldError } from '@repo/factory-db/writer-lock';
@@ -11,9 +11,9 @@ import {
   openRuntime,
   type OpenedRuntime,
 } from '../open-runtime';
-import { createOrder, helloWorker, PROJECT, REPO } from './test-kit';
+import { createOrder, helloCell, PROJECT, REPO } from './test-kit';
 
-const WORKER = '01J0000000000000000000000W' as WorkerId;
+const CELL = '01J0000000000000000000000W' as CellId;
 
 let dataDir: string;
 const opened: OpenedRuntime[] = [];
@@ -58,12 +58,12 @@ describe('openRuntime', () => {
     expect(second.writer.held).toBe(true);
   });
 
-  it('keeps orders, the Worker registry and claims across a restart', async () => {
+  it('keeps orders, the Cell registry and claims across a restart', async () => {
     const first = open();
-    await helloWorker(first, WORKER);
+    await helloCell(first, CELL);
     await createOrder(first, { todoId: 'todo-a' });
     const claimed = await first.runtime.call('claim', {
-      workerId: WORKER,
+      cellId: CELL,
       waitMs: 0,
     });
     const job = claimed.job;
@@ -73,7 +73,7 @@ describe('openRuntime', () => {
 
     const second = open();
     const board = await second.runtime.call('board', {});
-    const leases = await second.ports.leases.forWorker(WORKER);
+    const leases = await second.ports.leases.forCell(CELL);
     const prompt = job.station?.promptBlob
       ? await second.ports.blobs.get(job.station.promptBlob)
       : undefined;
@@ -81,7 +81,7 @@ describe('openRuntime', () => {
     expect(board.orders.map((order) => order.orderId)).toEqual([job.orderId]);
     expect(leases.map((lease) => lease.jobId)).toEqual([job.jobId]);
     expect(prompt?.byteLength).toBeGreaterThan(0);
-    expect((await second.ports.workers.get(WORKER))?.info?.runners).toEqual([
+    expect((await second.ports.cells.get(CELL))?.info?.runners).toEqual([
       'claude',
       'cursor',
     ]);

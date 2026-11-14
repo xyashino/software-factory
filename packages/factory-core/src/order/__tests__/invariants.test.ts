@@ -165,7 +165,7 @@ describe('I3 late facts are inert', () => {
 });
 
 describe('I4 single writer', () => {
-  it('stamps every worker and operator event with the epoch of its active job', () => {
+  it('stamps every cell and operator event with the epoch of its active job', () => {
     fc.assert(
       fc.property(arbLine, arbIntents(), (line, intents) => {
         const { events } = runSequence(line, intents);
@@ -183,7 +183,7 @@ describe('I4 single writer', () => {
           }
           if (stored.event.type === 'usage_recorded') return;
           if (
-            stored.actor.kind !== 'worker' &&
+            stored.actor.kind !== 'cell' &&
             stored.actor.kind !== 'operator'
           ) {
             return;
@@ -271,7 +271,7 @@ describe('I6 progress is kept', () => {
   });
 });
 
-describe('I7 Andons hold no Worker', () => {
+describe('I7 Andons hold no Cell', () => {
   it('has no active job whenever an Andon is raised', () => {
     fc.assert(
       fc.property(arbLine, arbIntents(), (line, intents) => {

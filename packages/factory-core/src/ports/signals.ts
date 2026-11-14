@@ -1,5 +1,5 @@
 import type { JobId } from '../ids';
-import type { Signal } from '../contracts/worker';
+import type { Signal } from '../contracts/cell';
 
 /** A signal as the runtime writes it: the wire Signal plus the time it was created. */
 export type NewSignal = Signal & { createdAt: number };

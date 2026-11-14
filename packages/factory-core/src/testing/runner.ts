@@ -7,7 +7,7 @@ import {
   PR_URL,
   pinnedLineOf,
   stationOf,
-  workerIdOf,
+  cellIdOf,
 } from './event-builders';
 import { actors, given, type Scenario } from './harness';
 import type { OrderCommand } from '../order/commands';
@@ -85,7 +85,7 @@ const commandFor = (
       ? pending.job
       : undefined;
   };
-  const worker = actors.worker(1);
+  const cell = actors.cell(1);
 
   switch (intent.kind) {
     case 'claim':
@@ -96,7 +96,7 @@ const commandFor = (
       )
         return undefined;
       return {
-        command: { type: 'ClaimJob', workerId: workerIdOf(1) },
+        command: { type: 'ClaimJob', cellId: cellIdOf(1) },
         by: FACTORY,
       };
     case 'start': {
@@ -114,7 +114,7 @@ const commandFor = (
           type: 'StartCycle',
           baseCommit: intent.goodBase ? base : commitOf(intent.commit),
         },
-        by: worker,
+        by: cell,
       };
     }
     case 'finish': {
@@ -134,7 +134,7 @@ const commandFor = (
                 type: 'ReportDelivery',
                 result: { status: 'failed', detail: 'push was rejected' },
               },
-          by: worker,
+          by: cell,
         };
       }
       const cycle = started();
@@ -147,7 +147,7 @@ const commandFor = (
             passed: intent.pass,
             results: [],
           },
-          by: worker,
+          by: cell,
         };
       }
       const station = state.line.stations.find(
@@ -176,7 +176,7 @@ const commandFor = (
             reason: 'crashed',
             detail: 'the Operator crashed',
           },
-          by: worker,
+          by: cell,
         };
       }
       return {
@@ -201,7 +201,7 @@ const commandFor = (
               reason: intent.reason,
               detail: intent.reason,
             },
-            by: worker,
+            by: cell,
           }
         : undefined;
     }
@@ -231,7 +231,7 @@ const commandFor = (
               handoverBlob: blobOf(4),
               commit: commitOf(intent.commit),
             },
-            by: worker,
+            by: cell,
           }
         : undefined;
     }
@@ -290,7 +290,7 @@ const commandFor = (
               inputTokens: 1,
               outputTokens: 2,
             },
-            by: worker,
+            by: cell,
           }
         : undefined;
     }
@@ -299,7 +299,7 @@ const commandFor = (
         ? { command: { type: 'ExpireLease' }, by: FACTORY }
         : undefined;
     case 'release':
-      return job ? { command: { type: 'ReleaseJob' }, by: worker } : undefined;
+      return job ? { command: { type: 'ReleaseJob' }, by: cell } : undefined;
     case 'workspace':
       return job && !started()
         ? {
@@ -309,7 +309,7 @@ const commandFor = (
               detail: 'no worktree',
               logBlob: blobOf(7),
             },
-            by: worker,
+            by: cell,
           }
         : undefined;
     case 'resume': {
@@ -345,7 +345,7 @@ const commandFor = (
         by: SUPERVISOR,
       };
     case 'stale': {
-      // A Worker that lost its lease claims the epoch before the active one: decide must refuse it.
+      // A Cell that lost its lease claims the epoch before the active one: decide must refuse it.
       const cycle = started();
       if (!cycle || !job) return undefined;
       return {
@@ -355,7 +355,7 @@ const commandFor = (
           reason: 'crashed',
           detail: 'late',
         },
-        by: worker,
+        by: cell,
         epoch: job.epoch - 1,
       };
     }
@@ -407,7 +407,7 @@ export const runSequence = (
     if (!state) break;
     let planned = commandFor(intent, state);
     if (!planned) {
-      // A worker claims and starts before it finishes, so the intent first takes the step it needs.
+      // A cell claims and starts before it finishes, so the intent first takes the step it needs.
       const step = prerequisite(intent, state);
       if (step && send(step, `${step.label}(auto)`)) {
         accepted += 1;

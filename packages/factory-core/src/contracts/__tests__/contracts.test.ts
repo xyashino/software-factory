@@ -7,11 +7,11 @@ import {
 } from '../errors';
 import { jobSchema } from '../job';
 import { ROUTES, routeByPath } from '../routes';
-import { helloRequestSchema, submitCommandRequestSchema } from '../worker';
+import { helloRequestSchema, submitCommandRequestSchema } from '../cell';
 
 const JOB_ID = '01J0000000000000000000000J';
 const ORDER_ID = 'software-factory:todo-a';
-const WORKER_ID = '01J0000000000000000000000W';
+const CELL_ID = '01J0000000000000000000000W';
 
 /** A minimal valid Job; tests change one field of it. */
 const baseJob = {
@@ -37,7 +37,7 @@ const baseJob = {
     cycleId: '01J0000000000000000000000C',
     n: 1,
     cause: { kind: 'first' },
-    outputs: [{ key: 'plan', path: '.worker/outputs/plan', required: true }],
+    outputs: [{ key: 'plan', path: '.cell/outputs/plan', required: true }],
   },
 };
 
@@ -47,7 +47,7 @@ describe('Job contract', () => {
   });
 
   it.each([
-    ['a POSIX absolute path', '/home/worker/todo-a'],
+    ['a POSIX absolute path', '/home/cell/todo-a'],
     ['a Windows drive path', 'C:\\work\\todo-a'],
     ['a Windows root path', '\\work\\todo-a'],
     ['a path that climbs out', '../todo-a'],
@@ -113,7 +113,7 @@ describe('error contract', () => {
   });
 
   it('turns schema issues into one line per problem', () => {
-    const parsed = helloRequestSchema.safeParse({ workerId: 'nope' });
+    const parsed = helloRequestSchema.safeParse({ cellId: 'nope' });
     if (parsed.success) throw new Error('expected a failure');
 
     const wire = invalidWire(parsed.error.issues);
@@ -134,12 +134,12 @@ describe('route table', () => {
   });
 
   it('answers an unknown path with no route', () => {
-    expect(routeByPath('worker/unknown')).toBeUndefined();
+    expect(routeByPath('cell/unknown')).toBeUndefined();
   });
 
-  it('keeps a worker command to the Worker and the epoch it holds', () => {
+  it('keeps a cell command to the Cell and the epoch it holds', () => {
     const parsed = submitCommandRequestSchema.safeParse({
-      workerId: WORKER_ID,
+      cellId: CELL_ID,
       orderId: ORDER_ID,
       commandId: 'c-1',
       epoch: 1,

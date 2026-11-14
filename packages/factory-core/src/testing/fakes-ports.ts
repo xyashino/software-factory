@@ -1,4 +1,4 @@
-import type { BlobRef, JobId, OrderId, WorkerId } from '../ids';
+import type { BlobRef, JobId, OrderId, CellId } from '../ids';
 import type { Lease, LeaseStore } from '../ports/lease-store';
 import type { BlobStore } from '../ports/blob-store';
 
@@ -31,8 +31,8 @@ export const fakeBlobStore = (): FakeBlobStore => {
 /** An in-memory `LeaseStore`. Leases are keyed by order, like the `leases` table. */
 export const fakeLeaseStore = (): LeaseStore => {
   const leases = new Map<OrderId, Lease>();
-  const ofWorker = (workerId: WorkerId): Lease[] =>
-    [...leases.values()].filter((lease) => lease.workerId === workerId);
+  const ofCell = (cellId: CellId): Lease[] =>
+    [...leases.values()].filter((lease) => lease.cellId === cellId);
   return {
     insert: async (lease) => {
       if (leases.has(lease.orderId)) {
@@ -40,8 +40,8 @@ export const fakeLeaseStore = (): LeaseStore => {
       }
       leases.set(lease.orderId, lease);
     },
-    extend: async (workerId, jobIds: readonly JobId[], expiresAt) => {
-      for (const lease of ofWorker(workerId)) {
+    extend: async (cellId, jobIds: readonly JobId[], expiresAt) => {
+      for (const lease of ofCell(cellId)) {
         if (jobIds.includes(lease.jobId)) {
           leases.set(lease.orderId, { ...lease, expiresAt });
         }
@@ -50,7 +50,7 @@ export const fakeLeaseStore = (): LeaseStore => {
     expired: async (now) =>
       [...leases.values()].filter((lease) => lease.expiresAt <= now),
     list: async () => [...leases.values()],
-    forWorker: async (workerId) => ofWorker(workerId),
+    forCell: async (cellId) => ofCell(cellId),
     delete: async (orderId) => {
       leases.delete(orderId);
     },

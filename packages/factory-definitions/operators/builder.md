@@ -20,7 +20,7 @@ You are the Builder for task {{taskId}}, attempt {{attemptId}}. You implement th
 
 ## Instructions
 
-1. Follow `.nitpick/agents/worker.md`. If the change is complex, write a short plan first.
+1. Follow `.nitpick/agents/cell.md`. If the change is complex, write a short plan first.
 2. Strictly follow the test pyramid in the `testing` rules of `.nitpick/config.ts`.
 3. Run the basic repo checks (typecheck, lint, test) for every package you touched, then `pnpm nitpick:check`. Fix every nitpick finding before you finish; the doctor audits the same rules.
    - ADR `summary` must be 10-70 characters; `why` 10-200. Count them before you write the file.

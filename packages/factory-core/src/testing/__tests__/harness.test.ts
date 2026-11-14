@@ -5,7 +5,7 @@ import {
   created,
   makeLine,
   stationOf,
-  workerIdOf,
+  cellIdOf,
 } from '../event-builders';
 import { fakeBlobs, fakeClock, fakeIds } from '../fakes';
 import { actors, given } from '../harness';
@@ -14,7 +14,7 @@ import { lineBuilder } from '../line-builder';
 const createOrder = () => ({ ...created(), type: 'CreateOrder' as const });
 const claimJob = () => ({
   type: 'ClaimJob' as const,
-  workerId: workerIdOf(1),
+  cellId: cellIdOf(1),
 });
 const startCycle = () => ({
   type: 'StartCycle' as const,
@@ -41,15 +41,13 @@ describe('given and when', () => {
 
   it('asserts a refusal by its code', () => {
     given([created()])
-      .when(claimJob(), actors.worker(1))
+      .when(claimJob(), actors.cell(1))
       .thenError('precondition');
   });
 
   it('fails when the refusal has another code', () => {
     const attempt = () =>
-      given([created()])
-        .when(claimJob(), actors.worker(1))
-        .thenError('invalid');
+      given([created()]).when(claimJob(), actors.cell(1)).thenError('invalid');
 
     expect(attempt).toThrow(/expected ClaimJob to be refused with invalid/);
   });
@@ -64,7 +62,7 @@ describe('given and when', () => {
   it('chains a second command on the events of the first', () => {
     given([created()])
       .when(claimJob())
-      .and(startCycle(), actors.worker(1))
+      .and(startCycle(), actors.cell(1))
       .thenTypes(['cycle_started']);
   });
 });

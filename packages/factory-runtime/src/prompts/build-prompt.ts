@@ -44,8 +44,8 @@ const variablesOf = (
   ),
   taskId: input.todoId,
   attemptId: input.cycleId,
-  artifactDir: '.worker/outputs',
-  evidenceDir: '.worker/evidence',
+  artifactDir: '.cell/outputs',
+  evidenceDir: '.cell/evidence',
   todoBody: input.todoBody,
   context,
 });

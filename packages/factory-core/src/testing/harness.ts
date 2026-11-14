@@ -16,7 +16,7 @@ import { evolve } from '../order/evolve';
 import type { Next } from '../order/next';
 import { nextJob } from '../order/next-job';
 import type { WorkOrderState } from '../order/state';
-import { history, ORDER_ID, workerIdOf } from './event-builders';
+import { history, ORDER_ID, cellIdOf } from './event-builders';
 import {
   fakeBlobs,
   fakeClock,
@@ -30,10 +30,10 @@ import {
 export const actors = {
   factory: { kind: 'factory' } satisfies Actor,
   supervisor: (name = 'dev'): Actor => ({ kind: 'supervisor', name }),
-  worker: (n = 1): Actor => ({ kind: 'worker', workerId: workerIdOf(n) }),
+  cell: (n = 1): Actor => ({ kind: 'cell', cellId: cellIdOf(n) }),
   operator: (cycleId: CycleId, n = 1): Actor => ({
     kind: 'operator',
-    workerId: workerIdOf(n),
+    cellId: cellIdOf(n),
     cycleId,
   }),
 };
@@ -146,7 +146,7 @@ export class Scenario {
     return [...this.stored];
   }
 
-  /** Runs a command as `by`. `epoch` defaults to the active job's epoch, as a live worker would hold. */
+  /** Runs a command as `by`. `epoch` defaults to the active job's epoch, as a live cell would hold. */
   when(
     command: OrderCommand,
     by: Actor = FACTORY_ACTOR,
@@ -164,7 +164,7 @@ export class Scenario {
       blobs: this.blobs,
     };
     const result: Decision = decide(state, command, context);
-    const fenced = by.kind === 'worker' || by.kind === 'operator';
+    const fenced = by.kind === 'cell' || by.kind === 'operator';
     const first = this.stored.length + 1;
     // One command, one commandId: every event it emits shares it (CORE §3.1).
     const envelopes: StoredEvent[] = result.ok

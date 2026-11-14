@@ -20,7 +20,7 @@ describe('the orders row mapping', () => {
     },
   );
 
-  it('stores the worker columns under their STORAGE names', () => {
+  it('stores the cell columns under their STORAGE names', () => {
     const events = fixtureEvents(SCENARIO_FIXTURES[0]!);
     const last = events[events.length - 1]!;
     const row = orderRowOf(
