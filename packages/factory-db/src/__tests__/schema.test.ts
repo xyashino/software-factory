@@ -1,10 +1,8 @@
 import type { Database } from 'bun:sqlite';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { Column, is } from 'drizzle-orm';
 import { getTableConfig, SQLiteTable } from 'drizzle-orm/sqlite-core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { MIGRATIONS_DIR } from '../migrate';
+import { MIGRATIONS_DIR, migrate } from '../migrate';
 import * as schema from '../schema';
 import { openDatabase } from '../sqlite-event-store';
 
@@ -165,12 +163,12 @@ const sqliteShape = (db: Database, table: string): TableShape => {
   return { columns, indexes, uniques, foreignKeys };
 };
 
-describe('the Drizzle schema mirrors migrations/0001_init.sql', () => {
+describe('the Drizzle schema mirrors the migrations', () => {
   let db: Database;
 
   beforeAll(() => {
     db = openDatabase(':memory:');
-    db.exec(readFileSync(join(MIGRATIONS_DIR, '0001_init.sql'), 'utf8'));
+    migrate(db, MIGRATIONS_DIR);
   });
 
   afterAll(() => {
@@ -188,7 +186,7 @@ describe('the Drizzle schema mirrors migrations/0001_init.sql', () => {
   it('creates exactly the eleven STORAGE tables from the migration', () => {
     const names = db
       .query<{ name: string }, []>(
-        "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name <> 'schema_migrations' ORDER BY name",
       )
       .all()
       .map((row) => row.name);

@@ -6,6 +6,7 @@ import {
   sqliteTable,
   text,
   unique,
+  uniqueIndex,
 } from 'drizzle-orm/sqlite-core';
 
 /**
@@ -109,14 +110,20 @@ export const commands = sqliteTable('commands', {
   at: integer('at').notNull(),
 });
 
-export const joinTokens = sqliteTable('join_tokens', {
-  joinTokenId: text('join_token_id').primaryKey(),
-  tokenHash: text('token_hash').notNull().unique(),
-  name: text('name').notNull(),
-  createdAt: integer('created_at').notNull(),
-  expiresAt: integer('expires_at'),
-  revokedAt: integer('revoked_at'),
-});
+export const joinTokens = sqliteTable(
+  'join_tokens',
+  {
+    joinTokenId: text('join_token_id').primaryKey(),
+    tokenHash: text('token_hash').notNull().unique(),
+    name: text('name').notNull(),
+    createdAt: integer('created_at').notNull(),
+    expiresAt: integer('expires_at'),
+    revokedAt: integer('revoked_at'),
+    /** The create command that made the token (migration 0002); null before it. */
+    commandId: text('command_id'),
+  },
+  (table) => [uniqueIndex('join_tokens_command_id').on(table.commandId)],
+);
 
 export const cells = sqliteTable('cells', {
   cellId: text('cell_id').primaryKey(),

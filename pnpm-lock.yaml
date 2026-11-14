@@ -309,6 +309,9 @@ importers:
       '@repo/typescript-config':
         specifier: workspace:*
         version: link:../../packages/typescript-config
+      '@types/bun':
+        specifier: 'catalog:'
+        version: 1.4.4
       '@types/node':
         specifier: 'catalog:'
         version: 26.6.4

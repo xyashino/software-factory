@@ -211,7 +211,8 @@ CREATE TABLE join_tokens (
   name          TEXT NOT NULL,
   created_at    INTEGER NOT NULL,
   expires_at    INTEGER,
-  revoked_at    INTEGER
+  revoked_at    INTEGER,
+  command_id    TEXT UNIQUE                             -- the create command; migration 0002, null before it
 );
 
 CREATE TABLE leases (

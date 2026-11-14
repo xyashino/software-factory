@@ -6,6 +6,7 @@ import type { ProjectStore } from '@repo/factory-core/ports/projects';
 import type { ProjectionReader } from '@repo/factory-core/ports/projection-reader';
 import type { SignalStore } from '@repo/factory-core/ports/signals';
 import type { CellStore } from '@repo/factory-core/ports/cells';
+import type { JoinTokenStore } from '@repo/factory-core/ports/join-tokens';
 import type { Clock } from '@repo/factory-core/ports/clock';
 import type { RuntimeIds } from './ids';
 
@@ -64,6 +65,15 @@ export const DEFAULT_CONFIG: RuntimeConfig = {
   ],
 };
 
+/**
+ * Intake (PROTOCOL §3.1, CORE §5): reads the todos at the base branch and writes the Work orders.
+ * It is wired by the intake slice (v2-10). Until a runner is wired, `intakeSync` refuses.
+ */
+export interface IntakeRunner {
+  /** Runs one intake pass now; `created` counts the Work orders it opened. */
+  sync(): Promise<{ created: number }>;
+}
+
 /** Everything the runtime receives from outside. It opens nothing itself. */
 export interface RuntimePorts {
   events: EventStore;
@@ -72,6 +82,7 @@ export interface RuntimePorts {
   blobs: BlobStore;
   leases: LeaseStore;
   cells: CellStore;
+  joinTokens: JoinTokenStore;
   signals: SignalStore;
   clock: Clock;
   ids: RuntimeIds;
@@ -79,4 +90,8 @@ export interface RuntimePorts {
   writer: WriterGuard;
   definitions: Definitions;
   config: RuntimeConfig;
+  /** The export archive of the whole Factory (STORAGE §7.3); the database adapter builds it. */
+  exportArchive(): Promise<Uint8Array>;
+  /** The intake runner, once v2-10 wires it. Absent means intake is not built in this server. */
+  intake?: IntakeRunner;
 }

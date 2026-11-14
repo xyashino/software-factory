@@ -33,6 +33,20 @@ describe('factory-cli boundaries', () => {
     expect(rules).toContain('no-restricted-imports');
   });
 
+  it('rejects an import of factory-runtime, the server runs it and the CLI talks to it', async () => {
+    const rules = await reportedRules(
+      `import { openRuntime } from '@repo/factory-runtime/open-runtime';`,
+    );
+    expect(rules).toContain('no-restricted-imports');
+  });
+
+  it('rejects an import of factory-server', async () => {
+    const rules = await reportedRules(
+      `import { serveRequest } from '@repo/factory-server/socket/serve';`,
+    );
+    expect(rules).toContain('no-restricted-imports');
+  });
+
   it('accepts an import of factory-definitions', async () => {
     const rules = await reportedRules(
       `import { x } from '@repo/factory-definitions/meta';`,

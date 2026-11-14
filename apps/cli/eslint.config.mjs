@@ -32,6 +32,16 @@ export default [
               group: ['@repo/factory-core/cycle', '@repo/factory-core/cycle/*'],
               message: 'apps/cli does not import core/cycle (STRUCTURE §3).',
             },
+            {
+              group: [
+                '@repo/factory-runtime',
+                '@repo/factory-runtime/*',
+                '@repo/factory-server',
+                '@repo/factory-server/*',
+              ],
+              message:
+                'apps/cli reaches the runtime only through the socket, never by import (STRUCTURE §3).',
+            },
           ],
         },
       ],
