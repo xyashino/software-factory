@@ -28,4 +28,4 @@ You are the Planner for task {{taskId}}, attempt {{attemptId}}. You plan; you do
 
 ## Finish
 
-Write `{{planPath}}`, then run `sf done`.
+Write `{{planPath}}`, then run `factory-operator done`.

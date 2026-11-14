@@ -93,7 +93,6 @@ const main = async (): Promise<void> => {
   const env = process.env;
   const config = readConfig(configPath(env));
   const cellDataDir = config.cellDataDir ?? cellDataDirOf(env);
-  const workspaceId = env.HERDR_WORKSPACE_ID;
   const remote = config.factoryUrl !== undefined;
 
   let current: RunningCell | undefined;
@@ -114,7 +113,7 @@ const main = async (): Promise<void> => {
       system: createSystemAdapter(),
       clock: systemClock,
       version: CELL_VERSION,
-      ...(workspaceId ? { pane: createHerdrPane({ workspaceId }) } : {}),
+      pane: createHerdrPane(),
       onError: (error, context) =>
         console.error(`factory-cell: ${context}: ${messageOf(error)}`),
       onUnauthorized: () => void rejoin(),

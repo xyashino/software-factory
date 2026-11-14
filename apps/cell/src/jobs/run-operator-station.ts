@@ -38,7 +38,7 @@ import {
   type PaneClock,
 } from '../cycle/observe';
 import type { StationRegistry, RunHandle } from '../cycle/registry';
-import { typedFor, type RuntimePromptSet } from '../cycle/signals';
+import { fillPrompt, typedFor, type RuntimePromptSet } from '../cycle/signals';
 import { cycleDirName, paneName } from '../names';
 import { newCycleToken, startOperatorSocket } from '../operator-socket';
 import type {
@@ -102,6 +102,10 @@ type FailReason = 'timed_out' | 'crashed' | 'stalled' | 'start_failed' | 'lost';
 type Blobs = Record<string, BlobRef | undefined>;
 
 const encode = (text: string): Uint8Array => new TextEncoder().encode(text);
+
+/** What the idle reminder asks for: the Operator's own instructions name the artifacts. */
+const MISSING_ARTIFACTS =
+  'the artifacts your instructions name for this station';
 
 const todoOf = (orderId: string): string =>
   orderId.slice(orderId.indexOf(':') + 1);
@@ -630,22 +634,36 @@ export const runOperatorStation = async (
       );
     }
 
-    const decision = watch(cycle, await observe(), now, policy);
+    const observation = await observe();
+    const decision = watch(cycle, observation, now, policy);
     switch (decision.type) {
       case 'none':
         return;
       case 'remind': {
+        // The placeholders are filled here: the Operator reads the typed text, not a template.
+        const sent = cycle.reminders[decision.kind] + 1;
         cycle = {
           ...cycle,
           reminders: {
             ...cycle.reminders,
-            [decision.kind]: cycle.reminders[decision.kind] + 1,
+            [decision.kind]: sent,
           },
         };
         typeText(
           decision.kind === 'idle'
-            ? prompts.idleReminder
-            : prompts.silentReminder,
+            ? fillPrompt(prompts.idleReminder, {
+                count: String(sent),
+                limit: String(policy.idleReminders),
+                missing: MISSING_ARTIFACTS,
+              })
+            : fillPrompt(prompts.silentReminder, {
+                minutes: String(
+                  Math.max(
+                    1,
+                    Math.round((now - observation.lastOutputAt) / 60_000),
+                  ),
+                ),
+              }),
         );
         journal({ at: now, kind: `remind_${decision.kind}` });
         return;
@@ -719,6 +737,7 @@ export const runOperatorStation = async (
           pane = paneName(station.stationId, station.n, cycleId);
           await deps.pane.open({
             name: pane,
+            task: todo,
             command,
             cwd: worktree,
             env,

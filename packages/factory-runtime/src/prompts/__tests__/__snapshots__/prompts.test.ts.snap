@@ -61,7 +61,7 @@ evidence
 
 ## Finish
 
-Write the files above, then run \`sf done\`. Do not commit or push.
+Write the files above, then run \`factory-operator done\`. Do not commit or push.
 
 ## sf commands
 
@@ -207,7 +207,7 @@ evidence
 
 ## Finish
 
-Write the files above, then run \`sf done\`. Do not commit or push.
+Write the files above, then run \`factory-operator done\`. Do not commit or push.
 
 ## sf commands
 
@@ -260,7 +260,7 @@ plan: .cell/outputs/plan
 
 ## Finish
 
-Write \`.cell/outputs/plan\`, then run \`sf done\`.
+Write \`.cell/outputs/plan\`, then run \`factory-operator done\`.
 
 ## sf commands
 
@@ -455,7 +455,7 @@ evidence
 
 ## Finish
 
-Write the files above, then run \`sf done\`. Do not commit or push.
+Write the files above, then run \`factory-operator done\`. Do not commit or push.
 
 ## sf commands
 

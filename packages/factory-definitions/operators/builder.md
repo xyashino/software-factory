@@ -36,4 +36,4 @@ You are the Builder for task {{taskId}}, attempt {{attemptId}}. You implement th
 
 ## Finish
 
-Write the files above, then run `sf done`. Do not commit or push.
+Write the files above, then run `factory-operator done`. Do not commit or push.
