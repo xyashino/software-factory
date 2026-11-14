@@ -5,7 +5,7 @@ workflow: feature
 factory: v2
 ---
 
-# v2-trial-tidy-feature: remove redundant comments from one file
+# v2-trial-polish-feature: remove redundant comments from one file
 
 ## Objective
 
