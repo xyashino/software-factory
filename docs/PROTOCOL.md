@@ -7,12 +7,12 @@ runs the runtime. HTTP routes below are the remote transport, not a requirement 
 
 ## 1. Actors and credentials
 
-| Actor                           | Credential                                                                  | Reaches                                      | Scope                                                                           |
-| :------------------------------ | :-------------------------------------------------------------------------- | :------------------------------------------- | :------------------------------------------------------------------------------ |
-| Supervisor via `factory`        | Local: operating-system account over the socket; remote: supervisor token (`FACTORY_TOKEN`) | `factory-server` via the socket, or its supervisor API | everything a Supervisor may do                                                  |
-| Cell, enrolling                 | join token (`FACTORY_JOIN_TOKEN`), created by `factory cells token create`  | Remote `POST /v1/cell/join`                  | obtaining a Cell credential                                                     |
-| Cell, enrolled                  | Cell credential, returned once by `join`                                    | `factory-server` via the socket, or the remote Cell API | writes only to Work orders for which it holds the current epoch; reads any blob |
-| Operator via `factory-operator` | per-Cycle local token (`FACTORY_CYCLE_TOKEN`), random, created by the Cell  | its Cell's unix socket only                  | only its own Cycle                                                              |
+| Actor                           | Credential                                                                                  | Reaches                                                 | Scope                                                                           |
+| :------------------------------ | :------------------------------------------------------------------------------------------ | :------------------------------------------------------ | :------------------------------------------------------------------------------ |
+| Supervisor via `factory`        | Local: operating-system account over the socket; remote: supervisor token (`FACTORY_TOKEN`) | `factory-server` via the socket, or its supervisor API  | everything a Supervisor may do                                                  |
+| Cell, enrolling                 | join token (`FACTORY_JOIN_TOKEN`), created by `factory cells token create`                  | Remote `POST /v1/cell/join`                             | obtaining a Cell credential                                                     |
+| Cell, enrolled                  | Cell credential, returned once by `join`                                                    | `factory-server` via the socket, or the remote Cell API | writes only to Work orders for which it holds the current epoch; reads any blob |
+| Operator via `factory-operator` | per-Cycle local token (`FACTORY_CYCLE_TOKEN`), random, created by the Cell                  | its Cell's unix socket only                             | only its own Cycle                                                              |
 
 Tokens are opaque random strings. The runtime stores only their hashes.
 
@@ -293,10 +293,10 @@ Delivered in heartbeat responses, acknowledged in the next heartbeat (`acked: si
 Kept until acknowledged or the job ends. A job that ended on the runtime side (cancel, expiry) is
 reported as `stale` in the heartbeat response, which is the Cell's cue to stop it.
 
-| Signal                        | Cause                                                                             | Cell action                                              |
-| :---------------------------- | :-------------------------------------------------------------------------------- | :------------------------------------------------------- |
-| `answer { questionId, text }` | `question_answered` for an open question                                          | Type the answer into the pane (`runtimePrompts.answer`). |
-| `nudge { text }`              | `nudged` (`factory nudge <order> "<text>"`, a Supervisor helping a live Operator) | Type the text into the pane (`runtimePrompts.nudge`).    |
+| Signal                        | Cause                                                                                         | Cell action                                              |
+| :---------------------------- | :-------------------------------------------------------------------------------------------- | :------------------------------------------------------- |
+| `answer { questionId, text }` | `question_answered` for an open question                                                      | Type the answer into the pane (`runtimePrompts.answer`). |
+| `nudge { text }`              | `nudged` (`factory nudge <order> "<text>"`, or a Mechanic/Supervisor helping a live Operator) | Type the text into the pane (`runtimePrompts.nudge`).    |
 
 ## 8. Git: branches and checkpoints
 
@@ -384,6 +384,9 @@ Executing `run_operator_station`:
 4. Open a Herdr pane (or a headless process) with `FACTORY_OPERATOR_SOCKET`, `FACTORY_CYCLE_TOKEN`,
    the runner command and the prompt blob.
 5. Loop: heartbeat (shared), observe the pane, `watch` → remind / fail / block; deliver signals.
+   When repeated `idle` / `silent` reminders cross the stall-alert threshold before `timeoutMs`, the
+   Cell may upload a sanitized pane-tail blob so the Mechanic (M10) can inspect and issue a live
+   `nudge` signal without ending the Cycle.
 6. On a `factory-operator` call: §3.3. On a terminal result, close the pane.
 7. `RecordUsage` if the runner reports usage.
 
@@ -405,22 +408,22 @@ The Cell exits when every job is released. A Cell that simply vanishes is handle
 
 ## 10. Supervisor CLI (`factory`)
 
-| Command                                                                  | Purpose                                                                                  |
-| :----------------------------------------------------------------------- | :--------------------------------------------------------------------------------------- |
+| Command                                                                  | Purpose                                                                                       |
+| :----------------------------------------------------------------------- | :-------------------------------------------------------------------------------------------- |
 | `factory run`                                                            | Start the server (core): owns the database, intake, scheduling, reaper, listens on the socket |
-| `factory status [--watch] [--all]`                                       | The board; `--watch` follows the runtime event feed locally or `/v1/stream` remotely     |
-| `factory show <order>`                                                   | Work order detail, Cycles, Andon, Handover                                               |
-| `factory log <order> [-f]`                                               | The Traveler, optionally followed                                                        |
-| `factory answer <order> "<text>"`                                        | Answer the open (or abandoned, unanswered) question                                      |
-| `factory resume <order> [--note "..."] [--from <station>] [--grant <n>]` | Resume an Andon                                                                          |
-| `factory reopen <order> --from <station> [--note "..."]`                 | Send a delivered, unmerged Work order back for rework                                    |
-| `factory nudge <order> "<text>"`                                         | Type into a live Operator's pane                                                         |
-| `factory cancel <order>` / `factory prio <order> <level>`                |                                                                                          |
-| `factory sync`                                                           | Run intake now                                                                           |
-| `factory cells [rm <id>]`                                                | List or revoke Cells                                                                     |
-| `factory cells token create [--ttl <d>] \| ls \| rm <id>`                | Manage join tokens                                                                       |
-| `factory check`                                                          | Offline: validate Operator profiles, Lines and templates (no Factory needed)             |
-| `factory admin export <file>`                                            | STORAGE §7                                                                               |
+| `factory status [--watch] [--all]`                                       | The board; `--watch` follows the runtime event feed locally or `/v1/stream` remotely          |
+| `factory show <order>`                                                   | Work order detail, Cycles, Andon, Handover                                                    |
+| `factory log <order> [-f]`                                               | The Traveler, optionally followed                                                             |
+| `factory answer <order> "<text>"`                                        | Answer the open (or abandoned, unanswered) question                                           |
+| `factory resume <order> [--note "..."] [--from <station>] [--grant <n>]` | Resume an Andon                                                                               |
+| `factory reopen <order> --from <station> [--note "..."]`                 | Send a delivered, unmerged Work order back for rework                                         |
+| `factory nudge <order> "<text>"`                                         | Type into a live Operator's pane                                                              |
+| `factory cancel <order>` / `factory prio <order> <level>`                |                                                                                               |
+| `factory sync`                                                           | Run intake now                                                                                |
+| `factory cells [rm <id>]`                                                | List or revoke Cells                                                                          |
+| `factory cells token create [--ttl <d>] \| ls \| rm <id>`                | Manage join tokens                                                                            |
+| `factory check`                                                          | Offline: validate Operator profiles, Lines and templates (no Factory needed)                  |
+| `factory admin export <file>`                                            | STORAGE §7                                                                                    |
 
 `factory-server` is the core process: `factory run` is its local start command. It owns the database
 through the writer lock, runs intake, scheduling, the reaper and leases, and listens on the local Unix
