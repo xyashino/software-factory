@@ -47,7 +47,6 @@ const TERMINAL = new Set<OrderProjection['status']>([
   'cancelled',
 ]);
 
-/** Stores a text as a blob and returns its `sha256:<hex>` ref. */
 const putText = async (
   ports: RuntimePorts,
   text: string,
@@ -60,11 +59,9 @@ const putText = async (
   return ref;
 };
 
-/** A todo's title: its first top-level heading, else its id. */
 const titleOf = (todo: Todo): string =>
   /^#\s+(.+)$/m.exec(todo.body)?.[1]?.trim() || todo.todoId;
 
-/** The `spec` of a Work order: the todo body and normalised todo file as blobs, plus its hash. */
 const specOf = async (
   ports: RuntimePorts,
   todo: Todo,
@@ -76,7 +73,6 @@ const specOf = async (
   contentHash: await putText(ports, normaliseTodoText(text), 'text/markdown'),
 });
 
-/** Whether a job was ever claimed for the Work order (any `job_claimed` in its events). */
 const claimed = async (
   ports: RuntimePorts,
   orderId: OrderId,
