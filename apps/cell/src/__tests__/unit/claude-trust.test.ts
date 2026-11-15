@@ -216,7 +216,7 @@ describe('the logs tab of a task workspace', () => {
       'pane',
       'run',
       'w9:p1',
-      'bun cli.ts log software-factory:todo-a -f',
+      `printf '\\033[2J\\033[3J\\033[H' && exec bun cli.ts log software-factory:todo-a -f`,
     ]);
   });
 });

@@ -119,7 +119,10 @@ export const createHerdrPane = (
       const paneId = findJsonString(created.stdout, 'pane_id');
       try {
         if (tabId !== undefined) await ok(['tab', 'rename', tabId, 'logs']);
-        if (paneId !== undefined) await ok(['pane', 'run', paneId, logCommand]);
+        // As v1: clear the screen and scrollback, then exec the follower, so no echoed command is left above it.
+        const clearAndRun = `printf '\\033[2J\\033[3J\\033[H' && exec ${logCommand}`;
+        if (paneId !== undefined)
+          await ok(['pane', 'run', paneId, clearAndRun]);
       } catch {
         // the logs tab is cosmetic
       }
