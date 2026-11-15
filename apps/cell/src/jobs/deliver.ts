@@ -13,6 +13,7 @@ import {
   type ShellContext,
   type ShellRun,
 } from '../workspace/shell';
+import { redactDetail } from './redact';
 import { JobStopped, submit, type JobContext } from './send';
 
 const MAX_DETAIL_CHARS = 500;
@@ -26,9 +27,9 @@ const IDENTITY = [
   'user.email=software-factory@localhost',
 ];
 
-/** The last characters of a run's output, for a failure detail. */
+/** The last characters of a run's output, for a failure detail, with machine-local values redacted. */
 const tailOfRun = (run: ShellRun): string =>
-  textOf(run).trim().slice(-MAX_DETAIL_CHARS);
+  redactDetail(textOf(run).trim(), MAX_DETAIL_CHARS, 'end');
 
 /**
  * Runs one `deliver` job end to end (PROTOCOL §8.3, CORE §4.3 rule 9). The order is fixed:
@@ -110,8 +111,8 @@ export const runDeliver = async (
 };
 
 const errorText = (error: unknown): string =>
-  (error instanceof Error ? error.message : String(error)).slice(
-    0,
+  redactDetail(
+    error instanceof Error ? error.message : String(error),
     MAX_DETAIL_CHARS,
   );
 
@@ -127,7 +128,10 @@ const reportFailed = async (
     job,
     {
       type: 'ReportDelivery',
-      result: { status: 'failed', detail: detail.slice(0, MAX_DETAIL_CHARS) },
+      result: {
+        status: 'failed',
+        detail: redactDetail(detail, MAX_DETAIL_CHARS),
+      },
     },
     signal,
   );
