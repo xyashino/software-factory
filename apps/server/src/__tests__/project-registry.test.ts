@@ -12,21 +12,18 @@ import {
   type WireError,
 } from '@repo/factory-core/contracts/errors';
 import type { RouteName } from '@repo/factory-core/contracts/routes';
-import { fakePrState } from '@repo/factory-core/testing';
 import {
   openRuntime,
   type OpenedRuntime,
 } from '@repo/factory-runtime/open-runtime';
-import { gitMirror } from '../adapters/git-mirror';
 import { createHttpApp } from '../http/app';
 import { socketFactoryClient } from '../socket/client';
 import { startSocketListener, type SocketListener } from '../socket/listener';
-import { createFixtureRepo, todoFile } from './e2e/fixture-repo';
 
 /**
  * The project registry answers the same over the local socket, remote HTTP and `--once` (RULES §6.5).
  * Each transport runs the same steps against a fresh data directory with no seeding, and the answers
- * must be equal. The scenario is add, list, set, a duplicate add, intake, two refusals and a not-found.
+ * must be equal. The scenario is add, list, set, a duplicate add, a board read, two refusals and a not-found.
  */
 
 /** The server entry point, run as a real process for `--once`. */
@@ -42,15 +39,11 @@ type Outcome =
   { ok: true; response: unknown } | { ok: false; error: WireError };
 
 let root: string;
-let repo: string;
+const repo = 'https://example.test/software-factory.git';
 let counter = 0;
-const prState = fakePrState();
 
-beforeAll(async () => {
+beforeAll(() => {
   root = mkdtempSync(join(tmpdir(), 'factory-registry-'));
-  repo = await createFixtureRepo(join(root, 'repo'), {
-    'add-login': todoFile({ title: 'Add login', v2: true }),
-  });
 });
 
 afterAll(() => {
@@ -76,7 +69,7 @@ const scenario = (repoUrl: string): Step[] => {
     { route: 'projectList', request: {} },
     { route: 'projectSet', request: { projectId: 'demo', maxRunning: 3 } },
     { route: 'projectAdd', request: demo },
-    { route: 'intakeSync', request: { projectId: 'demo' } },
+    { route: 'board', request: {} },
     {
       route: 'projectSet',
       request: { projectId: 'demo', baseBranch: 'develop' },
@@ -87,13 +80,7 @@ const scenario = (repoUrl: string): Step[] => {
   ];
 };
 
-const openFresh = (dataDir: string): OpenedRuntime =>
-  openRuntime({
-    dataDir,
-    git: gitMirror({ mirrorsDir: join(dataDir, 'mirrors') }),
-    prState,
-    config: { intakePollMs: 0, prPollMs: 0 },
-  });
+const openFresh = (dataDir: string): OpenedRuntime => openRuntime({ dataDir });
 
 /** Runs a call and turns a refusal into its wire error; any other failure is a test failure. */
 const outcomeOf = async (call: () => Promise<unknown>): Promise<Outcome> => {
@@ -222,12 +209,15 @@ describe('project registry over the three transports', () => {
       response: { project: { projectId: 'demo', maxRunning: 3 } },
     });
     expect(refusal(3).code).toBe('precondition');
-    expect(refusal(5).code).toBe('precondition');
-    expect(refusal(6).code).toBe('precondition');
+    expect(outcomes[5]).toMatchObject({
+      ok: true,
+      response: { project: { projectId: 'demo', baseBranch: 'develop' } },
+    });
+    expect(outcomes[6]).toMatchObject({ ok: true });
     expect(refusal(7)).toEqual({ code: 'not_found' });
     expect(outcomes[8]).toMatchObject({
       ok: true,
-      response: { projects: [{ projectId: 'demo', maxRunning: 3 }] },
+      response: { projects: [] },
     });
   }, 60_000);
 });

@@ -10,11 +10,8 @@ import {
 const KNOBS = [
   ['FACTORY_LEASE_TTL_MS', 'leaseTtlMs'],
   ['FACTORY_HEARTBEAT_MS', 'heartbeatMs'],
-  ['FACTORY_REAPER_MS', 'reaperMs'],
   ['FACTORY_SELF_FENCE_MS', 'selfFenceMs'],
   ['FACTORY_CLAIM_TICK_MS', 'claimTickMs'],
-  ['FACTORY_PR_POLL_MS', 'prPollMs'],
-  ['FACTORY_INTAKE_POLL_MS', 'intakePollMs'],
 ] as const satisfies readonly (readonly [string, keyof RuntimeConfig])[];
 
 /** One knob's value: a positive whole number of milliseconds, or nothing when it is unset. */

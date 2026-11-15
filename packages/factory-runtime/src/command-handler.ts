@@ -113,7 +113,7 @@ export const createCommandHandler = (
   const { events, blobs, leases, signals, ids, clock, writer, config } = ports;
   const jobPorts = {
     blobs,
-    runtimePrompts: ports.definitions.runtimePrompts,
+    runtimePrompts: ports.runtimePrompts,
     config,
   };
   const planCommands = createPlanCommands(ports, onCommit);

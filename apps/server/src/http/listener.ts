@@ -22,8 +22,13 @@ export const startHttpListener = (options: {
   runtime: Runtime;
   hostname: string;
   port: number;
+  githubWebhookSecret?: string;
 }): HttpListener => {
-  const app = createHttpApp(options.runtime);
+  const app = createHttpApp(options.runtime, {
+    ...(options.githubWebhookSecret !== undefined
+      ? { githubWebhookSecret: options.githubWebhookSecret }
+      : {}),
+  });
   const server = Bun.serve({
     hostname: options.hostname,
     port: options.port,

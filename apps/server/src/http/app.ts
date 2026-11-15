@@ -16,6 +16,7 @@ import type { Runtime } from '@repo/factory-runtime/composition';
 import { isRuntimeError } from '@repo/factory-runtime/errors';
 import { streamResponse } from '../socket/serve';
 import { failureResponse, jsonResponse, refusedResponse } from '../wire';
+import { serveGithubWebhook } from './github-webhook';
 
 /**
  * The remote HTTP app (PROTOCOL §2, §3): the same runtime as the socket, served over TCP with Hono.
@@ -79,7 +80,7 @@ const notJson = () =>
 /** One route: credential, path and body into the route's request, the runtime, the response. */
 const serveRoute = async (
   runtime: Runtime,
-  name: Exclude<HttpRouteName, 'join' | 'stream'>,
+  name: Exclude<HttpRouteName, 'join' | 'stream' | 'githubWebhook'>,
   request: Request,
   params: Readonly<Record<string, string>>,
 ): Promise<Response> => {
@@ -165,13 +166,20 @@ const serveRoute = async (
 };
 
 /**
- * The Hono app over one runtime. Every route of `HTTP_ROUTES` is registered; `join` and the SSE
- * stream are registered by hand, since neither is a socket route. An unknown path, and every socket
- * path, answers 404 `not_found` (PROTOCOL §3.5).
+ * The Hono app over one runtime. Every route of `HTTP_ROUTES` is registered; `join`, the SSE stream
+ * and the GitHub webhook are registered by hand, since none is a bearer-authed socket route. An
+ * unknown path, and every socket path, answers 404 `not_found` (PROTOCOL §3.5).
  */
-export const createHttpApp = (runtime: Runtime): Hono => {
+export const createHttpApp = (
+  runtime: Runtime,
+  options: { githubWebhookSecret?: string } = {},
+): Hono => {
   const app = new Hono();
   app.notFound(() => refusedResponse({ code: 'not_found' }));
+
+  app.on('POST', HTTP_ROUTES.githubWebhook.path, (c) =>
+    serveGithubWebhook(runtime, c.req.raw, options.githubWebhookSecret),
+  );
 
   app.on('POST', HTTP_ROUTES.join.path, async (c) => {
     try {
@@ -199,7 +207,9 @@ export const createHttpApp = (runtime: Runtime): Hono => {
   });
 
   for (const name of Object.keys(HTTP_ROUTES) as HttpRouteName[]) {
-    if (name === 'join' || name === 'stream') continue;
+    if (name === 'join' || name === 'stream' || name === 'githubWebhook') {
+      continue;
+    }
     const spec = HTTP_ROUTES[name];
     app.on(spec.method, spec.path, (c) =>
       serveRoute(runtime, name, c.req.raw, c.req.param()),

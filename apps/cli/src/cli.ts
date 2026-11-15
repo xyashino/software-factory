@@ -15,7 +15,6 @@ import { resumeCommand } from './commands/resume';
 import { runCommand } from './commands/run';
 import { showCommand } from './commands/show';
 import { statusCommand } from './commands/status';
-import { syncCommand } from './commands/sync';
 import { usage } from './usage';
 
 /** The Supervisor command line (PROTOCOL §10). Every subcommand is a client of `factory-server`. */
@@ -35,7 +34,6 @@ const main = defineCommand({
     nudge: nudgeCommand,
     cancel: cancelCommand,
     prio: prioCommand,
-    sync: syncCommand,
     cells: cellsCommand,
     project: projectCommand,
     plan: planCommand,

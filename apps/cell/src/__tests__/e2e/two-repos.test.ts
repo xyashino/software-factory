@@ -11,13 +11,11 @@ import type {
   TodoId,
 } from '@repo/factory-core/ids';
 import { orderIdOf } from '@repo/factory-core/ids';
-import { fakePrState } from '@repo/factory-core/testing';
 import {
   openRuntime,
   type OpenedRuntime,
 } from '@repo/factory-runtime/open-runtime';
-import { seedProject } from '@repo/factory-runtime/seed';
-import { gitMirror } from '@repo/factory-server/adapters/git-mirror';
+import { seedProject, shippedLine } from '@repo/factory-runtime/seed';
 import {
   PROMPT_CONFIG,
   renderDelivery,
@@ -69,12 +67,7 @@ beforeEach(() => {
   mkdirSync(dataDir);
   seedProject(dataDir, { projectId: ALPHA, repoUrl: alphaRepo });
   seedProject(dataDir, { projectId: BRAVO, repoUrl: bravoRepo });
-  opened = openRuntime({
-    dataDir,
-    git: gitMirror({ mirrorsDir: join(dataDir, 'mirrors') }),
-    prState: fakePrState(),
-    config: { intakePollMs: 0, prPollMs: 0 },
-  });
+  opened = openRuntime({ dataDir });
 });
 
 afterEach(() => {
@@ -82,12 +75,8 @@ afterEach(() => {
   rmSync(root, { recursive: true, force: true });
 });
 
-/** The shipped `standard` Line, as a caller pins it. The runtime's own definitions hold the shipped Lines. */
-const standardLine = (): LineSnapshot => {
-  const line = opened.ports.definitions.lines.get('standard');
-  if (!line) throw new Error('the shipped definitions name no standard line');
-  return line.snapshot;
-};
+/** The shipped `standard` Line, as a caller pins it: the repository's own `.factory/lines/standard.yml`. */
+const standardLine = (): LineSnapshot => shippedLine('standard');
 
 /** The blob reader of the runtime, as a Cell downloads its blobs. */
 const blobsOf =

@@ -4,12 +4,7 @@ import type {
   RouteName,
   RouteResponse,
 } from '@repo/factory-core/contracts/routes';
-import type {
-  CellId,
-  OrderId,
-  PlanId,
-  ProjectId,
-} from '@repo/factory-core/ids';
+import type { CellId, OrderId, PlanId } from '@repo/factory-core/ids';
 import { resolveDeps } from '@repo/factory-core/queue/deps';
 import { boardStatusWithDeps } from '@repo/factory-core/queue/deps';
 import type { PlanProjection } from '@repo/factory-core/plan/projection';
@@ -27,7 +22,6 @@ import { longPollClaim, type ClaimDeps } from './claim';
 import type { CommandHandler } from './command-handler';
 import { notFound, RuntimeError } from './errors';
 import { heartbeat } from './heartbeat';
-import type { IntakeReport, IntakeSource } from './intake';
 import { createJoinToken, revokeJoinToken } from './join-tokens';
 import {
   addProject,
@@ -167,9 +161,8 @@ const requireResult = (result: CommandResult | undefined): CommandResult => {
   return result;
 };
 
-/** What the composition root provides beyond the ports: intake and the admin operations. */
+/** What the composition root provides beyond the ports: the admin operations. */
 export interface OperationExtras {
-  sync(projectId?: ProjectId, source?: IntakeSource): Promise<IntakeReport[]>;
   admin: RuntimeAdmin;
 }
 
@@ -199,6 +192,12 @@ export const createOperations = (
       .then(requireResult);
   };
 
+  // The board and order reads reap lazily too (PROTOCOL §5.4): an expired lease shows as its reaped state.
+  const reaped = async <T>(read: () => Promise<T>): Promise<T> => {
+    await claimDeps.reap();
+    return read();
+  };
+
   const handlers: Handlers = {
     hello: (request) => hello(ports, request),
     claim: (request, options) =>
@@ -208,7 +207,7 @@ export const createOperations = (
         request.waitMs,
         options.signal,
       ).then((job) => ({ job })),
-    heartbeat: (request) => heartbeat(ports, request),
+    heartbeat: (request) => reaped(() => heartbeat(ports, request)),
     submitCommand: async (request) => {
       await assertCell(ports, request.cellId);
       if ('planId' in request) {
@@ -265,63 +264,67 @@ export const createOperations = (
         base64: Buffer.from(bytes).toString('base64'),
       };
     },
-    board: async () => ({
-      orders: (await ports.projections.orders()).map(boardRow),
-    }),
-    plans: async () => ({
-      plans: (await ports.projections.plans()).map(planRow),
-    }),
-    planDetail: async (request) => {
-      const plans = await ports.projections.plans();
-      const plan = plans.find(
-        (candidate) => candidate.planId === request.planId,
-      );
-      if (!plan) throw notFound();
-      const rows = await ports.projections.orders();
-      const policies = new Map(
-        (await ports.projects.list()).map((project) => [
-          project.projectId,
-          project.depPolicy,
-        ]),
-      );
-      return {
-        plan: planRow(plan),
-        members: plan.members.map((member) => {
-          const row = rows.find(
-            (candidate) => candidate.orderId === member.orderId,
-          );
-          return {
-            orderId: member.orderId,
-            todoId: member.todoId,
-            after: member.after ?? null,
-            state: member.state,
-            status: row?.status ?? null,
-            baseBranch: row
-              ? resolveBase(
-                  {
-                    plan: row.plan ?? undefined,
-                    dependsOn: row.dependsOn,
-                    baseBranch: row.baseBranch,
-                  },
-                  rows,
-                )
-              : null,
-            prUrl: row?.prUrl ?? null,
-            blocker: row
-              ? blockerOf(row, rows, policies.get(row.projectId))
-              : null,
-          };
-        }),
-      };
-    },
-    orderDetail: async (request) => {
-      const events = await ports.events.load(request.orderId);
-      const row = (await ports.projections.orders()).find(
-        (candidate) => candidate.orderId === request.orderId,
-      );
-      if (events.length === 0 || !row) throw notFound();
-      return { order: boardRow(row), events };
-    },
+    board: () =>
+      reaped(async () => ({
+        orders: (await ports.projections.orders()).map(boardRow),
+      })),
+    plans: () =>
+      reaped(async () => ({
+        plans: (await ports.projections.plans()).map(planRow),
+      })),
+    planDetail: (request) =>
+      reaped(async () => {
+        const plans = await ports.projections.plans();
+        const plan = plans.find(
+          (candidate) => candidate.planId === request.planId,
+        );
+        if (!plan) throw notFound();
+        const rows = await ports.projections.orders();
+        const policies = new Map(
+          (await ports.projects.list()).map((project) => [
+            project.projectId,
+            project.depPolicy,
+          ]),
+        );
+        return {
+          plan: planRow(plan),
+          members: plan.members.map((member) => {
+            const row = rows.find(
+              (candidate) => candidate.orderId === member.orderId,
+            );
+            return {
+              orderId: member.orderId,
+              todoId: member.todoId,
+              after: member.after ?? null,
+              state: member.state,
+              status: row?.status ?? null,
+              baseBranch: row
+                ? resolveBase(
+                    {
+                      plan: row.plan ?? undefined,
+                      dependsOn: row.dependsOn,
+                      baseBranch: row.baseBranch,
+                    },
+                    rows,
+                  )
+                : null,
+              prUrl: row?.prUrl ?? null,
+              blocker: row
+                ? blockerOf(row, rows, policies.get(row.projectId))
+                : null,
+            };
+          }),
+        };
+      }),
+    orderDetail: (request) =>
+      reaped(async () => {
+        const events = await ports.events.load(request.orderId);
+        const row = (await ports.projections.orders()).find(
+          (candidate) => candidate.orderId === request.orderId,
+        );
+        if (events.length === 0 || !row) throw notFound();
+        return { order: boardRow(row), events };
+      }),
     createOrder: (request) => createOrder(ports, handler, request),
     createPlan: (request) => createPlan(ports, handler, request),
     recordPrState: (request) => recordPrState(handler, request),
@@ -396,17 +399,6 @@ export const createOperations = (
         );
       }
     },
-    intakeSync: async (request) => {
-      const source: IntakeSource | undefined = request.files
-        ? { files: request.files, replace: request.replace ?? false }
-        : undefined;
-      const projects = await extras.sync(request.projectId, source);
-      const created = projects.reduce(
-        (total, report) => total + report.created.length,
-        0,
-      );
-      return { created, projects };
-    },
     joinTokenCreate: (request) => createJoinToken(ports, request),
     joinTokenList: async () => ({
       tokens: (await ports.joinTokens.list()).map((token) => ({
@@ -442,16 +434,6 @@ export const createOperations = (
     adminRebuildProjections: async () => ({
       rows: await extras.admin.rebuildProjections(),
     }),
-    adminRecover: async (request) => {
-      const report = await extras.admin.recover(request.projectId);
-      return {
-        recovered: report.recovered.map((order) => ({
-          ...order,
-          passedStations: [...order.passedStations],
-        })),
-        skipped: report.skipped,
-      };
-    },
   };
 
   return {

@@ -7,8 +7,12 @@ import type { RouteName } from './routes';
  */
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE';
 
-/** Who may call a route (PROTOCOL §1): a supervisor token, a Cell credential, or either. */
-export type HttpAuth = 'supervisor' | 'cell' | 'supervisor_or_cell' | 'join';
+/**
+ * Who may call a route (PROTOCOL §1): a supervisor token, a Cell credential, or either; `join` takes the
+ * join token in its body; `webhook` takes no bearer token, its credential is the HMAC of the body (§3.6).
+ */
+export type HttpAuth =
+  'supervisor' | 'cell' | 'supervisor_or_cell' | 'join' | 'webhook';
 
 export interface HttpRoute {
   readonly method: HttpMethod;
@@ -19,10 +23,18 @@ export interface HttpRoute {
   readonly params?: Readonly<Record<string, string>>;
 }
 
-/** Routes with no `ROUTES` entry: the join call, and the SSE stream that replaces `supervisorEvents`. */
+/**
+ * Routes with no `ROUTES` entry: the join call, the SSE stream that replaces `supervisorEvents`, and the
+ * GitHub webhook that reports pull request state (PROTOCOL §3.6).
+ */
 export const HTTP_EXTRA_ROUTES = {
   join: { method: 'POST', path: '/v1/cell/join', auth: 'join' },
   stream: { method: 'GET', path: '/v1/stream', auth: 'supervisor' },
+  githubWebhook: {
+    method: 'POST',
+    path: '/v1/webhooks/github',
+    auth: 'webhook',
+  },
 } as const satisfies Record<string, HttpRoute>;
 
 /**
@@ -106,11 +118,6 @@ export const HTTP_ROUTES = {
     auth: 'supervisor',
     params: { id: 'orderId' },
   },
-  intakeSync: {
-    method: 'POST',
-    path: '/v1/intake/sync',
-    auth: 'supervisor',
-  },
   cellsList: { method: 'GET', path: '/v1/cells', auth: 'supervisor' },
   cellRevoke: {
     method: 'DELETE',
@@ -156,11 +163,6 @@ export const HTTP_ROUTES = {
   adminRebuildProjections: {
     method: 'POST',
     path: '/v1/admin/rebuild-projections',
-    auth: 'supervisor',
-  },
-  adminRecover: {
-    method: 'POST',
-    path: '/v1/admin/recover',
     auth: 'supervisor',
   },
   hello: { method: 'POST', path: '/v1/cell/hello', auth: 'cell' },

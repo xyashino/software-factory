@@ -13,7 +13,7 @@ protected against duplicate processing, and resumable from the Station where it 
 
 | ID     | Requirement                                                                                                                                                                                                | Where it is solved                                                                                                          |
 | :----- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :-------------------------------------------------------------------------------------------------------------------------- |
-| **R1** | **Portable queue.** The full queue and every Work order's progress can be moved to, or rebuilt on, another machine.                                                                                        | Machine-independent events (CORE §3), blobs in the database (STORAGE §5), export/import and rebuild from git (STORAGE §7–8) |
+| **R1** | **Portable queue.** The full queue and every Work order's progress can be moved to, or rebuilt on, another machine.                                                                                        | Machine-independent events (CORE §3), blobs in the database (STORAGE §5), export/import (STORAGE §7); the server reads no repository, so no rebuild from git |
 | **R2** | **No double work.** With two or more Cells, a Work order is executed by at most one of them at a time, including after crashes and network partitions.                                                     | Atomic claim + lease + fencing epoch + optimistic append + dry run before push (PROTOCOL §5, §8.2, STORAGE §3)              |
 | **R3** | **Non-blocking Andons.** A stuck Operator raises an Andon; its Cell is released at once and takes other work; the Work order keeps every passed Station and resumes from the blocked Station, on any Cell. | `holder = supervisor` releases the lease (CORE §4), checkpoint commits (PROTOCOL §8), `resumed` (CORE §4.3)                 |
 | **R4** | **Deterministic control.** No LLM decides what runs next.                                                                                                                                                  | Pure `decide` / `nextJob` (CORE §5–6)                                                                                       |
@@ -60,7 +60,8 @@ databases are independent sources of truth (STORAGE §1).
 The server does not start a network listener in local mode. It uses the local Unix socket
 `$FACTORY_DATA_DIR/factory.sock` (mode 0600), and trust is the operating-system account. One writer owns
 the local database through an exclusive lock (STORAGE §1): `factory run` (the local start command for
-the server) holds it for its lifetime and keeps intake, scheduling and the reaper active. The CLI and
+the server) holds it for its lifetime. The server runs no timer and no loop: expired leases are reaped
+lazily on claim, heartbeat and board reads (PROTOCOL §5.4). The CLI and
 Cells are socket clients and never open the database. If no server is running, a one-shot CLI write
 may start the runtime in-process for that command while holding the writer lock; reads are always allowed.
 Distributed mode (optional, M4R, built after the local core) adds TCP with HTTP/SSE to the same server
@@ -73,7 +74,7 @@ flowchart LR
   end
 
   subgraph Server["factory-server (core process)"]
-    APP["factory-runtime: use cases, scheduling, intake, reaper, leases"]
+    APP["factory-runtime: use cases, lazy reaper, leases"]
     DB[("SQLite: Travelers, projections, leases, blobs")]
     SOCK["Unix socket listener factory.sock (0600)"]
     APP --> DB
@@ -110,7 +111,7 @@ flowchart LR
 
 | Component                                          | Owns                                                                                                                                                                                           | Never does                                                                              |
 | :------------------------------------------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :-------------------------------------------------------------------------------------- |
-| **`factory-runtime`** (`packages/factory-runtime`) | Application use cases; database lifecycle; intake; queue; leases and epochs; `decide` for commands; `nextJob`; prompt rendering; the event feed used by `factory-server`                 | Transport (socket or HTTP), run Operators, touch Herdr, run Inspections, create worktrees, open PRs |
+| **`factory-runtime`** (`packages/factory-runtime`) | Application use cases; database lifecycle; queue; leases and epochs; the lazy reaper; pull request state records; `decide` for commands; `nextJob`; prompt rendering; the event feed used by `factory-server`                 | Transport (socket or HTTP), run Operators, touch Herdr, run Inspections, create worktrees, open PRs |
 | **Cell** (`apps/cell`, `factory-cell`)             | Its mirror and worktrees; Herdr panes; runner adapters; Inspection execution; the Cycle runtime (watch, reminders, prompt delivery); the local Operator socket; checkpoint pushes; PR creation | Decide the next Station; write to the database; talk to another Cell                    |
 | **`factory-operator`** (`apps/operator-cli`)       | Passing an Operator's verbs to its Cell                                                                                                                                                        | Know the Factory's address or any Factory credential                                    |
 | **`factory`** (`apps/cli`)                         | Rendering; config and client selection; socket client to the running server (or remote client); one-shot in-process fallback; offline `factory check`                          | Depend directly on the runtime library, HTTP details or storage adapters                |
@@ -170,7 +171,7 @@ sequenceDiagram
   U->>S: factory run
   S->>D: open local database under writer lock
   S->>S: listen on $FACTORY_DATA_DIR/factory.sock (0600)
-  S->>R: start intake, scheduling, reaper and lease loops
+  S->>R: arm boot grace (every lease gets a full TTL; no timer)
   C->>S: connect over socket, hello (contract version, slots)
   loop while the run is active
     C->>S: claim (long-poll, up to 25 s)
@@ -182,19 +183,22 @@ sequenceDiagram
   end
 ```
 
-### F1. Intake (either mode)
+### F1. Work orders and plans come in (either mode)
 
 ```mermaid
 sequenceDiagram
-  participant G as git remote
-  participant S as Factory (intake)
+  participant U as Supervisor tooling
+  participant R as repository (.factory/, todos)
+  participant S as Factory (task API)
   participant D as db
-  S->>G: fetch origin/<baseBranch> (mirror)
-  S->>S: parse todos/*.md, compute content hash
-  S->>D: decide(CreateOrder) for new todos (idempotent on todoId)
-  S->>D: decide(UpdateSpec) for changed todos not yet claimed
-  S->>D: decide(Cancel) for removed todos not yet claimed
+  U->>R: read todos and the repository's .factory/ Line
+  U->>S: POST /v1/orders or /v1/plans (spec, pinned LineSnapshot)
+  S->>D: decide(CreateOrder) or decide(CreatePlan), idempotent on commandId
+  Note over S: the server reads no repository and runs no git
 ```
+
+Pull request state arrives the same way, by `POST /v1/webhooks/github` (PROTOCOL §3.6), and never by a
+poll of the host.
 
 ### F2. Claim and run one Operator station (distributed mode)
 
@@ -251,7 +255,7 @@ sequenceDiagram
   participant S as Factory
   participant C2 as Cell 2
   C1--xS: heartbeats stop
-  S->>S: reaper: lease expired, append cycle_failed(lost) + job_lost(lease_expired)
+  S->>S: next claim, heartbeat or board read: lease expired, append cycle_failed(lost) + job_lost(lease_expired)
   S->>S: nextJob: restart the Station from the failed Cycle's base commit
   C2->>S: claim
   S-->>C2: run_operator_station (restart, new epoch)

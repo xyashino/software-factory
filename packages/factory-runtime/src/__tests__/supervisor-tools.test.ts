@@ -301,25 +301,6 @@ describe('project registry', () => {
   });
 });
 
-describe('intake sync', () => {
-  it('opens Work orders from wired intake and returns both the count and per-project report', async () => {
-    const w = world();
-    w.git.setTodos([
-      {
-        file: 'todos/add-login.md',
-        text: '---\nstatus: todo\nfactory: v2\n---\n\n# Add login\n\nBody.\n',
-      },
-    ]);
-
-    const result = await w.runtime.call('intakeSync', { commandId: COMMAND });
-
-    expect(result.created).toBe(1);
-    expect(result.projects).toHaveLength(1);
-    expect(result.projects[0]?.projectId).toBe(PROJECT);
-    expect(result.projects[0]?.created).toEqual(['add-login']);
-  });
-});
-
 describe('admin export', () => {
   it('returns the export archive as base64 with its size', async () => {
     const w = world();

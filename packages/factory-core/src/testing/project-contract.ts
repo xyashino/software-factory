@@ -11,7 +11,7 @@ import { assertSame } from './harness';
 import type { ProjectHistorySeed } from './fakes-ports';
 import type { ContractRunner } from './store-contract';
 
-/** A project store under test, plus the hooks that give a project history (orders, events, intake). */
+/** A project store under test, plus the hooks that give a project history (orders, events). */
 export interface ProjectUnderTest extends ProjectHistorySeed {
   store: ProjectStore;
   close(): Promise<void>;
@@ -247,19 +247,6 @@ export const defineProjectStoreContract = (
           await store.remove(ALPHA),
           'has_history',
           'remove with an event',
-        );
-      }),
-    );
-
-    runner.it('refuses to remove a project with an intake row', () =>
-      withProjects(create, async ({ store, seedIntake }) => {
-        await store.add(recordOf(ALPHA), 10);
-        await seedIntake(ALPHA);
-
-        assertRefused(
-          await store.remove(ALPHA),
-          'has_history',
-          'remove with intake',
         );
       }),
     );

@@ -5,25 +5,24 @@ import {
   type RouteName,
   type RouteResponse,
 } from '@repo/factory-core/contracts/routes';
-import type { ProjectId } from '@repo/factory-core/ids';
 import type { StoredEvent } from '@repo/factory-core/order/events';
 import { createAdmin, type RuntimeAdmin } from './admin';
 import { createCommandHandler, type CommandHandler } from './command-handler';
-import { asRuntimeError, notFound, RuntimeError } from './errors';
+import { asRuntimeError } from './errors';
 import { feedFrom } from './feed';
-import { syncProject, type IntakeReport, type IntakeSource } from './intake';
 import { createNotifier } from './notifier';
 import { type CallOptions, createOperations } from './operations';
-import type { RuntimePorts, Timers } from './ports';
-import { pollPrStates } from './pr-poll';
+import type { RuntimePorts } from './ports';
 import { createRemoteAccess, type RemoteAccess } from './remote';
-import { bootGrace, reapOnce } from './reaper';
+import { createReaper } from './reaper';
+import { recordPullRequest, type PullRequestChange } from './pull-request';
 
 /**
- * The runtime: the command loop, the claims, the heartbeats, the reaper, intake, the PR poll, the
- * event feed, the admin operations and the Supervisor and Cell operations, built from ports only.
- * It opens no file, no socket and no port; a write needs the writer lock held (see `WriterGuard`).
- * Transports reach it through `call`, `client`, `feed` and `admin`.
+ * The runtime: the command loop, the claims, the heartbeats, the lazy lease reaper, the event feed, the
+ * admin operations, the Supervisor and Cell operations and the pull request records, built from ports
+ * only. It runs no timer, reads no repository and runs no git or gh. It opens no file, no socket and no
+ * port; a write needs the writer lock held (see `WriterGuard`). Transports reach it through `call`,
+ * `client`, `feed`, `admin`, `remote` and `recordPullRequest`.
  */
 export interface Runtime {
   /** One route, with an already validated request (PROTOCOL §3). */
@@ -37,20 +36,22 @@ export interface Runtime {
    * response is parsed back, exactly as the socket client does. Tests compare the two.
    */
   client: FactoryClient;
-  /** One reaper pass; returns how many expired leases it looked at. */
+  /**
+   * One reaper pass over the expired leases, unless boot grace still holds (PROTOCOL §5.4). Claim,
+   * heartbeat and the board reads run it lazily; this is the same pass for a caller that wants it now.
+   * Returns how many expired leases it looked at.
+   */
   reapOnce(): Promise<number>;
   /**
-   * The command loop itself, for intake and for tests that set up a Work order.
+   * The command loop itself, for tests that set up a Work order.
    * Commits made through it wake the claims waiting on the queue, as any other commit does.
    */
   commands: CommandHandler;
   /**
-   * Intake now, for one project or for every registered project (PROTOCOL §3.1). With `source`, the
-   * todo files come from the caller instead of git, for exactly one project.
+   * Records a pull request's state on the Work orders and Order Plans holding its URL (PROTOCOL §3.1,
+   * the GitHub webhook). Returns how many streams changed; a repeated delivery changes none.
    */
-  sync(projectId?: ProjectId, source?: IntakeSource): Promise<IntakeReport[]>;
-  /** One PR state pass over the delivered Work orders; returns how many PRs it asked about (ROADMAP M4). */
-  pollPrStates(): Promise<number>;
+  recordPullRequest(change: PullRequestChange): Promise<number>;
   /** Every stored event after `afterGlobalSeq`, then each new one, until `signal` aborts (PROTOCOL §3.1). */
   feed(
     afterGlobalSeq: number,
@@ -61,110 +62,28 @@ export interface Runtime {
   /** Credentials for the remote transport: join, token checks, supervisor token creation (PROTOCOL §1). */
   remote: RemoteAccess;
   /**
-   * Boot grace, then the reaper every `reaperMs`, and the intake and PR poll loops at their own
-   * intervals (PROTOCOL §5.1, §5.4). Idempotent.
+   * Arms boot grace (PROTOCOL §5.1): every lease gets a full TTL from now, and no lease is reaped until
+   * that grace has passed. Arms nothing else: no timer is registered. Idempotent.
    */
   start(): Promise<void>;
-  /** Stops every timer. Pending long-polls end at their next tick. */
+  /** Marks the runtime stopped. It holds no timer, so nothing else needs cancelling. Pending long-polls end at their next tick. */
   stop(): void;
 }
-
-/** A timer loop: one pass, then the next after `ms`. Off when `ms` is 0. Passes never overlap. */
-interface Loop {
-  start(): void;
-  stop(): void;
-}
-
-const repeating = (
-  timers: Timers,
-  name: string,
-  ms: number,
-  pass: () => Promise<unknown>,
-): Loop => {
-  let on = false;
-  let cancel: () => void = () => undefined;
-  const tick = (): void => {
-    if (!on) return;
-    pass()
-      .catch((error: unknown) => {
-        console.error(`factory ${name} pass failed`, error);
-      })
-      .finally(() => {
-        if (on) cancel = timers.after(ms, tick);
-      });
-  };
-  return {
-    start: () => {
-      if (ms <= 0 || on) return;
-      on = true;
-      cancel = timers.after(ms, tick);
-    },
-    stop: () => {
-      on = false;
-      cancel();
-    },
-  };
-};
 
 export const createRuntime = (ports: RuntimePorts): Runtime => {
   const notifier = createNotifier(ports.timers);
   const handler = createCommandHandler(ports, () => notifier.wake());
   const admin = createAdmin(ports, handler);
-
-  const sync = async (
-    projectId?: ProjectId,
-    source?: IntakeSource,
-  ): Promise<IntakeReport[]> => {
-    const projects = (await ports.projects.list()).filter(
-      (project) => projectId === undefined || project.projectId === projectId,
-    );
-    if (projectId !== undefined && projects.length === 0) throw notFound();
-    // A local folder is one project's todos: which one must be clear.
-    if (source && projects.length !== 1) {
-      throw new RuntimeError({
-        code: 'precondition',
-        detail:
-          projects.length === 0
-            ? 'no project is registered'
-            : 'several projects are registered; name one to sync a folder into',
-      });
-    }
-    const reports: IntakeReport[] = [];
-    for (const project of projects) {
-      reports.push(await syncProject(ports, handler, project, source));
-    }
-    return reports;
-  };
+  const reaper = createReaper(ports, handler);
 
   const operations = createOperations(
     ports,
     handler,
-    { ports, handler, notifier },
-    { sync, admin },
+    { ports, handler, notifier, reap: () => reaper.reap() },
+    { admin },
   );
 
   let running = false;
-  let cancelReaper: () => void = () => undefined;
-
-  const schedule = (): void => {
-    cancelReaper = ports.timers.after(ports.config.reaperMs, () => {
-      if (!running) return;
-      reapOnce(ports, handler)
-        .catch((error: unknown) => {
-          console.error('factory reaper pass failed', error);
-        })
-        .finally(() => {
-          if (running) schedule();
-        });
-    });
-  };
-
-  const loops: Loop[] = [
-    repeating(ports.timers, 'intake', ports.config.intakePollMs, () => sync()),
-    repeating(ports.timers, 'pr poll', ports.config.prPollMs, () =>
-      pollPrStates(ports, handler),
-    ),
-  ];
 
   const call = <K extends RouteName>(
     route: K,
@@ -189,24 +108,19 @@ export const createRuntime = (ports: RuntimePorts): Runtime => {
     call,
     client,
     commands: handler,
-    reapOnce: () => reapOnce(ports, handler),
-    sync,
-    pollPrStates: () => pollPrStates(ports, handler),
+    reapOnce: () => reaper.reap(),
+    recordPullRequest: (change) => recordPullRequest(ports, handler, change),
     feed: (afterGlobalSeq, signal) =>
       feedFrom(ports, notifier, afterGlobalSeq, signal),
     admin,
     remote: createRemoteAccess(ports),
     start: async () => {
       if (running) return;
-      await bootGrace(ports);
+      await reaper.arm();
       running = true;
-      schedule();
-      for (const loop of loops) loop.start();
     },
     stop: () => {
       running = false;
-      cancelReaper();
-      for (const loop of loops) loop.stop();
     },
   };
 };

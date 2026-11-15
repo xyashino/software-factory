@@ -38,7 +38,6 @@ export const helloResponseSchema = z
       .object({
         leaseTtlMs: z.number().int().min(1),
         heartbeatMs: z.number().int().min(1),
-        reaperMs: z.number().int().min(1),
         selfFenceMs: z.number().int().min(1),
       })
       .strict(),

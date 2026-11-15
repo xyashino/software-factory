@@ -1,6 +1,26 @@
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
-import { runProcess } from '../../adapters/run';
+
+/**
+ * A git command's stdout. A non-zero exit throws with its stderr. No shell: the arguments go as they are.
+ * Test helper only: the server runs no git (STORAGE §8), the Cell's repository work is what these test.
+ */
+const runGit = async (argv: readonly string[]): Promise<string> => {
+  const child = Bun.spawn([...argv], {
+    stdout: 'pipe',
+    stderr: 'pipe',
+    env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
+  });
+  const [stdout, stderr, code] = await Promise.all([
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+    child.exited,
+  ]);
+  if (code !== 0) {
+    throw new Error(`${argv[0]} exited ${code}: ${stderr.trim()}`);
+  }
+  return stdout;
+};
 
 /** A todo file as a repository holds it: frontmatter, a title, a body. */
 export const todoFile = (options: {
@@ -22,8 +42,8 @@ export const todoFile = (options: {
 };
 
 /**
- * A real git repository on `main` with one commit: the given todo files under `todos/`. The intake
- * mirrors it with the real git adapter, so the e2e tests exercise `git` and not a stand-in.
+ * A real git repository on `main` with one commit: the given todo files under `todos/`. The Cell clones
+ * and pushes it with the real git, so the tests exercise `git` and not a stand-in.
  */
 export const createFixtureRepo = async (
   dir: string,
@@ -33,10 +53,12 @@ export const createFixtureRepo = async (
   for (const [name, text] of Object.entries(todos)) {
     await Bun.write(join(dir, 'todos', `${name}.md`), text);
   }
-  const git = (args: string[]) => runProcess(['git', '-C', dir, ...args]);
-  await git(['init', '--quiet', '-b', 'main']);
-  await git(['add', '.']);
-  await git([
+  await runGit(['git', '-C', dir, 'init', '--quiet', '-b', 'main']);
+  await runGit(['git', '-C', dir, 'add', '.']);
+  await runGit([
+    'git',
+    '-C',
+    dir,
     '-c',
     'user.name=fixture',
     '-c',
@@ -57,12 +79,12 @@ export const pushTodo = async (
 ): Promise<void> => {
   const path = join(dir, 'todos', `${name}.md`);
   if (text === undefined) {
-    await runProcess(['git', '-C', dir, 'rm', '--quiet', `todos/${name}.md`]);
+    await runGit(['git', '-C', dir, 'rm', '--quiet', `todos/${name}.md`]);
   } else {
     await Bun.write(path, text);
-    await runProcess(['git', '-C', dir, 'add', `todos/${name}.md`]);
+    await runGit(['git', '-C', dir, 'add', `todos/${name}.md`]);
   }
-  await runProcess([
+  await runGit([
     'git',
     '-C',
     dir,

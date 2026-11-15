@@ -2,7 +2,6 @@ import { z } from 'zod';
 import {
   blobRefSchema,
   cellIdSchema,
-  commitShaSchema,
   orderIdSchema,
   planIdSchema,
   planSlugSchema,
@@ -197,59 +196,6 @@ export const streamEventsResponseSchema = z
   })
   .strict();
 
-/** A todo file sent by the Supervisor: `todos/<name>.md` and its text. */
-export const intakeFileSchema = z
-  .object({
-    file: z.string().regex(/^todos\/[^/]+\.md$/),
-    text: z.string().max(256 * 1024),
-  })
-  .strict();
-
-/**
- * Runs intake now (PROTOCOL §3.1, `/v1/supervisor/intake/sync`) for one project or every
- * registered project. Intake is idempotent, so the answer does not depend on `commandId`.
- *
- * With `files`, intake reads those todo files instead of the project's git base branch, and the
- * project is the one named (or the only one registered). With `replace`, every unfinished Work
- * order of that project whose todo is not among `files` is cancelled, claimed or not.
- */
-export const intakeSyncRequestSchema = z
-  .object({
-    commandId: z.string().min(1).max(128).optional(),
-    projectId: projectIdSchema.optional(),
-    files: z.array(intakeFileSchema).max(1000).optional(),
-    replace: z.boolean().optional(),
-  })
-  .strict();
-
-/** What one intake pass did to one project's todos (STORAGE §4, PROTOCOL §3.1). */
-export const intakeProjectReportSchema = z
-  .object({
-    projectId: projectIdSchema,
-    commit: commitShaSchema,
-    created: z.array(todoIdSchema),
-    updated: z.array(todoIdSchema),
-    cancelled: z.array(todoIdSchema),
-    specDrift: z.array(todoIdSchema),
-    diagnostics: z.array(
-      z
-        .object({
-          todoId: z.string(),
-          kind: z.string(),
-          message: z.string(),
-        })
-        .strict(),
-    ),
-  })
-  .strict();
-
-export const intakeSyncResponseSchema = z
-  .object({
-    created: z.number().int().min(0),
-    projects: z.array(intakeProjectReportSchema),
-  })
-  .strict();
-
 export const joinTokenCreateRequestSchema = z
   .object({
     commandId: z.string().min(1).max(128),
@@ -397,31 +343,6 @@ export const projectResponseSchema = z
 
 export const projectRemoveResponseSchema = z
   .object({ projectId: projectIdSchema, removed: z.literal(true) })
-  .strict();
-
-/** `admin recover` (STORAGE §8): every project unless one is named. */
-export const adminRecoverRequestSchema = z
-  .object({ projectId: projectIdSchema.optional() })
-  .strict();
-
-const recoveredOrderSchema = z
-  .object({
-    orderId: z.string(),
-    todoId: z.string(),
-    passedStations: z.array(z.string()),
-    checkpoint: z.string(),
-    delivered: z.boolean(),
-  })
-  .strict();
-const skippedOrderSchema = z
-  .object({ orderId: z.string(), todoId: z.string(), reason: z.string() })
-  .strict();
-
-export const adminRecoverResponseSchema = z
-  .object({
-    recovered: z.array(recoveredOrderSchema),
-    skipped: z.array(skippedOrderSchema),
-  })
   .strict();
 
 /**

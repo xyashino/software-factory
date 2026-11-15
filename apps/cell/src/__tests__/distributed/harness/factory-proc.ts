@@ -23,7 +23,6 @@ const SOCKET = 'factory.sock';
 export const SUITE_TIMING = {
   leaseTtlMs: 3_000,
   heartbeatMs: 300,
-  reaperMs: 200,
   selfFenceMs: 2_000,
   claimTickMs: 100,
 } as const;

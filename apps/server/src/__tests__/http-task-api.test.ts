@@ -9,20 +9,17 @@ import type {
   ProjectId,
   StationId,
 } from '@repo/factory-core/ids';
-import { fakePrState } from '@repo/factory-core/testing';
 import {
   openRuntime,
   type OpenedRuntime,
 } from '@repo/factory-runtime/open-runtime';
 import { seedProject } from '@repo/factory-runtime/seed';
 import { pinnableLine } from '@repo/factory-runtime/task-api';
-import { gitMirror } from '../adapters/git-mirror';
 import { createHttpApp } from '../http/app';
-import { createFixtureRepo, todoFile } from './e2e/fixture-repo';
 
 /**
  * The task API (PROTOCOL §3.3): Work orders and Order Plans are created over HTTP with a pinned Line in the
- * body. The server holds no repo definition for them: the repo below has no `.factory/` and no todo to intake.
+ * body. The server holds no repo definition for them: the project's repository is only a URL it records.
  */
 
 const PROJECT = 'software-factory' as ProjectId;
@@ -41,17 +38,11 @@ beforeEach(async () => {
   root = mkdtempSync(join(tmpdir(), 'factory-http-task-api-'));
   const dataDir = join(root, 'data');
   mkdirSync(dataDir);
-  // A git commit needs one file; a `done` todo is not intake's to create, and the API never reads todos.
-  const repo = await createFixtureRepo(join(root, 'repo'), {
-    placeholder: todoFile({ title: 'Placeholder', status: 'done' }),
+  seedProject(dataDir, {
+    projectId: PROJECT,
+    repoUrl: 'https://example.test/software-factory.git',
   });
-  seedProject(dataDir, { projectId: PROJECT, repoUrl: repo });
-  opened = openRuntime({
-    dataDir,
-    git: gitMirror({ mirrorsDir: join(dataDir, 'mirrors') }),
-    prState: fakePrState(),
-    config: { intakePollMs: 0, prPollMs: 0 },
-  });
+  opened = openRuntime({ dataDir });
   await opened.runtime.start();
   app = createHttpApp(opened.runtime);
 });
