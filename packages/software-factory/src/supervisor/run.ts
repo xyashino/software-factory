@@ -4,7 +4,7 @@ import { nextAction } from '../engine/next-action';
 import { reduce } from '../engine/reduce';
 import type { TaskState } from '../engine/state';
 import type { TaskRow } from '../ports/store.port';
-import { supervisorLogPath } from '../paths';
+import { localDir, supervisorLogPath } from '../paths';
 import { plainPaint, type Paint } from '../paint';
 import { transitionLines } from './console-lines';
 import { execute } from './execute';
@@ -73,7 +73,7 @@ export const appendSupervisorLog = (
 
 export const appendGlobalSupervisorLog = (root: string, line: string): void => {
   try {
-    const dir = join(root, '.factory');
+    const dir = localDir(root);
     mkdirSync(dir, { recursive: true });
     appendFileSync(join(dir, 'supervisor.log'), `${line}\n`);
   } catch {

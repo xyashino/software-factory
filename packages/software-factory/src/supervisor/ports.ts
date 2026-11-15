@@ -55,7 +55,7 @@ export interface WorkspaceRegistry {
 
 /** Everything the supervisor touches. Tests pass fakes; the CLI passes adapters. */
 export interface SupervisorPorts {
-  /** the main checkout: owns `.factory`, `.evidences` and `.worktrees` */
+  /** the main checkout: owns `.factory-local`, `.evidences` and `.worktrees` */
   root: string;
   definitions: Definitions;
   store: StorePort;

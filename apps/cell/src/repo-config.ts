@@ -8,8 +8,14 @@ import {
   type PartialConfig,
 } from './config';
 
-/** The repository's Cell config, relative to its root: `<repo>/.factory/cell.toml`. */
+/** The repository's committed Cell config, relative to its root: `<repo>/.factory/cell.toml`. */
 export const REPO_CONFIG_FILE = join('.factory', 'cell.toml');
+
+/**
+ * The machine-local Cell config, relative to the repository root: `<repo>/.factory-local/cell.toml`. It is
+ * gitignored and overrides the committed `.factory/cell.toml` key by key.
+ */
+export const LOCAL_CONFIG_FILE = join('.factory-local', 'cell.toml');
 
 /**
  * The repository a Cell runs in: the nearest directory at or above `start` that holds a `.factory/` or a
@@ -47,8 +53,10 @@ export interface LoadedConfig {
   config: CellConfig;
   /** the user's config file, which may not exist */
   userPath: string;
-  /** the repository config applied over the user's, when the repo has one */
+  /** the committed repository config applied over the user's, when the repo has one */
   repoPath?: string;
+  /** the machine-local repository config applied over the rest, when the repo has one */
+  localPath?: string;
 }
 
 export interface LoadOptions {
@@ -60,26 +68,36 @@ export interface LoadOptions {
 }
 
 /**
- * The Cell's config for a run in a repository (PROTOCOL §2, §10). `<repo>/.factory/cell.toml` overrides
- * `~/.config/factory-cell/config.toml` key by key. A repository is `--repo-dir`, or else the one the
- * working directory is in. With no repository, or none with a `cell.toml`, only the user's file applies.
+ * The Cell's config for a run in a repository (PROTOCOL §2, §10). Three layers, each key by key over the
+ * one before: `~/.config/factory-cell/config.toml`, then `<repo>/.factory/cell.toml`, then
+ * `<repo>/.factory-local/cell.toml`. A repository is `--repo-dir`, or else the one the working directory is
+ * in. A layer that is absent is skipped; with no repository only the user's file applies.
  */
 export const loadCellConfig = (options: LoadOptions): LoadedConfig => {
   const userPath = configPath(options.env);
-  const user = readPartialConfig(userPath);
   const root =
     options.repoDir !== undefined
       ? resolve(options.repoDir)
       : findRepoRoot(options.cwd ?? process.cwd());
-  const candidate =
-    root === undefined ? undefined : join(root, REPO_CONFIG_FILE);
-  if (candidate === undefined || !existsSync(candidate)) {
-    return { config: toCellConfig(user), userPath };
+  const repoPath = existingFile(root, REPO_CONFIG_FILE);
+  const localPath = existingFile(root, LOCAL_CONFIG_FILE);
+
+  let config = readPartialConfig(userPath);
+  if (repoPath !== undefined) {
+    config = mergeConfigs(config, readPartialConfig(repoPath));
   }
-  const repo = readPartialConfig(candidate);
-  return {
-    config: toCellConfig(mergeConfigs(user, repo)),
-    userPath,
-    repoPath: candidate,
-  };
+  if (localPath !== undefined) {
+    config = mergeConfigs(config, readPartialConfig(localPath));
+  }
+  return { config: toCellConfig(config), userPath, repoPath, localPath };
+};
+
+/** `<root>/<file>` when the repository root is known and the file exists there; undefined otherwise. */
+const existingFile = (
+  root: string | undefined,
+  file: string,
+): string | undefined => {
+  if (root === undefined) return undefined;
+  const candidate = join(root, file);
+  return existsSync(candidate) ? candidate : undefined;
 };

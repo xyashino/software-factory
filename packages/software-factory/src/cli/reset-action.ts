@@ -9,7 +9,7 @@ import {
 import { join } from 'node:path';
 import { splitFrontmatter } from '../definitions/frontmatter';
 import { colorPaint, type Paint } from '../paint';
-import { storePath, supervisorLockPath } from '../paths';
+import { localDir, storePath, supervisorLockPath } from '../paths';
 import { acquireSupervisorLock, type SupervisorLock } from '../supervisor/lock';
 import { resolveRoot } from '../supervisor/wire';
 
@@ -88,7 +88,7 @@ const clearSqliteStore = (root: string): boolean => {
 };
 
 const clearSupervisorLog = (root: string): boolean => {
-  const logFile = join(root, '.factory', 'supervisor.log');
+  const logFile = join(localDir(root), 'supervisor.log');
   if (existsSync(logFile)) {
     rmSync(logFile, { force: true });
     return true;
@@ -246,7 +246,7 @@ export const runReset = async (
     const result = performReset(root, options);
     console.log(paint.green('Software factory reset complete:'));
     console.log(`  • Cleared SQLite store (${storePath(root)}*)`);
-    console.log(`  • Cleared supervisor log (.factory/supervisor.log)`);
+    console.log(`  • Cleared supervisor log (.factory-local/supervisor.log)`);
     if (options.hard !== false) {
       console.log(
         '  • Removed worktrees (.worktrees/) and pruned git worktrees',

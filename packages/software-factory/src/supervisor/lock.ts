@@ -121,7 +121,7 @@ export const processIsAlive = (pid: number): boolean => {
 };
 
 /**
- * Take the exclusive `.factory/supervisor.lock`. A lock whose pid no longer
+ * Take the exclusive `.factory-local/supervisor.lock`. A lock whose pid no longer
  * exists is stale and taken over; a live holder is reported back.
  */
 export const acquireSupervisorLock = (
