@@ -631,6 +631,12 @@ The Cell reads `<repo>/.factory/cell.toml` when it runs inside a repository (`--
 repository the working directory is in). Its keys override `~/.config/factory-cell/config.toml` key by key;
 `projects` is replaced, not merged. The Cell logs `factory-cell: config from <path>` when it applies one.
 
+`<repo>/.factory-local/cell.toml`, when present, overrides both key by key: the order is
+`~/.config/factory-cell/config.toml` < `<repo>/.factory/cell.toml` < `<repo>/.factory-local/cell.toml`.
+`.factory-local/` is gitignored. It holds machine-local overrides (`factory_data_dir`, `cell_data_dir`,
+`factory_url`) and the machine's runtime state (the software-factory SQLite store, `supervisor.lock`,
+`supervisor.log`, `workspaces.json`). `.factory/` holds only the committed repository definitions.
+
 `factory plan ls` and `factory plan status` are read operations (§3.1) and support `--json`. `plan
 status` prints one line per member, for example
 `wo-1 [merged] -> wo-2 [delivered, PR into factory/wo-1] -> wo-3 [running]`, then the plan PR and the

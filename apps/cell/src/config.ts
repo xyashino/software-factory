@@ -26,7 +26,7 @@ const REMOVED_SLOTS_MESSAGE =
 const DEFAULT_WORKTREE_LIMIT = 8;
 
 /**
- * Every key of a config file, with no defaults: a file (or a repo's `.factory/cell.toml`) sets only the
+ * Every key of a config file, with no defaults: a file (or a repo's `.factory/cell.toml` or `.factory-local/cell.toml`) sets only the
  * keys it names. Unknown keys and wrong types are refused.
  */
 const partialConfigSchema = z

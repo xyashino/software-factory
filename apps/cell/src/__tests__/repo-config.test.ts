@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { projectIdSchema } from '@repo/factory-core/ids';
 import {
   findRepoRoot,
+  LOCAL_CONFIG_FILE,
   loadCellConfig,
   mergeConfigs,
   REPO_CONFIG_FILE,
@@ -142,6 +143,56 @@ describe('loadCellConfig', () => {
 
     expect(loaded.config.worktreeLimit).toBe(8);
     expect(loaded.repoPath).toBeUndefined();
+  });
+
+  it('layers the local cell.toml over the repo file over the user file, key by key', () => {
+    const root = repoWith(
+      'layered',
+      'worktree_limit = 2\nrunners = ["repo"]\n',
+    );
+    mkdirSync(join(root, '.factory-local'), { recursive: true });
+    writeFileSync(
+      join(root, LOCAL_CONFIG_FILE),
+      'worktree_limit = 9\nfactory_url = "http://local"\n',
+    );
+    const loaded = loadCellConfig({
+      env: userEnv('worktree_limit = 5\ncell_data_dir = "/user"\n'),
+      cwd: root,
+    });
+
+    expect(loaded.config).toMatchObject({
+      worktreeLimit: 9,
+      runners: ['repo'],
+      factoryUrl: 'http://local',
+      cellDataDir: '/user',
+    });
+    expect(loaded.repoPath).toBe(join(root, REPO_CONFIG_FILE));
+    expect(loaded.localPath).toBe(join(root, LOCAL_CONFIG_FILE));
+  });
+
+  it('applies a local cell.toml alone, over the user file, when the repo has no committed one', () => {
+    const root = repoWith('local-only');
+    mkdirSync(join(root, '.factory-local'), { recursive: true });
+    writeFileSync(join(root, LOCAL_CONFIG_FILE), 'cell_data_dir = "/local"\n');
+    const loaded = loadCellConfig({
+      env: userEnv('worktree_limit = 5\n'),
+      cwd: root,
+    });
+
+    expect(loaded.config).toMatchObject({
+      cellDataDir: '/local',
+      worktreeLimit: 5,
+    });
+    expect(loaded.repoPath).toBeUndefined();
+    expect(loaded.localPath).toBe(join(root, LOCAL_CONFIG_FILE));
+  });
+
+  it('leaves localPath unset when the repo has no local cell.toml', () => {
+    const root = repoWith('no-local', 'worktree_limit = 4\n');
+    const loaded = loadCellConfig({ env: userEnv(), cwd: root });
+
+    expect(loaded.config.worktreeLimit).toBe(4);
+    expect(loaded.localPath).toBeUndefined();
   });
 
   it('refuses an unknown key in the repo file and names that file', () => {

@@ -101,7 +101,8 @@ describe.each(BINARIES)('CLI subprocess via %s', (binary) => {
         event: { type: 'delivered', prUrl: 'https://example.test/pr/1' },
       }),
     ]);
-  });
+    // Three bun subprocesses; under turbo's parallel load this has taken ~7s.
+  }, 30_000);
 
   it('refuses done outside an agent pane with a clear message', () => {
     const root = mkdtempSync(join(tmpdir(), 'sf-cli-'));
@@ -176,7 +177,7 @@ describe.each(BINARIES)('CLI subprocess via %s', (binary) => {
 
   it('refuses a second sf run while a live holder owns the lock and leaves the store alone', () => {
     const root = mkdtempSync(join(tmpdir(), 'sf-cli-'));
-    mkdirSync(join(root, '.factory'), { recursive: true });
+    mkdirSync(join(root, '.factory-local'), { recursive: true });
     writeFileSync(
       supervisorLockPath(root),
       JSON.stringify({
@@ -203,9 +204,9 @@ describe.each(BINARIES)('CLI subprocess via %s', (binary) => {
 
   it('resets software factory state through reset command', () => {
     const root = mkdtempSync(join(tmpdir(), 'sf-cli-'));
-    mkdirSync(join(root, '.factory'), { recursive: true });
+    mkdirSync(join(root, '.factory-local'), { recursive: true });
     mkdirSync(join(root, 'todos'), { recursive: true });
-    writeFileSync(join(root, '.factory', 'supervisor.log'), 'log\n');
+    writeFileSync(join(root, '.factory-local', 'supervisor.log'), 'log\n');
     writeFileSync(
       join(root, 'todos', 'item.md'),
       '---\nstatus: delivered\n---\n# Item\n',
@@ -230,7 +231,9 @@ describe.each(BINARIES)('CLI subprocess via %s', (binary) => {
     expect(result.code).toBe(0);
     expect(result.out).toContain('Software factory reset complete');
     expect(existsSync(storePath(root))).toBe(false);
-    expect(existsSync(join(root, '.factory', 'supervisor.log'))).toBe(false);
+    expect(existsSync(join(root, '.factory-local', 'supervisor.log'))).toBe(
+      false,
+    );
     expect(existsSync(join(root, 'todos', 'item.md'))).toBe(false);
     expect(readFileSync(join(root, 'todos', 'parked.md'), 'utf8')).toContain(
       'status: todo',

@@ -130,6 +130,7 @@ flowchart LR
 - **Each repository** owns its definitions in `.factory/` at its root (`lines/`, `operators/`,
   `templates/prompts/`, `templates/pr/`), next to `.nitpick/` (`rules` and `skills`). A repo's `.factory/` is
   validated against its `.nitpick/` when that catalog is present (`loadRepoDefinitions`).
+- Machine-local runtime state and overrides live in `.factory-local/` (gitignored), never in `.factory/`.
 - **The Cell** reads `.factory/` and `.nitpick/` from the worktree of the job. It resolves the Operator profile,
   the declared rules and skills, and renders the Cycle and Mechanic prompts and the PR body on the Cell. A repo
   whose `.factory/` is missing or invalid fails the job with a diagnostic; nothing is guessed.

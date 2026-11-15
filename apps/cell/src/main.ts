@@ -120,8 +120,10 @@ const main = async (): Promise<void> => {
     cwd: process.cwd(),
   });
   const config = loaded.config;
-  if (loaded.repoPath !== undefined) {
-    console.log(`factory-cell: config from ${loaded.repoPath}`);
+  for (const applied of [loaded.repoPath, loaded.localPath]) {
+    if (applied !== undefined) {
+      console.log(`factory-cell: config from ${applied}`);
+    }
   }
   const baseCellDataDir = config.cellDataDir ?? cellDataDirOf(env);
   const instanceClaim = claimInstanceDir(baseCellDataDir);

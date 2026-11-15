@@ -215,13 +215,18 @@ All paths are built by `src/paths.ts` from `FACTORY_ROOT` (the repo root).
 ├── todos/                                   INPUT, committed: one todo per file
 │   └── <taskId>.md
 │
+├── .factory-local/                          git-ignored: runtime state, machine-local overrides
+│   ├── software-factory.sqlite              SQLite store (+ -wal, -shm)
+│   ├── supervisor.lock                      exclusive lock of the one running `sf run`
+│   ├── supervisor.log                       the supervisor's own log
+│   └── workspaces.json                      the task workspace registry
+│
 ├── .worktrees/                              git-ignored
 │   └── <taskId>/                            the task's git worktree, branch <type>/<taskId>
 │
 └── .evidences/                              git-ignored
-    ├── factory.db                           SQLite store (+ -wal, -shm)
-    ├── supervisor.log                       the supervisor's own log
     └── <taskId>/
+        ├── supervisor.log                   the task's live supervisor log
         ├── setup.log
         └── <attemptId>/                     <stepId>-<n>, e.g. build-2, quality-gate-1, operator-1
             ├── prompt.md                    exact prompt sent (agent steps)

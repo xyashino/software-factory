@@ -31,7 +31,8 @@ describe('write-mutex spike: a foreign statement and an open write transaction',
     const outer = async (): Promise<void> => {
       db.exec('BEGIN IMMEDIATE');
       insert(db, 'outer');
-      await pause(20);
+      // Wide window: the foreign write (5 ms) must land well before the rollback under load.
+      await pause(200);
       db.exec('ROLLBACK');
     };
     const foreign = async (): Promise<void> => {
@@ -48,7 +49,8 @@ describe('write-mutex spike: a foreign statement and an open write transaction',
     const db = openTable();
     const outer = async (): Promise<void> => {
       db.exec('BEGIN IMMEDIATE');
-      await pause(20);
+      // Wide window: the second BEGIN (5 ms) must land while this transaction is still open.
+      await pause(200);
       db.exec('COMMIT');
     };
     const second = async (): Promise<string | undefined> => {

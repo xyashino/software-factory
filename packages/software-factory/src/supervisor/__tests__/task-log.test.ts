@@ -42,7 +42,7 @@ describe('task supervisor log', () => {
       'utf8',
     );
     const globalLog = readFileSync(
-      join(root, '.factory', 'supervisor.log'),
+      join(root, '.factory-local', 'supervisor.log'),
       'utf8',
     );
     expect(taskLog).toContain(ESC);

@@ -9,13 +9,13 @@ import { createProcessAdapter } from '../adapters/system/process.adapter';
 import { createSystemAdapter } from '../adapters/system/system.adapter';
 import { loadDefinitions } from '../definitions/load';
 import type { Definitions } from '../definitions/types';
-import { PACKAGE_ROOT, storePath } from '../paths';
+import { localDir, PACKAGE_ROOT, storePath } from '../paths';
 import { createDeliverer } from './deliver';
 import type { SupervisorPorts } from './ports';
 import { FileWorkspaceRegistry } from './workspace-registry';
 
 /**
- * The main checkout that owns `.factory`, `.evidences` and `.worktrees`. Inside a
+ * The main checkout that owns `.factory-local`, `.evidences` and `.worktrees`. Inside a
  * worktree this resolves to the main checkout through git's common directory.
  */
 export const resolveRoot = (
@@ -74,7 +74,7 @@ export const openSupervisorPorts = (
     }),
     github,
     workspaces: new FileWorkspaceRegistry(
-      join(root, '.factory', 'workspaces.json'),
+      join(localDir(root), 'workspaces.json'),
     ),
     pathEnv: Bun.env.PATH ?? '',
     baseRef,
