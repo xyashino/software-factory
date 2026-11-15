@@ -2,7 +2,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Job } from '@repo/factory-core/contracts/job';
 import { workspaceOf } from '../jobs/job-shape';
-import { ensureMirror, GIT_TIMEOUT_MS } from './mirror';
+import { ensureMirror, GIT_TIMEOUT_MS, withMirrorLock } from './mirror';
 import { syncAndSetup } from './cache';
 import { pickEvictions, USED_MARKER } from './lru';
 import {
@@ -32,6 +32,11 @@ export interface PrepareContext {
   worktreeLimit: number;
   /** Worktree paths a job is using right now; eviction never removes one of them. */
   inUse: Set<string>;
+  /**
+   * Fetch the remote even when a pinned base is already in the mirror. Deliver sets it: its push lease reads
+   * the remote's branch tip from the mirror, which only a fetch brings up to date.
+   */
+  alwaysFetch?: boolean;
 }
 
 export type PrepareResult =
@@ -66,18 +71,27 @@ export const prepareWorkspace = async (
   const note = (run: ShellRun): void => {
     transcript.push(encoder.encode(`$ ${run.command}\n`), run.output);
   };
-  const fail = (stage: WorkspaceStage, detail: string): PrepareResult => ({
-    ok: false,
-    stage,
-    detail,
-    log: concatBytes(transcript),
-  });
+  // The worktree is claimed from the moment it is placed, so no eviction by another Job removes it during setup.
+  const claim: { worktree?: string } = {};
+  const fail = (stage: WorkspaceStage, detail: string): PrepareResult => {
+    if (claim.worktree !== undefined) ctx.inUse.delete(claim.worktree);
+    return {
+      ok: false,
+      stage,
+      detail,
+      log: concatBytes(transcript),
+    };
+  };
   const workspace = workspaceOf(job);
   const timeoutMs = workspace.timeoutMs;
 
+  // A pinned base already in the mirror needs no remote fetch (ensureMirror checks); a branch base always fetches.
   const mirror = await ensureMirror(ctx.shell, {
     cellDataDir: ctx.cellDataDir,
     url: job.repo.url,
+    ...(typeof job.base === 'string' && ctx.alwaysFetch !== true
+      ? { commit: job.base }
+      : {}),
   });
   if (!mirror.ok) {
     transcript.push(mirror.output);
@@ -121,12 +135,18 @@ export const prepareWorkspace = async (
     );
   }
 
-  const placed = await ensureWorktree(ctx.shell, {
-    mirror: mirror.path,
-    path: worktree,
-    commit,
-    timeoutMs: GIT_TIMEOUT_MS,
-  });
+  claim.worktree = worktree;
+  ctx.inUse.add(worktree);
+
+  // Worktree records live in the mirror, so their writes share the mirror lock.
+  const placed = await withMirrorLock(mirror.path, () =>
+    ensureWorktree(ctx.shell, {
+      mirror: mirror.path,
+      path: worktree,
+      commit,
+      timeoutMs: GIT_TIMEOUT_MS,
+    }),
+  );
   if (placed) {
     note(placed);
     return fail('worktree', describeFailure(placed, GIT_TIMEOUT_MS));
@@ -155,7 +175,6 @@ export const prepareWorkspace = async (
 
   mkdirSync(join(worktree, '.cell'), { recursive: true });
   writeFileSync(join(worktree, USED_MARKER), '');
-  ctx.inUse.add(worktree);
 
   try {
     const evicted = pickEvictions({
@@ -163,13 +182,15 @@ export const prepareWorkspace = async (
       limit: ctx.worktreeLimit,
       keep: ctx.inUse,
     });
-    for (const path of evicted) {
-      await removeWorktree(ctx.shell, {
-        mirror: mirror.path,
-        path,
-        timeoutMs: GIT_TIMEOUT_MS,
-      });
-    }
+    await withMirrorLock(mirror.path, async () => {
+      for (const path of evicted) {
+        await removeWorktree(ctx.shell, {
+          mirror: mirror.path,
+          path,
+          timeoutMs: GIT_TIMEOUT_MS,
+        });
+      }
+    });
   } catch {
     // Eviction is housekeeping: a failure leaves one worktree too many, and the job goes on.
   }

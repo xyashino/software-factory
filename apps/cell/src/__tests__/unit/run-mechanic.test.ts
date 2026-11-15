@@ -9,7 +9,7 @@ import { jobSchema, type Job } from '@repo/factory-core/contracts/job';
 import type { CellId } from '@repo/factory-core/ids';
 import { createSystemAdapter } from '../../adapters/system/system.adapter';
 import { runMechanic, type MechanicDeps } from '../../jobs/run-mechanic';
-import { prepareWorkspace } from '../../workspace';
+import { prepareWorkspace } from '../../workspace/prepare';
 import {
   createHerdrPane,
   type HerdrExec,
@@ -369,11 +369,22 @@ describe('the Mechanic job run (CORE §14.3, §14.4)', () => {
       },
     });
 
-    const result = await prepareWorkspace({ job, dataDir: cellDataDir });
+    const result = await prepareWorkspace(
+      {
+        shell: {
+          system: createSystemAdapter(),
+          logDir: join(cellDataDir, 'logs', job.jobId),
+        },
+        cellDataDir,
+        worktreeLimit: 8,
+        inUse: new Set(),
+      },
+      job,
+    );
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.base).toBe(head);
+    expect(result.head).toBe(head);
     expect(result.worktree).toContain('worktrees');
   });
 

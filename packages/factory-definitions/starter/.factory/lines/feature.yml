@@ -4,10 +4,6 @@ name: feature
 description: Plan, review the plan, build behind a quality gate, then audit
 
 workspace:
-  sync:
-    timeout: 2m
-    exec:
-      - git fetch origin
   setup:
     timeout: 10m
     exec:

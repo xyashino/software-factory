@@ -33,7 +33,8 @@ import { createHeartbeat } from '../../loops/heartbeat';
 import { runGit } from '../../git';
 import type { PaneDriver } from '../../ports';
 import { spawnHeadless } from '../../runners/headless';
-import { prepareWorkspace } from '../../workspace';
+import { createSystemAdapter } from '../../adapters/system/system.adapter';
+import { prepareWorkspace } from '../../workspace/prepare';
 import { commitOf, must } from '../helpers/git';
 import { commitFactoryTo } from '../../testing/factory-fixture';
 
@@ -187,7 +188,18 @@ const depsFor = (
     sleep,
     git: runGit,
     workspace: (current) =>
-      prepareWorkspace({ job: current, dataDir: cellDir }),
+      prepareWorkspace(
+        {
+          shell: {
+            system: createSystemAdapter(),
+            logDir: join(cellDir, 'logs', current.jobId),
+          },
+          cellDataDir: cellDir,
+          worktreeLimit: 8,
+          inUse: new Set(),
+        },
+        current,
+      ),
     runners: { [runner]: launch },
     spawn: spawnHeadless,
     timing: { ...FAST, ...options.timing },

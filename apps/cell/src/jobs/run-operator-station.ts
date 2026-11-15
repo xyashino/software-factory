@@ -56,7 +56,7 @@ import type {
   RunGit,
   SpawnHeadless,
 } from '../ports';
-import type { WorkspaceResult } from '../workspace';
+import type { PrepareResult } from '../workspace/prepare';
 import { getBlob, putBlob } from './blobs';
 import { todoOf } from './job-shape';
 import { logCommandOf } from './pane-commands';
@@ -93,7 +93,7 @@ export interface StationDeps {
   clock: Clock;
   sleep: (ms: number) => Promise<void>;
   git: RunGit;
-  workspace: (job: Job) => Promise<WorkspaceResult>;
+  workspace: (job: Job) => Promise<PrepareResult>;
   runners: Readonly<Record<string, RunnerLaunch>>;
   spawn: SpawnHeadless;
   pane?: PaneDriver;
@@ -273,7 +273,7 @@ export const runOperatorStation = async (
   );
   const started = await submit('start', {
     type: 'StartCycle',
-    baseCommit: ws.base,
+    baseCommit: ws.head as CommitSha,
     operator: {
       profile: operator.profile,
       runner: operator.runner,

@@ -83,10 +83,9 @@ describe('shipped definitions', () => {
     }
   });
 
-  it('prepare every line workspace before any station: fetch origin, then install', () => {
+  it('prepare every line workspace with setup only: the Cell fetches the mirror itself', () => {
     for (const { line } of definitions().lines.values()) {
-      expect(line.workspace.sync?.exec).toEqual(['git fetch origin']);
-      expect(line.workspace.sync?.timeoutMs).toBe(120_000);
+      expect(line.workspace.sync).toBeUndefined();
       expect(line.workspace.setup.exec).toEqual([
         'pnpm install --frozen-lockfile',
       ]);

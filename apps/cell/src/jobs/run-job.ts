@@ -12,7 +12,7 @@ import { createRegistry } from '../cycle/registry';
 import { runGit } from '../git';
 import { cycleDirName } from '../names';
 import { spawnHeadless } from '../runners/headless';
-import { prepareWorkspace } from '../workspace';
+import { prepareWorkspace } from '../workspace/prepare';
 import { runDeliver } from './deliver';
 import { runPlanJob } from './plan';
 import { runInspection } from './run-inspection';
@@ -120,27 +120,48 @@ export const runJob = async (
         return continuation;
       case 'run_operator_station': {
         const station = ctx.headlessOperators ? asHeadless(job) : job;
-        return await runOperatorStation(station, {
-          client: ctx.client,
-          cellId: ctx.cellId,
-          dataDir: ctx.cellDataDir,
-          clock: { now: () => Date.now() },
-          sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
-          git: runGit,
-          workspace: (current) =>
-            prepareWorkspace({ job: current, dataDir: ctx.cellDataDir }),
-          runners: runnersFor(station, ctx.cellDataDir),
-          spawn: spawnHeadless,
-          ...(ctx.pane ? { pane: ctx.pane } : {}),
-          timing: {
-            tickMs: STATION_TICK_MS,
-            questionHoldMs: QUESTION_HOLD_MS,
-            handoverGraceMs: HANDOVER_GRACE_MS,
-          },
-          registry: ctx.stations ?? createRegistry(),
-          signal,
-          takeSignals: () => ctx.takeSignals?.(job.jobId) ?? [],
-        });
+        // The station's worktree is claimed while the station runs, so eviction keeps it (see `inUse`).
+        let claimed: string | undefined;
+        try {
+          return await runOperatorStation(station, {
+            client: ctx.client,
+            cellId: ctx.cellId,
+            dataDir: ctx.cellDataDir,
+            clock: { now: () => Date.now() },
+            sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+            git: runGit,
+            workspace: async (current) => {
+              const prepared = await prepareWorkspace(
+                {
+                  shell: {
+                    system: ctx.system,
+                    logDir: join(ctx.cellDataDir, 'logs', current.jobId),
+                    signal,
+                  },
+                  cellDataDir: ctx.cellDataDir,
+                  worktreeLimit: ctx.worktreeLimit,
+                  inUse: ctx.inUse,
+                },
+                current,
+              );
+              if (prepared.ok) claimed = prepared.worktree;
+              return prepared;
+            },
+            runners: runnersFor(station, ctx.cellDataDir),
+            spawn: spawnHeadless,
+            ...(ctx.pane ? { pane: ctx.pane } : {}),
+            timing: {
+              tickMs: STATION_TICK_MS,
+              questionHoldMs: QUESTION_HOLD_MS,
+              handoverGraceMs: HANDOVER_GRACE_MS,
+            },
+            registry: ctx.stations ?? createRegistry(),
+            signal,
+            takeSignals: () => ctx.takeSignals?.(job.jobId) ?? [],
+          });
+        } finally {
+          if (claimed !== undefined) ctx.inUse.delete(claimed);
+        }
       }
       case 'mechanic': {
         // A Mechanic job runs in a Herdr pane, never headless.

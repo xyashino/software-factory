@@ -11,6 +11,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Job } from '@repo/factory-core/contracts/job';
 import { createSystemAdapter } from '../adapters/system/system.adapter';
+import type { SystemPort } from '../ports/system.port';
 import {
   ensureMirror,
   excludeCellDir,
@@ -204,6 +205,122 @@ describe('workspace prepare', () => {
     await prepareWorkspace(context, jobWith('other'));
 
     expect(first.ok && existsSync(first.worktree)).toBe(true);
+  });
+});
+
+describe('workspace shared by every job of a Work order', () => {
+  it('gives every job of one Work order the same worktree', async () => {
+    const operator = await prepareWorkspace(contextWith(), jobWith('todo-9'));
+    const inspection = await prepareWorkspace(contextWith(), jobWith('todo-9'));
+
+    expect(operator.ok && inspection.ok).toBe(true);
+    if (!operator.ok || !inspection.ok) return;
+    expect(inspection.worktree).toBe(operator.worktree);
+  });
+
+  it('places two Work orders of one repo at once on a fresh Cell, both ok', async () => {
+    // Both prepares clone the mirror; the mirror lock runs them in turn, so the second sees the first clone.
+    const [first, second] = await Promise.all([
+      prepareWorkspace(contextWith(), jobWith('par-a')),
+      prepareWorkspace(contextWith(), jobWith('par-b')),
+    ]);
+
+    expect(first.ok && second.ok).toBe(true);
+  });
+
+  it('reports a failing sync at the sync stage', async () => {
+    const prepared = await prepareWorkspace(
+      contextWith(),
+      jobWith('todo-10', [], ['exit 2']),
+    );
+
+    expect(prepared.ok).toBe(false);
+    if (prepared.ok) return;
+    expect(prepared.stage).toBe('sync');
+  });
+
+  it('resets an existing worktree to the base and removes leftovers', async () => {
+    const first = await prepareWorkspace(contextWith(), jobWith('todo-11'));
+    if (!first.ok) throw new Error(first.detail);
+    writeFileSync(join(first.worktree, 'leftover.md'), 'from the last Cycle');
+
+    const again = await prepareWorkspace(contextWith(), jobWith('todo-11'));
+
+    expect(again.ok).toBe(true);
+    expect(existsSync(join(first.worktree, 'leftover.md'))).toBe(false);
+  });
+});
+
+describe('fetch of the remote', () => {
+  /** A system port that records every command it runs, and runs it for real. */
+  const recordingSystem = () => {
+    const real = createSystemAdapter();
+    const commands: string[] = [];
+    const system: SystemPort = {
+      ...real,
+      run: (input) => {
+        commands.push(input.command);
+        return real.run(input);
+      },
+    };
+    return {
+      commands,
+      context: contextWith({
+        shell: { system, logDir: join(cellDataDir, 'logs', 'fetch') },
+      }),
+    };
+  };
+  const fetches = (commands: readonly string[]): number =>
+    commands.filter((command) => command.includes("'fetch'")).length;
+
+  it('skips the fetch when a pinned base is already in the mirror', async () => {
+    const head = git(origin, 'rev-parse', 'HEAD');
+    await prepareWorkspace(contextWith(), jobWith('pin-1'));
+    const recorded = recordingSystem();
+
+    const prepared = await prepareWorkspace(recorded.context, {
+      ...jobWith('pin-1'),
+      base: head,
+    } as unknown as Job);
+
+    expect(prepared).toMatchObject({ ok: true, head });
+    expect(fetches(recorded.commands)).toBe(0);
+  });
+
+  it('fetches when a pinned base is not in the mirror yet', async () => {
+    await prepareWorkspace(contextWith(), jobWith('pin-2'));
+    const next = commitFile(origin, 'pinned.txt', 'pinned\n');
+    const recorded = recordingSystem();
+
+    const prepared = await prepareWorkspace(recorded.context, {
+      ...jobWith('pin-2'),
+      base: next,
+    } as unknown as Job);
+
+    expect(prepared).toMatchObject({ ok: true, head: next });
+    expect(fetches(recorded.commands)).toBe(1);
+  });
+
+  it('fetches for a pinned base when the caller always fetches (deliver)', async () => {
+    const head = git(origin, 'rev-parse', 'HEAD');
+    await prepareWorkspace(contextWith(), jobWith('pin-3'));
+    const recorded = recordingSystem();
+
+    await prepareWorkspace({ ...recorded.context, alwaysFetch: true }, {
+      ...jobWith('pin-3'),
+      base: head,
+    } as unknown as Job);
+
+    expect(fetches(recorded.commands)).toBe(1);
+  });
+
+  it('always fetches for a branch base', async () => {
+    await prepareWorkspace(contextWith(), jobWith('branch-1'));
+    const recorded = recordingSystem();
+
+    await prepareWorkspace(recorded.context, jobWith('branch-1'));
+
+    expect(fetches(recorded.commands)).toBe(1);
   });
 });
 

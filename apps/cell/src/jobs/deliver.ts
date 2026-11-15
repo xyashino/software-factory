@@ -76,6 +76,8 @@ export const runDeliver = async (
       cellDataDir: ctx.cellDataDir,
       worktreeLimit: ctx.worktreeLimit,
       inUse: ctx.inUse,
+      // The push lease reads the remote tip from the mirror: deliver always fetches.
+      alwaysFetch: true,
     },
     job,
   );
