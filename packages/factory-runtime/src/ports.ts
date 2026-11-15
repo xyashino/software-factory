@@ -45,8 +45,6 @@ export interface RuntimeConfig {
   continuation: boolean;
   /** Timeout of an inspection command when its Line does not set one. */
   inspectionTimeoutMs: number;
-  /** Characters kept from the end of each inspection log in a prompt (PROTOCOL §4). */
-  logTailChars: number;
   /** The Operator's own CLI, listed in every prompt (PROTOCOL §3.3). */
   operatorCommands: string[];
   /**
@@ -71,7 +69,6 @@ export const DEFAULT_CONFIG: RuntimeConfig = {
   commandAttempts: 3,
   continuation: true,
   inspectionTimeoutMs: 600_000,
-  logTailChars: 12_000,
   operatorCommands: [
     'factory-operator done',
     'factory-operator verdict pass | fail --feedback <file>',

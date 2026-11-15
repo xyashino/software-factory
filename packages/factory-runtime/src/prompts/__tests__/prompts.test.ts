@@ -63,7 +63,6 @@ const firstCycleInput = async (
     budget: { retry: 0, max: 0 },
     declared: { rules: profile.rules, skills: profile.skills },
     operatorCommands: ['factory-operator done'],
-    logTailChars: 12_000,
   };
 };
 
@@ -91,10 +90,14 @@ describe('prompt rules', () => {
     );
   });
 
-  it('strips ANSI sequences and keeps only the last 12,000 characters of an inspection log', async () => {
+  it('lists only the gate commands that failed or timed out, with a run-and-fix instruction and no raw log', async () => {
     const input = await firstCycleInput('feature', 'plan');
-    const log = `\u001b[31mSTART-OF-LOG\u001b[0m${'x'.repeat(13_000)}END-OF-LOG`;
-    const logRef = `sha256:${'c'.repeat(64)}` as BlobRef;
+    const passLog = `\u001b[32mPASS-LOG-TEXT\u001b[0m\n`;
+    const failLog = `\u001b[31mFAIL-LOG-TEXT\u001b[0m\n${'x'.repeat(13_000)}`;
+    const timeoutLog = 'TIMEOUT-LOG-TEXT\n';
+    const passRef = `sha256:${'1'.repeat(64)}` as BlobRef;
+    const failRef = `sha256:${'2'.repeat(64)}` as BlobRef;
+    const timeoutRef = `sha256:${'3'.repeat(64)}` as BlobRef;
 
     const text = buildPrompt({
       ...input,
@@ -105,24 +108,50 @@ describe('prompt rules', () => {
           fromCycle: 'C000000000000000000000000A' as never,
           results: [
             {
-              command: 'pnpm test',
+              command: 'gate-passing-check',
+              exitCode: 0,
+              timedOut: false,
+              durationMs: 10,
+              tail: 'passed',
+              logBlob: passRef,
+            },
+            {
+              command: 'gate-failing-check',
               exitCode: 1,
               timedOut: false,
               durationMs: 10,
-              tail: 'tail',
-              logBlob: logRef,
+              tail: 'failed (exit 1)',
+              logBlob: failRef,
+            },
+            {
+              command: 'gate-slow-check',
+              exitCode: null,
+              timedOut: true,
+              durationMs: 300,
+              tail: 'timed out',
+              logBlob: timeoutRef,
             },
           ],
-          logBlobs: [logRef],
+          logBlobs: [passRef, failRef, timeoutRef],
         },
       },
-      blobTexts: new Map([[logRef, log]]),
+      blobTexts: new Map([
+        [passRef, passLog],
+        [failRef, failLog],
+        [timeoutRef, timeoutLog],
+      ]),
     });
 
+    expect(text).not.toContain('gate-passing-check');
+    expect(text).toContain('`gate-failing-check` (failed (exit 1))');
+    expect(text).toContain('`gate-slow-check` (timed out)');
+    expect(text.split('Quality gate check did not pass').length - 1).toBe(2);
+    expect(text).toContain('Run it in your worktree');
+    expect(text).toContain('fix them');
+    expect(text).not.toContain('PASS-LOG-TEXT');
+    expect(text).not.toContain('FAIL-LOG-TEXT');
+    expect(text).not.toContain('TIMEOUT-LOG-TEXT');
+    expect(text).not.toContain('xxxxxxxxxx');
     expect(text).not.toContain('\u001b');
-    expect(text).toContain('END-OF-LOG');
-    expect(text).not.toContain('START-OF-LOG');
-    const kept = text.split('x').length - 1;
-    expect(kept).toBeLessThanOrEqual(12_000);
   });
 });

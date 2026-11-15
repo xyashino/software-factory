@@ -16,7 +16,7 @@ export const TEMPLATE_VARS = {
   'gate-pass': ['step', 'attemptId', 'commands'],
   'context-input-path': ['ref', 'path', 'size'],
   'review-feedback': ['step', 'retry', 'max', 'feedback'],
-  'gate-feedback': ['command', 'exitCode', 'tail', 'logPath', 'retry', 'max'],
+  'gate-feedback': ['command', 'status', 'retry', 'max'],
   'reminder-idle': ['missing', 'count', 'limit'],
   'nudge-silent': ['minutes'],
   answer: ['question', 'answer'],
