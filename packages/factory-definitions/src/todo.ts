@@ -9,12 +9,17 @@ import {
   type ProjectId,
   type TodoId,
 } from '@repo/factory-core/ids';
+import { changeTypes } from '@repo/factory-core/order/events';
 import { err, ok, type Result } from '@repo/factory-core/result';
 import { zodErrors } from './errors';
 import { parseYaml, splitFrontmatter } from './frontmatter';
 
 /** The Line a todo runs in when its frontmatter names none. */
 const DEFAULT_LINE = 'feature';
+/** A change category: `feat`, `fix`, `chore`, … (the task API's `type`). */
+export type ChangeType = z.infer<typeof changeTypes>;
+/** The change category a todo takes when its frontmatter names none (branch `<type>/<id>`). */
+export const DEFAULT_TYPE: ChangeType = 'feat';
 const TODO_STATUSES = ['todo', 'done', 'cancelled'] as const;
 const PRIORITIES = ['high', 'medium', 'low'] as const;
 
@@ -64,6 +69,10 @@ export interface Todo {
   line: string;
   /** `factory: v2` marks a todo for the v2 intake during the trial (ROADMAP M9) */
   factory?: 'v2';
+  /** the change category: frontmatter `type`, else `feat` */
+  type: ChangeType;
+  /** the spec title: the first `# ` heading with its `<todoId>:` prefix removed, else the todo id */
+  title: string;
   body: string;
 }
 
@@ -90,10 +99,28 @@ const todoFrontmatter = z.object({
   workflow: z.string().min(1, 'must not be empty').optional(),
   factory: z.literal('v2', { error: 'must be v2' }).optional(),
   plan: planSlugSchema.optional(),
+  type: changeTypes.optional(),
 });
 
 /** A todo's id is its file name without `.md`, which must be a valid TodoId. */
 export const todoIdOf = (file: string): string => basename(file, '.md');
+
+/** The longest title a Work order takes (the task API's `title`, PROTOCOL §3.3). */
+const TITLE_MAX = 256;
+
+/**
+ * The spec title: the first `# ` heading of the body, with a leading `<todoId>:` removed (the repo's
+ * todo files write `# <todoId>: <title>`). Falls back to the todo id when there is no heading.
+ */
+export const titleOf = (todoId: string, body: string): string => {
+  const heading = /^# +(.+?)\s*$/m.exec(body)?.[1];
+  if (heading === undefined) return todoId;
+  const prefix = `${todoId}:`;
+  const title = heading.startsWith(prefix)
+    ? heading.slice(prefix.length).trim()
+    : heading.trim();
+  return title === '' ? todoId : title.slice(0, TITLE_MAX);
+};
 
 const unparseable = (
   file: string,
@@ -174,6 +201,8 @@ export const parseTodo = (
     ...(data.plan === undefined ? {} : { plan: data.plan }),
     line,
     ...(data.factory === undefined ? {} : { factory: data.factory }),
+    type: data.type ?? DEFAULT_TYPE,
+    title: titleOf(id.data, split.body),
     body: split.body,
   };
   return ok({ todo, diagnostics });

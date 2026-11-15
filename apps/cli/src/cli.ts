@@ -4,6 +4,9 @@ import { adminCommand } from './commands/admin';
 import { cancelCommand } from './commands/cancel';
 import { cellsCommand } from './commands/cells';
 import { checkCommand } from './commands/check';
+import { orderCommand } from './commands/order';
+import { todosCommand } from './commands/todos';
+import { initCommand } from './commands/init';
 import { answerCommand } from './commands/answer';
 import { logCommand } from './commands/log';
 import { projectCommand } from './commands/project';
@@ -37,6 +40,9 @@ const main = defineCommand({
     cells: cellsCommand,
     project: projectCommand,
     plan: planCommand,
+    init: initCommand,
+    order: orderCommand,
+    todos: todosCommand,
     check: checkCommand,
     admin: adminCommand,
   },
