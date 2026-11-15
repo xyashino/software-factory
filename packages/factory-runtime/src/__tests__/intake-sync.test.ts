@@ -326,4 +326,68 @@ describe('intake sync', () => {
       });
     });
   });
+
+  describe('intake writes', () => {
+    /** Records the todo id of every intake row written from now on. */
+    const watchWrites = (w: World): string[] => {
+      const written: string[] = [];
+      const upsert = w.intake.upsert;
+      w.intake.upsert = async (row) => {
+        written.push(row.todoId);
+        await upsert(row);
+      };
+      return written;
+    };
+
+    const files = () => [
+      { file: 'todos/active.md', text: todo({ title: 'Active', v2: true }) },
+      {
+        file: 'todos/finished.md',
+        text: todo({ title: 'Finished', status: 'done', v2: true }),
+      },
+      { file: 'todos/broken.md', text: '# no frontmatter\n' },
+    ];
+
+    it('writes nothing when the same commit is synced again', async () => {
+      const w = world();
+      w.git.setTodos(files());
+      await w.runtime.sync();
+      const written = watchWrites(w);
+
+      const [again] = await w.runtime.sync();
+
+      expect(written).toEqual([]);
+      expect(again).toMatchObject({ created: [], updated: [], cancelled: [] });
+    });
+
+    it('writes the row of a todo whose file changed', async () => {
+      const w = world();
+      w.git.setTodos(files());
+      await w.runtime.sync();
+      const written = watchWrites(w);
+      w.git.setTodos([
+        {
+          file: 'todos/active.md',
+          text: todo({ title: 'Active', body: 'Now larger.', v2: true }),
+        },
+        ...files().slice(1),
+      ]);
+
+      await w.runtime.sync();
+
+      expect(written).toContain('active');
+    });
+
+    it('writes every row again when a new commit reads the same todos', async () => {
+      const w = world();
+      w.git.setTodos(files());
+      await w.runtime.sync();
+      const written = watchWrites(w);
+      w.git.setTodos(files());
+
+      await w.runtime.sync();
+
+      expect([...written].sort()).toEqual(['active', 'broken', 'finished']);
+    });
+  });
 });

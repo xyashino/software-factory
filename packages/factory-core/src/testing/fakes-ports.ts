@@ -203,6 +203,13 @@ export const fakePrState = (): FakePrState => {
       if (!state) throw new Error(`no fake state for ${prUrl}`);
       return state;
     },
+    readMany: async (prUrls) =>
+      new Map(
+        prUrls.flatMap((prUrl) => {
+          const state = states.get(prUrl);
+          return state ? [[prUrl, state] as const] : [];
+        }),
+      ),
     setForBranch: (branch, pr) => {
       byBranch.set(branch, { ...pr });
     },

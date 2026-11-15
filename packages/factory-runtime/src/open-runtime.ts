@@ -71,6 +71,7 @@ const unconfiguredGit: GitMirror = {
 
 const unconfiguredPrState: PrStatePort = {
   read: () => Promise.reject(notConfigured('a PR state reader')),
+  readMany: () => Promise.reject(notConfigured('a PR state reader')),
   forBranch: () => Promise.reject(notConfigured('a PR state reader')),
 };
 
