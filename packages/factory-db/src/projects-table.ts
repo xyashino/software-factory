@@ -1,5 +1,5 @@
 import type { Database } from 'bun:sqlite';
-import { asc } from 'drizzle-orm';
+import { and, asc, eq, notInArray, sql } from 'drizzle-orm';
 import type { ProjectId } from '@repo/factory-core/ids';
 import type {
   ProjectPatch,
@@ -8,25 +8,18 @@ import type {
 } from '@repo/factory-core/ports/projects';
 import type { ProjectionReader } from '@repo/factory-core/ports/projection-reader';
 import type { OrderProjection } from '@repo/factory-core/order/projection';
-import { drizzleOf } from './db';
+import { drizzleOf, type FactoryDatabase } from './db';
 import { loadOrders } from './orders-table';
 import { loadPlans } from './plans-table';
 import type { PlanProjection } from '@repo/factory-core/plan/projection';
-import { projects } from './schema';
+import { events, intake, orders, projects } from './schema';
 import type { StatementGate } from './sqlite-event-store';
 import type { WriterLock } from './writer-lock';
 
 /** The Work order statuses after which a base branch is no longer held (CORE §4.2). */
-const TERMINAL_STATUSES = "('delivered', 'merged', 'cancelled')";
+const TERMINAL_STATUSES = ['delivered', 'merged', 'cancelled'];
 
-interface ProjectRow {
-  project_id: string;
-  repo_url: string;
-  base_branch: string;
-  max_running: number;
-  dep_policy: 'delivered' | 'merged';
-  created_at: number;
-}
+type ProjectRow = typeof projects.$inferSelect;
 
 const refused = (
   reason: 'missing' | 'has_history' | 'base_branch_busy' | 'exists',
@@ -36,37 +29,58 @@ const refused = (
 });
 
 /** The `projects` row of one id, or undefined. */
-const rowOf = (db: Database, projectId: string): ProjectRow | undefined =>
-  db
-    .query<ProjectRow, [string]>('SELECT * FROM projects WHERE project_id = ?')
-    .get(projectId) ?? undefined;
+const rowOf = (
+  orm: FactoryDatabase,
+  projectId: string,
+): ProjectRow | undefined =>
+  orm.select().from(projects).where(eq(projects.projectId, projectId)).get();
 
 /**
  * True when the project has any Work order, event or intake row. Events belong to a project through
  * their order id, which is `<projectId>:<todoId>` (core `orderIdOf`).
  */
-const hasHistory = (db: Database, projectId: string): boolean => {
+const hasHistory = (orm: FactoryDatabase, projectId: string): boolean => {
   const eventPrefix = `${projectId}:`;
-  return (
-    db
-      .query<{ history: number }, [string, string, string, string]>(
-        `SELECT
-           EXISTS (SELECT 1 FROM orders WHERE project_id = ?)
-           OR EXISTS (SELECT 1 FROM events WHERE substr(order_id, 1, length(?)) = ?)
-           OR EXISTS (SELECT 1 FROM intake WHERE project_id = ?) AS history`,
+  const hasOrder =
+    orm
+      .select({ one: sql`1` })
+      .from(orders)
+      .where(eq(orders.projectId, projectId))
+      .limit(1)
+      .get() !== undefined;
+  // `substr` prefix match, not LIKE: LIKE would read `_` and `%` in a project id as wildcards.
+  const hasEvent =
+    orm
+      .select({ one: sql`1` })
+      .from(events)
+      .where(
+        sql`substr(${events.orderId}, 1, length(${eventPrefix})) = ${eventPrefix}`,
       )
-      .get(projectId, eventPrefix, eventPrefix, projectId)?.history === 1
-  );
+      .limit(1)
+      .get() !== undefined;
+  const hasIntake =
+    orm
+      .select({ one: sql`1` })
+      .from(intake)
+      .where(eq(intake.projectId, projectId))
+      .limit(1)
+      .get() !== undefined;
+  return hasOrder || hasEvent || hasIntake;
 };
 
 /** True when a Work order of the project is not terminal, so it runs on the base branch now. */
-const holdsBaseBranch = (db: Database, projectId: string): boolean =>
-  db
-    .query<{ found: number }, [string]>(
-      `SELECT 1 AS found FROM orders
-       WHERE project_id = ? AND status NOT IN ${TERMINAL_STATUSES} LIMIT 1`,
+const holdsBaseBranch = (orm: FactoryDatabase, projectId: string): boolean =>
+  orm
+    .select({ one: sql`1` })
+    .from(orders)
+    .where(
+      and(
+        eq(orders.projectId, projectId),
+        notInArray(orders.status, TERMINAL_STATUSES),
+      ),
     )
-    .get(projectId) !== null;
+    .limit(1)
+    .get() !== undefined;
 
 /**
  * The `projects` table behind `ProjectStore` (STORAGE §4). Reads run as they always did. Writes assert
@@ -98,49 +112,48 @@ export const sqliteProjectStore = (
     add: (project, createdAt) =>
       gate.run((): ProjectStoreResult => {
         writer.assertHeld();
-        if (rowOf(db, project.projectId)) return refused('exists');
-        db.run(
-          `INSERT INTO projects (project_id, repo_url, base_branch, max_running, dep_policy, created_at)
-           VALUES (?, ?, ?, ?, ?, ?)`,
-          [
-            project.projectId,
-            project.repoUrl,
-            project.baseBranch,
-            project.maxRunning,
-            project.depPolicy,
+        if (rowOf(orm, project.projectId)) return refused('exists');
+        orm
+          .insert(projects)
+          .values({
+            projectId: project.projectId,
+            repoUrl: project.repoUrl,
+            baseBranch: project.baseBranch,
+            maxRunning: project.maxRunning,
+            depPolicy: project.depPolicy,
             createdAt,
-          ],
-        );
+          })
+          .run();
         return { ok: true };
       }),
     set: (projectId, patch: ProjectPatch) =>
       gate.run((): ProjectStoreResult => {
         writer.assertHeld();
-        const current = rowOf(db, projectId);
+        const current = rowOf(orm, projectId);
         if (!current) return refused('missing');
         const changesBase =
           patch.baseBranch !== undefined &&
-          patch.baseBranch !== current.base_branch;
-        if (changesBase && holdsBaseBranch(db, projectId)) {
+          patch.baseBranch !== current.baseBranch;
+        if (changesBase && holdsBaseBranch(orm, projectId)) {
           return refused('base_branch_busy');
         }
-        db.run(
-          'UPDATE projects SET base_branch = ?, max_running = ?, dep_policy = ? WHERE project_id = ?',
-          [
-            patch.baseBranch ?? current.base_branch,
-            patch.maxRunning ?? current.max_running,
-            patch.depPolicy ?? current.dep_policy,
-            projectId,
-          ],
-        );
+        orm
+          .update(projects)
+          .set({
+            baseBranch: patch.baseBranch ?? current.baseBranch,
+            maxRunning: patch.maxRunning ?? current.maxRunning,
+            depPolicy: patch.depPolicy ?? current.depPolicy,
+          })
+          .where(eq(projects.projectId, projectId))
+          .run();
         return { ok: true };
       }),
     remove: (projectId) =>
       gate.run((): ProjectStoreResult => {
         writer.assertHeld();
-        if (!rowOf(db, projectId)) return refused('missing');
-        if (hasHistory(db, projectId)) return refused('has_history');
-        db.run('DELETE FROM projects WHERE project_id = ?', [projectId]);
+        if (!rowOf(orm, projectId)) return refused('missing');
+        if (hasHistory(orm, projectId)) return refused('has_history');
+        orm.delete(projects).where(eq(projects.projectId, projectId)).run();
         return { ok: true };
       }),
   };

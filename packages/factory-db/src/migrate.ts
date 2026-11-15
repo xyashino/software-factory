@@ -37,6 +37,8 @@ interface Journal {
   entries: { tag: string }[];
 }
 
+// raw: the migration runner is the one raw-SQL module. `schema_migrations` is its own bookkeeping table,
+// not a domain table, so it stays outside `schema.ts`; the transaction control below is raw too (STORAGE §3.1).
 const CREATE_HISTORY =
   'CREATE TABLE IF NOT EXISTS schema_migrations (name TEXT PRIMARY KEY, applied_at INTEGER NOT NULL)';
 
