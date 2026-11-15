@@ -36,6 +36,26 @@ const ALPHA_CELL = '01J0000000000000000000000A' as CellId;
 const BRAVO_CELL = '01J0000000000000000000000B' as CellId;
 const TASK_BLOB = `sha256:${'1'.repeat(64)}` as BlobRef;
 
+/** Absolute paths of the machine a prompt was built on: none may reach a rendered prompt (PROTOCOL §4). */
+const ABSOLUTE_PATH =
+  /(^|[\s"'`(=])(\/home\/|\/tmp\/|\/Users\/|\/var\/|\/etc\/|[A-Za-z]:[\\/])/;
+
+/** Alpha's `.nitpick/` catalog: a self-contained config (no package imports) and the evidence skill it declares. */
+const ALPHA_NITPICK: Record<string, string> = {
+  '.nitpick/config.ts': `export default {
+  output: [{ path: '.agents' }],
+  rules: {
+    git: { 'rich-commit': { doc: { title: 'Rich commit' } } },
+    general: { 'decision-log': { doc: { title: 'Decision log' } } },
+    testing: { 'testing-unit': { doc: 'unit' } },
+  },
+  skills: { evidence: { source: './skills/evidence' } },
+};
+`,
+  '.nitpick/skills/evidence/SKILL.md': '# evidence\n',
+  '.agents/skills/evidence/SKILL.md': '# evidence\n',
+};
+
 let root: string;
 let opened: OpenedRuntime;
 let alphaRepo: string;
@@ -58,6 +78,7 @@ beforeEach(() => {
   makeRepo(alphaRepo, {
     'README.md': '# alpha\n',
     ...withMarker(factoryFiles(), 'ALPHA'),
+    ...ALPHA_NITPICK,
   });
   makeRepo(bravoRepo, {
     'README.md': '# bravo\n',
@@ -147,6 +168,15 @@ describe('two repositories with distinct .factory/ on one factory-server', () =>
     expect(bravoPrompt).not.toContain('PROFILE-ALPHA');
     expect(alphaPrompt).toContain('The add-a task.');
     expect(bravoPrompt).toContain('The add-b task.');
+    expect(alphaPrompt).toContain('rich-commit: .agents/rules/rich-commit.md');
+    expect(alphaPrompt).toContain(
+      'decision-log: .agents/rules/decision-log.md',
+    );
+    expect(alphaPrompt).toContain('testing: .agents/rules/testing.md');
+    expect(alphaPrompt).toContain('evidence: .agents/skills/evidence/SKILL.md');
+    expect(alphaPrompt).not.toMatch(ABSOLUTE_PATH);
+    expect(bravoPrompt).toContain('\nrich-commit\n');
+    expect(bravoPrompt).not.toContain('rich-commit:');
     const payloads = JSON.stringify([alphaJob, bravoJob]);
     expect(payloads).not.toContain('PROFILE-');
     expect(payloads).not.toContain('PR-ALPHA');

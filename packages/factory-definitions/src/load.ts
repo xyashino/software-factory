@@ -37,6 +37,10 @@ export interface Definitions {
   prTemplates: Map<string, Template>;
   /** the five runtime prompt texts, placeholders in place */
   runtimePrompts: RuntimePrompts;
+  /** rule or group id -> repo-relative markdown path; empty without `.nitpick/` */
+  rulePaths: ReadonlyMap<string, string>;
+  /** skill id -> repo-relative `SKILL.md` path; empty without `.nitpick/` */
+  skillPaths: ReadonlyMap<string, string>;
 }
 
 /** Definitions as far as they loaded, with every problem found along the way. */
@@ -148,6 +152,8 @@ export const readDefinitions = (
       templates: templates.templates,
       prTemplates: prTemplates.templates,
       runtimePrompts: runtime.ok ? runtime.value : EMPTY_RUNTIME_PROMPTS,
+      rulePaths: catalog?.rulePaths ?? new Map(),
+      skillPaths: catalog?.skillPaths ?? new Map(),
     },
     errors,
   };

@@ -7,6 +7,12 @@ import type { OperatorProfile } from '@repo/factory-definitions/operator-profile
 import type { Template } from '@repo/factory-definitions/templates';
 import { renderTemplate } from './render';
 
+/** A declared rule or skill: its id, and its repo-relative file when the repo's catalog resolves one. */
+export interface DeclaredUnit {
+  id: string;
+  path?: string;
+}
+
 /** The Cycle, the profile and the bytes a prompt is built from. Every path in it is relative. */
 export interface PromptInput {
   profile: OperatorProfile;
@@ -20,7 +26,7 @@ export interface PromptInput {
   /** Text of the blobs the prompt inlines: the verdict feedback only. Inspection logs are never inlined. */
   blobTexts: ReadonlyMap<BlobRef, string>;
   budget: { retry: number; max: number };
-  declared: { rules: string[]; skills: string[] };
+  declared: { rules: DeclaredUnit[]; skills: DeclaredUnit[] };
   operatorCommands: string[];
 }
 
@@ -142,13 +148,27 @@ const contextBlock = (
     );
   }
   if (input.declared.rules.length > 0) {
-    blocks.push(contentOf('declared.rules', input.declared.rules.join('\n')));
+    blocks.push(
+      contentOf(
+        'declared.rules',
+        input.declared.rules.map(unitLine).join('\n'),
+      ),
+    );
   }
   if (input.declared.skills.length > 0) {
-    blocks.push(contentOf('declared.skills', input.declared.skills.join('\n')));
+    blocks.push(
+      contentOf(
+        'declared.skills',
+        input.declared.skills.map(unitLine).join('\n'),
+      ),
+    );
   }
   return blocks;
 };
+
+/** `id: path` when the catalog resolved the path, else the bare id. */
+const unitLine = ({ id, path }: DeclaredUnit): string =>
+  path === undefined ? id : `${id}: ${path}`;
 
 const inputBlock = (
   item: CycleInput,
