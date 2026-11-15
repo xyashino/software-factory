@@ -93,7 +93,10 @@ const realTimers: Timers = {
   },
 };
 
-/** The migration that adds the Order Plan columns (migrations/0003_order_plan.sql). */
+/**
+ * The legacy migration that adds the Order Plan columns (migrations/0003_order_plan.sql). It runs
+ * only on a database older than the baseline, which then adopts the baseline without running it.
+ */
 const ORDER_PLAN_MIGRATION = '0003_order_plan.sql';
 
 /**
@@ -110,7 +113,7 @@ export const openRuntime = (options: OpenRuntimeOptions): OpenedRuntime => {
     const file = join(options.dataDir, DATABASE_FILE_NAME);
     database = openDatabase(file);
     const applied = migrate(database, MIGRATIONS_DIR);
-    // Migration 0003 adds `orders.plan` and `orders.base_branch`: a rebuild fills them for existing rows (STORAGE §6).
+    // Legacy migration 0003 adds `orders.plan` and `orders.base_branch`: a rebuild fills them for existing rows (STORAGE §6).
     if (applied.includes(ORDER_PLAN_MIGRATION)) {
       rebuildOn(drizzleOf(database), projectionOf);
     }

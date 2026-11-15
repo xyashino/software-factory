@@ -21,6 +21,15 @@
     "check-types": {
       "dependsOn": ["build", "^check-types"]
     },
+    "db:check": {
+      "inputs": [
+        "src/**",
+        "drizzle/**",
+        "drizzle.config.ts",
+        "scripts/**",
+        "package.json"
+      ]
+    },
     "test": {
       "dependsOn": ["^build"],
       "env": [

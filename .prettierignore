@@ -3,6 +3,8 @@ dist
 .turbo
 coverage
 pnpm-lock.yaml
+# drizzle-kit output (STORAGE §9): generated, never hand-formatted
+packages/factory-db/drizzle
 .tmp
 .mcp.json
 .cursor/mcp.json
