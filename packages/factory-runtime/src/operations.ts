@@ -29,6 +29,7 @@ import { notFound, RuntimeError } from './errors';
 import { heartbeat } from './heartbeat';
 import type { IntakeReport, IntakeSource } from './intake';
 import { createJoinToken, revokeJoinToken } from './join-tokens';
+import type { Revocation } from './revocations';
 import {
   addProject,
   listProjects,
@@ -165,6 +166,8 @@ const requireResult = (result: CommandResult | undefined): CommandResult => {
 export interface OperationExtras {
   sync(projectId?: ProjectId, source?: IntakeSource): Promise<IntakeReport[]>;
   admin: RuntimeAdmin;
+  /** Told after a revoke committed, so the transports drop what they cached about the credential. */
+  revoked(revocation: Revocation): void;
 }
 
 /**
@@ -366,6 +369,7 @@ export const createOperations = (
     }),
     cellRevoke: async (request) => {
       await revokeCell(ports, request.cellId);
+      extras.revoked({ kind: 'cell', cellId: request.cellId });
       return { cellId: request.cellId, revoked: true as const };
     },
     supervisorEvents: async (request, options) => {
@@ -409,6 +413,7 @@ export const createOperations = (
     }),
     joinTokenRevoke: async (request) => {
       await revokeJoinToken(ports, request.joinTokenId);
+      extras.revoked({ kind: 'joinToken', joinTokenId: request.joinTokenId });
       return { joinTokenId: request.joinTokenId, revoked: true as const };
     },
     projectList: () => listProjects(ports),

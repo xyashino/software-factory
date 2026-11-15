@@ -8,7 +8,6 @@ import type {
 } from '@repo/factory-core/ports/projects';
 import type { ProjectionReader } from '@repo/factory-core/ports/projection-reader';
 import type { OrderProjection } from '@repo/factory-core/order/projection';
-import { drizzleOf } from './db';
 import { loadOrders } from './orders-table';
 import { loadPlans } from './plans-table';
 import type { PlanProjection } from '@repo/factory-core/plan/projection';
@@ -78,11 +77,10 @@ export const sqliteProjectStore = (
   writer: WriterLock,
   gate: StatementGate,
 ): ProjectStore => {
-  const orm = drizzleOf(db);
   return {
     list: () =>
-      gate.run(() =>
-        orm
+      gate.read((reader) =>
+        reader
           .select()
           .from(projects)
           .orderBy(asc(projects.projectId))
@@ -146,14 +144,13 @@ export const sqliteProjectStore = (
   };
 };
 
-/** The `orders` projection as a reader port. Rows are read as stored; nothing is folded here. */
+/**
+ * The `orders` and `plans` projections as a reader port. Rows are read as stored; nothing is folded
+ * here. Both run on the gate's read connection, so a read is not queued behind a write.
+ */
 export const sqliteProjectionReader = (
-  db: Database,
   gate: StatementGate,
-): ProjectionReader => {
-  const orm = drizzleOf(db);
-  return {
-    orders: (): Promise<OrderProjection[]> => gate.run(() => loadOrders(orm)),
-    plans: (): Promise<PlanProjection[]> => gate.run(() => loadPlans(orm)),
-  };
-};
+): ProjectionReader => ({
+  orders: (): Promise<OrderProjection[]> => gate.read(loadOrders),
+  plans: (): Promise<PlanProjection[]> => gate.read(loadPlans),
+});

@@ -60,9 +60,16 @@ export interface SqliteEventStore extends EventStore {
   gate: StatementGate;
 }
 
-/** Runs one synchronous section of statements on the connection (see `SqliteEventStore.gate`). */
+/**
+ * Runs one synchronous section of statements on the connection (see `SqliteEventStore.gate`).
+ * `run` is for writes and for any section that must not see a half-written state. `read` is for
+ * reads: outside a transaction it runs on the read-only WAL connection, without the write mutex, so
+ * a long write or sweep never holds a read behind it (STORAGE §3.1). Inside a transaction it runs on
+ * the writer, so the transaction sees its own writes.
+ */
 export interface StatementGate {
   run<T>(section: () => T | Promise<T>): Promise<T>;
+  read<T>(section: (db: FactoryDatabase) => T): Promise<T>;
 }
 
 /** One stored event row, as `EVENT_SELECT` reads it. */
@@ -73,6 +80,17 @@ export const openDatabase = (file: string): Database => {
   const db = new Database(file);
   db.exec('PRAGMA journal_mode = WAL');
   db.exec('PRAGMA foreign_keys = ON');
+  db.exec('PRAGMA busy_timeout = 5000');
+  return db;
+};
+
+/**
+ * Opens a second, read-only connection on a database file the writer already put in WAL mode. Readers
+ * never wait for the writer's transaction; a WAL reader sees the last commit. `:memory:` has no file a
+ * second connection could share, so it cannot be opened here: the caller uses the writer alone.
+ */
+export const openReadDatabase = (file: string): Database => {
+  const db = new Database(file, { readonly: true });
   db.exec('PRAGMA busy_timeout = 5000');
   return db;
 };
@@ -347,12 +365,19 @@ const appendInSavepoint = <R>(raw: Database, run: () => R): R => {
 };
 
 /**
- * The SQLite `EventStore` over one connection. Every statement, reads included, runs under one
- * in-process write mutex, and every write runs inside `BEGIN IMMEDIATE` (STORAGE §3.1). The schema
- * must already be migrated (`migrate`).
+ * The SQLite `EventStore` over the writer connection and, when the database is a file, a read-only
+ * connection on the same file (`openReadDatabase`). Writes and transactions run under one in-process
+ * write mutex, and every write runs inside `BEGIN IMMEDIATE` (STORAGE §3.1). Reads outside a
+ * transaction run on the read connection without the mutex, so they are not queued behind a write or
+ * a sweep. Without a read connection (`:memory:`) reads queue on the mutex as before. The schema must
+ * already be migrated (`migrate`).
  */
-export const openSqliteEventStore = (db: Database): SqliteEventStore => {
+export const openSqliteEventStore = (
+  db: Database,
+  readDb?: Database,
+): SqliteEventStore => {
   const orm = drizzleOf(db);
+  const readOrm = readDb ? drizzleOf(readDb) : undefined;
   const writes = writeMutex();
   // Marks the async context of a transaction body, so `gate` can tell its own sections from others'.
   const inTransaction = new AsyncLocalStorage<true>();
@@ -362,6 +387,13 @@ export const openSqliteEventStore = (db: Database): SqliteEventStore => {
       inTransaction.getStore()
         ? Promise.resolve().then(section)
         : writes.run(async () => section()),
+    read: <T>(section: (reader: FactoryDatabase) => T): Promise<T> => {
+      if (inTransaction.getStore()) {
+        return Promise.resolve().then(() => section(orm));
+      }
+      if (readOrm) return Promise.resolve().then(() => section(readOrm));
+      return writes.run(async () => section(orm));
+    },
   };
 
   const inWriteTransaction = <T>(body: () => Promise<T>): Promise<T> =>
@@ -393,19 +425,20 @@ export const openSqliteEventStore = (db: Database): SqliteEventStore => {
     });
 
   return {
-    load: (orderId) => writes.run(async () => loadRows(orm, orderId)),
-    loadPlan: (planId) => writes.run(async () => loadPlanRows(orm, planId)),
+    load: (orderId) => gate.read((reader) => loadRows(reader, orderId)),
+    loadPlan: (planId) => gate.read((reader) => loadPlanRows(reader, planId)),
     appendPlan: (input) => transaction((tx) => tx.appendPlan(input)),
     response: (commandId) =>
-      writes.run(async () => {
-        const row = storedResponse(orm, commandId);
+      gate.read((reader) => {
+        const row = storedResponse(reader, commandId);
         return row
           ? { response: JSON.parse(row.response) as unknown }
           : undefined;
       }),
     feed: (afterGlobalSeq, limit) =>
-      writes.run(
-        async () => feedRows(orm, afterGlobalSeq, limit, true) as StoredEvent[],
+      gate.read(
+        (reader) =>
+          feedRows(reader, afterGlobalSeq, limit, true) as StoredEvent[],
       ),
     append: (input) => transaction((tx) => tx.append(input)),
     transaction,

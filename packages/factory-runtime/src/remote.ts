@@ -7,6 +7,7 @@ import type { CellId, JobId } from '@repo/factory-core/ids';
 import type { LeaseStreamId } from '@repo/factory-core/ports/lease-store';
 import { notFound, unauthorized } from './errors';
 import type { RuntimePorts } from './ports';
+import type { Revocation, Revocations } from './revocations';
 
 /** The SHA-256 hex of a token. Join tokens, supervisor tokens and Cell credentials are stored this way. */
 export const hashToken = (token: string): string =>
@@ -45,9 +46,18 @@ export interface RemoteAccess {
    * once. Needs the writer lock; no network route calls it (PROTOCOL §1).
    */
   createSupervisorToken(name: string): Promise<{ name: string; token: string }>;
+  /**
+   * Subscribes to credential revocations (after they commit, from any transport). A transport that
+   * caches a positive check drops the entry on the revocation (perf-04). Returns the unsubscribe.
+   */
+  onRevoked(listener: (revocation: Revocation) => void): () => void;
 }
 
-export const createRemoteAccess = (ports: RuntimePorts): RemoteAccess => ({
+export const createRemoteAccess = (
+  ports: RuntimePorts,
+  feed: Revocations,
+): RemoteAccess => ({
+  onRevoked: (listener) => feed.subscribe(listener),
   joinCell: async ({ joinToken, name }) => {
     ports.writer.assertHeld();
     const now = ports.clock.now();

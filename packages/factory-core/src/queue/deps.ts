@@ -45,6 +45,13 @@ const outcomeOf = (row: DepRow, depPolicy: DepPolicy): DepState => {
   return 'waiting';
 };
 
+/** The rows of one queue pass keyed by Work order id, built once per pass (`indexDeps`). */
+export type DepIndex = ReadonlyMap<OrderId, DepRow>;
+
+/** Indexes the rows of one queue pass by Work order id. Build it once; `resolveDeps` reads it O(1) per dependency. */
+export const indexDeps = (rows: readonly DepRow[]): DepIndex =>
+  new Map(rows.map((row) => [row.orderId, row]));
+
 /**
  * CORE §8 dependency outcome of one Work order. A dependency that names no row in `others` is
  * satisfied (v1 parity). A dependency that is a member of the same plan uses the stacked outcome
@@ -52,13 +59,18 @@ const outcomeOf = (row: DepRow, depPolicy: DepPolicy): DepState => {
  * any waiting one makes it waiting. The CORE §8 rule that a reopened dependency does not stop a
  * started dependent is not special-cased here: the outcome reads the rows as given, so the caller
  * decides which rows to pass.
+ *
+ * `others` is either the rows as an array (indexed here, once per call) or an index from `indexDeps`
+ * that the caller built once for a whole pass, which keeps a pass O(N) instead of O(N^2).
  */
 export const resolveDeps = (
   entry: DepEntry,
-  others: readonly DepRow[],
+  others: readonly DepRow[] | DepIndex,
   depPolicy: DepPolicy,
 ): DepState => {
-  const byId = new Map(others.map((row) => [row.orderId, row]));
+  const byId: DepIndex = Array.isArray(others)
+    ? indexDeps(others as readonly DepRow[])
+    : (others as DepIndex);
   const outcomes = entry.dependsOn.map((orderId) => {
     const row = byId.get(orderId);
     if (!row) return 'satisfied';

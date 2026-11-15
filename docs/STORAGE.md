@@ -118,13 +118,28 @@ contains `next` are committed together or not at all.
 `bun:sqlite` is synchronous, while the ports are async. Two rules keep a transaction closed to
 outsiders:
 
-- The SQLite adapter holds **one in-process write mutex** for the whole of `append` and
-  `transaction`. No other statement runs on the connection while a write transaction is open.
+- The SQLite adapter holds **one in-process write mutex** for the whole of `append`, `transaction`,
+  writes and the projection rebuild. No other write or write-side statement runs on the writer
+  connection while a write transaction is open.
 - Inside `transaction(fn)`, `fn` MUST await nothing but `tx` methods. Rendering a prompt, reading a
   blob or any other work is done before the transaction or through `tx`.
 
-The contract suite tests this with two concurrent appenders and a slow `fn` (ROADMAP
-`factory-m3-tx-spike`).
+**Reads never queue behind the writer (perf-04).** A file database has a second, read-only connection
+on the same WAL file (`openReadDatabase`). Reads run on it outside a transaction and take no mutex:
+`load`, `loadPlan`, `response`, `feed`, `orders()`, `plans()`, `projects.list()` and `blobs.get/stat`.
+A read therefore never waits for a write transaction or a long `blob.sweep`. The rules:
+
+- Every read keeps its zod validation (§2.3 of `RULES.md`); only the connection differs.
+- A read sees the last **committed** state. Inside an open transaction it sees the pre-transaction
+  state; a read issued after a write's promise resolves sees that write, because the COMMIT ran first.
+- Inside `transaction(fn)` every read runs on the writer, so `tx` and the body see their own writes.
+- Projection consistency is unchanged: the command loop reads the projections before its append and
+  the expected-seq check refuses a stale decision, which then reloads (§3).
+- `:memory:` has no file for a second connection. Without a read connection, reads queue on the mutex
+  as before. Tests use `:memory:` for that fallback only.
+
+The contract suite tests the write rules with two concurrent appenders and a slow `fn` (ROADMAP
+`factory-m3-tx-spike`), and the read rules on a file database (`read-path.test.ts`).
 
 ## 4. Schema
 
