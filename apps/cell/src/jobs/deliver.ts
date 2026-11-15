@@ -1,6 +1,10 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
-import type { Job } from '@repo/factory-core/contracts/job';
+import {
+  adrSectionOf,
+  PR_ADR_TOKEN,
+  type Job,
+} from '@repo/factory-core/contracts/job';
 import { WireFailure } from '@repo/factory-core/contracts/errors';
 import type { BlobRef, CommitSha } from '@repo/factory-core/ids';
 import { GIT_TIMEOUT_MS } from '../workspace/mirror';
@@ -268,7 +272,25 @@ const deliverWorktree = async (
   }
 
   const lease = `${branchRef}:${remoteTip}`;
-  const body = await blobText(ctx, deliver.bodyBlob);
+  // The ADR section is the Cell's to fill (v1 PR format): the `decisions/` entries this commit adds.
+  const added = await git(shell, worktree, [
+    'diff',
+    '--name-only',
+    '--diff-filter=A',
+    'HEAD~1',
+    'HEAD',
+    '--',
+    'decisions/',
+  ]);
+  const decisions = succeeded(added)
+    ? textOf(added)
+        .split('\n')
+        .map((path) => path.trim())
+        .filter((path) => /^decisions\/.+\.md$/.test(path))
+    : [];
+  const body = (await blobText(ctx, deliver.bodyBlob))
+    .split(PR_ADR_TOKEN)
+    .join(adrSectionOf(decisions));
 
   // The push goes to the repo URL, not to `origin`: the mirror is a `--mirror` clone, and git refuses an
   // explicit refspec on a mirror remote.

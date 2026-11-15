@@ -16,6 +16,13 @@ import type { Definitions } from '@repo/factory-definitions/load';
 import { buildPrompt } from './prompts/build-prompt';
 import { buildIncidentPrompt } from './prompts/incident-prompt';
 import { refusal } from './errors';
+import {
+  artifactBlob,
+  commitTitle,
+  formatPrBody,
+  usableCommitMessage,
+  verificationLines,
+} from './pr-body';
 import type { RuntimeConfig } from './ports';
 
 export interface JobPorts {
@@ -121,19 +128,37 @@ export const buildJob = async (
   };
 
   if (next.job.kind === 'deliver') {
-    const bodyBlob = state.spec.bodyBlob;
+    // As v1: the builder's `commit` artifact is the commit and the PR title; the PR body is the template.
+    const commitRef = artifactBlob(state, line.deliver.commit);
+    const reportRef = artifactBlob(state, line.deliver.report);
+    const commitMessage =
+      usableCommitMessage(
+        commitRef === undefined
+          ? undefined
+          : await textOf(ports.blobs, commitRef),
+      ) ?? richCommitOf(state.spec.type, state.spec.title, state.todoId);
+    const body = formatPrBody(
+      {
+        taskId: state.todoId,
+        type: state.spec.type,
+        todoBody: await textOf(ports.blobs, state.spec.bodyBlob),
+        commitMessage,
+        ...(reportRef === undefined
+          ? {}
+          : { report: await textOf(ports.blobs, reportRef) }),
+        logCommand: `factory log ${state.orderId}`,
+        verification: verificationLines(line),
+      },
+      ports.definitions.prTemplates,
+    );
     return jobSchema.parse({
       ...common,
       kind: 'deliver',
       base: next.job.base,
       deliver: {
-        title: state.spec.title,
-        bodyBlob,
-        commitMessage: richCommitOf(
-          state.spec.type,
-          state.spec.title,
-          state.todoId,
-        ),
+        title: commitTitle(commitMessage),
+        bodyBlob: await storeText(ports.blobs, body, 'text/markdown'),
+        commitMessage,
         removeTodo: `todos/${state.todoId}.md`,
       },
     });
