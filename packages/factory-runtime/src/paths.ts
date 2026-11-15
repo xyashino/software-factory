@@ -1,6 +1,10 @@
 import { fileURLToPath } from 'node:url';
 
-/** The Definitions package of this checkout: operators, Lines, templates and runtime prompts. */
+/**
+ * The `.factory/` directory of this checkout: operators, Lines and templates of the software-factory
+ * repository itself. The server still reads it at startup until the server task API replaces it
+ * (passive-server-03); runtime prompts come from the Definitions package.
+ */
 export const DEFINITIONS_ROOT = fileURLToPath(
-  new URL('../../factory-definitions', import.meta.url),
+  new URL('../../../.factory', import.meta.url),
 );

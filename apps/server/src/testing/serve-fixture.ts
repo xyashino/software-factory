@@ -10,12 +10,9 @@
  * the queue, so a test's own Cell claims it instead of receiving it from the command that ends a job.
  * Arguments, not environment variables: the turbo lint rule wants every env var declared.
  */
-import { createHash } from 'node:crypto';
 import { cpSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { BlobRef, ProjectId, TodoId } from '@repo/factory-core/ids';
-import { orderIdOf } from '@repo/factory-core/ids';
-import type { OrderCommand } from '@repo/factory-core/order/commands';
+import type { ProjectId, TodoId } from '@repo/factory-core/ids';
 import { openRuntime } from '@repo/factory-runtime/open-runtime';
 import { DEFINITIONS_ROOT } from '@repo/factory-runtime/paths';
 import { seedProject } from '@repo/factory-runtime/seed';
@@ -59,9 +56,6 @@ deliver:
   to: new-pr
 `;
 
-const sha256Ref = (text: string): BlobRef =>
-  `sha256:${createHash('sha256').update(text).digest('hex')}` as BlobRef;
-
 /** Copies the shipped definitions under `dataDir/definitions` and replaces the lines with the fixture's. */
 const fixtureDefinitions = (dataDir: string, checks: string[]): string => {
   const root = join(dataDir, 'definitions');
@@ -97,46 +91,18 @@ const main = async (): Promise<void> => {
 
   const loaded = opened.ports.definitions.lines.get('inspect');
   if (!loaded) throw new Error('the fixture line did not load');
-  const snapshotText = JSON.stringify(loaded.snapshot);
-  const bodyText = `Body of ${TODO}`;
-  const bodyBlob = sha256Ref(bodyText);
-  const snapshotBlob = sha256Ref(snapshotText);
-  await opened.ports.blobs.put(
-    bodyBlob,
-    new TextEncoder().encode(bodyText),
-    'text/markdown',
-  );
-  await opened.ports.blobs.put(
-    snapshotBlob,
-    new TextEncoder().encode(snapshotText),
-    'application/json',
-  );
-
-  const command: OrderCommand = {
-    type: 'CreateOrder',
+  // The Work order is created the way a Supervisor creates one: through the task API, with the Line it pins.
+  await opened.runtime.call('createOrder', {
+    commandId: `create-${TODO}`,
     projectId: PROJECT,
     todoId: TODO,
-    spec: {
-      title: `Title ${TODO}`,
-      type: 'feat',
-      bodyBlob,
-      contentHash: bodyBlob,
-    },
+    title: `Title ${TODO}`,
+    type: 'feat',
+    body: `Body of ${TODO}\n`,
+    line: loaded.snapshot,
     priority: 'medium',
     dependsOn: [],
-    line: {
-      name: loaded.snapshot.name,
-      hash: loaded.snapshot.hash,
-      snapshotBlob,
-      snapshot: loaded.snapshot,
-    },
     baseBranch: 'main',
-  };
-  await opened.runtime.commands.submit({
-    orderId: orderIdOf(PROJECT, TODO),
-    commandId: `create-${TODO}`,
-    command,
-    actor: { kind: 'factory' },
   });
 
   const listener = startSocketListener({

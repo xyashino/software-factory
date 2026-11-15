@@ -17,11 +17,12 @@
   },
   "dependencies": {
     "@repo/factory-core": "workspace:*",
+    "@repo/factory-definitions": "workspace:*",
+    "@repo/factory-runtime": "workspace:*",
     "zod": "catalog:"
   },
   "devDependencies": {
     "@repo/eslint-config": "workspace:*",
-    "@repo/factory-runtime": "workspace:*",
     "@repo/factory-server": "workspace:*",
     "@repo/typescript-config": "workspace:*",
     "@types/bun": "catalog:",

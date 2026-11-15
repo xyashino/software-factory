@@ -36,6 +36,12 @@ import {
   setProject,
 } from './projects';
 import type { RuntimePorts } from './ports';
+import {
+  createOrder,
+  createPlan,
+  recordPlanPrState,
+  recordPrState,
+} from './task-api';
 
 /** Per-call options a transport passes: the claim long-poll ends when its request ends. */
 export interface CallOptions {
@@ -316,6 +322,10 @@ export const createOperations = (
       if (events.length === 0 || !row) throw notFound();
       return { order: boardRow(row), events };
     },
+    createOrder: (request) => createOrder(ports, handler, request),
+    createPlan: (request) => createPlan(ports, handler, request),
+    recordPrState: (request) => recordPrState(handler, request),
+    recordPlanPrState: (request) => recordPlanPrState(handler, request),
     answer: (request) =>
       supervisorCommand(request.orderId, request.commandId, {
         type: 'Answer',

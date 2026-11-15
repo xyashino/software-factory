@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { CommandResult } from '@repo/factory-core/contracts/cell';
 import type { FactoryClient } from '@repo/factory-core/contracts/client';
 import { jobSchema, type Job } from '@repo/factory-core/contracts/job';
-import type { BlobRef, CellId } from '@repo/factory-core/ids';
+import type { CellId } from '@repo/factory-core/ids';
 import { runMechanic, type MechanicDeps } from '../../jobs/run-mechanic';
 import { prepareWorkspace } from '../../workspace';
 import {
@@ -18,7 +18,6 @@ import type { LaunchSpec, PaneDriver, PaneReading } from '../../ports';
 
 const JOB_ID = '01M7FHM3CH4N1C0B0000000001';
 const ORDER_ID = 'software-factory:v2-24-mechanic';
-const PROMPT = `sha256:${'a'.repeat(64)}` as BlobRef;
 const CELL = 'cell-test' as CellId;
 
 type Command = { type: string } & Record<string, unknown>;
@@ -53,7 +52,7 @@ const mechanicJob = (): Job =>
     mechanic: {
       andonAt: 2000,
       n: 1,
-      promptBlob: PROMPT,
+      incident: { reason: 'operator_stalled', detail: 'the pane went quiet' },
       operator: {
         profile: 'mechanic',
         runner: 'claude',

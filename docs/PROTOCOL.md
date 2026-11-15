@@ -82,6 +82,10 @@ HTTP routes below; local mode sends the same operations over the Unix socket to 
 | `POST`                    | `/v1/orders/:id/nudge`         | `Nudge`                                                                                                                                                     |
 | `POST`                    | `/v1/orders/:id/cancel`        | `Cancel`                                                                                                                                                    |
 | `POST`                    | `/v1/orders/:id/priority`      | `Reprioritise`                                                                                                                                              |
+| `POST`                    | `/v1/orders`                   | `createOrder`: a Work order from `projectId`, `todoId`, `title`, `type`, `body` (markdown spec), `line` (a `LineSnapshot`, pinned as sent, hash verified), `priority`, `dependsOn`, optional `plan`, `baseBranch`. Idempotent by `commandId`. Socket path `supervisor/orders/create` |
+| `POST`                    | `/v1/plans`                    | `createPlan`: `projectId`, `slug`, optional `baseBranch`, `members[]` (`todoId`, `title`, `type`, `body`, `line`, `priority`) in chain order. Creates the plan, each member's Work order and the chain. Idempotent by `commandId`. Socket path `supervisor/plans/create` |
+| `POST`                    | `/v1/orders/:id/pr-state`      | `recordPrState`: `prUrl`, `state` (`open \| merged \| closed`). Refused as `precondition` while the Work order has no PR. Socket path `supervisor/orders/pr-state` |
+| `POST`                    | `/v1/plans/:id/pr-state`       | `recordPlanPrState`: `prUrl`, `state`. Refused as `precondition` while the plan has no PR. Socket path `supervisor/plans/pr-state` |
 | `POST`                    | `/v1/intake/sync`              | Run intake now instead of waiting for the next poll                                                                                                         |
 | `GET`                     | `/v1/cells`                    | Cells, their last heartbeat, slots, current jobs                                                                                                            |
 | `DELETE`                  | `/v1/cells/:id`                | Revoke a Cell                                                                                                                                               |
@@ -216,7 +220,14 @@ interface Job {
       headless: boolean;
       timeoutMs;
     };
-    promptBlob?: BlobRef;
+    // The Cell renders the Operator prompt from these inputs and the repo's own `.factory/` (its profile,
+    // templates, rules and skills). The server sends no rendered prompt and no repo template.
+    prompt?: {
+      taskId: string; // the todo id, as `{{taskId}}`
+      todoBodyBlob: BlobRef; // the spec body
+      context: CycleContext; // the Cycle's inputs, notes, feedback, resume and outputs (CORE §7), as blob refs
+      budget: { retry: number; max: number };
+    };
     inputs?: { blob: BlobRef; path: string }[]; // relative to the worktree
     outputs?: { key: string; path: string; required: boolean }[];
     verdict?: boolean;
@@ -232,12 +243,23 @@ interface Job {
     exec?: string[];
     inspectionTimeoutMs?: number;
   };
+  // deliver: the Cell renders the commit message, the PR title and the PR body from these refs and the repo's
+  // `.factory/templates/pr/`. It removes `todos/<taskId>.md` only when that file exists (intake orders have one;
+  // API-created orders do not).
   deliver?: {
-    title: string;
-    bodyBlob: BlobRef;
-    commitMessage: string;
-    removeTodo: string;
+    taskId: string;
+    type: string;
+    title: string; // the spec title, the fallback subject of the generated commit
+    todoBodyBlob: BlobRef;
+    commitBlob?: BlobRef; // the builder's commit artifact, when the Line delivers one
+    reportBlob?: BlobRef; // the builder's report artifact
+    logCommand: string;
+    verification: (
+      | { kind: 'inspection'; stationId: string; commands: string[] }
+      | { kind: 'operator'; stationId: string; profile: string }
+    )[];
   };
+  // mechanic: `incident: { reason, detail }`; the Cell renders the incident prompt from it.
   plan?: {
     // plan_* jobs only
     slug: string;

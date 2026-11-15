@@ -56,6 +56,20 @@ export const HTTP_ROUTES = {
     auth: 'supervisor',
     params: { id: 'orderId' },
   },
+  createOrder: { method: 'POST', path: '/v1/orders', auth: 'supervisor' },
+  createPlan: { method: 'POST', path: '/v1/plans', auth: 'supervisor' },
+  recordPrState: {
+    method: 'POST',
+    path: '/v1/orders/:id/pr-state',
+    auth: 'supervisor',
+    params: { id: 'orderId' },
+  },
+  recordPlanPrState: {
+    method: 'POST',
+    path: '/v1/plans/:id/pr-state',
+    auth: 'supervisor',
+    params: { id: 'planId' },
+  },
   answer: {
     method: 'POST',
     path: '/v1/orders/:id/answer',

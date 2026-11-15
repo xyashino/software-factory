@@ -5,7 +5,7 @@ import {
 } from '@repo/factory-core/line/snapshot';
 import { err, ok, type Result } from '@repo/factory-core/result';
 import { zodErrors, type DefinitionError } from './errors';
-import type { Line, LineStation } from './line-schema';
+import type { Line, LineStation, OperatorPool } from './line-schema';
 import type { OperatorProfile } from './operator-profile';
 
 /** Placeholder hash used only while the snapshot body is validated. */
@@ -53,18 +53,36 @@ const toStation = (
     maxLostRestarts: station.maxLostRestarts,
   };
   if (station.kind === 'inspection') {
-    return { ...base, kind: 'inspection', artifacts: [], exec: station.exec };
+    return {
+      ...base,
+      kind: 'inspection',
+      artifacts: [],
+      exec: station.exec,
+      timeoutMs: station.timeoutMs,
+    };
   }
   const pool = line.operators[station.operator];
   const profile = pool === undefined ? undefined : operators.get(pool.profile);
   return {
     ...base,
     kind: 'operator',
-    ...(pool === undefined ? {} : { runner: pool.runner }),
+    ...(pool === undefined
+      ? {}
+      : { runner: pool.runner, operator: poolOf(pool) }),
     verdict: profile?.verdict ?? false,
     artifacts: Object.keys(profile?.artifacts ?? {}).sort(),
   };
 };
+
+/** The Operator pool a snapshot carries: everything the Cell needs to start the Operator (CORE §11). */
+const poolOf = (pool: OperatorPool): Record<string, unknown> => ({
+  profile: pool.profile,
+  runner: pool.runner,
+  model: pool.model,
+  permission: pool.permission,
+  headless: pool.headless,
+  timeoutMs: pool.timeoutMs,
+});
 
 /**
  * The Line as the core reads it: stations only, no paths, no operator
@@ -82,6 +100,16 @@ export const toLineSnapshot = (
     stations: line.stations.map((station) =>
       toStation(station, line, operators),
     ),
+    workspace: {
+      ...(line.workspace.sync === undefined
+        ? {}
+        : { sync: line.workspace.sync }),
+      setup: line.workspace.setup,
+    },
+    deliver: {
+      commit: `${line.deliver.commit.stationId}.${line.deliver.commit.artifactKey}`,
+      report: `${line.deliver.report.stationId}.${line.deliver.report.artifactKey}`,
+    },
   };
   const check = lineSnapshotSchema.safeParse({ ...body, hash: EMPTY_HASH });
   if (!check.success) {

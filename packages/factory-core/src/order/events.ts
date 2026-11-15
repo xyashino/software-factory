@@ -76,7 +76,7 @@ const nonNegativeInt = z.number().int().min(0);
 const positiveInt = z.number().int().min(1);
 
 export const priorities = z.enum(['high', 'medium', 'low']);
-const changeTypes = z.enum([
+export const changeTypes = z.enum([
   'feat',
   'fix',
   'chore',

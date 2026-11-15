@@ -118,7 +118,25 @@ flowchart LR
 | **runtime** (`packages/factory-runtime`)           | Application use cases composed over core ports and storage; shared by local and server modes                                                                                                   | HTTP transport and Cell execution                                                       |
 | **server** (`apps/server`, `factory-server`)       | Core process: owns the database through the writer lock; Unix socket listener; optional TCP HTTP/SSE listener; auth; server lifecycle                                                | Own a second implementation of application decisions                                    |
 | **db** (`packages/factory-db`)                     | The `EventStore`, `BlobStore`, `LeaseStore` implementations and migrations                                                                                                                     | Domain decisions                                                                        |
-| **definitions** (`packages/factory-definitions`)   | Operator profiles, Lines, templates, todo frontmatter, their parser                                                                                                                            | Runtime state                                                                           |
+| **definitions** (`packages/factory-definitions`)   | Schemas, validators and parsers (`line-schema`, `line-validate`, `line-snapshot`, `operator-profile`, `templates`, `nitpick-catalog`, `load`); the runtime prompts (`templates/runtime/`); starter scaffold assets | Repo-specific workflow and PR templates (those are in each repo's `.factory/`); runtime state |
+
+### Ownership: the server holds tasks and state, each repo holds its definitions
+
+- **`factory-server`** owns tasks and state only: Work orders, Order Plans, events, leases, blobs and PR state.
+  It creates them through the task API (`POST /v1/orders`, `POST /v1/plans`, `POST /v1/orders/:id/pr-state`,
+  `POST /v1/plans/:id/pr-state`), each with a pinned `LineSnapshot` in the request. It holds no `lines`,
+  `operators` or repo `templates` tables.
+- **Each repository** owns its definitions in `.factory/` at its root (`lines/`, `operators/`,
+  `templates/prompts/`, `templates/pr/`), next to `.nitpick/` (`rules` and `skills`). A repo's `.factory/` is
+  validated against its `.nitpick/` when that catalog is present (`loadRepoDefinitions`).
+- **The Cell** reads `.factory/` and `.nitpick/` from the worktree of the job. It resolves the Operator profile,
+  the declared rules and skills, and renders the Cycle and Mechanic prompts and the PR body on the Cell. A repo
+  whose `.factory/` is missing or invalid fails the job with a diagnostic; nothing is guessed.
+- The pinned `LineSnapshot` carries what a job needs of its Line: the stations, the Operator pools, the workspace
+  setup and the delivery artifacts. Changing a repo's Line YAML affects only Work orders created afterwards.
+  The Operator profile's text, and the templates, are not pinned: the Cell reads them from the worktree when a
+  Cycle starts, so an edit to `.factory/operators/` or `.factory/templates/` reaches the next Cycle. Pinning them
+  is open (see the report of passive-server-03).
 
 ### Trust boundaries
 

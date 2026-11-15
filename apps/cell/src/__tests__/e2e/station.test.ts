@@ -40,6 +40,7 @@ import type { PaneDriver } from '../../ports';
 import { spawnHeadless } from '../../runners/headless';
 import { prepareWorkspace } from '../../workspace';
 import { commitOf, must } from '../helpers/git';
+import { commitFactoryTo } from '../../testing/factory-fixture';
 
 type Client = FactoryClient;
 
@@ -74,6 +75,8 @@ beforeEach(async () => {
   repo = await createFixtureRepo(join(root, 'repo'), {
     [TODO]: todoFile({ title: 'Add login', v2: true }),
   });
+  // The repo's own `.factory/`: the Cell renders the Operator prompt from it on the worktree.
+  commitFactoryTo(repo);
   seedProject(dataDir, { projectId: PROJECT, repoUrl: repo });
 });
 

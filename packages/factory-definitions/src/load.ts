@@ -1,5 +1,6 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { err, ok, type Result } from '@repo/factory-core/result';
 import type { LineSnapshot } from '@repo/factory-core/line/snapshot';
 import type { DefinitionError } from './errors';
@@ -7,7 +8,7 @@ import { listFiles } from './files';
 import { parseLine, type Line } from './line-schema';
 import { validateLine } from './line-validate';
 import { toLineSnapshot } from './line-snapshot';
-import type { NitpickCatalog } from './nitpick-catalog';
+import { nitpickCatalog, type NitpickCatalog } from './nitpick-catalog';
 import { validateOperatorCatalog } from './operator-catalog';
 import { parseOperatorProfile, type OperatorProfile } from './operator-profile';
 import {
@@ -44,6 +45,12 @@ export interface ReadResult {
   errors: DefinitionError[];
 }
 
+/** The package root: holds `templates/runtime/`, the Cell↔Operator protocol prompts every repo shares. */
+export const PACKAGE_ROOT = fileURLToPath(new URL('..', import.meta.url));
+
+/** The directory name of a repository's definitions, at its root (next to `.nitpick/`). */
+export const FACTORY_DIR = '.factory';
+
 const EMPTY_RUNTIME_PROMPTS: RuntimePrompts = {
   answer: '',
   nudge: '',
@@ -56,20 +63,21 @@ const readText = (root: string, file: string): string =>
   readFileSync(join(root, file), 'utf8');
 
 /**
- * Reads and validates every operator profile, Line, template and runtime
- * prompt under `packageRoot`. Nothing is bundled: files are read on each
- * call. Every problem is collected, not just the first. With `catalog` (from
+ * Reads and validates every operator profile, Line and template under
+ * `factoryRoot` (a repository's `.factory/` directory), and the runtime prompts
+ * shipped with this package. Nothing is bundled: files are read on each call.
+ * Every problem is collected, not just the first. With `catalog` (from
  * `.nitpick`), declared rules and skills must exist there.
  */
 export const readDefinitions = (
-  packageRoot: string,
+  factoryRoot: string,
   catalog?: NitpickCatalog,
 ): ReadResult => {
   const errors: DefinitionError[] = [];
   const operators = new Map<string, OperatorProfile>();
   const lines = new Map<string, LoadedLine>();
 
-  const operatorFiles = listFiles(packageRoot, 'operators', '.md');
+  const operatorFiles = listFiles(factoryRoot, 'operators', '.md');
   if (operatorFiles === null) {
     errors.push({
       file: 'operators',
@@ -80,8 +88,8 @@ export const readDefinitions = (
   const brokenOperators = new Set<string>();
   for (const file of operatorFiles ?? []) {
     const parsed = parseOperatorProfile(
-      { file, path: join(packageRoot, file) },
-      readText(packageRoot, file),
+      { file, path: join(factoryRoot, file) },
+      readText(factoryRoot, file),
     );
     if (!parsed.ok) {
       brokenOperators.add(basename(file, '.md'));
@@ -94,7 +102,7 @@ export const readDefinitions = (
     }
   }
 
-  const lineFiles = listFiles(packageRoot, 'lines', '.yml');
+  const lineFiles = listFiles(factoryRoot, 'lines', '.yml');
   if (lineFiles === null) {
     errors.push({
       file: 'lines',
@@ -104,8 +112,8 @@ export const readDefinitions = (
   }
   for (const file of lineFiles ?? []) {
     const parsed = parseLine(
-      { file, path: join(packageRoot, file) },
-      readText(packageRoot, file),
+      { file, path: join(factoryRoot, file) },
+      readText(factoryRoot, file),
     );
     if (!parsed.ok) {
       errors.push(...parsed.error);
@@ -125,9 +133,9 @@ export const readDefinitions = (
     lines.set(line.name, { line, snapshot: snapshot.value });
   }
 
-  const templates = loadTemplates(packageRoot);
-  const prTemplates = loadPrTemplates(packageRoot);
-  const runtime = loadRuntimePrompts(packageRoot);
+  const templates = loadTemplates(factoryRoot);
+  const prTemplates = loadPrTemplates(factoryRoot);
+  const runtime = loadRuntimePrompts(PACKAGE_ROOT);
   errors.push(...templates.errors, ...prTemplates.errors);
   if (!runtime.ok) {
     errors.push(...runtime.error);
@@ -146,13 +154,37 @@ export const readDefinitions = (
 };
 
 /**
- * Loads every definition under `packageRoot` or returns all problems at once,
+ * Loads every definition under `factoryRoot` or returns all problems at once,
  * each with its file and field.
  */
 export const loadDefinitions = (
-  packageRoot: string,
+  factoryRoot: string,
   catalog?: NitpickCatalog,
 ): Result<Definitions, DefinitionError[]> => {
-  const read = readDefinitions(packageRoot, catalog);
+  const read = readDefinitions(factoryRoot, catalog);
   return read.errors.length > 0 ? err(read.errors) : ok(read.definitions);
+};
+
+/**
+ * Loads a repository's definitions from `<repoRoot>/.factory/`. When the repo
+ * has a `.nitpick/` catalog, declared rules and skills are validated against
+ * it; without one, they are not checked. A missing `.factory/` is one error
+ * saying what to add.
+ */
+export const loadRepoDefinitions = async (
+  repoRoot: string,
+): Promise<Result<Definitions, DefinitionError[]>> => {
+  const factoryRoot = join(repoRoot, FACTORY_DIR);
+  if (!existsSync(factoryRoot)) {
+    return err([
+      {
+        file: FACTORY_DIR,
+        field: '(directory)',
+        message: `no ${FACTORY_DIR}/ directory in ${repoRoot}; add lines/, operators/ and templates/ there`,
+      },
+    ]);
+  }
+  const hasCatalog = existsSync(join(repoRoot, '.nitpick', 'config.ts'));
+  const catalog = hasCatalog ? await nitpickCatalog(repoRoot) : undefined;
+  return loadDefinitions(factoryRoot, catalog);
 };

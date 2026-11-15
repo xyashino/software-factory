@@ -1,5 +1,12 @@
 import type { z } from 'zod';
 import {
+  createOrderRequestSchema,
+  createOrderResponseSchema,
+  createPlanRequestSchema,
+  createPlanResponseSchema,
+  recordPlanPrStateRequestSchema,
+  recordPlanPrStateResponseSchema,
+  recordPrStateRequestSchema,
   adminArchiveResponseSchema,
   adminExportResponseSchema,
   adminFileRequestSchema,
@@ -107,6 +114,26 @@ export const ROUTES = {
     path: 'supervisor/order',
     request: orderDetailRequestSchema,
     response: orderDetailResponseSchema,
+  },
+  createOrder: {
+    path: 'supervisor/orders/create',
+    request: createOrderRequestSchema,
+    response: createOrderResponseSchema,
+  },
+  createPlan: {
+    path: 'supervisor/plans/create',
+    request: createPlanRequestSchema,
+    response: createPlanResponseSchema,
+  },
+  recordPrState: {
+    path: 'supervisor/orders/pr-state',
+    request: recordPrStateRequestSchema,
+    response: commandResultSchema,
+  },
+  recordPlanPrState: {
+    path: 'supervisor/plans/pr-state',
+    request: recordPlanPrStateRequestSchema,
+    response: recordPlanPrStateResponseSchema,
   },
   answer: {
     path: 'supervisor/answer',

@@ -58,6 +58,8 @@ import type {
 } from '../ports';
 import type { WorkspaceResult } from '../workspace';
 import { getBlob, putBlob } from './blobs';
+import { redactDetail } from './redact';
+import { PROMPT_CONFIG, RenderFailed, renderOperatorPrompt } from './render';
 import { workspaceDetailOf } from './workspace-detail';
 
 /** The usage a runner reports in its output: tokens, and the cost when the runner names one. */
@@ -249,6 +251,35 @@ export const runOperatorStation = async (
   }
   const worktree = ws.worktree;
 
+  // The Cell renders the prompt from the repo's `.factory/` (PROTOCOL §4); a repo that cannot render it fails the job.
+  let promptText: string;
+  try {
+    promptText = await renderOperatorPrompt({
+      job,
+      worktree,
+      blobs: (ref) => getBlob(deps.client, ref),
+      config: PROMPT_CONFIG,
+    });
+  } catch (error) {
+    if (!(error instanceof RenderFailed)) throw error;
+    const logBlob = await putBlob(
+      deps.client,
+      encode(error.message),
+      'text/plain',
+    );
+    const reported = await submit('prompt', {
+      type: 'ReportWorkspaceFailed',
+      stage: 'setup',
+      detail: redactDetail(error.message, 500),
+      logBlob,
+    });
+    return reported.ok ? reported.result.next : null;
+  }
+  const promptBlob = await putBlob(
+    deps.client,
+    encode(promptText),
+    'text/markdown',
+  );
   const started = await submit('start', {
     type: 'StartCycle',
     baseCommit: ws.base,
@@ -257,9 +288,7 @@ export const runOperatorStation = async (
       runner: operator.runner,
       model: operator.model,
     },
-    ...(station.promptBlob === undefined
-      ? {}
-      : { promptBlob: station.promptBlob }),
+    promptBlob,
   });
   if (!started.ok) return null;
 
@@ -270,9 +299,7 @@ export const runOperatorStation = async (
   const cycleDir = join(deps.dataDir, 'cycles', cycleDirName(cycleId));
   mkdirSync(cycleDir, { recursive: true });
   const promptPath = join(cycleDir, 'prompt.md');
-  if (station.promptBlob !== undefined) {
-    writeFileSync(promptPath, await getBlob(deps.client, station.promptBlob));
-  }
+  writeFileSync(promptPath, promptText);
   for (const output of outputs)
     mkdirSync(dirname(join(worktree, output.path)), { recursive: true });
   const kickoff = `Read ${promptPath} and follow it exactly. Finish with the factory-operator command it names.`;
