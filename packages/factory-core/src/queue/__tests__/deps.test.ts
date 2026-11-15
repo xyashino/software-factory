@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { planSlugSchema, type OrderId, type PlanSlug } from '../../ids';
 import type { BoardStatus } from '../../order/status';
-import { type DepRow, boardStatusWithDeps, resolveDeps } from '../deps';
+import {
+  type DepRow,
+  boardStatusWithDeps,
+  indexDeps,
+  resolveDeps,
+} from '../deps';
 import { orderOf } from './builders';
 
 const DEP: OrderId = orderOf('dep');
@@ -173,5 +178,37 @@ describe('resolveDeps: stacked outcome of an in-plan predecessor (CORE §12.4)',
     const other = planSlugSchema.parse('abc');
     // Under the merged policy an open delivered PR waits; the stacked rule would satisfy it.
     expect(stacked(row('delivered', 'open'), other)).toBe('waiting');
+  });
+});
+
+describe('indexDeps: a pre-built index gives the array answer', () => {
+  const ONE: OrderId = orderOf('one');
+  const TWO: OrderId = orderOf('two');
+  const rows: DepRow[] = [
+    { orderId: ONE, status: 'delivered', prState: 'open' },
+    { orderId: TWO, status: 'merged', prState: 'merged' },
+  ];
+  const entries = [
+    { dependsOn: [] },
+    { dependsOn: [ONE] },
+    { dependsOn: [ONE, TWO] },
+    { dependsOn: [orderOf('missing')] },
+  ];
+
+  it('resolves every entry the same from the array and from the index', () => {
+    const index = indexDeps(rows);
+    for (const policy of ['delivered', 'merged'] as const) {
+      for (const entry of entries) {
+        expect(resolveDeps(entry, index, policy)).toBe(
+          resolveDeps(entry, rows, policy),
+        );
+      }
+    }
+  });
+
+  it('keys each row by its order id', () => {
+    const index = indexDeps(rows);
+    expect(index.size).toBe(2);
+    expect(index.get(TWO)?.status).toBe('merged');
   });
 });

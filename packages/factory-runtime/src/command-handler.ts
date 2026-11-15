@@ -27,7 +27,9 @@ import {
   type PlanCommandRequest,
   type PlanCommandResult,
 } from './plan-commands';
-import { readQueue, cellView } from './queue';
+import type { PlanProjection } from '@repo/factory-core/plan/projection';
+import type { ProjectRecord } from '@repo/factory-core/ports/projects';
+import { cellView, queueOf } from './queue';
 import type { RuntimePorts } from './ports';
 import {
   blobRefsIn,
@@ -92,6 +94,28 @@ export interface CommandHandler {
   submitPlan(request: PlanCommandRequest): Promise<PlanCommandResult>;
 }
 
+/**
+ * The projections one attempt of a command reads, each loaded at most once and only when asked for
+ * (perf-04). A claim reads the rows and the registry; a continuation also reads the plans. The reads
+ * happen before the attempt's append, as they always did, so a conflict reloads through a new attempt.
+ */
+interface AttemptReads {
+  rows(): Promise<OrderProjection[]>;
+  plans(): Promise<PlanProjection[]>;
+  projects(): Promise<ProjectRecord[]>;
+}
+
+const attemptReads = (ports: RuntimePorts): AttemptReads => {
+  let rows: Promise<OrderProjection[]> | undefined;
+  let plans: Promise<PlanProjection[]> | undefined;
+  let projects: Promise<ProjectRecord[]> | undefined;
+  return {
+    rows: () => (rows ??= ports.projections.orders()),
+    plans: () => (plans ??= ports.projections.plans()),
+    projects: () => (projects ??= ports.projects.list()),
+  };
+};
+
 /** The state a decided command leaves; a decided command always leaves one. */
 const stateOf = (working: Working): WorkOrderState => {
   if (!working.state)
@@ -114,8 +138,12 @@ export const createCommandHandler = (
   const jobPorts = { blobs, definitions: ports.definitions, config };
   const planCommands = createPlanCommands(ports, onCommit);
 
-  const projectFor = async (projectId: string) => {
-    const project = (await ports.projects.list()).find(
+  /** The project of a Work order, from the attempt's registry read (no second `projects.list()`). */
+  const projectFor = (
+    projects: readonly ProjectRecord[],
+    projectId: string,
+  ) => {
+    const project = projects.find(
       (candidate) => candidate.projectId === projectId,
     );
     if (!project) {
@@ -131,13 +159,22 @@ export const createCommandHandler = (
     cellId: CellId,
     orderId: OrderId,
     projection: OrderProjection,
+    reads: AttemptReads,
   ): Promise<boolean> => {
     const cell = await ports.cells.get(cellId);
     if (!cell || cell.revokedAt !== null || !cell.info) return false;
     const heldElsewhere = (await leases.forCell(cellId)).filter(
       (lease) => lease.orderId !== orderId,
     ).length;
-    const queue = await readQueue(ports, projection);
+    const queue = queueOf(
+      {
+        rows: await reads.rows(),
+        plans: await reads.plans(),
+        projects: await reads.projects(),
+      },
+      clock.now(),
+      projection,
+    );
     return selectClaimable(
       queue.entries,
       cellView(cellId, cell.info, heldElsewhere),
@@ -239,10 +276,15 @@ export const createCommandHandler = (
     let lease: Lease | undefined;
     const claimedJob = stateOf(working).activeJob;
     const beforeJobId = before?.activeJob?.jobId;
+    // Each projection is read at most once per attempt, and only when a claim or a continuation needs it.
+    const reads = attemptReads(ports);
 
     if (request.command.type === 'ClaimJob' && claimedJob && before) {
       // The decision claimed the job itself: build what the Cell runs and lease it.
-      const project = await projectFor(stateOf(working).projectId);
+      const project = projectFor(
+        await reads.projects(),
+        stateOf(working).projectId,
+      );
       const spec = nextJob(before);
       if (spec.kind !== 'job')
         throw new Error('a claim decided on a state with no job');
@@ -251,7 +293,7 @@ export const createCommandHandler = (
         stateOf(working),
         project,
         spec.job,
-        await ports.projections.orders(),
+        await reads.rows(),
       );
       lease = leaseFor(
         request.orderId,
@@ -278,6 +320,7 @@ export const createCommandHandler = (
           cellId,
           request.orderId,
           preview(stateOf(beforeClaim), lastSeq + beforeClaim.events.length),
+          reads,
         ));
       if (canRun && spec.kind === 'job') {
         try {
@@ -288,13 +331,16 @@ export const createCommandHandler = (
           );
           if (claim.ok) {
             const claimed = appendTo(beforeClaim, claim.value);
-            const project = await projectFor(stateOf(claimed).projectId);
+            const project = projectFor(
+              await reads.projects(),
+              stateOf(claimed).projectId,
+            );
             next = await buildJob(
               jobPorts,
               stateOf(claimed),
               project,
               spec.job,
-              await ports.projections.orders(),
+              await reads.rows(),
             );
             working = claimed;
             lease = leaseFor(request.orderId, stateOf(claimed), cellId);

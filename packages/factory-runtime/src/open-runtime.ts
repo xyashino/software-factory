@@ -20,6 +20,7 @@ import { sqliteSignalStore } from '@repo/factory-db/signals-table';
 import { sqliteBlobStore } from '@repo/factory-db/sqlite-blob-store';
 import {
   openDatabase,
+  openReadDatabase,
   openSqliteEventStore,
 } from '@repo/factory-db/sqlite-event-store';
 import { sqliteLeaseStore } from '@repo/factory-db/sqlite-lease-store';
@@ -103,8 +104,10 @@ const ORDER_PLAN_MIGRATION = '0003_order_plan.sql';
 export const openRuntime = (options: OpenRuntimeOptions): OpenedRuntime => {
   const writer = acquireWriter(options.dataDir);
   let database: Database | undefined;
+  let readDatabase: Database | undefined;
   try {
-    database = openDatabase(join(options.dataDir, DATABASE_FILE_NAME));
+    const file = join(options.dataDir, DATABASE_FILE_NAME);
+    database = openDatabase(file);
     const applied = migrate(database, MIGRATIONS_DIR);
     // Migration 0003 adds `orders.plan` and `orders.base_branch`: a rebuild fills them for existing rows (STORAGE §6).
     if (applied.includes(ORDER_PLAN_MIGRATION)) {
@@ -114,11 +117,13 @@ export const openRuntime = (options: OpenRuntimeOptions): OpenedRuntime => {
       loadDefinitions(options.definitionsRoot ?? DEFINITIONS_ROOT),
     );
     const clock = options.clock ?? systemClock;
-    const store = openSqliteEventStore(database);
+    // Reads run on their own read-only WAL connection, so a write or a sweep never queues them (STORAGE §3.1).
+    readDatabase = openReadDatabase(file);
+    const store = openSqliteEventStore(database, readDatabase);
     const gate = store.gate;
     const ports: RuntimePorts = {
       events: store,
-      projections: sqliteProjectionReader(database, gate),
+      projections: sqliteProjectionReader(gate),
       projects: sqliteProjectStore(database, writer, gate),
       blobs: sqliteBlobStore(database, writer, gate),
       leases: sqliteLeaseStore(database, writer, gate),
@@ -141,17 +146,20 @@ export const openRuntime = (options: OpenRuntimeOptions): OpenedRuntime => {
     };
     const runtime = createRuntime(ports);
     const opened = database;
+    const openedRead = readDatabase;
     return {
       runtime,
       ports,
       writer,
       close: () => {
         runtime.stop();
+        openedRead.close();
         opened.close();
         writer.release();
       },
     };
   } catch (error) {
+    readDatabase?.close();
     database?.close();
     writer.release();
     throw error;

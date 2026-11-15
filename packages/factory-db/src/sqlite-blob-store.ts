@@ -99,12 +99,12 @@ export const sqliteBlobStore = (
         writer.assertHeld();
         putBlobOn(orm, ref, bytes, mediaType, kind, clock.now());
       }),
-    get: (ref) => gate.run(() => readBlobOn(orm, ref)),
+    get: (ref) => gate.read((reader) => readBlobOn(reader, ref)),
     stat: (refs) =>
-      gate.run(() => {
+      gate.read((reader) => {
         const sizes = new Map<BlobRef, number>();
         if (refs.length === 0) return sizes;
-        const rows = orm
+        const rows = reader
           .select({ ref: blobs.ref, size: blobs.size })
           .from(blobs)
           .where(inArray(blobs.ref, [...refs]))

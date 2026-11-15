@@ -6,7 +6,11 @@ import {
 } from '@repo/factory-core/ids';
 import type { PlanProjection } from '@repo/factory-core/plan/projection';
 import type { OrderProjection } from '@repo/factory-core/order/projection';
-import { resolveDeps, type DepPolicy } from '@repo/factory-core/queue/deps';
+import {
+  indexDeps,
+  resolveDeps,
+  type DepPolicy,
+} from '@repo/factory-core/queue/deps';
 import type {
   Limits,
   QueueEntry,
@@ -61,40 +65,63 @@ const entryOf = (
 });
 
 /**
- * Reads the queue. `replace` swaps in the projection a command is about to write, so a continuation
- * sees the Work order as it will stand after the command (STORAGE §3).
+ * What one queue pass reads from the projections and the project registry. A caller that needs the
+ * queue more than once in a command loads it once (`loadQueueSnapshot`) and derives each queue from it.
  */
-export const readQueue = async (
-  ports: Pick<RuntimePorts, 'projections' | 'projects' | 'clock'>,
+export interface QueueSnapshot {
+  rows: OrderProjection[];
+  plans: PlanProjection[];
+  projects: ProjectRecord[];
+}
+
+/** Reads the three projections a queue is built from, once each. */
+export const loadQueueSnapshot = async (
+  ports: Pick<RuntimePorts, 'projections' | 'projects'>,
+): Promise<QueueSnapshot> => ({
+  rows: await ports.projections.orders(),
+  plans: await ports.projections.plans(),
+  projects: await ports.projects.list(),
+});
+
+/**
+ * Builds the queue from a snapshot, in O(N). `replace` swaps in the projection a command is about to
+ * write, so a continuation sees the Work order as it will stand after the command (STORAGE §3).
+ */
+export const queueOf = (
+  snapshot: QueueSnapshot,
+  now: number,
   replace?: OrderProjection,
-): Promise<Queue> => {
-  const stored = await ports.projections.orders();
+): Queue => {
   const rows = replace
-    ? stored.map((row) => (row.orderId === replace.orderId ? replace : row))
-    : stored;
+    ? snapshot.rows.map((row) =>
+        row.orderId === replace.orderId ? replace : row,
+      )
+    : snapshot.rows;
   const plansById = new Map<PlanId, PlanProjection>(
-    (await ports.projections.plans()).map((plan) => [plan.planId, plan]),
+    snapshot.plans.map((plan) => [plan.planId, plan]),
   );
   const projects = new Map(
-    (await ports.projects.list()).map((project) => [
-      project.projectId,
-      project,
-    ]),
+    snapshot.projects.map((project) => [project.projectId, project]),
   );
-  const now = ports.clock.now();
+  // One index of the pass: each dependency is then an O(1) lookup, not a rebuild per Work order.
+  const byId = indexDeps(rows);
   const entries = rows.map((row) => {
     const policy: DepPolicy =
       projects.get(row.projectId)?.depPolicy ?? 'delivered';
-    const deps = resolveDeps(row, rows, policy);
+    const deps = resolveDeps(row, byId, policy);
     return entryOf(row, rootGated(row, plansById) ? 'waiting' : deps, now);
   });
+  const running = new Map<ProjectId, number>();
+  for (const row of rows) {
+    if (row.holder === 'cell') {
+      running.set(row.projectId, (running.get(row.projectId) ?? 0) + 1);
+    }
+  }
   const perProjectRunning: Limits['perProjectRunning'] = {};
   for (const [projectId, project] of projects) {
     perProjectRunning[projectId] = {
       max: project.maxRunning,
-      running: rows.filter(
-        (row) => row.projectId === projectId && row.holder === 'cell',
-      ).length,
+      running: running.get(projectId) ?? 0,
     };
   }
   return {
@@ -104,6 +131,13 @@ export const readQueue = async (
     limits: { now, perProjectRunning },
   };
 };
+
+/** Reads the queue. `replace` swaps in the projection a command is about to write (see `queueOf`). */
+export const readQueue = async (
+  ports: Pick<RuntimePorts, 'projections' | 'projects' | 'clock'>,
+  replace?: OrderProjection,
+): Promise<Queue> =>
+  queueOf(await loadQueueSnapshot(ports), ports.clock.now(), replace);
 
 /** The Cell's offer as `selectClaimable` reads it: free slots are its slots less its live leases. */
 export const cellView = (

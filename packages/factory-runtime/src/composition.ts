@@ -18,6 +18,7 @@ import type { RuntimePorts, Timers } from './ports';
 import { pollPrStates } from './pr-poll';
 import { createRemoteAccess, type RemoteAccess } from './remote';
 import { bootGrace, reapOnce } from './reaper';
+import { revocations } from './revocations';
 
 /**
  * The runtime: the command loop, the claims, the heartbeats, the reaper, intake, the PR poll, the
@@ -136,11 +137,12 @@ export const createRuntime = (ports: RuntimePorts): Runtime => {
     return reports;
   };
 
+  const revoked = revocations();
   const operations = createOperations(
     ports,
     handler,
     { ports, handler, notifier },
-    { sync, admin },
+    { sync, admin, revoked: (revocation) => revoked.emit(revocation) },
   );
 
   let running = false;
@@ -195,7 +197,7 @@ export const createRuntime = (ports: RuntimePorts): Runtime => {
     feed: (afterGlobalSeq, signal) =>
       feedFrom(ports, notifier, afterGlobalSeq, signal),
     admin,
-    remote: createRemoteAccess(ports),
+    remote: createRemoteAccess(ports, revoked),
     start: async () => {
       if (running) return;
       await bootGrace(ports);

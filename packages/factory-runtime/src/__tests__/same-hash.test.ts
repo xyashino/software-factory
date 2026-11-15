@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createRemoteAccess, hashToken, sameHash } from '../remote';
 import type { RuntimePorts } from '../ports';
+import { revocations } from '../revocations';
 
 describe('the constant-time hash check', () => {
   it('matches the stored hash of the same token only', () => {
@@ -21,9 +22,9 @@ describe('the constant-time hash check', () => {
       },
     } as unknown as RuntimePorts;
 
-    expect(await createRemoteAccess(ports).cellOf('cell-credential')).toBe(
-      undefined,
-    );
+    expect(
+      await createRemoteAccess(ports, revocations()).cellOf('cell-credential'),
+    ).toBe(undefined);
   });
 
   it('accepts a Cell whose stored hash is the presented one', async () => {
@@ -37,6 +38,8 @@ describe('the constant-time hash check', () => {
       },
     } as unknown as RuntimePorts;
 
-    expect(await createRemoteAccess(ports).cellOf(credential)).toBe('C');
+    expect(
+      await createRemoteAccess(ports, revocations()).cellOf(credential),
+    ).toBe('C');
   });
 });

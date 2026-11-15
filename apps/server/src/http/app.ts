@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { Hono } from 'hono';
 import {
   joinRequestSchema,
@@ -11,11 +12,12 @@ import {
   type HttpRouteName,
 } from '@repo/factory-core/contracts/http-routes';
 import { ROUTES, type RouteName } from '@repo/factory-core/contracts/routes';
-import { isPlanId, type CellId, type JobId } from '@repo/factory-core/ids';
+import { isPlanId, type JobId } from '@repo/factory-core/ids';
 import type { Runtime } from '@repo/factory-runtime/composition';
 import { isRuntimeError } from '@repo/factory-runtime/errors';
 import { streamResponse } from '../socket/serve';
 import { failureResponse, jsonResponse, refusedResponse } from '../wire';
+import { type AuthCache, type Caller, createAuthCache } from './auth-cache';
 
 /**
  * The remote HTTP app (PROTOCOL §2, §3): the same runtime as the socket, served over TCP with Hono.
@@ -35,14 +37,17 @@ const CELL_BODY_ROUTES: ReadonlySet<string> = new Set([
 /** A bearer token: the base64url alphabet, bounded in length. Anything else is no token. */
 const BEARER = /^Bearer ([A-Za-z0-9_-]{1,512})$/;
 
-type Caller =
-  { kind: 'supervisor'; name: string } | { kind: 'cell'; cellId: CellId };
-
 const bearerOf = (request: Request): string | undefined =>
   BEARER.exec(request.headers.get('authorization') ?? '')?.[1];
 
-/** Who holds the token, among the credential classes the route accepts (PROTOCOL §1). */
-const callerOf = async (
+/** Whether a route's credential classes (PROTOCOL §1) admit a caller of this kind. */
+const admits = (auth: HttpAuth, caller: Caller): boolean =>
+  caller.kind === 'supervisor'
+    ? auth !== 'cell'
+    : auth !== 'supervisor' && auth !== 'join';
+
+/** Who holds the token, among the credential classes the route accepts (PROTOCOL §1). Runtime lookup. */
+const lookupCaller = async (
   runtime: Runtime,
   auth: HttpAuth,
   token: string,
@@ -56,6 +61,26 @@ const callerOf = async (
     if (cellId !== undefined) return { kind: 'cell', cellId };
   }
   return undefined;
+};
+
+/**
+ * Who holds the token (PROTOCOL §1), through the auth cache (perf-04): a verified caller the route
+ * admits is served from memory; otherwise the runtime checks the credential and a positive result is
+ * cached under the token's digest. A refusal is never cached.
+ */
+const callerOf = async (
+  runtime: Runtime,
+  cache: AuthCache,
+  auth: HttpAuth,
+  token: string,
+): Promise<Caller | undefined> => {
+  const digest = createHash('sha256').update(token).digest('hex');
+  const cached = cache.get(digest, Date.now());
+  if (cached !== undefined && admits(auth, cached)) return cached;
+  const generation = cache.generation();
+  const caller = await lookupCaller(runtime, auth, token);
+  if (caller !== undefined) cache.set(digest, caller, generation, Date.now());
+  return caller;
 };
 
 const NOT_JSON = Symbol('not json');
@@ -79,6 +104,7 @@ const notJson = () =>
 /** One route: credential, path and body into the route's request, the runtime, the response. */
 const serveRoute = async (
   runtime: Runtime,
+  cache: AuthCache,
   name: Exclude<HttpRouteName, 'join' | 'stream'>,
   request: Request,
   params: Readonly<Record<string, string>>,
@@ -86,7 +112,9 @@ const serveRoute = async (
   const spec: HttpRoute = HTTP_ROUTES[name];
   const token = bearerOf(request);
   const caller =
-    token === undefined ? undefined : await callerOf(runtime, spec.auth, token);
+    token === undefined
+      ? undefined
+      : await callerOf(runtime, cache, spec.auth, token);
   if (!caller) return refusedResponse({ code: 'unauthorized' });
 
   const route: RouteName = name;
@@ -172,6 +200,12 @@ const serveRoute = async (
 export const createHttpApp = (runtime: Runtime): Hono => {
   const app = new Hono();
   app.notFound(() => refusedResponse({ code: 'not_found' }));
+  // Verified credentials are cached for this app; every revoke, from HTTP or the socket, drops its entries.
+  const cache = createAuthCache();
+  runtime.remote.onRevoked((revocation) => {
+    if (revocation.kind === 'cell') cache.evictCell(revocation.cellId);
+    else cache.clear();
+  });
 
   app.on('POST', HTTP_ROUTES.join.path, async (c) => {
     try {
@@ -193,7 +227,7 @@ export const createHttpApp = (runtime: Runtime): Hono => {
     const caller =
       token === undefined
         ? undefined
-        : await callerOf(runtime, HTTP_ROUTES.stream.auth, token);
+        : await callerOf(runtime, cache, HTTP_ROUTES.stream.auth, token);
     if (!caller) return refusedResponse({ code: 'unauthorized' });
     return streamResponse(runtime, c.req.raw);
   });
@@ -202,7 +236,7 @@ export const createHttpApp = (runtime: Runtime): Hono => {
     if (name === 'join' || name === 'stream') continue;
     const spec = HTTP_ROUTES[name];
     app.on(spec.method, spec.path, (c) =>
-      serveRoute(runtime, name, c.req.raw, c.req.param()),
+      serveRoute(runtime, cache, name, c.req.raw, c.req.param()),
     );
   }
   return app;
