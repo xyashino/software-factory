@@ -3,7 +3,8 @@ import type { DomainError } from '../order/commands';
 
 /**
  * The wire form of every refusal (PROTOCOL §3.5). A domain refusal keeps its shape; the transport
- * adds `unavailable` (503, after the retry budget) and `unauthorized` (a revoked or unknown Cell).
+ * adds `unavailable` (503, after the retry budget), `unauthorized` (a revoked or unknown Cell) and
+ * `not_configured` (503: a feature the server was started without, such as the GitHub webhook secret).
  */
 export const wireErrorSchema = z.discriminatedUnion('code', [
   z.object({ code: z.literal('not_found') }).strict(),
@@ -17,6 +18,7 @@ export const wireErrorSchema = z.discriminatedUnion('code', [
     .strict(),
   z.object({ code: z.literal('unavailable') }).strict(),
   z.object({ code: z.literal('unauthorized') }).strict(),
+  z.object({ code: z.literal('not_configured') }).strict(),
 ]);
 
 export type WireError = z.infer<typeof wireErrorSchema>;
@@ -31,6 +33,7 @@ export const WIRE_STATUS: Record<WireErrorCode, number> = {
   invalid: 422,
   unavailable: 503,
   unauthorized: 401,
+  not_configured: 503,
 };
 
 /** A domain refusal in its wire form. The shapes are the same by construction. */

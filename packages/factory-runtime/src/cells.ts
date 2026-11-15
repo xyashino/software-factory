@@ -44,7 +44,6 @@ export const hello = async (
     config: {
       leaseTtlMs: config.leaseTtlMs,
       heartbeatMs: config.heartbeatMs,
-      reaperMs: config.reaperMs,
       selfFenceMs: config.selfFenceMs,
     },
   };

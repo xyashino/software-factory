@@ -10,16 +10,21 @@
  * the queue, so a test's own Cell claims it instead of receiving it from the command that ends a job.
  * Arguments, not environment variables: the turbo lint rule wants every env var declared.
  */
-import { cpSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { ProjectId, TodoId } from '@repo/factory-core/ids';
 import { openRuntime } from '@repo/factory-runtime/open-runtime';
-import { DEFINITIONS_ROOT } from '@repo/factory-runtime/paths';
-import { seedProject } from '@repo/factory-runtime/seed';
+import { fixtureLine, seedProject } from '@repo/factory-runtime/seed';
 import { startSocketListener } from '../socket/listener';
 
 const PROJECT = 'software-factory' as ProjectId;
 const TODO = 'todo-1' as TodoId;
+
+/** This repository's own `.factory/`: the operator profiles the fixture line names. */
+const SHIPPED_FACTORY = fileURLToPath(
+  new URL('../../../../.factory', import.meta.url),
+);
 
 /** The line the fixture serves: the quality gate first, then a builder the tests never claim. */
 const lineYaml = (checks: string[]): string => `schemaVersion: 2
@@ -56,20 +61,6 @@ deliver:
   to: new-pr
 `;
 
-/** Copies the shipped definitions under `dataDir/definitions` and replaces the lines with the fixture's. */
-const fixtureDefinitions = (dataDir: string, checks: string[]): string => {
-  const root = join(dataDir, 'definitions');
-  rmSync(root, { recursive: true, force: true });
-  cpSync(DEFINITIONS_ROOT, root, {
-    recursive: true,
-    filter: (source) => !source.includes('node_modules'),
-  });
-  rmSync(join(root, 'lines'), { recursive: true, force: true });
-  mkdirSync(join(root, 'lines'), { recursive: true });
-  writeFileSync(join(root, 'lines', 'inspect.yml'), lineYaml(checks));
-  return root;
-};
-
 const main = async (): Promise<void> => {
   const [dataDir, repoUrl, checksJson = '["true"]', continuation = 'true'] =
     process.argv.slice(2);
@@ -82,15 +73,18 @@ const main = async (): Promise<void> => {
 
   mkdirSync(dataDir, { recursive: true });
   seedProject(dataDir, { projectId: PROJECT, repoUrl, baseBranch: 'main' });
+  const line = fixtureLine(
+    dataDir,
+    SHIPPED_FACTORY,
+    'inspect',
+    lineYaml(checks),
+  );
   const opened = openRuntime({
     dataDir,
-    definitionsRoot: fixtureDefinitions(dataDir, checks),
     config: { continuation: continuation === 'true' },
   });
   await opened.runtime.start();
 
-  const loaded = opened.ports.definitions.lines.get('inspect');
-  if (!loaded) throw new Error('the fixture line did not load');
   // The Work order is created the way a Supervisor creates one: through the task API, with the Line it pins.
   await opened.runtime.call('createOrder', {
     commandId: `create-${TODO}`,
@@ -99,7 +93,7 @@ const main = async (): Promise<void> => {
     title: `Title ${TODO}`,
     type: 'feat',
     body: `Body of ${TODO}\n`,
-    line: loaded.snapshot,
+    line,
     priority: 'medium',
     dependsOn: [],
     baseBranch: 'main',

@@ -94,6 +94,7 @@ describe('openRuntime', () => {
     db.close();
     expect(names).toEqual([
       '0000_baseline',
+      '0001_drop_intake',
       '0001_init.sql',
       '0002_join_token_command_id.sql',
       '0003_order_plan.sql',

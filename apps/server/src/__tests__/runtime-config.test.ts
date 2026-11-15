@@ -11,14 +11,12 @@ describe('runtime timing knobs from the environment', () => {
       runtimeConfigFrom({
         FACTORY_LEASE_TTL_MS: '3000',
         FACTORY_HEARTBEAT_MS: '300',
-        FACTORY_REAPER_MS: '200',
         FACTORY_SELF_FENCE_MS: '2000',
         FACTORY_CLAIM_TICK_MS: '100',
       }),
     ).toEqual({
       leaseTtlMs: 3000,
       heartbeatMs: 300,
-      reaperMs: 200,
       selfFenceMs: 2000,
       claimTickMs: 100,
     });
@@ -27,9 +25,6 @@ describe('runtime timing knobs from the environment', () => {
   it('refuses a knob that is not a positive whole number of milliseconds', () => {
     expect(() => runtimeConfigFrom({ FACTORY_HEARTBEAT_MS: 'soon' })).toThrow(
       'FACTORY_HEARTBEAT_MS',
-    );
-    expect(() => runtimeConfigFrom({ FACTORY_REAPER_MS: '0' })).toThrow(
-      'FACTORY_REAPER_MS',
     );
   });
 

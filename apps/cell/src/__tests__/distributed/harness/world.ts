@@ -1,14 +1,22 @@
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import {
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { StoredEvent } from '@repo/factory-core/order/events';
-import type { OrderId, ProjectId } from '@repo/factory-core/ids';
-import { seedProject } from '@repo/factory-runtime/seed';
 import {
-  createFixtureRepo,
-  todoFile,
-} from '@repo/factory-server/__tests__/e2e/fixture-repo';
+  planSlugSchema,
+  type OrderId,
+  type ProjectId,
+  type TodoId,
+} from '@repo/factory-core/ids';
+import { seedProject, shippedLine } from '@repo/factory-runtime/seed';
+import { createFixtureRepo, todoFile } from '../../fixture-repo';
 import { startHttpProxy, type HttpProxy } from './tcp-proxy';
 import { startCell, type CellOptions, type RunningCell } from './cell-proc';
 import {
@@ -96,14 +104,139 @@ export const suiteEnv = (ghDir: string): Record<string, string> => ({
   FAKE_GH_DIR: ghDir,
   FACTORY_LEASE_TTL_MS: String(SUITE_TIMING.leaseTtlMs),
   FACTORY_HEARTBEAT_MS: String(SUITE_TIMING.heartbeatMs),
-  FACTORY_REAPER_MS: String(SUITE_TIMING.reaperMs),
   FACTORY_SELF_FENCE_MS: String(SUITE_TIMING.selfFenceMs),
   FACTORY_CLAIM_TICK_MS: String(SUITE_TIMING.claimTickMs),
 });
 
+/** One todo file's fields a Work order takes (intake's rule: `factory: v2`, status `todo`). */
+interface TodoFields {
+  todoId: string;
+  title: string;
+  body: string;
+  priority: 'high' | 'medium' | 'low';
+  plan: string | undefined;
+}
+
+const parseTodo = (name: string, text: string): TodoFields | undefined => {
+  const match = /^---\n([\s\S]*?)\n---\n/.exec(text);
+  const front = match?.[1] ?? '';
+  const field = (key: string): string | undefined =>
+    new RegExp(`^${key}:\\s*(.+)$`, 'm').exec(front)?.[1]?.trim();
+  if (field('status') !== 'todo' || field('factory') !== 'v2') return undefined;
+  const priority = field('priority');
+  return {
+    todoId: name,
+    title: /^# (.+)$/m.exec(text)?.[1]?.trim() ?? name,
+    body: text.slice(match ? match[0].length : 0),
+    priority: priority === 'high' || priority === 'low' ? priority : 'medium',
+    plan: field('plan'),
+  };
+};
+
+/**
+ * The Work orders and Order Plans the todo files name, created through the task API on the shipped
+ * `feature` Line: a plan's todos become one chain in file order, the others one Work order each.
+ */
+const createOrdersFromTodos = async (
+  factory: RunningFactory,
+  todos: Record<string, string>,
+): Promise<void> => {
+  const plans = new Map<string, TodoFields[]>();
+  for (const [file, text] of Object.entries(todos)) {
+    const todo = parseTodo(file.replace(/\.md$/, ''), text);
+    if (!todo) continue;
+    if (todo.plan !== undefined) {
+      plans.set(todo.plan, [...(plans.get(todo.plan) ?? []), todo]);
+      continue;
+    }
+    await factory.client.call('createOrder', {
+      commandId: `create-${todo.todoId}`,
+      projectId: PROJECT,
+      todoId: todo.todoId as TodoId,
+      title: todo.title,
+      type: 'feat',
+      body: todo.body,
+      line: shippedLine('feature'),
+      priority: todo.priority,
+      dependsOn: [],
+      baseBranch: 'main',
+    });
+  }
+  for (const [slug, members] of plans) {
+    await factory.client.call('createPlan', {
+      commandId: `plan-${slug}`,
+      projectId: PROJECT,
+      slug: planSlugSchema.parse(slug),
+      members: members.map((todo) => ({
+        todoId: todo.todoId as TodoId,
+        title: todo.title,
+        type: 'feat',
+        body: todo.body,
+        line: shippedLine('feature'),
+        priority: todo.priority,
+      })),
+    });
+  }
+};
+
+/**
+ * GitHub's side of the pull request webhook (PROTOCOL §3.6): every pull request the fake `gh` holds is
+ * reported to the Factory through its task API when its state differs from the stored one, so a merge
+ * the test makes in git reaches the Work order and the Order Plan that hold the PR.
+ */
+export const reportPrStates = async (w: {
+  factory: RunningFactory;
+  ghDir: string;
+}): Promise<void> => {
+  const pulls = readdirSync(w.ghDir)
+    .filter((name) => name.endsWith('.json'))
+    .map(
+      (name) =>
+        JSON.parse(readFileSync(join(w.ghDir, name), 'utf8')) as {
+          url: string;
+          state: 'OPEN' | 'MERGED' | 'CLOSED';
+        },
+    );
+  const stateOf = (state: 'OPEN' | 'MERGED' | 'CLOSED') =>
+    state === 'MERGED' ? 'merged' : state === 'CLOSED' ? 'closed' : 'open';
+  const board = await w.factory.client.call('board', {});
+  for (const row of board.orders) {
+    const pr = pulls.find((candidate) => candidate.url === row.prUrl);
+    if (!pr || row.prState === stateOf(pr.state)) continue;
+    await w.factory.client.call('recordPrState', {
+      orderId: row.orderId,
+      commandId: `gh:${pr.url}:${stateOf(pr.state)}`,
+      prUrl: pr.url,
+      state: stateOf(pr.state),
+    });
+  }
+  const plans = await w.factory.client.call('plans', {});
+  for (const row of plans.plans) {
+    const pr = pulls.find((candidate) => candidate.url === row.prUrl);
+    if (!pr || row.prState === stateOf(pr.state)) continue;
+    await w.factory.client.call('recordPlanPrState', {
+      planId: row.planId,
+      commandId: `gh:${pr.url}:${stateOf(pr.state)}`,
+      prUrl: pr.url,
+      state: stateOf(pr.state),
+    });
+  }
+};
+
+/** Reports the pull requests on a timer while a test runs; the returned function stops it. */
+export const startPrReporter = (w: {
+  factory: RunningFactory;
+  ghDir: string;
+}): (() => void) => {
+  const timer = setInterval(() => {
+    reportPrStates(w).catch(() => undefined);
+  }, 100);
+  return () => clearInterval(timer);
+};
+
 /**
  * A fresh suite world: a temp root, the fixture repository with the given todo files, the project seeded
- * on it, and one Factory process (remote or local) that has synced intake, so the Work orders exist.
+ * on it, and one Factory process (remote or local) that holds the Work orders those todos name.
  */
 export const createWorld = async (
   todos: Record<string, string>,
@@ -153,7 +286,7 @@ export const createWorld = async (
     return factory;
   };
   let factory = await start();
-  await factory.client.call('intakeSync', {});
+  await createOrdersFromTodos(factory, todos);
 
   const proxies: HttpProxy[] = [];
   const cells: RunningCell[] = [];

@@ -1,12 +1,10 @@
 import {
   existsSync,
-  mkdirSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
   readlinkSync,
   rmSync,
-  writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -32,6 +30,9 @@ const ANSWERABLE = 'software-factory:todo-a';
 const PLAIN = 'software-factory:todo-b';
 
 const scratch = (): string => mkdtempSync(join(tmpdir(), 'factory-cli-'));
+
+/** This checkout's root: the repository whose `.factory/` `factory check --dir` validates. */
+const REPO_ROOT = fileURLToPath(new URL('../../../../', import.meta.url));
 
 /** A config file that does not exist, so the developer's own settings never reach a test. */
 const noConfig = (dataDir: string): string => join(dataDir, 'no-config.json');
@@ -377,82 +378,8 @@ describe('factory against a running server', () => {
     expect(result.stderr).toContain('factory-server admin import');
   });
 
-  it('sync --git runs intake against the project repo and creates a Work order', async () => {
-    const repoDir = scratch();
-    const syncDir = scratch();
-    try {
-      mkdirSync(join(repoDir, 'todos'), { recursive: true });
-      writeFileSync(
-        join(repoDir, 'todos', 'add-sso.md'),
-        '---\nstatus: todo\nfactory: v2\npriority: high\n---\n\n# Add SSO\n\nSupport SAML sign-in.\n',
-      );
-      const git = (args: string[]) => {
-        const out = Bun.spawnSync(['git', '-C', repoDir, ...args], {
-          stdout: 'pipe',
-          stderr: 'pipe',
-        });
-        if (out.exitCode !== 0) {
-          throw new Error(
-            `git ${args.join(' ')} failed: ${out.stderr.toString()}`,
-          );
-        }
-      };
-      git(['init', '--quiet', '-b', 'main']);
-      git(['add', '.']);
-      git([
-        '-c',
-        'user.name=test',
-        '-c',
-        'user.email=test@example.test',
-        'commit',
-        '--quiet',
-        '-m',
-        'add todo',
-      ]);
-
-      await seed(syncDir, true, ['--no-orders', '--repo', repoDir]);
-      const result = await factory(syncDir, ['sync', '--git']);
-      const board = await factory(syncDir, ['status']);
-
-      expect(result.code).toBe(0);
-      expect(result.stdout).toContain('intake ran: 1 Work order(s) created');
-      expect(board.stdout).toContain('software-factory:add-sso');
-    } finally {
-      rmSync(repoDir, { recursive: true, force: true });
-      rmSync(syncDir, { recursive: true, force: true });
-    }
-  });
-
-  it('sync replaces the board with a local todo folder', async () => {
-    const todosDir = scratch();
-    const syncDir = scratch();
-    try {
-      const write = (name: string, title: string) =>
-        writeFileSync(
-          join(todosDir, `${name}.md`),
-          `---\nstatus: todo\nfactory: v2\n---\n\n# ${title}\n\nBody.\n`,
-        );
-      write('first', 'First');
-      await seed(syncDir, true, ['--no-orders']);
-
-      const created = await factory(syncDir, ['sync', '--dir', todosDir]);
-      rmSync(join(todosDir, 'first.md'));
-      write('second', 'Second');
-      const replaced = await factory(syncDir, ['sync', '--dir', todosDir]);
-
-      expect(created.code).toBe(0);
-      expect(created.stdout).toContain('created: first');
-      expect(replaced.code).toBe(0);
-      expect(replaced.stdout).toContain('created: second');
-      expect(replaced.stdout).toContain('cancelled: first');
-    } finally {
-      rmSync(todosDir, { recursive: true, force: true });
-      rmSync(syncDir, { recursive: true, force: true });
-    }
-  });
-
   it('check validates the definitions offline', async () => {
-    const result = await factory(dataDir, ['check']);
+    const result = await factory(dataDir, ['check', '--dir', REPO_ROOT]);
 
     expect(result.code).toBe(0);
     expect(result.stdout).toContain('definitions pass');

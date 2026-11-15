@@ -21,7 +21,7 @@ afterAll(() => {
 
 /**
  * A SQLite project store over a fresh migrated database, with the writer lock held for the test. The
- * hooks insert the history rows directly: a Work order, an event of its order, an intake row.
+ * hooks insert the history rows directly: a Work order, an event of its order.
  */
 const sqliteUnderTest =
   (locate: () => string): ProjectFactory =>
@@ -48,14 +48,6 @@ const sqliteUnderTest =
           `INSERT INTO events (order_id, seq, at, actor, command_id, schema_version, type, payload)
            VALUES (?, 1, 0, '{"kind":"factory"}', ?, 1, 'order_created', '{}')`,
           [`${projectId}:event-${todo}`, `command-${todo}`],
-        );
-      },
-      seedIntake: async (projectId) => {
-        todo += 1;
-        db.run(
-          `INSERT INTO intake (project_id, todo_id, content_hash, seen_commit)
-           VALUES (?, ?, 'hash', 'commit')`,
-          [projectId, `intake-${todo}`],
         );
       },
       close: async () => {

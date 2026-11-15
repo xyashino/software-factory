@@ -11,11 +11,12 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { StoredEvent } from '@repo/factory-core/order/events';
-import { todoFile } from '@repo/factory-server/__tests__/e2e/fixture-repo';
+import { todoFile } from '../fixture-repo';
 import {
   createWorld,
   orderOf,
   remoteTip,
+  startPrReporter,
   statusOf,
   until,
   type World,
@@ -35,10 +36,13 @@ const PLAN_BRANCH = 'feat/e2e';
 const MAIN = 'main';
 
 let world: World | undefined;
+let stopReporter: (() => void) | undefined;
 let observeDir: string | undefined;
 let merges = 0;
 
 afterEach(async () => {
+  stopReporter?.();
+  stopReporter = undefined;
   await world?.close();
   world = undefined;
   if (observeDir) rmSync(observeDir, { recursive: true, force: true });
@@ -207,10 +211,11 @@ describe('an Order Plan of three stacked Work orders', () => {
       },
       {
         bare: true,
-        env: { FACTORY_PR_POLL_MS: '100', FAKE_OBSERVE_LOG: observe },
+        env: { FAKE_OBSERVE_LOG: observe },
       },
     );
     const w = world;
+    stopReporter = startPrReporter(w);
     await w.cell('cell-a', { scenarios: { builder: 'add-file' } });
 
     // The plan branch is created by the Factory, from main, before the first member runs.

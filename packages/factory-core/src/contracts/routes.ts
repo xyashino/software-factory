@@ -11,8 +11,6 @@ import {
   adminExportResponseSchema,
   adminFileRequestSchema,
   adminRebuildResponseSchema,
-  adminRecoverRequestSchema,
-  adminRecoverResponseSchema,
   answerRequestSchema,
   boardResponseSchema,
   planDetailRequestSchema,
@@ -23,8 +21,6 @@ import {
   cellRevokeResponseSchema,
   cellsListResponseSchema,
   emptyRequestSchema,
-  intakeSyncRequestSchema,
-  intakeSyncResponseSchema,
   joinTokenCreateRequestSchema,
   joinTokenCreateResponseSchema,
   joinTokenListResponseSchema,
@@ -180,11 +176,6 @@ export const ROUTES = {
     request: streamEventsRequestSchema,
     response: streamEventsResponseSchema,
   },
-  intakeSync: {
-    path: 'supervisor/intake/sync',
-    request: intakeSyncRequestSchema,
-    response: intakeSyncResponseSchema,
-  },
   joinTokenCreate: {
     path: 'supervisor/join-tokens/create',
     request: joinTokenCreateRequestSchema,
@@ -234,11 +225,6 @@ export const ROUTES = {
     path: 'supervisor/admin/rebuild-projections',
     request: emptyRequestSchema,
     response: adminRebuildResponseSchema,
-  },
-  adminRecover: {
-    path: 'supervisor/admin/recover',
-    request: adminRecoverRequestSchema,
-    response: adminRecoverResponseSchema,
   },
 } as const;
 
