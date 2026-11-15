@@ -17,19 +17,12 @@ export interface PromptInput {
   context: CycleContext;
   /** Size in bytes of every input blob, so a large one is named by its path, not inlined. */
   blobSizes: ReadonlyMap<BlobRef, number>;
-  /** Text of the blobs the prompt inlines: the verdict feedback and the inspection logs. */
+  /** Text of the blobs the prompt inlines: the verdict feedback only. Inspection logs are never inlined. */
   blobTexts: ReadonlyMap<BlobRef, string>;
   budget: { retry: number; max: number };
   declared: { rules: string[]; skills: string[] };
   operatorCommands: string[];
-  logTailChars: number;
 }
-
-/** ANSI colour and cursor sequences, stripped from inspection logs before they reach a prompt. */
-const ANSI = new RegExp(
-  `${String.fromCharCode(27)}\\[[0-9;?]*[ -/]*[@-~]`,
-  'g',
-);
 
 /**
  * Every variable an Operator profile may use: the built-ins (`BUILT_IN_VARIABLES`, relative paths
@@ -116,14 +109,13 @@ const contextBlock = (
   }
   if (feedback?.kind === 'inspection') {
     for (const result of feedback.results) {
-      const log = textOf(input, result.logBlob, '');
+      if (result.exitCode === 0 && !result.timedOut) continue;
       blocks.push(
         renderTemplate(template('gate-feedback'), {
           command: result.command,
-          exitCode:
-            result.exitCode === null ? 'timed out' : String(result.exitCode),
-          tail: stripAnsi(log).slice(-input.logTailChars),
-          logPath: '(inline above)',
+          status: result.timedOut
+            ? 'timed out'
+            : `failed (exit ${result.exitCode ?? 'without a code'})`,
           retry: String(input.budget.retry),
           max: String(input.budget.max),
         }),
@@ -180,5 +172,3 @@ const inputBlock = (
 
 const textOf = (input: PromptInput, ref: BlobRef, fallback: string): string =>
   input.blobTexts.get(ref) ?? fallback;
-
-const stripAnsi = (text: string): string => text.replace(ANSI, '');

@@ -16,7 +16,7 @@ import {
   type ShellContext,
 } from '../workspace/shell';
 import { redactDetail } from './redact';
-import { putLog, submit, tailOf, type JobContext } from './send';
+import { putLog, submit, type JobContext } from './send';
 import { workspaceDetailOf } from './workspace-detail';
 
 /** A station without its own timeout gets this much per command (the runtime's inspection default). */
@@ -36,7 +36,8 @@ const errorText = (error: unknown): string =>
  * 1. prepare the workspace. A failure uploads the log and reports `ReportWorkspaceFailed`, which needs
  *    no Cycle, so no `StartCycle` is sent before it.
  * 2. `StartCycle` from the worktree's HEAD. Every later command needs the live Cycle it opens.
- * 3. run every command of the station, each with its full log as a blob and a 2 KiB tail.
+ * 3. run every command of the station, each with its full log as a blob and a status tail
+ *    (`passed`, `timed out`, or `failed (exit N)`). No command output reaches the event store.
  * 4. read-only check: a tree that changed during the run is `FailCycle{crashed}`, no report.
  * 5. `ReportInspection`, passed when every command exited 0 and none timed out.
  *
@@ -128,6 +129,19 @@ export const runInspection = async (
   }
 };
 
+/**
+ * The machine-independent status of one check, the only text of it that goes on the wire. The full
+ * output stays in the check's `logBlob`.
+ */
+export const checkStatus = (run: {
+  exitCode: number | null;
+  timedOut: boolean;
+}): string => {
+  if (run.timedOut) return 'timed out';
+  if (run.exitCode === 0) return 'passed';
+  return `failed (exit ${run.exitCode ?? 'without a code'})`;
+};
+
 /** The Cycle a `StartCycle` opened, from its `cycle_started` event. */
 const cycleStartedId = (events: readonly OrderEvent[]): CycleId => {
   const started = events.find(
@@ -167,7 +181,7 @@ const runChecks = async (
         exitCode: run.exitCode,
         timedOut: run.timedOut,
         durationMs: run.durationMs,
-        tail: tailOf(textOf(run)),
+        tail: checkStatus(run),
         logBlob,
       });
     }
