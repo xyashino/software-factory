@@ -174,7 +174,7 @@ export const cells = sqliteTable('cells', {
   joinedAt: integer('joined_at').notNull(),
   revokedAt: integer('revoked_at'),
   lastSeenAt: integer('last_seen_at'),
-  /** JSON from /hello: version, projects, runners, capabilities, slots. */
+  /** JSON from /hello: version, projects, runners, capabilities. */
   info: text('info'),
 });
 

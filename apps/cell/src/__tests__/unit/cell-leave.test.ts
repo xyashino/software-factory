@@ -20,7 +20,7 @@ describe('startCell leave()', () => {
     }
   });
 
-  it('pauses claims, waits cleanly, stops heartbeats, and resolves slotsDone', async () => {
+  it('pauses claims, waits cleanly, stops heartbeats, and resolves loopDone', async () => {
     const cellDataDir = mkdtempSync(join(tmpdir(), 'cell-leave-'));
     dirs.push(cellDataDir);
     let claimsAfterLeave = 0;
@@ -50,9 +50,7 @@ describe('startCell leave()', () => {
     const running = await startCell({
       client,
       cellId: CELL,
-      config: parseConfig(
-        `slots = 1\nprojects = ["${'software-factory' as ProjectId}"]`,
-      ),
+      config: parseConfig(`projects =["${'software-factory' as ProjectId}"]`),
       cellDataDir,
       system: createSystemAdapter(),
       clock: systemClock,
@@ -70,7 +68,7 @@ describe('startCell leave()', () => {
 
     leavingStarted = true;
     const result = await running.leave(5);
-    await running.slotsDone;
+    await running.loopDone;
 
     expect(result).toEqual({ remaining: 0 });
     expect(claimsAfterLeave).toBe(0);

@@ -42,13 +42,13 @@ const chainTodos = () => [
   planTodo('wo-3', ['wo-2']),
 ];
 
-/** A world with the three-member plan synced and one Cell with the given slots. */
-const planWorld = async (slots = 1) => {
+/** A world with the three-member plan synced and one Cell. */
+const planWorld = async () => {
   const w = world();
   running = w;
   w.git.setTodos(chainTodos());
   await w.runtime.sync();
-  await helloCell(w, CELL, slots);
+  await helloCell(w, CELL);
   const planId = planIdOf(PROJECT, planSlugSchema.parse('xyz')) as PlanId;
   return { w, planId };
 };
@@ -103,8 +103,8 @@ describe('claiming a plan job (PROTOCOL §4)', () => {
     ]);
   });
 
-  it('gives a Cell with one slot no second job while the first runs', async () => {
-    const { w } = await planWorld(1);
+  it('gives a busy Cell no second job while the first runs', async () => {
+    const { w } = await planWorld();
     expect(await claim(w)).not.toBeNull();
     expect(await claim(w)).toBeNull();
   });
@@ -117,7 +117,6 @@ describe('claiming a plan job (PROTOCOL §4)', () => {
       projects: ['elsewhere' as never],
       runners: [],
       capabilities: [],
-      slots: 1,
     });
     expect(await claim(w, OTHER)).toBeNull();
   });

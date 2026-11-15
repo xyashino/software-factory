@@ -114,7 +114,6 @@ describe('factory-server admin', () => {
       projects: [PROJECT],
       runners: ['claude'],
       capabilities: [],
-      slots: 1,
     });
     const claimed = await running.runtime.call('claim', {
       cellId: CELL,

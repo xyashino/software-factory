@@ -37,7 +37,7 @@ const isClaimable = (
   const limit: { max: number; running: number } | undefined =
     limits.perProjectRunning[entry.projectId];
   if (limit === undefined || limit.running >= limit.max) return false;
-  return cell.freeSlots > 0;
+  return !cell.busy;
 };
 
 /**

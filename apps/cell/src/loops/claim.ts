@@ -4,7 +4,7 @@ import type { CellId } from '@repo/factory-core/ids';
 import type { JobRegistry } from '../jobs/registry';
 import { isUnauthorized } from '../remote-client';
 
-export interface SlotOptions {
+export interface ClaimLoopOptions {
   client: FactoryClient;
   cellId: CellId;
   registry: JobRegistry;
@@ -19,21 +19,23 @@ export interface SlotOptions {
   sleep: (ms: number) => Promise<void>;
   /**
    * Runs one claimed job to its end. It resolves with the continuation the Factory handed back, the job
-   * of the same Work order this Cell already holds (PROTOCOL §4), or null. The slot is free again when it
+   * of the same Work order this Cell already holds (PROTOCOL §4), or null. The Cell is free again when it
    * returns or throws.
    */
   runJob: (job: Job, signal: AbortSignal) => Promise<Job | null>;
   onError?: (error: unknown, context: string) => void;
-  /** The Factory refused the credential (401): this slot stops, and the Cell joins again. */
+  /** The Factory refused the credential (401): the loop stops, and the Cell joins again. */
   onUnauthorized?: () => void;
 }
 
 /**
- * One slot of a Cell (PROTOCOL §5.2): a loop that claims one job at a time. A claimed job is registered
- * before it runs, so the heartbeat keeps its lease, and the slot is free again once it ends. A claim
- * that fails or comes back empty waits before it tries again.
+ * The claim loop of a Cell (PROTOCOL §5.2): one loop that claims one Work order at a time. A claimed job
+ * is registered before it runs, so the heartbeat keeps its lease. Its continuations run on this Cell
+ * before it claims again. A claim that fails or comes back empty waits before it tries again.
  */
-export const runSlot = async (options: SlotOptions): Promise<void> => {
+export const runClaimLoop = async (
+  options: ClaimLoopOptions,
+): Promise<void> => {
   while (!options.isStopped()) {
     if (options.isFenced()) {
       await options.sleep(options.idlePauseMs);
@@ -63,7 +65,7 @@ export const runSlot = async (options: SlotOptions): Promise<void> => {
       continue;
     }
 
-    // A continuation runs in this slot at once: the Factory already holds its lease for this Cell.
+    // A continuation runs on this Cell at once: the Factory already holds its lease for this Cell.
     let current: Job | null = job;
     while (current) {
       const next = await runClaimed(options, current);
@@ -82,7 +84,7 @@ export const runSlot = async (options: SlotOptions): Promise<void> => {
  * nothing (PROTOCOL §5.4): its lease lapses and the reaper takes the job back.
  */
 const releaseUnstarted = async (
-  options: SlotOptions,
+  options: ClaimLoopOptions,
   job: Job,
 ): Promise<void> => {
   if (options.isFenced()) return;
@@ -102,7 +104,7 @@ const releaseUnstarted = async (
 
 /** Runs one claimed job in the registry, so the heartbeat keeps its lease while it runs. */
 const runClaimed = async (
-  options: SlotOptions,
+  options: ClaimLoopOptions,
   job: Job,
 ): Promise<Job | null> => {
   const handle = options.registry.start(job.jobId);

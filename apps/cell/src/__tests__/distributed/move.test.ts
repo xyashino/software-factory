@@ -112,18 +112,23 @@ describe('a Factory moved to another machine mid-run', () => {
       return started;
     };
 
-    // Cell A has two slots; its builder hangs, so two Work orders hold a job mid-Station when A moves.
-    const a = await w.cell('cell-a', {
+    // Two Cells of A; each builder hangs, so two Work orders hold a job mid-Station when A moves.
+    const a1 = await w.cell('cell-a1', {
       factoryUrl: remoteA,
       joinToken: await w.joinToken(),
-      slots: 2,
+      scenarios: { builder: 'silent' },
+    });
+    const a2 = await w.cell('cell-a2', {
+      factoryUrl: remoteA,
+      joinToken: await w.joinToken(),
       scenarios: { builder: 'silent' },
     });
     await until(
       async () => (await buildStarted()).length >= 2,
-      'cell A to hang two builds',
+      'cells of A to hang two builds',
     );
-    await a.kill9();
+    await a1.kill9();
+    await a2.kill9();
 
     // The snapshot of Factory A is taken right after Cell A dies, before A stops: the lease has not
     // lapsed yet, so the reaper appends nothing in between. Then A stops cleanly (the writer lock is free).

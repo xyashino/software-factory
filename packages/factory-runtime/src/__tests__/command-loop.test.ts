@@ -26,7 +26,7 @@ type StoreTxLike = StoreTx;
 const CELL = '01J0000000000000000000000W' as CellId;
 const COMMIT = 'a'.repeat(40) as CommitSha;
 
-/** Claims the next job for a Cell; the Cell must be registered and have a free slot. */
+/** Claims the next job for a Cell; the Cell must be registered and not busy. */
 const claim = async (w: World, cellId: CellId = CELL): Promise<Job> => {
   const response = await w.runtime.call('claim', { cellId, waitMs: 0 });
   if (!response.job) throw new Error('expected a job to be on offer');
@@ -286,9 +286,9 @@ describe('claims', () => {
     ).toEqual(['software-factory:todo-high']);
   });
 
-  it('a Cell with no free slot is offered nothing', async () => {
+  it('a busy Cell is offered nothing and a claim from it returns no job', async () => {
     const w = world();
-    await helloCell(w, CELL, 1);
+    await helloCell(w, CELL);
     await createOrder(w, { todoId: 'todo-a' });
     await createOrder(w, { todoId: 'todo-b' });
     await claim(w);
@@ -299,6 +299,22 @@ describe('claims', () => {
     });
 
     expect(response.job).toBeNull();
+  });
+
+  it('two Cells on one machine each run one Work order in parallel', async () => {
+    const w = world();
+    const OTHER_CELL = '01J0000000000000000000000X' as CellId;
+    await helloCell(w, CELL);
+    await helloCell(w, OTHER_CELL);
+    await createOrder(w, { todoId: 'todo-a' });
+    await createOrder(w, { todoId: 'todo-b' });
+
+    const first = await claim(w, CELL);
+    const second = await claim(w, OTHER_CELL);
+
+    expect(second.orderId).not.toBe(first.orderId);
+    const again = await w.runtime.call('claim', { cellId: CELL, waitMs: 0 });
+    expect(again.job).toBeNull();
   });
 
   it('the long-poll answers none at 25 s when nothing is queued', async () => {
@@ -343,7 +359,7 @@ describe('continuation', () => {
   it('returns no next job when the Cell cannot run the next station', async () => {
     const w = world();
     // The plan Station runs on `claude`; the plan review runs on `cursor`, which this Cell lacks.
-    await helloCell(w, CELL, 1, ['claude']);
+    await helloCell(w, CELL, ['claude']);
     const orderId = await createOrder(w, { todoId: 'todo-a' });
     const job = await claim(w);
 
@@ -364,7 +380,7 @@ describe('continuation', () => {
     const w = world();
     // The Cell could run the next station (the plan review runs on `cursor`): only the release keeps it
     // from being claimed straight back, which would hand the same job to the Cell that gave it up.
-    await helloCell(w, CELL, 1, ['claude', 'cursor']);
+    await helloCell(w, CELL, ['claude', 'cursor']);
     await createOrder(w, { todoId: 'todo-a' });
     const job = await claim(w);
 

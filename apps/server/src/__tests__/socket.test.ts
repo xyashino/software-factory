@@ -106,7 +106,6 @@ describe('socket client parity', () => {
       projects: [PROJECT],
       runners: ['claude'],
       capabilities: [],
-      slots: 1,
     };
 
     const viaSocket = await client.call('hello', hello);

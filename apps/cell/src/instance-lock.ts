@@ -83,6 +83,6 @@ export const claimInstanceDir = (baseDir: string): InstanceClaim => {
     }
   }
   throw new Error(
-    `unable to claim a cell instance directory under ${normalized} (checked ${MAX_INSTANCES} slots)`,
+    `unable to claim a cell instance directory under ${normalized} (checked ${MAX_INSTANCES} instance directories)`,
   );
 };

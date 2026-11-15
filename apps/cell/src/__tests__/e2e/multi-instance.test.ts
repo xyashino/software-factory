@@ -14,7 +14,7 @@ import {
 import { inheritedEnv } from '../distributed/harness/process';
 
 const CELL_MAIN = fileURLToPath(new URL('../../main.ts', import.meta.url));
-const START_LINE = /factory-cell: \d+ slot\(s\) running as (\S+)/;
+const START_LINE = /factory-cell: running as (\S+)/;
 
 let root: string;
 let opened: OpenedRuntime | undefined;
@@ -92,7 +92,6 @@ describe('launching multiple factory-cell processes with the same config', () =>
     writeFileSync(
       join(configHome, 'factory-cell', 'config.toml'),
       [
-        'slots = 1',
         'projects = []',
         'runners = ["claude"]',
         `factory_data_dir = "${factoryDataDir}"`,

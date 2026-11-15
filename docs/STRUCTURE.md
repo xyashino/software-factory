@@ -25,7 +25,7 @@ software-factory/
 │   │
 │   ├── cell/                      # @repo/factory-cell          bin: factory-cell     (a Cell)
 │   │   └── src/
-│   │       ├── main.ts            # config, select local/remote client, slots, claim/heartbeat loops, leave
+│   │       ├── main.ts            # config, select local/remote client, claim/heartbeat loop, leave
 │   │       ├── factory-client.ts  # socket client to factory-server + remote HTTP adapter, retries, idempotency ids
 │   │       ├── workspace/         # mirror, worktree, sync/setup cache, LRU eviction
 │   │       ├── jobs/

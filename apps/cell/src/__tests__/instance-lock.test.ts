@@ -40,7 +40,7 @@ describe('claimInstanceDir', () => {
     expect(third.cellDataDir).toBe(`${resolve(base)}-3`);
   });
 
-  it('reuses a released slot when a new process starts', () => {
+  it('reuses a released instance directory when a new process starts', () => {
     const base = join(root, 'factory-cell');
 
     const first = claimInstanceDir(base);

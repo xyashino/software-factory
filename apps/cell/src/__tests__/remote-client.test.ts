@@ -36,7 +36,6 @@ const hello = {
   projects: [],
   runners: [],
   capabilities: [],
-  slots: 1,
 };
 
 describe('remote Cell client', () => {

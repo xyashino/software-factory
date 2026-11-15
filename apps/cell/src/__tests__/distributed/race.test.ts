@@ -90,7 +90,6 @@ describe('ten Cells, fifty Work orders, Cells joining and leaving', () => {
         await w.cell(`cell-${joins}`, {
           factoryUrl: proxy.url,
           joinToken: await w.joinToken(),
-          slots: 2,
         }),
       );
     };

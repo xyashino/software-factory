@@ -43,7 +43,6 @@ Ask the user for these, and offer the defaults shown:
 
 - `projects`: the project id to serve, for example `software-factory`.
 - `repo`: the Git URL of that project's repository. Ask; do not assume one.
-- `slots`: concurrent Jobs for this Cell. Default `1`.
 - `runners`: the runners this Cell may start. Default: the ones the prerequisites found, from the Lines in use.
 - `factory_data_dir`: where the server keeps its data and socket. Default `$HOME/.local/share/factory`.
 - `cell_data_dir`: optional. Default `$HOME/.local/share/factory-cell`.
@@ -54,7 +53,6 @@ Ask the user for these, and offer the defaults shown:
 The Cell reads `${XDG_CONFIG_HOME:-$HOME/.config}/factory-cell/config.toml`. Write it with the values from step 2. Keep the keys exactly as the Cell parses them (`apps/cell/src/config.ts`), and do not add unknown keys: the parser refuses them.
 
 ```toml
-slots = 1
 projects = ["<project-id>"]
 runners = ["claude"]
 factory_data_dir = "<absolute path>"
@@ -70,7 +68,7 @@ If the file exists, back it up first and show the user the diff. Never overwrite
 
 ## 5. Start the Cell
 
-In its own terminal: `pnpm factory-cell`. It must print `1 slot(s) running as <cell id>` (or the number of slots set). If it prints `no factory-server answers on ...`, the data directory in the config does not match the server's: fix `factory_data_dir`.
+In its own terminal: `pnpm factory-cell`. It must print `factory-cell: running as <cell id>`. A Cell runs one Work order at a time; for more in parallel, start another `pnpm factory-cell` in its own terminal, and it takes its own instance directory. If it prints `no factory-server answers on ...`, the data directory in the config does not match the server's: fix `factory_data_dir`.
 
 Do not set `XDG_CONFIG_HOME` to point somewhere else for the Cell. Herdr finds its socket under that directory, so the Cell then cannot reach Herdr.
 

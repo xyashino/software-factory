@@ -104,7 +104,6 @@ const serve = async (): Promise<Client> => {
     projects: [PROJECT],
     runners: ['claude', 'cursor'],
     capabilities: [],
-    slots: 1,
   });
   return client;
 };

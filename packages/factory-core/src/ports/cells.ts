@@ -6,7 +6,6 @@ export interface CellInfo {
   projects: string[];
   runners: string[];
   capabilities: string[];
-  slots: number;
 }
 
 export interface CellRecord {

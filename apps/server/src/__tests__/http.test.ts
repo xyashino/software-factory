@@ -503,7 +503,6 @@ const helloBody = (cellId: string) => ({
   projects: [PROJECT],
   runners: ['claude'],
   capabilities: [],
-  slots: 1,
 });
 
 /** A blob ref of some bytes: `sha256:<hex>`, the form the runtime verifies. */

@@ -430,11 +430,10 @@ export const createOrder = async (
   return orderId;
 };
 
-/** Registers a Cell that can run every shipped runner, with the given slots. */
+/** Registers a Cell that can run every shipped runner. */
 export const helloCell = async (
   w: { runtime: Runtime },
   cellId: CellId,
-  slots = 1,
   runners = ['claude', 'cursor'],
 ): Promise<void> => {
   await w.runtime.call('hello', {
@@ -443,6 +442,5 @@ export const helloCell = async (
     projects: [PROJECT],
     runners,
     capabilities: [],
-    slots,
   });
 };
