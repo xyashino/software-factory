@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { FactoryClient } from '@repo/factory-core/contracts/client';
 import { WireFailure } from '@repo/factory-core/contracts/errors';
-import type { Job } from '@repo/factory-core/contracts/job';
+import { PR_ADR_TOKEN, type Job } from '@repo/factory-core/contracts/job';
 import type {
   BlobRef,
   CellId,
@@ -252,6 +252,45 @@ describe('deliver job', () => {
 
     expect(github.created[0]?.body).toBe(BODY);
     expect(github.created[0]?.body).not.toBe('Add the feature');
+  });
+
+  it('fills the PR ADR section with the decisions/ entry the commit adds', async () => {
+    commitOnBranch('decisions/20261115-120000-factory-add-thing.md', '---\n');
+    commitOnBranch('wip-1.txt', 'one\n');
+    const withToken: Answer = (sent) =>
+      sent.route === 'blobGet'
+        ? {
+            ref: sent.request.ref,
+            base64: Buffer.from(`## ADR\n\n${PR_ADR_TOKEN}\n`).toString(
+              'base64',
+            ),
+          }
+        : accepting(sent);
+    const { context, github } = contextWith(withToken);
+
+    await runDeliver(context, deliverJob(), signal());
+
+    expect(github.created[0]?.body).toBe(
+      '## ADR\n\n- Path: `decisions/20261115-120000-factory-add-thing.md`\n',
+    );
+  });
+
+  it('says so in the PR when the commit adds no decisions/ entry', async () => {
+    commitOnBranch('wip-1.txt', 'one\n');
+    const withToken: Answer = (sent) =>
+      sent.route === 'blobGet'
+        ? {
+            ref: sent.request.ref,
+            base64: Buffer.from(PR_ADR_TOKEN).toString('base64'),
+          }
+        : accepting(sent);
+    const { context, github } = contextWith(withToken);
+
+    await runDeliver(context, deliverJob(), signal());
+
+    expect(github.created[0]?.body).toBe(
+      '_No decisions/ entry recorded for this change._',
+    );
   });
 
   it('removes the todo file in the same commit', async () => {
