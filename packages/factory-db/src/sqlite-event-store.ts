@@ -71,6 +71,7 @@ type EventRow = Pick<EventRecord, keyof typeof EVENT_SELECT>;
 /** Opens (or creates) a database file in WAL mode with foreign keys and a busy timeout. */
 export const openDatabase = (file: string): Database => {
   const db = new Database(file);
+  // raw: connection pragmas are not queries; Drizzle has no builder for them.
   db.exec('PRAGMA journal_mode = WAL');
   db.exec('PRAGMA foreign_keys = ON');
   db.exec('PRAGMA busy_timeout = 5000');
@@ -334,6 +335,7 @@ const appendPlanOn = (
  * Savepoints are raw SQL on the connection; Drizzle runs the statements inside them.
  */
 const appendInSavepoint = <R>(raw: Database, run: () => R): R => {
+  // raw: savepoint control, the transaction-control counterpart of BEGIN/COMMIT (STORAGE §3.1).
   raw.exec('SAVEPOINT append');
   try {
     const result = run();
@@ -367,6 +369,7 @@ export const openSqliteEventStore = (db: Database): SqliteEventStore => {
   const inWriteTransaction = <T>(body: () => Promise<T>): Promise<T> =>
     writes.run(() =>
       inTransaction.run(true, async () => {
+        // raw: transaction control stays raw; `orm.transaction` would issue a plain BEGIN (STORAGE §3.1).
         db.exec('BEGIN IMMEDIATE');
         try {
           const value = await body();

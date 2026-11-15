@@ -1,20 +1,18 @@
 import type { Database } from 'bun:sqlite';
 import type { Signal } from '@repo/factory-core/contracts/cell';
 import type { SignalStore } from '@repo/factory-core/ports/signals';
+import { and, asc, eq, isNull } from 'drizzle-orm';
+import { drizzleOf } from './db';
+import { signals } from './schema';
 import type { StatementGate } from './sqlite-event-store';
 import type { WriterLock } from './writer-lock';
 
-interface SignalRow {
-  signal_id: string;
-  job_id: string;
-  kind: string;
-  payload: string;
-}
+type SignalRow = typeof signals.$inferSelect;
 
 const signalOf = (row: SignalRow): Signal =>
   ({
-    signalId: row.signal_id,
-    jobId: row.job_id,
+    signalId: row.signalId,
+    jobId: row.jobId,
     kind: row.kind,
     ...(JSON.parse(row.payload) as object),
   }) as Signal;
@@ -30,43 +28,48 @@ export const sqliteSignalStore = (
   db: Database,
   writer: WriterLock,
   gate: StatementGate,
-): SignalStore => ({
-  insert: (signal) =>
-    gate.run(() => {
-      writer.assertHeld();
-      db.run(
-        'INSERT INTO signals (signal_id, job_id, kind, payload, created_at) VALUES (?, ?, ?, ?, ?)',
-        [
-          signal.signalId,
-          signal.jobId,
-          signal.kind,
-          JSON.stringify(payloadOf(signal)),
-          signal.createdAt,
-        ],
-      );
-    }),
-  unacked: (jobId) =>
-    gate.run(() =>
-      db
-        .query<SignalRow, [string]>(
-          'SELECT signal_id, job_id, kind, payload FROM signals WHERE job_id = ? AND acked_at IS NULL ORDER BY created_at, signal_id',
-        )
-        .all(jobId)
-        .map(signalOf),
-    ),
-  ack: (signalIds, at) =>
-    gate.run(() => {
-      writer.assertHeld();
-      const statement = db.query(
-        'UPDATE signals SET acked_at = ? WHERE signal_id = ? AND acked_at IS NULL',
-      );
-      for (const signalId of signalIds) {
-        statement.run(at, signalId);
-      }
-    }),
-  deleteForJob: (jobId) =>
-    gate.run(() => {
-      writer.assertHeld();
-      db.run('DELETE FROM signals WHERE job_id = ?', [jobId]);
-    }),
-});
+): SignalStore => {
+  const orm = drizzleOf(db);
+  return {
+    insert: (signal) =>
+      gate.run(() => {
+        writer.assertHeld();
+        orm
+          .insert(signals)
+          .values({
+            signalId: signal.signalId,
+            jobId: signal.jobId,
+            kind: signal.kind,
+            payload: JSON.stringify(payloadOf(signal)),
+            createdAt: signal.createdAt,
+          })
+          .run();
+      }),
+    unacked: (jobId) =>
+      gate.run(() =>
+        orm
+          .select()
+          .from(signals)
+          .where(and(eq(signals.jobId, jobId), isNull(signals.ackedAt)))
+          .orderBy(asc(signals.createdAt), asc(signals.signalId))
+          .all()
+          .map(signalOf),
+      ),
+    ack: (signalIds, at) =>
+      gate.run(() => {
+        writer.assertHeld();
+        for (const signalId of signalIds) {
+          orm
+            .update(signals)
+            .set({ ackedAt: at })
+            .where(and(eq(signals.signalId, signalId), isNull(signals.ackedAt)))
+            .run();
+        }
+      }),
+    deleteForJob: (jobId) =>
+      gate.run(() => {
+        writer.assertHeld();
+        orm.delete(signals).where(eq(signals.jobId, jobId)).run();
+      }),
+  };
+};

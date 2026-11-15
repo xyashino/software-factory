@@ -7,6 +7,20 @@ CLI and Cells use runtime clients and never access storage directly.
 
 **SQLite** (`bun:sqlite`, WAL mode) behind Drizzle, with **one writer per database**.
 
+**Drizzle-only query layer.** Every `factory-db` store queries through the Drizzle query builder on
+`FactoryDatabase` (`db.ts`, `drizzleOf`), typed by `schema.ts`: a row type is `typeof table.$inferSelect`
+or `$inferInsert`, never a hand-written interface. JSON columns are parsed where they are read. There is
+one way to talk to the database, and the raw statements that remain are the ones Drizzle cannot express:
+
+- connection pragmas (`openDatabase`);
+- transaction control: `BEGIN IMMEDIATE`, `COMMIT`, `ROLLBACK` and savepoints (§3.1);
+- the migration runner (§9), which owns the `schema_migrations` table;
+- `VACUUM INTO` for backup (§7).
+
+Each remaining raw call carries a one-line `raw:` comment. `src/__tests__/raw-sql-allowlist.test.ts`
+counts the raw calls per file and fails on any change until the allowlist is updated with a reason. A
+new `db.run(`, `db.query(`, `db.prepare(` or `db.exec(` outside it is a review finding.
+
 Single-writer rule:
 
 - `factory-db` provides the mechanism: `acquireWriter(dataDir)` takes an exclusive `flock` on
@@ -89,7 +103,14 @@ and the ref scan live in `factory-core/blob-rules`; gzip, hashing and the sweep 
 The store never computes a projection and never calls `decide` or `nextJob`: the row it writes is
 handed to it. This keeps domain decisions out of `factory-db` (STRUCTURE §2).
 
+Each port is implemented with the Drizzle builder over the tables in `schema.ts` (§1). The port
+contracts in `factory-core` do not change with the query layer: a store maps its table rows to the port
+records and keeps the signatures it had before.
+
 ## 3. The append transaction
+
+The block shows the steps in SQL notation. Each statement is a Drizzle builder call on the connection
+(§1); only `BEGIN IMMEDIATE`, `COMMIT` and `ROLLBACK` are raw (§3.1).
 
 ```sql
 BEGIN IMMEDIATE;
@@ -122,6 +143,9 @@ outsiders:
   `transaction`. No other statement runs on the connection while a write transaction is open.
 - Inside `transaction(fn)`, `fn` MUST await nothing but `tx` methods. Rendering a prompt, reading a
   blob or any other work is done before the transaction or through `tx`.
+- The statements inside the transaction are Drizzle builder calls on the same connection. `BEGIN
+  IMMEDIATE`, `COMMIT`, `ROLLBACK` and savepoints stay raw on the `Database`. `orm.transaction` is never
+  used: it would issue a plain `BEGIN`, which does not take the write lock up front.
 
 The contract suite tests this with two concurrent appenders and a slow `fn` (ROADMAP
 `factory-m3-tx-spike`).

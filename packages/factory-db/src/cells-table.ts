@@ -5,94 +5,109 @@ import type {
   CellRecord,
   CellStore,
 } from '@repo/factory-core/ports/cells';
+import { asc, eq, sql } from 'drizzle-orm';
+import { drizzleOf, type FactoryDatabase } from './db';
+import { cells } from './schema';
 import type { StatementGate } from './sqlite-event-store';
 import type { WriterLock } from './writer-lock';
 
-interface CellRow {
-  cell_id: string;
-  name: string;
-  joined_at: number;
-  last_seen_at: number | null;
-  revoked_at: number | null;
-  info: string | null;
-  /** The credential hash of a remote Cell; null for a local, operating-system-trusted one. */
-  token_hash: string | null;
-}
+type CellRow = typeof cells.$inferSelect;
 
 const recordOf = (row: CellRow): CellRecord => ({
-  cellId: row.cell_id as CellId,
+  cellId: row.cellId as CellId,
   name: row.name,
   info: row.info === null ? null : (JSON.parse(row.info) as CellInfo),
-  joinedAt: row.joined_at,
-  lastSeenAt: row.last_seen_at,
-  revokedAt: row.revoked_at,
+  joinedAt: row.joinedAt,
+  lastSeenAt: row.lastSeenAt,
+  revokedAt: row.revokedAt,
 });
+
+const selectCells = (orm: FactoryDatabase) => orm.select().from(cells);
 
 /** The `cells` table behind `CellStore`. `token_hash` marks the local, operating-system trust. */
 export const sqliteCellStore = (
   db: Database,
   writer: WriterLock,
   gate: StatementGate,
-): CellStore => ({
-  hello: ({ cellId, name, info, at }) =>
-    gate.run(() => {
-      writer.assertHeld();
-      db.run(
-        `INSERT INTO cells (cell_id, name, token_hash, joined_at, last_seen_at, info)
-         VALUES (?, ?, 'local:os-account', ?, ?, ?)
-         ON CONFLICT(cell_id) DO UPDATE SET
-           name = excluded.name, last_seen_at = excluded.last_seen_at, info = excluded.info`,
-        [cellId, name, at, at, JSON.stringify(info)],
-      );
-    }),
-  get: (cellId) =>
-    gate.run(() => {
-      const row = db
-        .query<CellRow, [string]>('SELECT * FROM cells WHERE cell_id = ?')
-        .get(cellId);
-      return row ? recordOf(row) : undefined;
-    }),
-  list: () =>
-    gate.run(() =>
-      db
-        .query<CellRow, []>('SELECT * FROM cells ORDER BY joined_at, cell_id')
-        .all()
-        .map(recordOf),
-    ),
-  touch: (cellId, at) =>
-    gate.run(() => {
-      writer.assertHeld();
-      db.run('UPDATE cells SET last_seen_at = ? WHERE cell_id = ?', [
-        at,
-        cellId,
-      ]);
-    }),
-  revoke: (cellId, at) =>
-    gate.run(() => {
-      writer.assertHeld();
-      db.run(
-        'UPDATE cells SET revoked_at = COALESCE(revoked_at, ?) WHERE cell_id = ?',
-        [at, cellId],
-      );
-    }),
-  join: ({ cellId, name, credentialHash, joinedWith, at }) =>
-    gate.run(() => {
-      writer.assertHeld();
-      db.run(
-        `INSERT INTO cells (cell_id, name, token_hash, joined_with, joined_at)
-         VALUES (?, ?, ?, ?, ?)`,
-        [cellId, name, credentialHash, joinedWith, at],
-      );
-    }),
-  findByCredentialHash: (credentialHash) =>
-    gate.run(() => {
-      const row = db
-        .query<CellRow, [string]>(
-          'SELECT * FROM cells WHERE token_hash = ? LIMIT 1',
-        )
-        .get(credentialHash);
-      return row
-        ? { credentialHash: row.token_hash ?? '', record: recordOf(row) }
-        : undefined;
-    }),
-});
+): CellStore => {
+  const orm = drizzleOf(db);
+  return {
+    hello: ({ cellId, name, info, at }) =>
+      gate.run(() => {
+        writer.assertHeld();
+        orm
+          .insert(cells)
+          .values({
+            cellId,
+            name,
+            tokenHash: 'local:os-account',
+            joinedAt: at,
+            lastSeenAt: at,
+            info: JSON.stringify(info),
+          })
+          .onConflictDoUpdate({
+            target: cells.cellId,
+            set: {
+              name,
+              lastSeenAt: at,
+              info: JSON.stringify(info),
+            },
+          })
+          .run();
+      }),
+    get: (cellId) =>
+      gate.run(() => {
+        const row = selectCells(orm).where(eq(cells.cellId, cellId)).get();
+        return row ? recordOf(row) : undefined;
+      }),
+    list: () =>
+      gate.run(() =>
+        selectCells(orm)
+          .orderBy(asc(cells.joinedAt), asc(cells.cellId))
+          .all()
+          .map(recordOf),
+      ),
+    touch: (cellId, at) =>
+      gate.run(() => {
+        writer.assertHeld();
+        orm
+          .update(cells)
+          .set({ lastSeenAt: at })
+          .where(eq(cells.cellId, cellId))
+          .run();
+      }),
+    revoke: (cellId, at) =>
+      gate.run(() => {
+        writer.assertHeld();
+        orm
+          .update(cells)
+          .set({ revokedAt: sql`coalesce(${cells.revokedAt}, ${at})` })
+          .where(eq(cells.cellId, cellId))
+          .run();
+      }),
+    join: ({ cellId, name, credentialHash, joinedWith, at }) =>
+      gate.run(() => {
+        writer.assertHeld();
+        orm
+          .insert(cells)
+          .values({
+            cellId,
+            name,
+            tokenHash: credentialHash,
+            joinedWith,
+            joinedAt: at,
+          })
+          .run();
+      }),
+    findByCredentialHash: (credentialHash) =>
+      gate.run(() => {
+        const row = selectCells(orm)
+          .where(eq(cells.tokenHash, credentialHash))
+          .limit(1)
+          .get();
+        return row
+          ? { credentialHash: row.tokenHash, record: recordOf(row) }
+          : undefined;
+      }),
+  };
+};
