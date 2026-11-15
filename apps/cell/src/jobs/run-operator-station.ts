@@ -108,7 +108,7 @@ export interface StationDeps {
   takeSignals?: () => Signal[];
 }
 
-type Stage = 'fetch' | 'sync' | 'worktree' | 'setup';
+type Stage = 'fetch' | 'sync' | 'worktree' | 'changeover';
 type FailReason = 'timed_out' | 'crashed' | 'stalled' | 'start_failed' | 'lost';
 type Blobs = Record<string, BlobRef | undefined>;
 
@@ -260,7 +260,8 @@ export const runOperatorStation = async (
     );
     const reported = await submit('prompt', {
       type: 'ReportWorkspaceFailed',
-      stage: 'setup',
+      // A prompt that does not render fails the workspace's last step, the changeover stage the Factory names.
+      stage: 'changeover',
       detail: redactDetail(error.message, 500),
       logBlob,
     });

@@ -89,7 +89,7 @@ const scenario = (): OrderEvent[] => [
 
 /** A late fact as stored, with its own time, so inserting it leaves every other event's time alone. */
 const lateFact = (event: OrderEvent, at: number): StoredEvent => ({
-  schemaVersion: 2,
+  schemaVersion: 3,
   seq: 1,
   globalSeq: 1,
   orderId: ORDER_ID,

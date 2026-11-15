@@ -4,10 +4,14 @@ name: feature
 description: Plan, review the plan, build behind a quality gate, then audit
 
 workspace:
-  setup:
+  changeover:
     timeout: 10m
     exec:
       - pnpm install --frozen-lockfile
+    keyFiles:
+      - pnpm-lock.yaml
+      - pnpm-workspace.yaml
+      - '**/package.json'
 
 operators:
   planner:
@@ -45,6 +49,7 @@ stations:
     operator: planner
     inputs: []
     requires: []
+    changeover: false
 
   - id: plan-review
     kind: operator
@@ -52,6 +57,7 @@ stations:
     inputs:
       - plan.plan
     requires: []
+    changeover: false
     onFail:
       retry: plan
       max: 2
@@ -92,3 +98,4 @@ deliver:
   commit: build.commit
   report: build.report
   to: new-pr
+  changeover: false

@@ -142,10 +142,13 @@ change. Every `OrderEvent` is on an `OrderId` stream and every `PlanEvent` on a 
 | :----------------- | :-------------------------------------------------------------------------- | :------------------------------------------------------------------------ |
 | `job_claimed`      | `jobId, kind, cellId, epoch, cycleId?`                                      | `epoch = previous + 1`. `cycleId` is pre-allocated for Station jobs.      |
 | `job_lost`         | `jobId, epoch, reason: 'lease_expired' \| 'cell_left' \| 'cancelled'`       | Ends the job without a result.                                            |
-| `workspace_failed` | `jobId, stage: 'fetch' \| 'sync' \| 'worktree' \| 'setup', detail, logBlob` | The Cell could not prepare the workspace; ends the job; no Cycle started. |
+| `workspace_failed` | `jobId, stage: 'fetch' \| 'sync' \| 'worktree' \| 'changeover', detail, logBlob` | The Cell could not prepare the workspace; ends the job; no Cycle started. Schema version 2 named the stage `'setup'`; the version 3 upcaster renames it (§11). |
 
-There is **no Work-order-level setup phase**. Preparing a workspace (fetch, worktree at the base
-commit, `setup` commands) is part of every job, because the next job may run on a different Cell.
+There is **no Work-order-level changeover phase**. Preparing a workspace (fetch, worktree at the base
+commit, the job's `changeover` commands) is part of every job, because the next job may run on a different Cell.
+The changeover is declared by the Line, not by the Cell: a Line sets `workspace.changeover` once, and a station
+or `deliver` opts out (`changeover: false`) or replaces it with its own block. The pinned snapshot carries the
+result, so a job's changeover is fixed when the Work order is created.
 Cells cache prepared worktrees, so on the same Cell it is usually a no-op.
 
 **Cycles**
@@ -750,7 +753,9 @@ Each one is a property test (fast-check) over random command sequences, plus nam
 
 - Every stored event carries `schemaVersion`. The core reads only the current version; older
   versions go through `upcast.ts` on read. Stored rows are never rewritten.
-- The Line snapshot carries its own `snapshotVersion` with its own upcaster.
+- The Line snapshot carries its own `snapshotVersion` with its own upcaster. Version 2 replaces the workspace's
+  `setup` with `changeover` (and adds the optional `keyFiles`, and per-station and deliver `changeover`); the
+  version 1 snapshot upcasts in place, and an order event that pins one is upcast with it (order schema version 3).
 - Adding an optional field is not a version bump. Renaming, removing or changing meaning is.
 - Order Plans change no existing event's meaning. `order_created.plan` is a new optional field, so
   Work orders stored without it still read, and `schemaVersion` stays 2. The plan events (§12.3) are

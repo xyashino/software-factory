@@ -29,8 +29,14 @@ import { upsertPlan } from './plans-table';
 import { commands, type EventRecord, events, orders, plans } from './schema';
 import { writeMutex } from './write-mutex';
 
-/** The envelope version this store writes (CORE §11). */
-export const SCHEMA_VERSION = 2;
+/** The order envelope version this store writes (CORE §11). Version 3 renamed the `setup` workspace stage. */
+export const SCHEMA_VERSION = 3;
+
+/** The oldest order envelope this store still reads: older rows are upcast on read, never rewritten. */
+export const OLDEST_SCHEMA_VERSION = 2;
+
+/** The plan envelope version this store writes. Plans have no workspace stages, so it did not change. */
+export const PLAN_SCHEMA_VERSION = 2;
 
 /** The columns a stored event is read back as. `type` is not needed: the payload carries it. */
 const EVENT_SELECT = {
@@ -315,14 +321,14 @@ const appendPlanOn = (
         actor: JSON.stringify(input.actor),
         commandId: input.commandId,
         epoch: input.epoch ?? null,
-        schemaVersion: SCHEMA_VERSION,
+        schemaVersion: PLAN_SCHEMA_VERSION,
         type: event.type,
         payload: JSON.stringify(event),
       })
       .returning({ globalSeq: events.globalSeq })
       .get();
     return planStoredEventSchema.parse({
-      schemaVersion: SCHEMA_VERSION,
+      schemaVersion: PLAN_SCHEMA_VERSION,
       seq,
       globalSeq: inserted?.globalSeq,
       planId: input.planId,

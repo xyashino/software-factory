@@ -20,6 +20,6 @@ describe('workspace failure detail sent to the server', () => {
   it('caps a long detail at 500 characters', () => {
     const detail = `${'a'.repeat(600)}`;
 
-    expect(workspaceDetailOf('setup', detail)).toHaveLength(500);
+    expect(workspaceDetailOf('changeover', detail)).toHaveLength(500);
   });
 });

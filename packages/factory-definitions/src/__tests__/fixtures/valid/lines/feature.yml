@@ -8,10 +8,12 @@ workspace:
     timeout: 2m
     exec:
       - git fetch origin
-  setup:
+  changeover:
     timeout: 10m
     exec:
       - pnpm install --frozen-lockfile
+    keyFiles:
+      - pnpm-lock.yaml
 
 operators:
   planner:
@@ -69,3 +71,4 @@ deliver:
   commit: build.commit
   report: build.report
   to: new-pr
+  changeover: false

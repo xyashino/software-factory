@@ -78,7 +78,7 @@ export const makeLine = (
   stations: Station[] = DEFAULT_STATIONS,
 ): LineSnapshot =>
   lineSnapshotSchema.parse({
-    snapshotVersion: 1,
+    snapshotVersion: 2,
     name: 'factory-default',
     hash: `sha256:${'a'.repeat(64)}`,
     stations,
@@ -400,7 +400,7 @@ export const history = (...events: OrderEvent[]): StoredEvent[] =>
   events.map((event, index): StoredEvent => {
     const seq = index + 1;
     return {
-      schemaVersion: 2,
+      schemaVersion: 3,
       seq,
       globalSeq: seq,
       orderId: ORDER_ID,

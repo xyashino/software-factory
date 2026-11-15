@@ -29,7 +29,8 @@ const baseJob = {
   workspace: {
     dir: 'todo-a',
     sync: [],
-    setup: ['pnpm install'],
+    changeover: ['pnpm install'],
+    changeoverKeyFiles: ['pnpm-lock.yaml'],
     timeoutMs: 600_000,
   },
   station: {

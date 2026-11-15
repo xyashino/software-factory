@@ -2,7 +2,7 @@ import { execFile } from 'node:child_process';
 import type { RunShell } from './ports';
 
 /**
- * The real shell adapter for a Job's `sync` and `setup` lines: `sh -c` in the directory, bounded by
+ * The real shell adapter for a Job's `sync` and `changeover` lines: `sh -c` in the directory, bounded by
  * the timeout. The lines come from the Work order's own definition, the same trust as the
  * Supervisor's config (PROTOCOL §4), and are never built from Operator output.
  */

@@ -45,7 +45,7 @@ export interface ShellResult {
   detail: string;
 }
 
-/** Runs one `sync` or `setup` line of a Job in a directory, bounded by its timeout. */
+/** Runs one `sync` or `changeover` line of a Job in a directory, bounded by its timeout. */
 export type RunShell = (
   cwd: string,
   command: string,

@@ -4,10 +4,14 @@ name: standard
 description: Direct builder build with quality gate and doctor audit (bypasses planning)
 
 workspace:
-  setup:
+  changeover:
     timeout: 10m
     exec:
       - pnpm install --frozen-lockfile
+    keyFiles:
+      - pnpm-lock.yaml
+      - pnpm-workspace.yaml
+      - '**/package.json'
 
 operators:
   builder:
@@ -60,3 +64,4 @@ deliver:
   commit: build.commit
   report: build.report
   to: new-pr
+  changeover: false

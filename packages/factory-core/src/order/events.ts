@@ -121,7 +121,7 @@ export const workspaceStageSchema = z.enum([
   'fetch',
   'sync',
   'worktree',
-  'setup',
+  'changeover',
 ]);
 export const cycleFailureSchema = z.enum([
   'timed_out',
@@ -504,10 +504,10 @@ export const orderEventSchema = z.discriminatedUnion('type', [
   orderRecoveredSchema,
 ]);
 
-/** The envelope every stored event carries (CORE §3.1). Schema version 2 is the current one. */
+/** The envelope every stored order event carries (CORE §3.1). Schema version 3 is the current one. */
 export const storedEventSchema = z
   .object({
-    schemaVersion: z.literal(2),
+    schemaVersion: z.literal(3),
     seq: positiveInt,
     globalSeq: positiveInt,
     orderId: orderIdSchema,

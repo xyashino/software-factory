@@ -82,7 +82,7 @@ const envelopeOf = (
   globalSeq: number,
 ): StoredEvent => {
   const envelope = {
-    schemaVersion: 2,
+    schemaVersion: 3,
     seq,
     globalSeq,
     orderId: input.orderId,

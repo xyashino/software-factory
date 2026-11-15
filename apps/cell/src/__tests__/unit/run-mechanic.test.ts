@@ -260,8 +260,7 @@ describe('the Mechanic job run (CORE §14.3, §14.4)', () => {
       workspace: {
         dir: 'v2-24-mechanic',
         sync: [],
-        setup: [],
-        timeoutMs: 30_000,
+        changeover: [],
       },
     });
     const pane = scriptedPane(
@@ -321,8 +320,7 @@ describe('the Mechanic job run (CORE §14.3, §14.4)', () => {
       workspace: {
         dir: 'v2-24-mechanic',
         sync: [],
-        setup: [],
-        timeoutMs: 30_000,
+        changeover: [],
       },
     });
     const pane = scriptedPane(
@@ -364,8 +362,7 @@ describe('the Mechanic job run (CORE §14.3, §14.4)', () => {
       workspace: {
         dir: 'v2-24-mechanic',
         sync: [],
-        setup: [],
-        timeoutMs: 30_000,
+        changeover: [],
       },
     });
 

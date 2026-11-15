@@ -51,6 +51,9 @@ const toStation = (
     ...(station.onFail === undefined ? {} : { onFail: station.onFail }),
     maxRestarts: station.maxRestarts,
     maxLostRestarts: station.maxLostRestarts,
+    ...(station.changeover === undefined
+      ? {}
+      : { changeover: station.changeover }),
   };
   if (station.kind === 'inspection') {
     return {
@@ -95,7 +98,7 @@ export const toLineSnapshot = (
   operators: ReadonlyMap<string, OperatorProfile>,
 ): Result<LineSnapshot, DefinitionError[]> => {
   const body = {
-    snapshotVersion: 1,
+    snapshotVersion: 2,
     name: line.name,
     stations: line.stations.map((station) =>
       toStation(station, line, operators),
@@ -104,11 +107,16 @@ export const toLineSnapshot = (
       ...(line.workspace.sync === undefined
         ? {}
         : { sync: line.workspace.sync }),
-      setup: line.workspace.setup,
+      ...(line.workspace.changeover === undefined
+        ? {}
+        : { changeover: line.workspace.changeover }),
     },
     deliver: {
       commit: `${line.deliver.commit.stationId}.${line.deliver.commit.artifactKey}`,
       report: `${line.deliver.report.stationId}.${line.deliver.report.artifactKey}`,
+      ...(line.deliver.changeover === undefined
+        ? {}
+        : { changeover: line.deliver.changeover }),
     },
   };
   const check = lineSnapshotSchema.safeParse({ ...body, hash: EMPTY_HASH });

@@ -15,6 +15,7 @@ import { rebuildOn } from './rebuild-projections';
 import { blobs, type ProjectRecord, events, projects } from './schema';
 import { putBlobOn, readBlobOn } from './sqlite-blob-store';
 import {
+  OLDEST_SCHEMA_VERSION,
   SCHEMA_VERSION,
   type SqliteEventStore,
   feedRows,
@@ -157,9 +158,13 @@ const parseManifest = (bytes: Uint8Array): Manifest => {
   if (manifest.version !== EXPORT_VERSION) {
     throw new Error(`unsupported export version ${String(manifest.version)}`);
   }
-  if (manifest.schemaVersion !== SCHEMA_VERSION) {
+  const readable =
+    Number.isSafeInteger(manifest.schemaVersion) &&
+    (manifest.schemaVersion ?? 0) >= OLDEST_SCHEMA_VERSION &&
+    (manifest.schemaVersion ?? 0) <= SCHEMA_VERSION;
+  if (!readable) {
     throw new Error(
-      `unsupported schema version ${String(manifest.schemaVersion)}, expected ${SCHEMA_VERSION}`,
+      `unsupported schema version ${String(manifest.schemaVersion)}, expected ${OLDEST_SCHEMA_VERSION} to ${SCHEMA_VERSION}`,
     );
   }
   if (

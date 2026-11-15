@@ -85,7 +85,7 @@ const nextCommandId = (): string => {
 /** A Line the caller supplies: one operator station, hashed the way `factory-definitions` hashes a snapshot. */
 const lineSnapshot = (name = LINE_NAME): LineSnapshot => {
   const body = {
-    snapshotVersion: 1 as const,
+    snapshotVersion: 2 as const,
     name,
     stations: [
       {

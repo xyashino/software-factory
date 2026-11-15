@@ -349,7 +349,7 @@ There is no `archived` flag: the board hides terminal Work orders by `updated_at
 | Rule                                         | Value                                                               |
 | :------------------------------------------- | :------------------------------------------------------------------ |
 | Text artifacts, prompts, Handovers, feedback | ≤ 2 MiB each                                                        |
-| Inspection and setup logs                    | ≤ 20 MiB, gzip; larger logs are truncated head + tail with a marker |
+| Inspection and changeover logs               | ≤ 20 MiB, gzip; larger logs are truncated head + tail with a marker |
 | Compression                                  | gzip above 4 KiB                                                    |
 | Referenced by any event                      | never deleted                                                       |
 | Uploaded but unreferenced after 24 h         | deleted by a daily sweep                                            |

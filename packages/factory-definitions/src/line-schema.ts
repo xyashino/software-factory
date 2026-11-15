@@ -71,6 +71,8 @@ interface StationBase {
   onFail?: OnFail;
   maxRestarts: number;
   maxLostRestarts: number;
+  /** `false` opts the station out of the line changeover; a block overrides it */
+  changeover?: ChangeoverBlock | false;
 }
 
 export interface OperatorStation extends StationBase {
@@ -89,10 +91,22 @@ export interface InspectionStation extends StationBase {
 
 export type LineStation = OperatorStation | InspectionStation;
 
-/** A timed list of shell commands, the shape of `workspace.sync` and `workspace.setup`. */
+/** A timed list of shell commands, the shape of `workspace.sync`. */
 export interface CommandBlock {
   timeoutMs: number;
   exec: string[];
+}
+
+/**
+ * A changeover: the commands that bring a worktree up to date with its Line
+ * (`pnpm install`, say). `keyFiles` are repo-relative paths or globs whose git
+ * blob hashes decide when the cache is stale; without them the changeover runs
+ * once per base commit.
+ */
+export interface ChangeoverBlock {
+  timeoutMs: number;
+  exec: string[];
+  keyFiles?: string[];
 }
 
 /** An assembly line, schema v2, normalised: durations in milliseconds, defaults filled. */
@@ -100,10 +114,16 @@ export interface Line {
   name: string;
   description: string;
   /** Per-job workspace preparation, run before any station of a job. Not a phase. */
-  workspace: { sync?: CommandBlock; setup: CommandBlock };
+  workspace: { sync?: CommandBlock; changeover?: ChangeoverBlock };
   operators: Record<string, OperatorPool>;
   stations: LineStation[];
-  deliver: { commit: ArtifactRef; report: ArtifactRef; to: 'new-pr' };
+  deliver: {
+    commit: ArtifactRef;
+    report: ArtifactRef;
+    to: 'new-pr';
+    /** `false` opts the delivery out of the line changeover; a block overrides it */
+    changeover?: ChangeoverBlock | false;
+  };
   /** absolute path of the Line file */
   path: string;
 }
@@ -138,6 +158,16 @@ const durationSchema = z.string().transform((value, ctx) => {
   }
   return ms;
 });
+
+/** A repo-relative path or glob: no leading slash, no `..` segment. */
+const keyFileSchema = z
+  .string()
+  .min(1, 'must not be empty')
+  .max(512)
+  .refine(
+    (value) => !value.startsWith('/') && !value.split('/').includes('..'),
+    'must be a repo-relative path or glob',
+  );
 
 const machineText = z
   .string()
@@ -217,10 +247,26 @@ export const commandBlockSchema = z.strictObject({
   exec: z.array(machineText).min(1, 'must list at least one command'),
 });
 
-/** Per-job workspace preparation: `sync` (optional) and `setup`, never a station. */
+export const changeoverSchema = commandBlockSchema.extend({
+  keyFiles: z
+    .array(keyFileSchema)
+    .min(1, 'must list at least one key file, or leave keyFiles out')
+    .max(64, 'must list at most 64 key files')
+    .optional(),
+});
+
+/** A station or deliver opt-out: `changeover: false`, or a changeover that replaces the line's. */
+export const changeoverOverrideSchema = z
+  .union([
+    z.literal(false, { error: 'must be false or a changeover block' }),
+    changeoverSchema,
+  ])
+  .optional();
+
+/** Per-job workspace preparation: optional `sync` and optional `changeover`, never a station. */
 export const workspaceSchema = z.strictObject({
   sync: commandBlockSchema.optional(),
-  setup: commandBlockSchema,
+  changeover: changeoverSchema.optional(),
 });
 
 export const operatorStationSchema = z.strictObject({
@@ -232,6 +278,7 @@ export const operatorStationSchema = z.strictObject({
   onFail: onFailSchema.optional(),
   maxRestarts: restartSchema(1),
   maxLostRestarts: restartSchema(3),
+  changeover: changeoverOverrideSchema,
 });
 
 export const inspectionStationSchema = z.strictObject({
@@ -246,6 +293,7 @@ export const inspectionStationSchema = z.strictObject({
   onFail: onFailSchema.optional(),
   maxRestarts: restartSchema(1),
   maxLostRestarts: restartSchema(3),
+  changeover: changeoverOverrideSchema,
 });
 
 const stationSchema = z.discriminatedUnion('kind', [
@@ -257,6 +305,7 @@ export const deliverSchema = z.strictObject({
   commit: artifactRefSchema,
   report: artifactRefSchema,
   to: z.literal('new-pr', { error: 'must be new-pr' }),
+  changeover: changeoverOverrideSchema,
 });
 
 /**
@@ -297,6 +346,7 @@ export const lineFileSchema = z.strictObject({
 type LineFileData = z.infer<typeof lineFileSchema>;
 type OperatorPoolData = z.infer<typeof operatorPoolSchema>;
 type StationData = z.infer<typeof stationSchema>;
+type ChangeoverData = z.infer<typeof changeoverSchema>;
 
 const toOperatorPool = (data: OperatorPoolData): OperatorPool => ({
   profile: data.profile,
@@ -307,13 +357,27 @@ const toOperatorPool = (data: OperatorPoolData): OperatorPool => ({
   permission: data.permission,
 });
 
+const toChangeoverBlock = (data: ChangeoverData): ChangeoverBlock => ({
+  timeoutMs: data.timeout,
+  exec: data.exec,
+  ...(data.keyFiles === undefined ? {} : { keyFiles: data.keyFiles }),
+});
+
+/** A parsed changeover override: `false`, or the block in milliseconds. */
+const toChangeover = (
+  data: ChangeoverData | false | undefined,
+): ChangeoverBlock | false | undefined =>
+  data === undefined || data === false ? data : toChangeoverBlock(data);
+
 const toStation = (data: StationData): LineStation => {
+  const changeover = toChangeover(data.changeover);
   const base = {
     id: data.id,
     requires: data.requires,
     ...(data.onFail === undefined ? {} : { onFail: data.onFail }),
     maxRestarts: data.maxRestarts,
     maxLostRestarts: data.maxLostRestarts,
+    ...(changeover === undefined ? {} : { changeover }),
   };
   if (data.kind === 'operator') {
     return {
@@ -332,7 +396,8 @@ const toStation = (data: StationData): LineStation => {
 };
 
 const toLine = (data: LineFileData, path: string): Line => {
-  const { sync, setup } = data.workspace;
+  const { sync, changeover } = data.workspace;
+  const deliverChangeover = toChangeover(data.deliver.changeover);
   return {
     name: data.name,
     description: data.description,
@@ -340,7 +405,9 @@ const toLine = (data: LineFileData, path: string): Line => {
       ...(sync === undefined
         ? {}
         : { sync: { timeoutMs: sync.timeout, exec: sync.exec } }),
-      setup: { timeoutMs: setup.timeout, exec: setup.exec },
+      ...(changeover === undefined
+        ? {}
+        : { changeover: toChangeoverBlock(changeover) }),
     },
     operators: Object.fromEntries(
       Object.entries(data.operators).map(([key, pool]) => [
@@ -349,7 +416,14 @@ const toLine = (data: LineFileData, path: string): Line => {
       ]),
     ),
     stations: data.stations.map(toStation),
-    deliver: data.deliver,
+    deliver: {
+      commit: data.deliver.commit,
+      report: data.deliver.report,
+      to: data.deliver.to,
+      ...(deliverChangeover === undefined
+        ? {}
+        : { changeover: deliverChangeover }),
+    },
     path,
   };
 };

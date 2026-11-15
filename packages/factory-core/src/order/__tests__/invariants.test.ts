@@ -139,7 +139,7 @@ describe('I3 late facts are inert', () => {
             endedAt + 1 + (pick % Math.max(1, events.length - endedAt)),
           );
           const envelope: StoredEvent = {
-            schemaVersion: 2,
+            schemaVersion: 3,
             seq: at + 1,
             globalSeq: at + 1,
             orderId: events[0]?.orderId ?? ('x:y' as StoredEvent['orderId']),

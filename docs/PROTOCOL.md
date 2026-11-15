@@ -203,8 +203,9 @@ interface Job {
   workspace?: {
     dir: string;
     sync: string[];
-    setup: string[];
-    timeoutMs: number;
+    changeover: string[]; // [] when the Line declares none for this job
+    changeoverKeyFiles?: string[]; // repo-relative paths or globs; the cache keys on their blob hashes at base
+    timeoutMs?: number; // bounds sync and changeover; present whenever changeover is not empty
   }; // dir = <todoId>, relative to the Cell's worktrees/; absent on plan jobs (no worktree)
   station?: {
     stationId;
@@ -304,7 +305,7 @@ refers to "its base" is exact.
 ```mermaid
 stateDiagram-v2
   [*] --> claimed : job_claimed (epoch N)
-  claimed --> preparing : Cell fetches, worktree, setup
+  claimed --> preparing : Cell fetches, worktree, changeover
   preparing --> failed_ws : workspace_failed
   preparing --> running : cycle_started
   running --> ended : completed / verdict / inspection_finished / cycle_failed / cycle_blocked / cycle_handed_over
@@ -532,8 +533,11 @@ Executing `run_operator_station`:
 
 1. Prepare the workspace (one path for operator stations, inspections and delivery): fetch the mirror
    unless `base` is a pinned commit the mirror already holds (deliver always fetches); place the detached
-   worktree of the Work order at `base`; run `sync` (when the line sets it) and `setup` unless the worktree
-   is already set up at that commit.
+   worktree of the Work order at `base`; run `sync` (when the line sets it) and the job's `changeover` unless its
+   marker exists. The marker is per commit, or, when the job names `changeoverKeyFiles`, per digest of those
+   files' git blob hashes at `base` (read from the commit, not the worktree; a missing file hashes as absent).
+   A job with no changeover runs none and writes no marker. Globs: `*` one path segment, `**` any depth, `?`
+   one character; nothing else.
    On failure → `ReportWorkspaceFailed`.
 2. `StartCycle`.
 3. Download and write `inputs` blobs to their paths; create the Cycle socket token.

@@ -79,7 +79,7 @@ const contextWith = (answer: Answer = accepting) => {
 /** An inspection job on the origin repo, running `exec` as its checks. */
 const inspectionJob = (
   exec: string[],
-  options: { setup?: string[]; inspectionTimeoutMs?: number } = {},
+  options: { changeover?: string[]; inspectionTimeoutMs?: number } = {},
 ): Job =>
   ({
     jobId: JOB,
@@ -92,7 +92,7 @@ const inspectionJob = (
     workspace: {
       dir: 'todo-1',
       sync: [],
-      setup: options.setup ?? [],
+      changeover: options.changeover ?? [],
       timeoutMs: 60_000,
     },
     station: {
@@ -313,7 +313,7 @@ describe('inspection job', () => {
 
     await runInspection(
       context,
-      inspectionJob(['true'], { setup: ['exit 4'] }),
+      inspectionJob(['true'], { changeover: ['exit 4'] }),
       signal(),
     );
 
@@ -321,7 +321,7 @@ describe('inspection job', () => {
     expect(commandsOf(calls, 'ReportWorkspaceFailed')).toEqual([
       expect.objectContaining({
         type: 'ReportWorkspaceFailed',
-        stage: 'setup',
+        stage: 'changeover',
       }),
     ]);
   });

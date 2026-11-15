@@ -3,7 +3,8 @@ import { join } from 'node:path';
 import type { Job } from '@repo/factory-core/contracts/job';
 import { workspaceOf } from '../jobs/job-shape';
 import { ensureMirror, GIT_TIMEOUT_MS, withMirrorLock } from './mirror';
-import { syncAndSetup } from './cache';
+import { cacheMarkerOf, keyedMarkerOf, syncAndChangeover } from './cache';
+import { keyDigestOf, keyLinesOf, trackedFilesOf } from './key-files';
 import { pickEvictions, USED_MARKER } from './lru';
 import {
   ensureWorktree,
@@ -22,7 +23,7 @@ import {
 } from './shell';
 
 /** The steps of a workspace prepare, in the order `ReportWorkspaceFailed` names them (STORAGE, PROTOCOL §9). */
-export type WorkspaceStage = 'fetch' | 'sync' | 'worktree' | 'setup';
+export type WorkspaceStage = 'fetch' | 'sync' | 'worktree' | 'changeover';
 
 export interface PrepareContext {
   shell: ShellContext;
@@ -59,9 +60,9 @@ const concatBytes = (parts: readonly Uint8Array[]): Uint8Array => {
 
 /**
  * Prepares a job's workspace (PROTOCOL §9 step 1): the bare mirror is fetched, the worktree is put at
- * `base`, `sync` and `setup` run (setup once per commit), and the least recently used worktrees beyond
- * the limit are evicted. A failure names its stage and carries the transcript of every command run, for
- * the log blob. The head commit of the worktree is the commit the Cycle starts from.
+ * `base`, `sync` and the changeover run (the changeover once per marker, see below), and the least
+ * recently used worktrees beyond the limit are evicted. A failure names its stage and carries the transcript of
+ * every command run, for the log blob. The head commit of the worktree is the commit the Cycle starts from.
  */
 export const prepareWorkspace = async (
   ctx: PrepareContext,
@@ -71,7 +72,7 @@ export const prepareWorkspace = async (
   const note = (run: ShellRun): void => {
     transcript.push(encoder.encode(`$ ${run.command}\n`), run.output);
   };
-  // The worktree is claimed from the moment it is placed, so no eviction by another Job removes it during setup.
+  // The worktree is claimed from the moment it is placed, so no eviction by another Job removes it during the changeover.
   const claim: { worktree?: string } = {};
   const fail = (stage: WorkspaceStage, detail: string): PrepareResult => {
     if (claim.worktree !== undefined) ctx.inUse.delete(claim.worktree);
@@ -83,7 +84,6 @@ export const prepareWorkspace = async (
     };
   };
   const workspace = workspaceOf(job);
-  const timeoutMs = workspace.timeoutMs;
 
   // A pinned base already in the mirror needs no remote fetch (ensureMirror checks); a branch base always fetches.
   const mirror = await ensureMirror(ctx.shell, {
@@ -163,12 +163,35 @@ export const prepareWorkspace = async (
     return fail('worktree', 'the worktree has no HEAD commit');
   }
 
-  const prepared = await syncAndSetup(ctx.shell, {
+  // The changeover's marker: keyed by the commit when the Job names no key files, by the digest of its key files
+  // at the base commit when it does. A Job with no changeover needs no marker.
+  let marker = cacheMarkerOf(worktree, headSha);
+  if (
+    workspace.changeoverKeyFiles !== undefined &&
+    workspace.changeover.length > 0
+  ) {
+    const tracked = await trackedFilesOf(ctx.shell, {
+      worktree,
+      commit: headSha,
+      timeoutMs: GIT_TIMEOUT_MS,
+    });
+    if (!tracked.ok) {
+      note(tracked.run);
+      return fail('changeover', describeFailure(tracked.run, GIT_TIMEOUT_MS));
+    }
+    marker = keyedMarkerOf(
+      worktree,
+      keyDigestOf(keyLinesOf(tracked.files, workspace.changeoverKeyFiles)),
+    );
+  }
+
+  const prepared = await syncAndChangeover(ctx.shell, {
     worktree,
-    commit: headSha,
+    marker,
     sync: workspace.sync,
-    setup: workspace.setup,
-    timeoutMs,
+    changeover: workspace.changeover,
+    // Sync and changeover share the Job's timeout; a Job with no changeover is bounded by the git timeout.
+    timeoutMs: workspace.timeoutMs ?? GIT_TIMEOUT_MS,
     record: note,
   });
   if (!prepared.ok) return fail(prepared.stage, prepared.detail);

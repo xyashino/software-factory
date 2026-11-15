@@ -39,14 +39,24 @@ const repoSchema = z
   })
   .strict();
 
+/**
+ * The workspace of a Job (PROTOCOL §4). `changeover` is the commands the Line declares for this Job, `[]` when it
+ * declares none; `changeoverKeyFiles` are the repo-relative paths or globs that key its cache. No tool is named here.
+ */
 const workspaceSchema = z
   .object({
     dir: relativePath,
     sync: z.array(z.string().min(1).max(512)).max(32),
-    setup: z.array(z.string().min(1).max(512)).max(32),
-    timeoutMs,
+    changeover: z.array(z.string().min(1).max(512)).max(32),
+    changeoverKeyFiles: z.array(relativePath).min(1).max(64).optional(),
+    timeoutMs: timeoutMs.optional(),
   })
-  .strict();
+  .strict()
+  .refine(
+    (workspace) =>
+      workspace.changeover.length === 0 || workspace.timeoutMs !== undefined,
+    'a changeover needs a timeout',
+  );
 
 const operatorSchema = z
   .object({

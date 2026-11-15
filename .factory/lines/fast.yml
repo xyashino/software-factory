@@ -4,10 +4,14 @@ name: fast
 description: Fast direct builder build with quality gate and direct delivery (for chores, docs, style)
 
 workspace:
-  setup:
+  changeover:
     timeout: 10m
     exec:
       - pnpm install --frozen-lockfile
+    keyFiles:
+      - pnpm-lock.yaml
+      - pnpm-workspace.yaml
+      - '**/package.json'
 
 operators:
   builder:
@@ -41,3 +45,4 @@ deliver:
   commit: build.commit
   report: build.report
   to: new-pr
+  changeover: false

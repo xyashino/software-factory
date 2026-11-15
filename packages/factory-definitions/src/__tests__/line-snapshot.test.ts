@@ -85,22 +85,22 @@ describe('toLineSnapshot', () => {
 describe('golden hashes', () => {
   it('pins the hash of the valid fixture line', () => {
     expect(snapshotOf(validText).hash).toBe(
-      'sha256:fb7b8b7658f304f89d02ab75848360963cde004fd0920427cd93b6b9b525f7ef',
+      'sha256:3d6cf89d6de468d44a3fdeb2de682de862bf9c3b9eb4433e79a78b35081e34f2',
     );
   });
 
   it.each([
     [
       'feature',
-      'sha256:c60c6e26ea77618ad29af81800692460478e742850637b88b6a6ca4cac6b2890',
+      'sha256:b4c6e0ddb831b9c7bcc9891190b9fe94c191214eab8681dddf58a52b3d1c6a23',
     ],
     [
       'fast',
-      'sha256:beb68d2dee002d6ee37376ce4a18d57d46ec8603242acd9295c13b3d52489b44',
+      'sha256:e3a265b23ce16b9b948374238d2f9ad2ca524836fdc98826186d9d799c9975ed',
     ],
     [
       'standard',
-      'sha256:f5110761ce0dddcb071826b0bfe2f17c5a4b2dfc3cf423ac2b02a9cd7fb093fd',
+      'sha256:9547d4b20d95b5863e030d6c74fb2163670278ed2ee345576d99108c8a0082e1',
     ],
   ])('pins the hash of the shipped %s line', (name, hash) => {
     expect(definitions.lines.get(name)?.snapshot.hash).toBe(hash);

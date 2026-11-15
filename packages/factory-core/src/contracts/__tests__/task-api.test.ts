@@ -15,7 +15,7 @@ const HASH = `sha256:${'a'.repeat(64)}`;
 const PR_URL = 'https://github.com/example/repo/pull/12';
 
 const line = {
-  snapshotVersion: 1,
+  snapshotVersion: 2,
   name: 'standard',
   hash: HASH,
   stations: [

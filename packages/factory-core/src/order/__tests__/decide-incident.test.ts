@@ -459,7 +459,7 @@ describe('incident schemas', () => {
   it('accepts a mechanic actor and a stored incident', () => {
     expect(
       storedEventSchema.safeParse({
-        schemaVersion: 2,
+        schemaVersion: 3,
         seq: 3,
         globalSeq: 3,
         orderId: 'p:o',

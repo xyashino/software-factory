@@ -134,7 +134,7 @@ const deliverJob = (base: Job['base'] = { branchBase: 'main' }): Job =>
     kind: 'deliver',
     repo: { url: origin, baseBranch: 'main', branch: BRANCH },
     base,
-    workspace: { dir: 'todo-1', sync: [], setup: [], timeoutMs: 60_000 },
+    workspace: { dir: 'todo-1', sync: [], changeover: [] },
     deliver: {
       taskId: 'todo-1',
       type: 'feat',

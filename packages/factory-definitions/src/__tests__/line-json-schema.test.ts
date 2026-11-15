@@ -4,6 +4,7 @@ import Ajv from 'ajv';
 import { parse } from 'yaml';
 import { describe, expect, it } from 'vitest';
 import {
+  changeoverSchema,
   commandBlockSchema,
   deliverSchema,
   inspectionStationSchema,
@@ -70,6 +71,7 @@ describe('line JSON schema', () => {
         lineFileSchema,
         workspaceSchema,
         commandBlockSchema,
+        changeoverSchema,
         operatorPoolSchema,
         operatorStationSchema,
         inspectionStationSchema,
@@ -118,6 +120,24 @@ describe('line JSON schema', () => {
     expect(errorsOf(doc).map((error) => error.keyword)).toContain(
       'additionalProperties',
     );
+  });
+
+  it('accepts a station that opts out of the changeover with false', () => {
+    const doc = readYaml(VALID);
+    const stations = doc['stations'] as Json[];
+    stations[0] = { ...(stations[0] ?? {}), changeover: false };
+    expect(errorsOf(doc)).toEqual([]);
+  });
+
+  it('rejects a changeover key file that climbs out of the worktree', () => {
+    const doc = readYaml(VALID);
+    const workspace = doc['workspace'] as Json;
+    workspace['changeover'] = {
+      timeout: '10m',
+      exec: ['pnpm install'],
+      keyFiles: ['../secrets'],
+    };
+    expect(errorsOf(doc).length).toBeGreaterThan(0);
   });
 
   it('rejects an onFail.max above 5', () => {

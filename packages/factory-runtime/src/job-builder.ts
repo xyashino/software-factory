@@ -8,6 +8,10 @@ import {
   type LineSnapshot,
   type Station,
 } from '@repo/factory-core/line/snapshot';
+
+/** A changeover as the pinned Line carries it: a block, `false` to opt out, or absent to take the line's. */
+type ChangeoverBlock = NonNullable<LineSnapshot['workspace']>['changeover'];
+type ChangeoverOverride = Station['changeover'];
 import { resolveCycleContext } from '@repo/factory-core/order/context';
 import type { JobSpec } from '@repo/factory-core/order/next';
 import type { OrderProjection } from '@repo/factory-core/order/projection';
@@ -79,16 +83,31 @@ export const resolveBase = (
   return `factory/${predecessor.todoId}`;
 };
 
-/** The workspace preparation of the pinned Line: its sync and setup commands, and the setup timeout. */
-const workspaceOf = (line: LineSnapshot) => {
-  const setup = line.workspace?.setup;
-  if (setup === undefined) {
-    throw unpinned(`line ${line.name} names no workspace setup`);
-  }
+/**
+ * The changeover a Job runs: its own block (a station's or the delivery's) when it names one, else the line's.
+ * `false` opts the Job out, and a Line with no changeover runs none. Pure lookup of the pinned Line, nothing guessed.
+ */
+const changeoverOf = (
+  line: LineSnapshot,
+  own: ChangeoverOverride,
+): ChangeoverBlock | undefined => {
+  const block = own !== undefined ? own : line.workspace?.changeover;
+  return block === false ? undefined : block;
+};
+
+/**
+ * The workspace preparation of a Job, from the pinned Line: its sync commands, and the changeover the Job runs
+ * (`[]` when none). The changeover's key files and timeout ride along only when it has them.
+ */
+const workspaceOf = (line: LineSnapshot, own: ChangeoverOverride) => {
+  const changeover = changeoverOf(line, own);
   return {
     sync: line.workspace?.sync?.exec ?? [],
-    setup: setup.exec,
-    timeoutMs: setup.timeoutMs,
+    changeover: changeover?.exec ?? [],
+    ...(changeover?.keyFiles === undefined
+      ? {}
+      : { changeoverKeyFiles: changeover.keyFiles }),
+    ...(changeover === undefined ? {} : { timeoutMs: changeover.timeoutMs }),
   };
 };
 
@@ -165,7 +184,6 @@ export const buildJob = async (
       baseBranch: branchBase,
       branch: `factory/${state.todoId}`,
     },
-    workspace: { dir: state.todoId, ...workspaceOf(line) },
   };
 
   if (next.job.kind === 'deliver') {
@@ -174,6 +192,10 @@ export const buildJob = async (
     const reportBlob = artifactBlob(state, refs.report);
     return jobSchema.parse({
       ...common,
+      workspace: {
+        dir: state.todoId,
+        ...workspaceOf(line, line.deliver?.changeover),
+      },
       kind: 'deliver',
       base: next.job.base,
       deliver: {
@@ -210,6 +232,7 @@ export const buildJob = async (
       [...state.cycles].reverse().find((cycle) => cycle.commit)?.commit;
     return jobSchema.parse({
       ...common,
+      workspace: { dir: state.todoId, ...workspaceOf(line, undefined) },
       kind: 'mechanic',
       base: latestCommit ?? { branchBase },
       mechanic: {
@@ -247,6 +270,10 @@ export const buildJob = async (
     }
     return jobSchema.parse({
       ...common,
+      workspace: {
+        dir: state.todoId,
+        ...workspaceOf(line, station.changeover),
+      },
       kind: 'run_inspection',
       base,
       station: {
@@ -279,6 +306,10 @@ export const buildJob = async (
 
   return jobSchema.parse({
     ...common,
+    workspace: {
+      dir: state.todoId,
+      ...workspaceOf(line, station.changeover),
+    },
     kind: 'run_operator_station',
     base,
     station: {

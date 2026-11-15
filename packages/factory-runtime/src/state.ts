@@ -8,8 +8,8 @@ import { evolve } from '@repo/factory-core/order/evolve';
 import type { DecideContext } from '@repo/factory-core/order/commands';
 import type { WorkOrderState } from '@repo/factory-core/order/state';
 
-/** The envelope version the store writes (CORE §11). */
-const SCHEMA_VERSION = 2;
+/** The order envelope version the store writes (CORE §11). */
+const SCHEMA_VERSION = 3;
 
 /** Folds a Traveler into the Work order state it describes. An empty history has no state. */
 export const foldHistory = (

@@ -18,7 +18,7 @@ const workJob = {
     branch: 'factory/todo-a',
   },
   base: { branchBase: 'main' },
-  workspace: { dir: 'todo-a', sync: [], setup: [], timeoutMs: 600_000 },
+  workspace: { dir: 'todo-a', sync: [], changeover: [], timeoutMs: 600_000 },
   station: {
     stationId: 'plan',
     cycleId: '01J0000000000000000000000C',
@@ -41,6 +41,51 @@ const planJob = (kind: string, plan: Record<string, unknown> = {}) => ({
   },
   base: { branchBase: 'main' },
   plan: { slug: 'x', title: 'Plan x', ...plan },
+});
+
+describe('Job contract: workspace changeover', () => {
+  const withWorkspace = (workspace: Record<string, unknown>) => ({
+    ...workJob,
+    workspace: { dir: 'todo-a', sync: [], ...workspace },
+  });
+
+  it('accepts an empty changeover with no timeout: the Line declares none', () => {
+    expect(jobSchema.safeParse(withWorkspace({ changeover: [] })).success).toBe(
+      true,
+    );
+  });
+
+  it('accepts a changeover with its key files and timeout', () => {
+    const job = withWorkspace({
+      changeover: ['pnpm install --frozen-lockfile'],
+      changeoverKeyFiles: ['pnpm-lock.yaml', 'packages/*/package.json'],
+      timeoutMs: 600_000,
+    });
+    expect(jobSchema.safeParse(job).success).toBe(true);
+  });
+
+  it('rejects a changeover that names no timeout', () => {
+    const job = withWorkspace({ changeover: ['pnpm install'] });
+    expect(jobSchema.safeParse(job).success).toBe(false);
+  });
+
+  it('rejects a changeover key file that climbs out of the worktree', () => {
+    const job = withWorkspace({
+      changeover: ['pnpm install'],
+      changeoverKeyFiles: ['../secrets'],
+      timeoutMs: 600_000,
+    });
+    expect(jobSchema.safeParse(job).success).toBe(false);
+  });
+
+  it('rejects the retired setup field: the workspace names changeover only', () => {
+    const job = withWorkspace({
+      changeover: [],
+      setup: ['pnpm install'],
+      timeoutMs: 600_000,
+    });
+    expect(jobSchema.safeParse(job).success).toBe(false);
+  });
 });
 
 describe('Job contract: Order Plan jobs (PROTOCOL §4)', () => {

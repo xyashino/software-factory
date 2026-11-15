@@ -172,7 +172,7 @@ export class Scenario {
       ? result.value.map((event, index) => {
           const seq = first + index;
           return {
-            schemaVersion: 2,
+            schemaVersion: 3,
             seq,
             globalSeq: seq,
             orderId: ORDER_ID,
@@ -206,7 +206,7 @@ export class Scenario {
     this.clock.advance(1000);
     const seq = this.stored.length + 1;
     this.stored.push({
-      schemaVersion: 2,
+      schemaVersion: 3,
       seq,
       globalSeq: seq,
       orderId: ORDER_ID,

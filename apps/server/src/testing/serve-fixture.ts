@@ -31,7 +31,7 @@ const lineYaml = (checks: string[]): string => `schemaVersion: 2
 name: inspect
 description: Quality gate first (integration fixture)
 workspace:
-  setup:
+  changeover:
     timeout: 2m
     exec:
       - "true"

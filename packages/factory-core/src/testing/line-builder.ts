@@ -75,7 +75,7 @@ export const lineBuilder = (name = 'factory-default'): LineBuilder => {
     },
     build: () =>
       lineSnapshotSchema.parse({
-        snapshotVersion: 1,
+        snapshotVersion: 2,
         name,
         hash: `sha256:${'a'.repeat(64)}`,
         stations,

@@ -2,6 +2,7 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
@@ -31,7 +32,7 @@ beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), 'factory-cell-workspace-'));
   origin = join(root, 'origin');
   cellDataDir = join(root, 'cell');
-  counter = join(root, 'setup-count.txt');
+  counter = join(root, 'changeover-count.txt');
   makeRepo(origin);
 });
 
@@ -53,18 +54,29 @@ const contextWith = (
   ...overrides,
 });
 
-/** A job with only the fields the workspace reads. */
-const jobWith = (dir: string, setup: string[] = [], sync: string[] = []): Job =>
+/** A job with only the fields the workspace reads: its changeover commands and, when given, its key files. */
+const jobWith = (
+  dir: string,
+  changeover: string[] = [],
+  sync: string[] = [],
+  changeoverKeyFiles?: string[],
+): Job =>
   ({
     jobId: '01J0000000000000000000000J',
     repo: { url: origin, baseBranch: 'main', branch: `factory/${dir}` },
     base: { branchBase: 'main' },
-    workspace: { dir, sync, setup, timeoutMs: 60_000 },
+    workspace: {
+      dir,
+      sync,
+      changeover,
+      timeoutMs: 60_000,
+      ...(changeoverKeyFiles === undefined ? {} : { changeoverKeyFiles }),
+    },
   }) as unknown as Job;
 
-/** The command that appends one line to the counter file: how many times setup ran. */
-const countSetup = (): string => `echo run >> ${shellQuote(counter)}`;
-const setupRuns = (): number =>
+/** The command that appends one line to the counter file: how many times the changeover ran. */
+const countChangeover = (): string => `echo run >> ${shellQuote(counter)}`;
+const changeoverRuns = (): number =>
   existsSync(counter)
     ? readFileSync(counter, 'utf8').split('\n').filter(Boolean).length
     : 0;
@@ -121,26 +133,83 @@ describe('workspace prepare', () => {
     expect(git(prepared.worktree, 'rev-parse', 'HEAD')).toBe(head);
   });
 
-  it('runs setup once per commit and skips it on the next prepare of that commit', async () => {
-    const job = jobWith('todo-2', [countSetup()]);
+  it('runs the changeover once per commit and skips it on the next prepare of that commit', async () => {
+    const job = jobWith('todo-2', [countChangeover()]);
 
     await prepareWorkspace(contextWith(), job);
     await prepareWorkspace(contextWith(), job);
 
-    expect(setupRuns()).toBe(1);
+    expect(changeoverRuns()).toBe(1);
   });
 
-  it('runs setup again when a new commit is prepared', async () => {
-    const job = jobWith('todo-3', [countSetup()]);
+  it('runs the changeover again when a new commit is prepared', async () => {
+    const job = jobWith('todo-3', [countChangeover()]);
     await prepareWorkspace(contextWith(), job);
     commitFile(origin, 'next.txt', 'next\n');
 
     await prepareWorkspace(contextWith(), job);
 
-    expect(setupRuns()).toBe(2);
+    expect(changeoverRuns()).toBe(2);
   });
 
-  it('reports a failed setup with its stage and the commands it ran', async () => {
+  it('skips the changeover and writes no marker when the Job names none', async () => {
+    const prepared = await prepareWorkspace(contextWith(), jobWith('todo-12'));
+
+    expect(prepared.ok).toBe(true);
+    if (!prepared.ok) return;
+    const markers = existsSync(join(prepared.worktree, '.cell'))
+      ? readdirSync(join(prepared.worktree, '.cell')).filter((name) =>
+          name.startsWith('cache-'),
+        )
+      : [];
+    expect(markers).toEqual([]);
+  });
+
+  it('keys the changeover on its key files: a commit that leaves them alone runs no changeover again', async () => {
+    commitFile(origin, 'lock.txt', 'v1\n');
+    const job = jobWith('kf-1', [countChangeover()], [], ['lock.txt']);
+    await prepareWorkspace(contextWith(), job);
+
+    commitFile(origin, 'unrelated.txt', 'elsewhere\n');
+    const next = await prepareWorkspace(contextWith(), job);
+
+    expect(next.ok).toBe(true);
+    expect(changeoverRuns()).toBe(1);
+  });
+
+  it('runs the changeover again when a key file changes at the new commit', async () => {
+    commitFile(origin, 'lock.txt', 'v1\n');
+    const job = jobWith('kf-2', [countChangeover()], [], ['lock.txt']);
+    await prepareWorkspace(contextWith(), job);
+
+    commitFile(origin, 'lock.txt', 'v2\n');
+    await prepareWorkspace(contextWith(), job);
+
+    expect(changeoverRuns()).toBe(2);
+  });
+
+  it('matches a key-file glob against the tracked files of the commit', async () => {
+    commitFile(origin, 'packages/app/package.json', '{}\n');
+    const job = jobWith('kf-3', [countChangeover()], [], ['**/package.json']);
+    await prepareWorkspace(contextWith(), job);
+
+    commitFile(origin, 'packages/app/package.json', '{"v":2}\n');
+    await prepareWorkspace(contextWith(), job);
+
+    expect(changeoverRuns()).toBe(2);
+  });
+
+  it('keys a missing key file as absent, so the changeover runs once and then stays put', async () => {
+    const job = jobWith('kf-4', [countChangeover()], [], ['not-yet.lock']);
+    await prepareWorkspace(contextWith(), job);
+
+    commitFile(origin, 'unrelated.txt', 'elsewhere\n');
+    await prepareWorkspace(contextWith(), job);
+
+    expect(changeoverRuns()).toBe(1);
+  });
+
+  it('reports a failed changeover with its stage and the commands it ran', async () => {
     const prepared = await prepareWorkspace(
       contextWith(),
       jobWith('todo-4', ['echo building', 'exit 3']),
@@ -148,7 +217,7 @@ describe('workspace prepare', () => {
 
     expect(prepared.ok).toBe(false);
     if (prepared.ok) return;
-    expect(prepared.stage).toBe('setup');
+    expect(prepared.stage).toBe('changeover');
     expect(prepared.detail).toContain('exited 3');
     const log = new TextDecoder().decode(prepared.log);
     expect(log).toContain('$ exit 3');

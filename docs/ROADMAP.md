@@ -102,7 +102,7 @@ counterpart or a written reason it no longer applies.
 | Todo                          | Depends on                    | Scope                                                                                                                                                                         |
 | :---------------------------- | :---------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `factory-m2-definitions-port` | M0                            | Copy v1 definitions, roles → `operators/`, templates, workflows → `lines/` into `factory-definitions`; tests pass                                                             |
-| `factory-m2-line-v2`          | `factory-m2-definitions-port` | Schema v2 (`sync`/`setup` become per-job workspace preparation, not a phase; Station `requires`; `maxRestarts`, `maxLostRestarts`), runtime prompt templates, snapshot + hash |
+| `factory-m2-line-v2`          | `factory-m2-definitions-port` | Schema v2 (`sync`/`changeover` become per-job workspace preparation, not a phase; Station `requires`; `maxRestarts`, `maxLostRestarts`), runtime prompt templates, snapshot + hash |
 | `factory-m2-queue`            | M1                            | `core/queue/select.ts` (CORE §8) with ordering, capability and dependency tests                                                                                               |
 | `factory-m2-todo-parse`       | `factory-m2-definitions-port` | Todo frontmatter parsing ported from v1 `pick-todo.ts` into `factory-definitions`, `OrderId` derivation, the missing-dependency rule, diagnostics                             |
 
@@ -158,7 +158,7 @@ Delivered in `v2-18`, after M6. Nothing in M5 to M6 depends on it.
 | :---------------------------- | :---------------------------- | :--------------------------------------------------------------------------------------------------------------------------- |
 | `factory-m5-adapters-port`    | M0                            | Port v1 adapters (herdr, git, github, process, runners) with tests                                                           |
 | `factory-m5-client-loops`     | M4                            | Cell socket client to `factory-server`; hello, claim/heartbeat loops, idempotency ids, self-fence (remote TCP client in M4R) |
-| `factory-m5-workspace`        | `factory-m5-adapters-port`    | Mirror, worktree at base, sync/setup cache, LRU, `.cell/` excluded                                                           |
+| `factory-m5-workspace`        | `factory-m5-adapters-port`    | Mirror, worktree at base, sync/changeover cache, LRU, `.cell/` excluded                                                           |
 | `factory-m5-inspection`       | `factory-m5-workspace`        | `run-inspection.ts`                                                                                                          |
 | `factory-m5-headless-station` | `factory-m5-workspace`        | `run-operator-station.ts` for headless runners first (no Herdr), checkpoint procedure (PROTOCOL §8.2)                        |
 | `factory-m5-operator-socket`  | `factory-m5-headless-station` | Unix socket, Cycle tokens, local validation, blob upload                                                                     |
@@ -233,5 +233,5 @@ Mechanic's commands run as. The distributed `factory-m10` scenarios are still to
 | R4 deterministic control | `factory-m0-boundaries` (purity), I1, I9                                                                                              |
 | R5 auditable             | prompt blobs in `cycle_started`, `nudged` events, `factory log`                                                                       |
 | R6 runner-agnostic       | `factory-m5-adapters-port`                                                                                                            |
-| R7 declarative Lines     | `factory-m2-*`                                                                                                                        |
+| R7 declarative Lines     | `factory-m2-*`; `perf-02-workflow-changeover` (changeover declared per Line, station and deliver)                                     |
 | R8 replaceable Cells     | `factory-m5-leave`, `factory-m7-leave`, `factory-m7-race`, I11                                                                        |

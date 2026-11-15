@@ -48,6 +48,40 @@ describe('line snapshot lookup', () => {
     expect(lineSnapshotSchema.safeParse(duplicate).success).toBe(false);
   });
 
+  it('carries a station and deliver changeover: false as an opt-out, a block as an override', () => {
+    const parsed = lineSnapshotSchema.parse({
+      ...LINE,
+      stations: [
+        { ...LINE.stations[0]!, changeover: false },
+        LINE.stations[1]!,
+      ],
+      workspace: {
+        changeover: {
+          timeoutMs: 600_000,
+          exec: ['pnpm install --frozen-lockfile'],
+          keyFiles: ['pnpm-lock.yaml'],
+        },
+      },
+      deliver: {
+        commit: 'build.commit',
+        report: 'build.report',
+        changeover: false,
+      },
+    });
+    expect(parsed.stations[0]?.changeover).toBe(false);
+    expect(parsed.stations[1]?.changeover).toBeUndefined();
+    expect(parsed.workspace?.changeover?.keyFiles).toEqual(['pnpm-lock.yaml']);
+    expect(parsed.deliver?.changeover).toBe(false);
+  });
+
+  it('rejects the retired setup workspace field', () => {
+    const legacy = {
+      ...LINE,
+      workspace: { setup: { timeoutMs: 600_000, exec: ['pnpm install'] } },
+    };
+    expect(lineSnapshotSchema.safeParse(legacy).success).toBe(false);
+  });
+
   it('gives a station no declared artifacts when it names none', () => {
     const bare = { ...LINE.stations[1]!, artifacts: undefined };
 

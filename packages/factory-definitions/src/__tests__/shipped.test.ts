@@ -83,12 +83,33 @@ describe('shipped definitions', () => {
     }
   });
 
-  it('prepare every line workspace with setup only: the Cell fetches the mirror itself', () => {
+  it('prepare every line workspace with changeover only: the Cell fetches the mirror itself', () => {
     for (const { line } of definitions().lines.values()) {
       expect(line.workspace.sync).toBeUndefined();
-      expect(line.workspace.setup.exec).toEqual([
+      expect(line.workspace.changeover?.exec).toEqual([
         'pnpm install --frozen-lockfile',
       ]);
+      expect(line.workspace.changeover?.keyFiles).toEqual([
+        'pnpm-lock.yaml',
+        'pnpm-workspace.yaml',
+        '**/package.json',
+      ]);
+    }
+  });
+
+  it('opt the plan, plan review and delivery out of the changeover, and keep the build on it', () => {
+    const feature = definitions().lines.get('feature')?.line;
+    expect(feature?.stations.find((s) => s.id === 'plan')?.changeover).toBe(
+      false,
+    );
+    expect(
+      feature?.stations.find((s) => s.id === 'plan-review')?.changeover,
+    ).toBe(false);
+    expect(feature?.stations.find((s) => s.id === 'build')?.changeover).toBe(
+      undefined,
+    );
+    for (const { line } of definitions().lines.values()) {
+      expect(line.deliver.changeover).toBe(false);
     }
   });
 

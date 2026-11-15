@@ -35,13 +35,27 @@ export const operatorPoolSchema = z
   })
   .strict();
 
-/** A timed list of shell commands: a workspace's `sync` or `setup` (PROTOCOL §4). */
+/** A timed list of shell commands: a workspace's `sync` (PROTOCOL §4). */
 export const commandBlockSchema = z
   .object({
     timeoutMs: z.number().int().min(1),
     exec: z.array(machineText(512)).max(32),
   })
   .strict();
+
+/**
+ * A changeover: the commands a worktree needs before a Station runs (PROTOCOL §4). `keyFiles`, when present, are the
+ * repo-relative paths or globs whose git blob hashes decide when the cache is stale; without them the cache is per base commit.
+ */
+export const changeoverBlockSchema = commandBlockSchema.extend({
+  keyFiles: z.array(machineText(512)).min(1).max(64).optional(),
+});
+
+/** `false` opts a Station or the delivery out of the line changeover; a block replaces the line's (CORE §11). */
+const changeoverOverrideSchema = z.union([
+  z.literal(false),
+  changeoverBlockSchema,
+]);
 
 export const stationSchema = z
   .object({
@@ -59,6 +73,8 @@ export const stationSchema = z
       .optional(),
     maxRestarts: z.number().int().min(0).max(100),
     maxLostRestarts: z.number().int().min(0).max(100),
+    // Optional: absent takes the line changeover, `false` opts out, a block replaces it (CORE §11).
+    changeover: changeoverOverrideSchema.optional(),
     // Optional and additive (CORE §11). `verdict`: an Operator whose pass is a judgment (PROTOCOL §4).
     verdict: z.boolean().optional(),
     // Keys of the artifacts the Station must hand over when its Cycle completes.
@@ -93,7 +109,7 @@ export const stationSchema = z
 
 export const lineSnapshotSchema = z
   .object({
-    snapshotVersion: z.literal(1),
+    snapshotVersion: z.literal(2),
     name: tag,
     hash: z.string().regex(SHA256),
     stations: z.array(stationSchema).min(1).max(64),
@@ -101,12 +117,16 @@ export const lineSnapshotSchema = z
     workspace: z
       .object({
         sync: commandBlockSchema.optional(),
-        setup: commandBlockSchema.optional(),
+        changeover: changeoverBlockSchema.optional(),
       })
       .strict()
       .optional(),
     deliver: z
-      .object({ commit: machineText(128), report: machineText(128) })
+      .object({
+        commit: machineText(128),
+        report: machineText(128),
+        changeover: changeoverOverrideSchema.optional(),
+      })
       .strict()
       .optional(),
   })
