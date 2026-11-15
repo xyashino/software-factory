@@ -19,6 +19,7 @@ catalog:
   '@vitest/coverage-v8': 5.1.0
   ajv: 8.20.0
   citty: 0.2.2
+  drizzle-kit: 0.31.11
   drizzle-orm: 0.45.4
   eslint: 9.39.5
   eslint-config-prettier: 10.1.8

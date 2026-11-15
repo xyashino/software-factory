@@ -56,8 +56,9 @@ software-factory/
     ├── factory-runtime/           # @repo/factory-runtime    application use cases, scheduling (run inside factory-server)
     │   └── src/                   # composition, commands, claims, intake, prompts, admin, event feed
     ├── factory-db/                # @repo/factory-db         (STORAGE.md)
-    │   ├── migrations/
-    │   └── src/                   # sqlite event store, blob store, lease store, export/import
+    │   ├── drizzle/               # drizzle-kit migrations generated from src/schema.ts
+    │   ├── migrations/            # legacy 0001-0003, frozen (STORAGE §9)
+    │   └── src/                   # schema.ts (source of truth), migrate, sqlite event store, blob store, lease store, export/import
     ├── factory-definitions/       # @repo/factory-definitions
     │   ├── operators/             # Operator profiles, copied from v1 roles/, then evolved
     │   ├── lines/                 # Line definitions, copied from v1 workflows/, schema v2
