@@ -1,5 +1,8 @@
 import type { Database } from 'bun:sqlite';
 import type { SupervisorTokenStore } from '@repo/factory-core/ports/supervisor-tokens';
+import { eq } from 'drizzle-orm';
+import { drizzleOf } from './db';
+import { supervisorTokens } from './schema';
 import type { StatementGate } from './sqlite-event-store';
 import type { WriterLock } from './writer-lock';
 
@@ -8,22 +11,28 @@ export const sqliteSupervisorTokenStore = (
   db: Database,
   writer: WriterLock,
   gate: StatementGate,
-): SupervisorTokenStore => ({
-  create: ({ tokenHash, name, createdAt }) =>
-    gate.run(() => {
-      writer.assertHeld();
-      db.run(
-        'INSERT INTO supervisor_tokens (token_hash, name, created_at) VALUES (?, ?, ?)',
-        [tokenHash, name, createdAt],
-      );
-    }),
-  find: (tokenHash) =>
-    gate.run(() => {
-      const row = db
-        .query<{ token_hash: string; name: string }, [string]>(
-          'SELECT token_hash, name FROM supervisor_tokens WHERE token_hash = ?',
-        )
-        .get(tokenHash);
-      return row ? { tokenHash: row.token_hash, name: row.name } : undefined;
-    }),
-});
+): SupervisorTokenStore => {
+  const orm = drizzleOf(db);
+  return {
+    create: ({ tokenHash, name, createdAt }) =>
+      gate.run(() => {
+        writer.assertHeld();
+        orm
+          .insert(supervisorTokens)
+          .values({ tokenHash, name, createdAt })
+          .run();
+      }),
+    find: (tokenHash) =>
+      gate.run(() => {
+        const row = orm
+          .select({
+            tokenHash: supervisorTokens.tokenHash,
+            name: supervisorTokens.name,
+          })
+          .from(supervisorTokens)
+          .where(eq(supervisorTokens.tokenHash, tokenHash))
+          .get();
+        return row ? { tokenHash: row.tokenHash, name: row.name } : undefined;
+      }),
+  };
+};

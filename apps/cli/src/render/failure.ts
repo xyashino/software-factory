@@ -17,5 +17,7 @@ export const describeFailure = (error: WireError): string => {
       return 'factory unavailable: the request could not be completed; try again (no server answered, or it failed; see its log)';
     case 'unauthorized':
       return 'unauthorized: the Cell is unknown or revoked';
+    case 'not_configured':
+      return 'not configured: the server was started without this feature (see its environment)';
   }
 };

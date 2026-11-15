@@ -29,7 +29,7 @@ Complete `apps/factory-demo` with Cells & Join Tokens, Projects Registry CRUD, A
    - Projects table/cards (`projectId`, `repoUrl`, `baseBranch`, `maxRunning`, `depPolicy`).
    - Add project form (`projectId`, `repoUrl`, `baseBranch`, `maxRunning`, `depPolicy`), edit settings (`baseBranch`, `maxRunning`, `depPolicy`), remove project with confirmation.
 3. **`src/modules/admin/`:**
-   - Trigger `Rebuild Projections` (`rows` count result) and `Recover from Git` (optional `projectId`, showing `recovered` and `skipped` tables).
+   - Trigger `Rebuild Projections` (`rows` count result).
    - Export Archive button downloading decoded base64 archive JSON from `GET /api/admin/export`.
 4. **Shell polish, A11y & Docs:**
    - Header controls for Dark/Light theme toggle and accessibility preferences (reduced motion, high contrast, font scale) backed by CSS tokens in `src/styles/theme.css`.
@@ -41,5 +41,5 @@ Complete `apps/factory-demo` with Cells & Join Tokens, Projects Registry CRUD, A
 
 ## Acceptance criteria
 
-- [ ] Full `factory-server` HTTP management surface (`board`, `orders`, `plans`, `intake`, `cells`, `join-tokens`, `projects`, `admin`, `blobs`, `stream`) usable from `apps/factory-demo`.
-- [ ] `pnpm check-types`, `pnpm lint`, `pnpm test`, `pnpm format:check`, and `pnpm --filter @repo/factory-demo build` pass.
+- [ ] Full `factory-server` HTTP management surface (`board`, `orders`, `plans`, `cells`, `join-tokens`, `projects`, `admin`, `blobs`, `stream`) usable from `apps/factory-demo`.
+- [ ] `pnpm check-types`, `pnpm lint`, `pnpm test`, and `pnpm format:check`, and `pnpm --filter @repo/factory-demo build` pass.

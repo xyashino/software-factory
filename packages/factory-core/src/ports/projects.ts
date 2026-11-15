@@ -30,7 +30,7 @@ export type ProjectStoreResult =
 
 /**
  * The `projects` table (STORAGE §4): mutable configuration, not an event stream. Writes assert the
- * writer lock. `remove` refuses a project with any Work order, event or intake row; `set` refuses a
+ * writer lock. `remove` refuses a project with any Work order or event; `set` refuses a
  * `baseBranch` change while a Work order of the project is not terminal.
  */
 export interface ProjectStore {

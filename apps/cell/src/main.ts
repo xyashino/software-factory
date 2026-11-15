@@ -3,7 +3,8 @@ import { hostname } from 'node:os';
 import type { FactoryClient } from '@repo/factory-core/contracts/client';
 import type { CellId } from '@repo/factory-core/ids';
 import { WireFailure } from '@repo/factory-core/contracts/errors';
-import { readConfig, configPath, cellDataDirOf } from './config';
+import { readConfig, cellDataDirOf } from './config';
+import { loadCellConfig } from './repo-config';
 import { startCell, type RunningCell } from './cell';
 import {
   factoryDataDirOf,
@@ -32,6 +33,25 @@ export const CELL_VERSION = '0.0.0';
 
 const messageOf = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
+
+/**
+ * The value of a `--name <value>` or `--name=<value>` flag in the command line, or undefined when the
+ * flag is absent. A flag with no value is refused.
+ */
+const flagValue = (
+  name: string,
+  argv: readonly string[] = process.argv,
+): string | undefined => {
+  const at = argv.indexOf(name);
+  if (at >= 0) {
+    const value = argv[at + 1];
+    if (value === undefined || value.startsWith('--')) {
+      throw new Error(`${name} needs a value`);
+    }
+    return value;
+  }
+  return argv.find((arg) => arg.startsWith(`${name}=`))?.slice(name.length + 1);
+};
 
 /**
  * The Cell's identity and client. Local mode (the default) keeps the socket and the local id. Remote mode
@@ -94,7 +114,17 @@ const main = async (): Promise<void> => {
   }
 
   const env = process.env;
-  const config = readConfig(configPath(env));
+  const loaded = loadCellConfig({
+    env,
+    repoDir: flagValue('--repo-dir'),
+    cwd: process.cwd(),
+  });
+  const config = loaded.config;
+  for (const applied of [loaded.repoPath, loaded.localPath]) {
+    if (applied !== undefined) {
+      console.log(`factory-cell: config from ${applied}`);
+    }
+  }
   const baseCellDataDir = config.cellDataDir ?? cellDataDirOf(env);
   const instanceClaim = claimInstanceDir(baseCellDataDir);
   const cellDataDir = instanceClaim.cellDataDir;

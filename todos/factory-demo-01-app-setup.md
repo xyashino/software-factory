@@ -28,7 +28,7 @@ Create `apps/factory-demo` (`@repo/factory-demo`) workspace app with Astro SSR a
 2. **Theme & layout:**
    - Single theme file `src/styles/theme.css` with Tailwind `@theme` design tokens (colors, spacing, fonts, z-index, breakpoints `320, 480, 640, 768, 1024, 1280, 1440, 1920`), light/dark mode tokens, zero raw `px` or direct literal colors/spacing in components.
    - Base structure matching `.agents/references/frontend-architecture.md` (`src/core/`, `src/libs/`, `src/modules/`, `src/pages/`, `src/shared/`).
-   - App shell layout (`src/pages/index.astro` + `src/core/AppShell.tsx`) with accessible landmark regions, skip link, keyboard-navigable sidebar/nav tabs (`Board`, `Plans`, `Intake`, `Cells`, `Projects`, `Admin`), centered main content (`ui-dashboard-centered`), `lucide-react` icons, and `/api/health` Astro endpoint returning `{ ok: true }` validated with `zod`.
+   - App shell layout (`src/pages/index.astro` + `src/core/AppShell.tsx`) with accessible landmark regions, skip link, keyboard-navigable sidebar/nav tabs (`Board`, `Plans`, `Cells`, `Projects`, `Admin`), centered main content (`ui-dashboard-centered`), `lucide-react` icons, and `/api/health` Astro endpoint returning `{ ok: true }` validated with `zod`.
 3. **Tests & ADR:**
    - Smoke test for `/api/health` and `AppShell` render/navigation (AAA, black-box).
    - One `decisions/` ADR entry.

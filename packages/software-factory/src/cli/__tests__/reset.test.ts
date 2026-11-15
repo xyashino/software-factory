@@ -54,12 +54,15 @@ describe('cleanTodos', () => {
 describe('performReset', () => {
   it('clears database, logs, worktrees, evidences and deletes delivered todos when hard: true', () => {
     const root = mkdtempSync(join(tmpdir(), 'sf-reset-root-'));
-    mkdirSync(join(root, '.factory'), { recursive: true });
+    mkdirSync(join(root, '.factory-local'), { recursive: true });
     mkdirSync(join(root, '.worktrees', 'task-1'), { recursive: true });
     mkdirSync(join(root, '.evidences', 'task-1'), { recursive: true });
     mkdirSync(join(root, 'todos'), { recursive: true });
 
-    writeFileSync(join(root, '.factory', 'supervisor.log'), 'log content\n');
+    writeFileSync(
+      join(root, '.factory-local', 'supervisor.log'),
+      'log content\n',
+    );
     writeFileSync(
       join(root, 'todos', 'task-1.md'),
       '---\nstatus: delivered\n---\n# Body\n',
@@ -82,7 +85,9 @@ describe('performReset', () => {
     store.close();
 
     expect(existsSync(storePath(root))).toBe(true);
-    expect(existsSync(join(root, '.factory', 'supervisor.log'))).toBe(true);
+    expect(existsSync(join(root, '.factory-local', 'supervisor.log'))).toBe(
+      true,
+    );
     expect(existsSync(join(root, '.worktrees'))).toBe(true);
     expect(existsSync(join(root, '.evidences'))).toBe(true);
 
@@ -96,7 +101,9 @@ describe('performReset', () => {
     expect(result.todosResetCount).toBe(1);
 
     expect(existsSync(storePath(root))).toBe(false);
-    expect(existsSync(join(root, '.factory', 'supervisor.log'))).toBe(false);
+    expect(existsSync(join(root, '.factory-local', 'supervisor.log'))).toBe(
+      false,
+    );
     expect(existsSync(join(root, '.worktrees'))).toBe(false);
     expect(existsSync(join(root, '.evidences'))).toBe(false);
     expect(existsSync(join(root, 'todos', 'task-1.md'))).toBe(false);
@@ -107,12 +114,12 @@ describe('performReset', () => {
 
   it('keeps worktrees, evidences and todos when hard: false', () => {
     const root = mkdtempSync(join(tmpdir(), 'sf-reset-soft-'));
-    mkdirSync(join(root, '.factory'), { recursive: true });
+    mkdirSync(join(root, '.factory-local'), { recursive: true });
     mkdirSync(join(root, '.worktrees', 'task-1'), { recursive: true });
     mkdirSync(join(root, '.evidences', 'task-1'), { recursive: true });
     mkdirSync(join(root, 'todos'), { recursive: true });
 
-    writeFileSync(join(root, '.factory', 'supervisor.log'), 'log\n');
+    writeFileSync(join(root, '.factory-local', 'supervisor.log'), 'log\n');
     writeFileSync(
       join(root, 'todos', 'task-1.md'),
       '---\nstatus: delivered\n---\n# Body\n',
@@ -138,7 +145,7 @@ describe('performReset', () => {
 describe('runReset lock handling', () => {
   it('refuses reset when supervisor lock is active without force', async () => {
     const root = mkdtempSync(join(tmpdir(), 'sf-reset-locked-'));
-    mkdirSync(join(root, '.factory'), { recursive: true });
+    mkdirSync(join(root, '.factory-local'), { recursive: true });
     writeFileSync(
       supervisorLockPath(root),
       JSON.stringify({ pid: process.pid, startedAt: new Date().toISOString() }),

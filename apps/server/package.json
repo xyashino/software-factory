@@ -21,6 +21,7 @@
   },
   "devDependencies": {
     "@repo/eslint-config": "workspace:*",
+    "@repo/factory-definitions": "workspace:*",
     "@repo/typescript-config": "workspace:*",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",

@@ -27,9 +27,9 @@ import {
   textOf,
   type ShellContext,
 } from '../workspace/shell';
-import { getBlob } from './blobs';
 import { orderIdOf, todoOf } from './job-shape';
 import { logCommandOf } from './pane-commands';
+import { renderIncidentPrompt } from './render';
 
 /** What the Mechanic is told to do when its incident says `nudge` (CORE §14.3). */
 export const MECHANIC_NUDGE =
@@ -233,7 +233,8 @@ export const runMechanic = async (
   const repairDir = repairDirOf(deps.dataDir, job.jobId);
   mkdirSync(repairDir, { recursive: true });
   const promptPath = join(repairDir, 'prompt.md');
-  let promptBytes = await getBlob(deps.client, mechanic.promptBlob);
+  // The Cell renders the incident prompt from the Andon the job carries (CORE §14.4).
+  let promptText = renderIncidentPrompt(mechanic.incident);
 
   const inUse = deps.inUse ?? new Set<string>();
   const shell: ShellContext | undefined =
@@ -261,15 +262,10 @@ export const runMechanic = async (
       worktree = prepared.worktree;
       startHead = prepared.head;
     } else {
-      const note = Buffer.from(
-        `\n### Workspace prepare note\n\nPreparing the Work order worktree failed at \`${prepared.stage}\`: ${prepared.detail}\nYou are running in the repair directory instead.\n`,
-        'utf8',
-      );
-      promptBytes = Buffer.concat([promptBytes, note]);
+      promptText += `\n### Workspace prepare note\n\nPreparing the Work order worktree failed at \`${prepared.stage}\`: ${prepared.detail}\nYou are running in the repair directory instead.\n`;
     }
   }
-  writeFileSync(promptPath, promptBytes);
-
+  writeFileSync(promptPath, promptText);
   const token = newCycleToken();
   const socketPath = join(repairDir, 'op.sock');
   const name = paneName('mechanic', mechanic.n, job.jobId);

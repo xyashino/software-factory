@@ -7,6 +7,7 @@ import { parseLine } from '../line-schema';
 import { readDefinitions } from '../load';
 
 const PACKAGE_ROOT = join(import.meta.dirname, '..', '..');
+const FACTORY_ROOT = join(PACKAGE_ROOT, '..', '..', '.factory');
 const VALID = join(
   import.meta.dirname,
   'fixtures',
@@ -16,7 +17,7 @@ const VALID = join(
 );
 const FILE = 'lines/feature.yml';
 
-const { definitions } = readDefinitions(PACKAGE_ROOT);
+const { definitions } = readDefinitions(FACTORY_ROOT);
 const operators = definitions.operators;
 
 const snapshotOf = (text: string) => {
@@ -50,11 +51,14 @@ describe('toLineSnapshot', () => {
     expect(snapshot.stations[3]).toMatchObject({ id: 'audit', verdict: true });
   });
 
-  it('keeps no operator details, paths or workspace in the snapshot', () => {
-    const json = JSON.stringify(snapshotOf(validText));
-    expect(json).not.toContain('timeout');
-    expect(json).not.toContain('model');
-    expect(json).not.toContain(PACKAGE_ROOT);
+  it('carries each operator pool and the workspace, and no path', () => {
+    const snapshot = snapshotOf(validText);
+    const operator = snapshot.stations.find(
+      (station) => station.kind === 'operator',
+    );
+    expect(operator?.operator?.model).toBeTruthy();
+    expect(operator?.operator?.timeoutMs).toBeGreaterThan(0);
+    expect(JSON.stringify(snapshot)).not.toContain(FACTORY_ROOT);
   });
 
   it('validates the result with the core snapshot schema', () => {
@@ -81,22 +85,22 @@ describe('toLineSnapshot', () => {
 describe('golden hashes', () => {
   it('pins the hash of the valid fixture line', () => {
     expect(snapshotOf(validText).hash).toBe(
-      'sha256:ac32b80be47342ef04bb929994902e444b23fad6f1abe58d54cc7c69560660e8',
+      'sha256:fb7b8b7658f304f89d02ab75848360963cde004fd0920427cd93b6b9b525f7ef',
     );
   });
 
   it.each([
     [
       'feature',
-      'sha256:ba391147944fe54200c13ac94deaa3055eb926504916c4324ddf03801e81e98d',
+      'sha256:dcc86ea37ea37573ce53495abfc344873027e794e4a9e2cf647172e113238d63',
     ],
     [
       'fast',
-      'sha256:3e3af31acdb16928455a25a597fa5e0ec7fe56268c8895249febf2de5d8f6d3f',
+      'sha256:65b698a24ff1424e96367120e50c59d9f9e58d6a046fbf4074647969db8e5962',
     ],
     [
       'standard',
-      'sha256:67f0b80adf5270b16ed9fd1eaaa482f5a693293b730e842912c81d6f4342e6d4',
+      'sha256:72bd14e4de8c93615ad38a9fe9ad7ceb9236529ba6c5c7631879ce65b84b5a10',
     ],
   ])('pins the hash of the shipped %s line', (name, hash) => {
     expect(definitions.lines.get(name)?.snapshot.hash).toBe(hash);

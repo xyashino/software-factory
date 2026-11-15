@@ -4,14 +4,22 @@ import { fileURLToPath } from 'node:url';
 /** The software-factory package root: src/ -> package. */
 export const PACKAGE_ROOT = fileURLToPath(new URL('..', import.meta.url));
 
-/** The SQLite event store, inside the main checkout's `.factory/`. */
+/**
+ * `.factory-local/`: the main checkout's gitignored runtime state and machine-local overrides. `.factory/`
+ * holds only the committed repository definitions.
+ */
+export const localDir = (root: string): string => {
+  return join(root, '.factory-local');
+};
+
+/** The SQLite event store, inside the main checkout's `.factory-local/`. */
 export const storePath = (root: string): string => {
-  return join(root, '.factory', 'software-factory.sqlite');
+  return join(localDir(root), 'software-factory.sqlite');
 };
 
 /** Exclusive lock held by the one running `sf run` supervisor. */
 export const supervisorLockPath = (root: string): string => {
-  return join(root, '.factory', 'supervisor.lock');
+  return join(localDir(root), 'supervisor.lock');
 };
 
 /** `.evidences/<taskId>/<attemptId>`: prompts, artifacts, gate logs. */

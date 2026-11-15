@@ -11,14 +11,12 @@ describe('runtime timing knobs from the environment', () => {
       runtimeConfigFrom({
         FACTORY_LEASE_TTL_MS: '3000',
         FACTORY_HEARTBEAT_MS: '300',
-        FACTORY_REAPER_MS: '200',
         FACTORY_SELF_FENCE_MS: '2000',
         FACTORY_CLAIM_TICK_MS: '100',
       }),
     ).toEqual({
       leaseTtlMs: 3000,
       heartbeatMs: 300,
-      reaperMs: 200,
       selfFenceMs: 2000,
       claimTickMs: 100,
     });
@@ -28,18 +26,6 @@ describe('runtime timing knobs from the environment', () => {
     expect(() => runtimeConfigFrom({ FACTORY_HEARTBEAT_MS: 'soon' })).toThrow(
       'FACTORY_HEARTBEAT_MS',
     );
-    expect(() => runtimeConfigFrom({ FACTORY_REAPER_MS: '0' })).toThrow(
-      'FACTORY_REAPER_MS',
-    );
-  });
-
-  it('applies the intake and PR poll intervals the operator sets', () => {
-    expect(
-      runtimeConfigFrom({
-        FACTORY_INTAKE_POLL_MS: '60000',
-        FACTORY_PR_POLL_MS: '120000',
-      }),
-    ).toEqual({ intakePollMs: 60000, prPollMs: 120000 });
   });
 
   it('reads the cut-over flag: 0 turns the v2 todo filter off, 1 keeps it on', () => {

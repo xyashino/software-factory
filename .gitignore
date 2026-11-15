@@ -8,4 +8,4 @@ dist/
 coverage/
 .worktrees/
 .boss.lock
-.factory/
+.factory-local/

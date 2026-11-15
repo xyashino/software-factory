@@ -1,0 +1,3 @@
+CREATE TABLE third_table (id INTEGER PRIMARY KEY);
+--> statement-breakpoint
+INSERT INTO no_such_table VALUES (1);

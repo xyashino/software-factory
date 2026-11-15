@@ -173,7 +173,7 @@ describe('supervisor routes', () => {
 
     const response = await send({
       method: 'POST',
-      path: '/v1/intake/sync',
+      path: '/v1/orders',
       token,
       text: '{not json',
     });

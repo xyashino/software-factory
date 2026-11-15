@@ -1,11 +1,16 @@
 import type { z } from 'zod';
 import {
+  createOrderRequestSchema,
+  createOrderResponseSchema,
+  createPlanRequestSchema,
+  createPlanResponseSchema,
+  recordPlanPrStateRequestSchema,
+  recordPlanPrStateResponseSchema,
+  recordPrStateRequestSchema,
   adminArchiveResponseSchema,
   adminExportResponseSchema,
   adminFileRequestSchema,
   adminRebuildResponseSchema,
-  adminRecoverRequestSchema,
-  adminRecoverResponseSchema,
   answerRequestSchema,
   boardResponseSchema,
   planDetailRequestSchema,
@@ -16,8 +21,6 @@ import {
   cellRevokeResponseSchema,
   cellsListResponseSchema,
   emptyRequestSchema,
-  intakeSyncRequestSchema,
-  intakeSyncResponseSchema,
   joinTokenCreateRequestSchema,
   joinTokenCreateResponseSchema,
   joinTokenListResponseSchema,
@@ -108,6 +111,26 @@ export const ROUTES = {
     request: orderDetailRequestSchema,
     response: orderDetailResponseSchema,
   },
+  createOrder: {
+    path: 'supervisor/orders/create',
+    request: createOrderRequestSchema,
+    response: createOrderResponseSchema,
+  },
+  createPlan: {
+    path: 'supervisor/plans/create',
+    request: createPlanRequestSchema,
+    response: createPlanResponseSchema,
+  },
+  recordPrState: {
+    path: 'supervisor/orders/pr-state',
+    request: recordPrStateRequestSchema,
+    response: commandResultSchema,
+  },
+  recordPlanPrState: {
+    path: 'supervisor/plans/pr-state',
+    request: recordPlanPrStateRequestSchema,
+    response: recordPlanPrStateResponseSchema,
+  },
   answer: {
     path: 'supervisor/answer',
     request: answerRequestSchema,
@@ -152,11 +175,6 @@ export const ROUTES = {
     path: 'supervisor/events',
     request: streamEventsRequestSchema,
     response: streamEventsResponseSchema,
-  },
-  intakeSync: {
-    path: 'supervisor/intake/sync',
-    request: intakeSyncRequestSchema,
-    response: intakeSyncResponseSchema,
   },
   joinTokenCreate: {
     path: 'supervisor/join-tokens/create',
@@ -207,11 +225,6 @@ export const ROUTES = {
     path: 'supervisor/admin/rebuild-projections',
     request: emptyRequestSchema,
     response: adminRebuildResponseSchema,
-  },
-  adminRecover: {
-    path: 'supervisor/admin/recover',
-    request: adminRecoverRequestSchema,
-    response: adminRecoverResponseSchema,
   },
 } as const;
 

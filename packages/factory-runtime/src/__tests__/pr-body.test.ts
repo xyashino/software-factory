@@ -1,18 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { PR_ADR_TOKEN } from '@repo/factory-core/contracts/job';
-import type { BlobRef, CommitSha } from '@repo/factory-core/ids';
+import type { BlobRef } from '@repo/factory-core/ids';
 import type { WorkOrderState } from '@repo/factory-core/order/state';
-import { fakeBlobStore } from '@repo/factory-core/testing';
-import { buildJob, storeText } from '../job-builder';
 import {
   artifactBlob,
   extractObjective,
   formatPrBody,
   usableCommitMessage,
-  verificationLines,
+  verificationLinesOf,
 } from '../pr-body';
-import { DEFAULT_CONFIG } from '../ports';
-import { PROJECT, REPO, shippedDefinitions } from './test-kit';
+import { shippedDefinitions } from './test-kit';
 
 const TODO_BODY = `# add-login: Add login
 
@@ -43,14 +40,26 @@ describe('PR body (v1 format)', () => {
     expect(usableCommitMessage('')).toBeUndefined();
   });
 
-  it('checks every Inspection command and Operator station of the Line', () => {
-    const line = shippedDefinitions().lines.get('standard')!.line;
+  it('lists every Inspection command and Operator station of the job', () => {
+    const lines = verificationLinesOf([
+      {
+        kind: 'inspection',
+        stationId: 'quality-gate',
+        commands: ['pnpm lint'],
+      },
+      { kind: 'operator', stationId: 'build', profile: 'builder' },
+    ]);
 
-    const lines = verificationLines(line);
+    expect(lines).toEqual([
+      '- [x] `pnpm lint`',
+      '- [x] Operator station `build` (builder)',
+    ]);
+  });
 
-    expect(lines).toContain('- [x] `pnpm lint`');
-    expect(lines).toContain('- [x] Operator station `build` (builder)');
-    expect(lines.every((item) => item.startsWith('- [x] '))).toBe(true);
+  it('says so when the job names no verification step', () => {
+    expect(verificationLinesOf([])).toEqual([
+      '_No verification steps in the Line._',
+    ]);
   });
 
   it('renders the template with the changes, the report, and the ADR left for the Cell', () => {
@@ -93,77 +102,5 @@ describe('PR body (v1 format)', () => {
     expect(
       artifactBlob(state, { stationId: 'build', artifactKey: 'commit' }),
     ).toBe(ref(2));
-  });
-});
-
-describe('deliver job', () => {
-  const deliverState = async (
-    blobs: ReturnType<typeof fakeBlobStore>,
-    commitText?: string,
-  ): Promise<WorkOrderState> => {
-    const artifacts: Record<string, BlobRef> = {};
-    if (commitText !== undefined) {
-      artifacts.commit = await storeText(blobs, commitText, 'text/plain');
-    }
-    artifacts.report = await storeText(blobs, '- did it', 'text/markdown');
-    return {
-      orderId: `${PROJECT}:add-login`,
-      projectId: PROJECT,
-      todoId: 'add-login',
-      baseBranch: 'main',
-      dependsOn: [],
-      line: { name: 'standard' },
-      spec: {
-        title: 'add-login: Add login',
-        type: 'feat',
-        bodyBlob: await storeText(blobs, TODO_BODY, 'text/markdown'),
-      },
-      activeJob: { jobId: '01J0000000000000000000000J', epoch: 4 },
-      cycles: [{ stationId: 'build', status: 'passed', artifacts }],
-    } as unknown as WorkOrderState;
-  };
-
-  const build = async (commitText?: string) => {
-    const blobs = fakeBlobStore();
-    const ports = {
-      blobs,
-      definitions: shippedDefinitions(),
-      config: DEFAULT_CONFIG,
-    };
-    const job = await buildJob(
-      ports,
-      await deliverState(blobs, commitText),
-      {
-        projectId: PROJECT,
-        repoUrl: REPO,
-        baseBranch: 'main',
-        maxRunning: 2,
-        depPolicy: 'delivered',
-      },
-      { kind: 'deliver', base: 'a'.repeat(40) as CommitSha },
-    );
-    const body = new TextDecoder().decode(
-      await blobs.get(job.deliver!.bodyBlob),
-    );
-    return { job, body };
-  };
-
-  it("takes the title and commit from the builder's commit artifact", async () => {
-    const { job, body } = await build(COMMIT);
-
-    expect(job.deliver?.commitMessage).toBe(COMMIT);
-    expect(job.deliver?.title).toBe('feat(factory): add SSO login');
-    expect(body).toContain('## 🎯 Summary');
-    expect(body).toContain('- Wire the SSO callback');
-    expect(body).toContain('- did it');
-  });
-
-  it('falls back to a generated commit when the builder wrote none', async () => {
-    const { job } = await build();
-
-    expect(job.deliver?.title).toBe('feat(factory): Add login');
-    expect(job.deliver?.commitMessage).toContain(
-      'Deliver the Work order for todo add-login',
-    );
   });
 });

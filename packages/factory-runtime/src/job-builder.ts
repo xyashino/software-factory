@@ -3,7 +3,11 @@ import { jobSchema, type Job } from '@repo/factory-core/contracts/job';
 import type { BlobRef, CommitSha, JobId } from '@repo/factory-core/ids';
 import type { PlanJobKind } from '@repo/factory-core/plan/events';
 import type { PlanProjection } from '@repo/factory-core/plan/projection';
-import { findStation } from '@repo/factory-core/line/snapshot';
+import {
+  findStation,
+  type LineSnapshot,
+  type Station,
+} from '@repo/factory-core/line/snapshot';
 import { resolveCycleContext } from '@repo/factory-core/order/context';
 import type { JobSpec } from '@repo/factory-core/order/next';
 import type { OrderProjection } from '@repo/factory-core/order/projection';
@@ -11,56 +15,34 @@ import type { WorkOrderState } from '@repo/factory-core/order/state';
 import { planBranchOf } from '@repo/factory-core/ids';
 import type { ProjectRecord } from '@repo/factory-core/ports/projects';
 import type { BlobStore } from '@repo/factory-core/ports/blob-store';
-import type { Line, LineStation } from '@repo/factory-definitions/line-schema';
-import type { Definitions } from '@repo/factory-definitions/load';
-import { buildPrompt } from './prompts/build-prompt';
-import { buildIncidentPrompt } from './prompts/incident-prompt';
+import type { ArtifactRef } from '@repo/factory-definitions/line-schema';
+import type { RuntimePrompts } from '@repo/factory-definitions/templates';
 import { refusal } from './errors';
-import {
-  artifactBlob,
-  commitTitle,
-  formatPrBody,
-  usableCommitMessage,
-  verificationLines,
-} from './pr-body';
+import { artifactBlob } from './pr-body';
 import type { RuntimeConfig } from './ports';
 
+/**
+ * What the builder reads: the blobs a job refers to, the protocol's runtime prompts (`templates/runtime/`, shipped
+ * with the package) and the runtime config. It reads no repo definition: the Line a Work order runs is the pinned
+ * snapshot, and the repo's own templates, operators and PR body are the Cell's to read from `.factory/`.
+ */
 export interface JobPorts {
   blobs: BlobStore;
-  definitions: Definitions;
+  runtimePrompts: RuntimePrompts;
   config: RuntimeConfig;
 }
 
-const decoder = new TextDecoder();
-const encoder = new TextEncoder();
-
-/** The `sha256:<hex>` ref of text, stored as a blob. A prompt is stored once, however often it is built. */
+/** The `sha256:<hex>` ref of text, stored as a blob. A text is stored once, however often it is written. */
 export const storeText = async (
   blobs: BlobStore,
   text: string,
   mediaType: string,
 ): Promise<BlobRef> => {
-  const bytes = encoder.encode(text);
+  const bytes = new TextEncoder().encode(text);
   const ref =
     `sha256:${createHash('sha256').update(bytes).digest('hex')}` as BlobRef;
   await blobs.put(ref, bytes, mediaType);
   return ref;
-};
-
-const textOf = async (blobs: BlobStore, ref: BlobRef): Promise<string> => {
-  const bytes = await blobs.get(ref);
-  return bytes ? decoder.decode(bytes) : '';
-};
-
-const lineOf = (definitions: Definitions, name: string): Line => {
-  const loaded = definitions.lines.get(name);
-  if (!loaded) {
-    throw refusal({
-      code: 'precondition',
-      detail: `line ${name} is not in the loaded definitions`,
-    });
-  }
-  return loaded.line;
 };
 
 const baseOf = (
@@ -68,6 +50,13 @@ const baseOf = (
   branchBase: string,
 ): CommitSha | { branchBase: string } =>
   base === 'branch_base' ? { branchBase } : base;
+
+/** A pinned Line from before job details were carried: the Work order cannot run, and nothing is guessed. */
+const unpinned = (detail: string) =>
+  refusal({
+    code: 'precondition',
+    detail: `${detail}; the Work order was pinned before job details were carried, so recreate it`,
+  });
 
 /**
  * The branch a Work order builds on, resolved when the job is built (CORE §12.5, never stored):
@@ -90,10 +79,67 @@ export const resolveBase = (
   return `factory/${predecessor.todoId}`;
 };
 
+/** The workspace preparation of the pinned Line: its sync and setup commands, and the setup timeout. */
+const workspaceOf = (line: LineSnapshot) => {
+  const setup = line.workspace?.setup;
+  if (setup === undefined) {
+    throw unpinned(`line ${line.name} names no workspace setup`);
+  }
+  return {
+    sync: line.workspace?.sync?.exec ?? [],
+    setup: setup.exec,
+    timeoutMs: setup.timeoutMs,
+  };
+};
+
+/** The Operator pool a station runs with, as the snapshot pinned it. */
+const poolOf = (station: Station) => {
+  if (station.operator === undefined) {
+    throw unpinned(`station ${station.id} carries no operator pool`);
+  }
+  return station.operator;
+};
+
+/** The artifacts a delivery commits and reports, from the pinned `deliver` block (`<stationId>.<key>`). */
+const deliverRefsOf = (
+  line: LineSnapshot,
+): { commit: ArtifactRef; report: ArtifactRef } => {
+  const deliver = line.deliver;
+  if (deliver === undefined) {
+    throw unpinned(`line ${line.name} names no delivery artifacts`);
+  }
+  return {
+    commit: artifactRefOf(deliver.commit),
+    report: artifactRefOf(deliver.report),
+  };
+};
+
+/** `<stationId>.<artifactKey>` as an artifact reference: the station id is everything before the first dot. */
+const artifactRefOf = (text: string): ArtifactRef => {
+  const dot = text.indexOf('.');
+  return { stationId: text.slice(0, dot), artifactKey: text.slice(dot + 1) };
+};
+
+/** The checklist of a PR body: one entry per Inspection (its commands) and per Operator station (its profile). */
+const verificationOf = (line: LineSnapshot) =>
+  line.stations.map((station) =>
+    station.kind === 'inspection'
+      ? {
+          kind: 'inspection' as const,
+          stationId: station.id,
+          commands: station.exec ?? [],
+        }
+      : {
+          kind: 'operator' as const,
+          stationId: station.id,
+          profile: poolOf(station).profile,
+        },
+  );
+
 /**
- * The Job a claimed job becomes (PROTOCOL §4). `spec` is the job `nextJob` named before the claim,
- * `state` the state after it; every path is relative and the prompt is stored as a blob, referenced by
- * ref. Pure apart from the blob reads and the one prompt blob write.
+ * The Job a claimed job becomes (PROTOCOL §4). `spec` is the job `nextJob` named before the claim, `state` the
+ * state after it. Every path is relative; every text is a blob ref, so the Cell reads the spec, the artifacts and
+ * the logs itself. Pure apart from the one prompt-independent read of the delivery artifacts.
  */
 export const buildJob = async (
   ports: JobPorts,
@@ -107,7 +153,7 @@ export const buildJob = async (
     throw refusal({ code: 'precondition', detail: 'no job is active' });
   }
   const next: { kind: 'job'; job: JobSpec } = { kind: 'job', job: spec };
-  const line = lineOf(ports.definitions, state.line.name);
+  const line = state.line;
   const branchBase = resolveBase(state, rows);
   const common = {
     jobId: active.jobId,
@@ -119,47 +165,26 @@ export const buildJob = async (
       baseBranch: branchBase,
       branch: `factory/${state.todoId}`,
     },
-    workspace: {
-      dir: state.todoId,
-      sync: line.workspace.sync?.exec ?? [],
-      setup: line.workspace.setup.exec,
-      timeoutMs: line.workspace.setup.timeoutMs,
-    },
+    workspace: { dir: state.todoId, ...workspaceOf(line) },
   };
 
   if (next.job.kind === 'deliver') {
-    // As v1: the builder's `commit` artifact is the commit and the PR title; the PR body is the template.
-    const commitRef = artifactBlob(state, line.deliver.commit);
-    const reportRef = artifactBlob(state, line.deliver.report);
-    const commitMessage =
-      usableCommitMessage(
-        commitRef === undefined
-          ? undefined
-          : await textOf(ports.blobs, commitRef),
-      ) ?? richCommitOf(state.spec.type, state.spec.title, state.todoId);
-    const body = formatPrBody(
-      {
-        taskId: state.todoId,
-        type: state.spec.type,
-        todoBody: await textOf(ports.blobs, state.spec.bodyBlob),
-        commitMessage,
-        ...(reportRef === undefined
-          ? {}
-          : { report: await textOf(ports.blobs, reportRef) }),
-        logCommand: `factory log ${state.orderId}`,
-        verification: verificationLines(line),
-      },
-      ports.definitions.prTemplates,
-    );
+    const refs = deliverRefsOf(line);
+    const commitBlob = artifactBlob(state, refs.commit);
+    const reportBlob = artifactBlob(state, refs.report);
     return jobSchema.parse({
       ...common,
       kind: 'deliver',
       base: next.job.base,
       deliver: {
-        title: commitTitle(commitMessage),
-        bodyBlob: await storeText(ports.blobs, body, 'text/markdown'),
-        commitMessage,
-        removeTodo: `todos/${state.todoId}.md`,
+        taskId: state.todoId,
+        type: state.spec.type,
+        title: state.spec.title,
+        todoBodyBlob: state.spec.bodyBlob,
+        ...(commitBlob === undefined ? {} : { commitBlob }),
+        ...(reportBlob === undefined ? {} : { reportBlob }),
+        logCommand: `factory log ${state.orderId}`,
+        verification: verificationOf(line),
       },
     });
   }
@@ -172,25 +197,17 @@ export const buildJob = async (
         detail: 'the mechanic job names no open Andon',
       });
     }
-    // The Mechanic runs with the first Operator pool of the Line whose profile loads (CORE §14.4).
-    const pool = Object.values(line.operators).find(
-      (candidate) =>
-        ports.definitions.operators.get(candidate.profile) !== undefined,
-    );
-    if (!pool) {
+    // The Mechanic runs with the Line's first Operator pool (CORE §14.4).
+    const station = line.stations.find((candidate) => candidate.operator);
+    if (!station?.operator) {
       throw refusal({
         code: 'precondition',
-        detail: 'the Line names no loaded operator for the mechanic',
+        detail: 'the Line names no operator for the mechanic',
       });
     }
     const latestCommit =
       state.checkpoint?.commit ??
       [...state.cycles].reverse().find((cycle) => cycle.commit)?.commit;
-    const promptBlob = await storeText(
-      ports.blobs,
-      buildIncidentPrompt({ reason: andon.reason, detail: andon.detail }),
-      'text/markdown',
-    );
     return jobSchema.parse({
       ...common,
       kind: 'mechanic',
@@ -198,26 +215,16 @@ export const buildJob = async (
       mechanic: {
         andonAt: next.job.andonAt,
         n: next.job.n,
-        promptBlob,
-        // A Mechanic always runs in a Herdr pane (PROTOCOL §9) with write permission to edit the worktree.
-        operator: {
-          profile: pool.profile,
-          runner: pool.runner,
-          model: pool.model,
-          permission: 'write',
-          headless: false,
-          timeoutMs: pool.timeoutMs,
-        },
+        incident: { reason: andon.reason, detail: andon.detail },
+        // A Mechanic always runs in a Herdr pane (PROTOCOL §9) with write permission to edit the worktree, whatever the pool says.
+        operator: { ...station.operator, permission: 'write', headless: false },
       },
     });
   }
 
   const { stationId, n, cause } = next.job;
-  const station = findStation(state.line, stationId);
-  const lineStation = line.stations.find(
-    (candidate): candidate is LineStation => candidate.id === stationId,
-  );
-  if (!station || !lineStation) {
+  const station = findStation(line, stationId);
+  if (!station) {
     throw refusal({
       code: 'precondition',
       detail: `station ${stationId} is not in line ${line.name}`,
@@ -232,7 +239,7 @@ export const buildJob = async (
   };
 
   if (next.job.kind === 'run_inspection') {
-    if (lineStation.kind !== 'inspection') {
+    if (station.kind !== 'inspection') {
       throw refusal({
         code: 'precondition',
         detail: `station ${stationId} is not an inspection`,
@@ -246,28 +253,18 @@ export const buildJob = async (
         ...stationBase,
         exec: station.exec ?? [],
         inspectionTimeoutMs:
-          lineStation.timeoutMs || ports.config.inspectionTimeoutMs,
+          station.timeoutMs || ports.config.inspectionTimeoutMs,
       },
     });
   }
 
-  if (lineStation.kind !== 'operator') {
+  if (station.kind !== 'operator') {
     throw refusal({
       code: 'precondition',
       detail: `station ${stationId} is not an operator station`,
     });
   }
-  const pool = line.operators[lineStation.operator];
-  const profile = pool
-    ? ports.definitions.operators.get(pool.profile)
-    : undefined;
-  if (!pool || !profile) {
-    throw refusal({
-      code: 'precondition',
-      detail: `station ${stationId} names no loaded operator`,
-    });
-  }
-
+  const pool = poolOf(station);
   const context = resolveCycleContext(state, stationId, cause);
   const inputs = context.inputs.flatMap((item) => {
     if (item.kind === 'artifact') {
@@ -278,37 +275,7 @@ export const buildJob = async (
     }
     return [];
   });
-  const sizes = new Map<BlobRef, number>();
-  for (const [ref, size] of await ports.blobs.stat(inputs.map((i) => i.blob))) {
-    sizes.set(ref, size);
-  }
-  // Only the verdict feedback is inlined. Inspection logs stay in their blobs, never in the prompt.
-  const feedbackRefs: BlobRef[] = [];
-  if (context.feedback?.kind === 'verdict') {
-    feedbackRefs.push(context.feedback.blob);
-  }
-  const texts = new Map<BlobRef, string>();
-  for (const ref of [state.spec.bodyBlob, ...feedbackRefs]) {
-    texts.set(ref, await textOf(ports.blobs, ref));
-  }
-
-  const text = buildPrompt({
-    profile,
-    templates: ports.definitions.templates,
-    todoId: state.todoId,
-    cycleId: active.cycleId ?? stationCycleMissing(),
-    todoBody: texts.get(state.spec.bodyBlob) ?? '',
-    context,
-    blobSizes: sizes,
-    blobTexts: texts,
-    budget: {
-      retry: state.retriesUsed[stationId] ?? 0,
-      max: station.onFail?.max ?? 0,
-    },
-    declared: { rules: profile.rules, skills: profile.skills },
-    operatorCommands: ports.config.operatorCommands,
-  });
-  const promptBlob = await storeText(ports.blobs, text, 'text/markdown');
+  const verdict = station.verdict ?? false;
 
   return jobSchema.parse({
     ...common,
@@ -324,20 +291,25 @@ export const buildJob = async (
         headless: pool.headless,
         timeoutMs: pool.timeoutMs,
       },
-      promptBlob,
+      prompt: {
+        taskId: state.todoId,
+        todoBodyBlob: state.spec.bodyBlob,
+        context,
+        budget: {
+          retry: state.retriesUsed[stationId] ?? 0,
+          max: station.onFail?.max ?? 0,
+        },
+      },
       inputs,
       outputs: context.outputs.map((output) => ({
         key: output.key,
         path: output.path,
         // A verdict writes its feedback only when it fails: the domain refuses a failing verdict without it,
         // so a passing verdict must not be refused for a feedback file it has no reason to write.
-        required: !(
-          output.key === 'feedback' &&
-          (station.verdict ?? profile.verdict)
-        ),
+        required: !(output.key === 'feedback' && verdict),
       })),
-      verdict: station.verdict ?? profile.verdict,
-      runtimePrompts: ports.definitions.runtimePrompts,
+      verdict,
+      runtimePrompts: ports.runtimePrompts,
     },
   });
 };

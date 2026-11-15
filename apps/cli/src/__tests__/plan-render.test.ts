@@ -180,9 +180,9 @@ describe('resolvePlan', () => {
 });
 
 describe('factory plan command tree', () => {
-  it('registers ls and status subcommands', () => {
+  it('registers ls, status and create subcommands', () => {
     const subCommands = planCommand.subCommands as Record<string, unknown>;
-    expect(Object.keys(subCommands).sort()).toEqual(['ls', 'status']);
+    expect(Object.keys(subCommands).sort()).toEqual(['create', 'ls', 'status']);
   });
 
   it('documents plan ls and plan status in usage', () => {

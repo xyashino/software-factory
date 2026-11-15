@@ -18,14 +18,14 @@ export interface CheckOptions {
 }
 
 /**
- * Every definition error under `packageRoot`, with file and field: the
+ * Every definition error under `factoryRoot` (a `.factory/` directory), with file and field: the
  * function behind `factory check`. An empty list means the definitions pass.
  */
 export const check = (
-  packageRoot: string,
+  factoryRoot: string,
   options: CheckOptions = {},
 ): DefinitionError[] => {
-  const { definitions, errors } = readDefinitions(packageRoot, options.catalog);
+  const { definitions, errors } = readDefinitions(factoryRoot, options.catalog);
   if (options.todos === undefined) {
     return errors;
   }

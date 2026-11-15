@@ -1,8 +1,7 @@
 ---
 status: todo
 priority: medium
-depends_on:
-  [factory-demo-03-board-and-orders, passive-server-05-cli-and-migrate]
+depends_on: [factory-demo-03-board-and-orders]
 line: feature
 factory: v2
 ---
@@ -15,7 +14,9 @@ Add Astro BFF endpoints and Web UI workflows in `apps/factory-demo` so operators
 
 ## Read first
 
-- `packages/factory-core/src/contracts/supervisor.ts`, `http-routes.ts`
+- `packages/factory-core/src/contracts/supervisor.ts` (`createOrderRequestSchema`, `createPlanRequestSchema`, `recordPrStateRequestSchema`), `http-routes.ts`
+- `packages/factory-definitions/src/todo.ts`, `line-snapshot.ts`, `starter/.factory/lines/`
+- `apps/cli/src/commands/order.ts`, `plan.ts`, `todos.ts`, `repo-lines.ts`
 - `todos/factory-demo-02-server-bff-client.md`, `factory-demo-03-board-and-orders.md`
 - `.agents/references/frontend-architecture.md`
 - `.agents/rules/astro.md`, `.agents/rules/ui.md`, `.agents/rules/ux.md`, `.agents/rules/accessibility.md`, `.agents/rules/msw-backend-mocks.md`
@@ -23,10 +24,11 @@ Add Astro BFF endpoints and Web UI workflows in `apps/factory-demo` so operators
 ## Deliverables
 
 1. **Astro BFF routes (`apps/factory-demo/src/pages/api/`):**
-   - Add `POST /api/orders`, `POST /api/plans`, and `POST /api/orders/[id]/pr-state` proxying to `POST /v1/orders`, `POST /v1/plans`, and `POST /v1/orders/:id/pr-state` with `zod` validation and session auth forwarding.
+   - Add `POST /api/orders`, `POST /api/plans`, `POST /api/orders/[id]/pr-state`, and `POST /api/plans/[id]/pr-state` proxying to `POST /v1/orders`, `POST /v1/plans`, `POST /v1/orders/:id/pr-state`, and `POST /v1/plans/:id/pr-state` with `zod` validation and session auth forwarding.
+   - Note: `factory-server` is a pure store and requires a full `LineSnapshot` (`line`) in `createOrder` / `createPlan` payloads (`starter` line snapshots or uploaded `.yml` parsed via `@repo/factory-definitions/line-snapshot` can supply it).
 2. **Web UI creation & import (`apps/factory-demo/src/modules/orders/`):**
-   - Add a "New Order" drawer/modal on the Board view with fields for `projectId`, `todoId` (auto-slugged from title, editable), `title`, `type`, `line`, `priority`, `dependsOn` selector, optional `plan`, and markdown `body` editor.
-   - Add a "Create Plan / Import `.md` Todos" flow allowing multi-file `.md` drop/upload (parsed client-side or validated against the server schema) to preview the plan chain/todos and submit via `POST /api/plans` and `POST /api/orders`.
+   - Add a "New Order" drawer/modal on the Board view with fields for `projectId`, `todoId` (auto-slugged from title, editable), `title`, `type`, `line` (starter preset or custom Line YAML/JSON snapshot), `priority`, `dependsOn` selector, optional `plan`, and markdown `body` editor.
+   - Add a "Create Plan / Import `.md` Todos" flow allowing multi-file `.md` drop/upload (parsed/validated with `@repo/factory-definitions/todo` + `LineSnapshot`) to preview the plan chain/todos and submit via `POST /api/plans` and `POST /api/orders`.
    - Optimistic refresh / toast notifications and inline validation errors matching `ux.md` / `ui.md`.
 3. **Tests & ADR:**
    - Black-box AAA tests with `msw` covering single order creation, plan creation, `.md` file import preview/submit, and validation error handling.

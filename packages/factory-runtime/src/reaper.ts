@@ -11,7 +11,7 @@ const STALE_LEASE_CODES = new Set(['stale_epoch', 'not_found', 'precondition']);
  * normal loop, so `cycle_failed{lost}` and `job_lost` are appended and the restart budget is checked
  * (`andon_raised` when it is spent). A lease whose job already ended is only deleted.
  */
-export const reapOnce = async (
+const reapExpired = async (
   ports: RuntimePorts,
   handler: CommandHandler,
 ): Promise<number> => {
@@ -55,10 +55,39 @@ export const reapOnce = async (
  * Boot grace (PROTOCOL §5.1): on start, every lease gets a full TTL from now, so a Factory that was
  * down does not cost the Cells their jobs before they can heartbeat again.
  */
-export const bootGrace = async (ports: RuntimePorts): Promise<void> => {
+const extendAll = async (ports: RuntimePorts): Promise<void> => {
   ports.writer.assertHeld();
   const expiresAt = ports.clock.now() + ports.config.leaseTtlMs;
   for (const lease of await ports.leases.list()) {
     await ports.leases.extend(lease.cellId, [lease.jobId], expiresAt);
   }
+};
+
+/**
+ * The lazy reaper (PROTOCOL §5.4): no timer. Expired leases are reaped when a read or a write asks for
+ * them (claim, heartbeat, board and order reads), in the same write transaction semantics as a pass.
+ * `start` arms boot grace: until one lease TTL has passed since start, nothing is reaped.
+ */
+export interface Reaper {
+  /** Gives every lease a full TTL from now and holds reaping until that grace has passed. */
+  arm(): Promise<void>;
+  /** One pass over the expired leases, unless boot grace still holds. Returns how many it looked at. */
+  reap(): Promise<number>;
+}
+
+export const createReaper = (
+  ports: RuntimePorts,
+  handler: CommandHandler,
+): Reaper => {
+  let graceUntil = 0;
+  return {
+    arm: async () => {
+      await extendAll(ports);
+      graceUntil = ports.clock.now() + ports.config.leaseTtlMs;
+    },
+    reap: async () => {
+      if (ports.clock.now() < graceUntil) return 0;
+      return reapExpired(ports, handler);
+    },
+  };
 };

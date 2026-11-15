@@ -15,7 +15,7 @@ Rename `workspace.setup` to `changeover` across definitions, contracts, runtime,
 ## Read first
 
 - `packages/factory-definitions/src/line-schema.ts`, `line-validate.ts`, `schemas/line.schema.json`
-- `packages/factory-definitions/lines/fast.yml`, `standard.yml`, `feature.yml`
+- `packages/factory-definitions/starter/.factory/lines/{fast,standard,feature}.yml`, `.factory/lines/{fast,standard,feature}.yml`
 - `packages/factory-core/src/contracts/job.ts`, `packages/factory-core/src/order/events.ts`, `upcast.ts`
 - `packages/factory-runtime/src/job-builder.ts`
 - `apps/cell/src/workspace/prepare.ts`, `cache.ts`, `apps/cell/src/jobs/workspace-detail.ts`
@@ -25,7 +25,7 @@ Rename `workspace.setup` to `changeover` across definitions, contracts, runtime,
 
 1. **Workflow-driven `changeover` in `packages/factory-definitions`:**
    - Replace `workspace.setup` with optional `workspace.changeover` (`timeout`, `exec`, optional `keyFiles?: string[]` of repo-relative paths/globs whose git blob hashes determine cache invalidation).
-   - Allow stations and `deliver` in `lines/*.yml` to opt out or override changeover declaratively in YAML (e.g. `changeover: false` on `plan`, `plan-review`, and `deliver` in `lines/{fast,standard,feature}.yml` where dependencies are not needed).
+   - Allow stations and `deliver` in `starter/.factory/lines/*.yml` and `.factory/lines/*.yml` to opt out or override changeover declaratively in YAML (e.g. `changeover: false` on `plan`, `plan-review`, and `deliver` in `{fast,standard,feature}.yml` where dependencies are not needed).
    - Update `line-schema.ts`, `schemas/line.schema.json`, and `shipped.test.ts` / `line-parse.test.ts`.
 2. **Core contracts & event schema upcaster (`packages/factory-core`):**
    - Update `jobSchema` (`workspace.changeover: string[]`, optional `changeoverKeyFiles: string[]`) — no tool-specific fields.

@@ -1,9 +1,13 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { CellId } from '@repo/factory-core/ids';
-import { MIGRATIONS_DIR, migrate } from '@repo/factory-db/migrate';
+import {
+  LEGACY_MIGRATIONS_DIR,
+  MIGRATIONS_DIR,
+  migrate,
+} from '@repo/factory-db/migrate';
 import { openDatabase } from '@repo/factory-db/sqlite-event-store';
 import { WriterHeldError } from '@repo/factory-db/writer-lock';
 import {
@@ -58,6 +62,45 @@ describe('openRuntime', () => {
     expect(second.writer.held).toBe(true);
   });
 
+  it('opens a database from before migration 0003: it runs 0003 and adopts the baseline', () => {
+    rmSync(dataDir, { recursive: true, force: true });
+    dataDir = mkdtempSync(join(tmpdir(), 'factory-runtime-legacy-'));
+    const legacy = openDatabase(join(dataDir, DATABASE_FILE_NAME));
+    legacy.exec(
+      'CREATE TABLE schema_migrations (name TEXT PRIMARY KEY, applied_at INTEGER NOT NULL)',
+    );
+    for (const name of ['0001_init.sql', '0002_join_token_command_id.sql']) {
+      legacy.exec(readFileSync(join(LEGACY_MIGRATIONS_DIR, name), 'utf8'));
+      legacy.run(
+        'INSERT INTO schema_migrations (name, applied_at) VALUES (?, ?)',
+        [name, 0],
+      );
+    }
+    legacy.run(
+      'INSERT INTO projects (project_id, repo_url, created_at) VALUES (?, ?, ?)',
+      [PROJECT, REPO, 0],
+    );
+    legacy.close();
+
+    open().close();
+
+    const db = openDatabase(join(dataDir, DATABASE_FILE_NAME));
+    const names = db
+      .query<{ name: string }, []>(
+        'SELECT name FROM schema_migrations ORDER BY name',
+      )
+      .all()
+      .map((row) => row.name);
+    db.close();
+    expect(names).toEqual([
+      '0000_baseline',
+      '0001_drop_intake',
+      '0001_init.sql',
+      '0002_join_token_command_id.sql',
+      '0003_order_plan.sql',
+    ]);
+  });
+
   it('keeps orders, the Cell registry and claims across a restart', async () => {
     const first = open();
     await helloCell(first, CELL);
@@ -74,13 +117,11 @@ describe('openRuntime', () => {
     const second = open();
     const board = await second.runtime.call('board', {});
     const leases = await second.ports.leases.forCell(CELL);
-    const prompt = job.station?.promptBlob
-      ? await second.ports.blobs.get(job.station.promptBlob)
-      : undefined;
+    const prompt = job.station?.prompt;
 
     expect(board.orders.map((order) => order.orderId)).toEqual([job.orderId]);
     expect(leases.map((lease) => lease.jobId)).toEqual([job.jobId]);
-    expect(prompt?.byteLength).toBeGreaterThan(0);
+    expect(prompt?.taskId).toBe('todo-a');
     expect((await second.ports.cells.get(CELL))?.info?.runners).toEqual([
       'claude',
       'cursor',

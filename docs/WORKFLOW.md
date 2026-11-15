@@ -7,14 +7,16 @@ claims a Job for a Work order—it does not choose the Line or decide which Stat
 
 ```mermaid
 flowchart TB
-  subgraph Intake["Intake"]
-    Todo["todo/*.md in the git repository"]
+  subgraph Intake["Intake (task API)"]
+    Todo["todo/*.md and .factory/ in the repository"]
+    Supervisor["Supervisor tooling\n(reads the repo, pins the Line)"]
     Line["Line definition\n(ordered Stations)"]
-    Runtime["Factory runtime\ninside factory-server"]
+    Runtime["POST /v1/orders or /v1/plans\ninside factory-server"]
     Order["Work order created\nLine snapshot pinned; Traveler begins"]
-    Todo --> Runtime
-    Line --> Order
-    Runtime -->|parse todo; create or update| Order
+    Todo --> Supervisor
+    Line --> Supervisor
+    Supervisor -->|create with pinned Line| Runtime
+    Runtime --> Order
   end
 
   subgraph Schedule["Scheduling"]
@@ -69,8 +71,11 @@ flowchart TB
 
 ## Read the flow
 
-1. Intake reads todo files from the repository and creates a **Work order**. The Work order pins a
-   snapshot of its **Line** so later definition changes do not silently change work already in flight.
+1. The Supervisor creates a **Work order** through the task API (`POST /v1/orders`, or `POST /v1/plans`
+   for an Order Plan). The server holds no git and reads no repository: the request carries the spec and
+   the **Line** the repository's own `.factory/` defines. The Work order pins a snapshot of that Line, so
+   later definition changes do not silently change work already in flight. Repository definitions live in
+   each repository's `.factory/` (`lines/`, `operators/`, `templates/`), and the Cell renders prompts from them.
 2. The **Factory runtime** selects a claimable Work order and computes its next **Job**. A **Cell**
    claims that Job under a time-limited lease and epoch, prepares its workspace, and executes it.
 3. A Station Job runs either an **Operator** Station or an **Inspection** Station. Each execution is a

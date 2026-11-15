@@ -7,12 +7,14 @@ material. Commands are the ones the binaries print in `--help` and in their usag
 Paths assume the units in `deploy/systemd/`: the data directory is `/var/lib/factory`, the Cell's
 state is `/var/lib/factory-cell`.
 
-| You have                                  | Use                                   |
-| :---------------------------------------- | :------------------------------------- |
-| A Litestream replica of `factory.db`      | A. Litestream restore                  |
-| A snapshot from `backup`                  | B. Snapshot restore                    |
-| An export archive (`export`)              | C. Export and import into a new Factory |
-| Only the project's git repository         | D. Rebuild from git                    |
+| You have                             | Use                                     |
+| :----------------------------------- | :-------------------------------------- |
+| A Litestream replica of `factory.db` | A. Litestream restore                   |
+| A snapshot from `backup`             | B. Snapshot restore                     |
+| An export archive (`export`)         | C. Export and import into a new Factory |
+
+With none of these there is nothing to restore: the server keeps no git and reads no repository, so
+it cannot rebuild its Work orders from a repository (see "No backup at all" below).
 
 Before any step that writes the database, stop the server: it holds the writer lock, and an offline
 admin command refuses to run while it does.
@@ -101,43 +103,15 @@ and the Cells join again.
    A Cell that has its old credential for Factory A is refused with `401`. It stops its jobs and
    joins again with the token, as a new Cell (PROTOCOL §1, §9).
 
-## D. Rebuild from git (no backup at all)
+## No backup at all
 
-This is the last resort. It rebuilds the Work orders of the project from its git repository. It
-restores the queue, not the history (STORAGE §8, "What is lost" below).
+There is no rebuild from git. The server holds tasks and state only, so a lost database with no
+snapshot and no export is lost. Start a new Factory and let the Supervisors create the Work orders
+again through the task API (`POST /v1/orders`, `POST /v1/plans`), each with its pinned Line. The
+repositories' `.factory/` and todos are the source for those requests; the Work orders' history is
+not recovered (STORAGE §8).
 
-1. The project row must exist in the new database. Project registration is not a command yet, so
-   seed it with the same project id and repository URL, as the test harness does
-   (`packages/factory-runtime/src/seed.ts`, `seedProject`).
-
-2. Run the recovery with the server stopped:
-
-   ```sh
-   factory-server admin recover
-   ```
-
-   It runs intake from `todos/*.md` at the base branch, then for each fresh Work order it reads
-   `factory/<todoId>`: the newest commit with `Factory-Outcome: passed` gives the checkpoint, and an
-   open or merged PR marks the Work order delivered. A second run changes nothing.
-
-   With the server running, `factory admin recover [--project <id>]` does the same through the socket.
-
-3. Start the Factory and the Cells. Every recovered Work order resumes at its first Station that has
-   not passed, on its checkpoint commit:
-
-   ```sh
-   systemctl start factory-server factory-cell
-   ```
-
-What is lost with git-only recovery:
-
-- The artifacts of the Stations that passed (they are not in git). The resumed Station gets no
-  inputs from them.
-- Questions, notes, budgets, retry and restart counters, and the event history.
-- Work orders whose PR was merged: their todo is gone from the base branch, so intake does not
-  recreate them. That is correct; they are finished.
-- A Station whose commit was never pushed. The checkpoint is pushed before its command is sent
-  (PROTOCOL §8.2).
+Take a `backup` or an `export` on a schedule, so this case does not arise.
 
 ## Notes
 
@@ -145,4 +119,6 @@ What is lost with git-only recovery:
   `factory.sock`, which is mode 0600.
 - `TimeoutStopSec=330` on the Cell is longer than the leave cap of 5 minutes, so a graceful leave can
   finish (PROTOCOL §9).
-- `GH_TOKEN` for the PR poll goes in `/etc/factory/factory-server.env`; the server calls `gh`.
+- The server calls no `gh`. Pull request state arrives by the GitHub webhook (`POST /v1/webhooks/github`,
+  PROTOCOL §3.6): `GITHUB_WEBHOOK_SECRET` goes in `/etc/factory/factory-server.env`, with
+  `FACTORY_REMOTE=1` so the HTTP listener serves it.

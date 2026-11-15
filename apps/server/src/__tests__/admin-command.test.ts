@@ -4,31 +4,26 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CellId, ProjectId } from '@repo/factory-core/ids';
-import { fakePrState } from '@repo/factory-core/testing';
 import { seedProject } from '@repo/factory-runtime/seed';
 import {
   openRuntime,
   type OpenedRuntime,
 } from '@repo/factory-runtime/open-runtime';
-import { gitMirror } from '../adapters/git-mirror';
 import { runAdminCommand } from '../admin-command';
 import { startSocketListener, type SocketListener } from '../socket/listener';
 import { socketFactoryClient } from '../socket/client';
-import { createFixtureRepo, todoFile } from './e2e/fixture-repo';
+import { orderRequest } from '../testing/order-request';
 
 const PROJECT = 'software-factory' as ProjectId;
 const CELL = '01J0000000000000000000000W' as CellId;
+const REPO = 'https://example.test/software-factory.git';
 
 let root: string;
-let repo: string;
 let opened: OpenedRuntime[] = [];
 let listener: SocketListener | undefined;
 
-beforeEach(async () => {
+beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), 'factory-admin-'));
-  repo = await createFixtureRepo(join(root, 'repo'), {
-    'add-login': todoFile({ title: 'Add login', v2: true }),
-  });
 });
 
 afterEach(async () => {
@@ -39,21 +34,16 @@ afterEach(async () => {
   rmSync(root, { recursive: true, force: true });
 });
 
-/** A data directory seeded with the fixture project, opened with the real git adapter. */
+/** A data directory seeded with the project, as the registry has it. */
 const dataDirWithProject = (name: string): string => {
   const dataDir = join(root, name);
   mkdirSync(dataDir);
-  seedProject(dataDir, { projectId: PROJECT, repoUrl: repo });
+  seedProject(dataDir, { projectId: PROJECT, repoUrl: REPO });
   return dataDir;
 };
 
 const open = (dataDir: string): OpenedRuntime => {
-  const runtime = openRuntime({
-    dataDir,
-    git: gitMirror({ mirrorsDir: join(dataDir, 'mirrors') }),
-    prState: fakePrState(),
-    config: { intakePollMs: 0, prPollMs: 0 },
-  });
+  const runtime = openRuntime({ dataDir });
   opened.push(runtime);
   return runtime;
 };
@@ -84,7 +74,10 @@ describe('factory-server admin', () => {
   it('writes a backup that opens with the same orders', async () => {
     const dataDir = dataDirWithProject('source');
     const runtime = open(dataDir);
-    await runtime.runtime.sync();
+    await runtime.runtime.call(
+      'createOrder',
+      orderRequest(PROJECT, 'add-login'),
+    );
     runtime.close();
     opened = [];
     const file = join(root, 'backup.db');
@@ -107,7 +100,10 @@ describe('factory-server admin', () => {
   it('imports an export into an empty directory and expires the lease it finds', async () => {
     const source = dataDirWithProject('exporter');
     const running = open(source);
-    await running.runtime.sync();
+    await running.runtime.call(
+      'createOrder',
+      orderRequest(PROJECT, 'add-login'),
+    );
     await running.runtime.call('hello', {
       cellId: CELL,
       version: '0.1.0',

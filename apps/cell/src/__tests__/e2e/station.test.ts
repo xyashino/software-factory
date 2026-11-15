@@ -3,26 +3,21 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { gitMirror } from '@repo/factory-server/adapters/git-mirror';
 import { socketFactoryClient } from '@repo/factory-server/socket/client';
 import {
   startSocketListener,
   type SocketListener,
 } from '@repo/factory-server/socket/listener';
-import {
-  createFixtureRepo,
-  todoFile,
-} from '@repo/factory-server/__tests__/e2e/fixture-repo';
+import { createFixtureRepo, todoFile } from '../fixture-repo';
 import type { FactoryClient } from '@repo/factory-core/contracts/client';
 import type { Job } from '@repo/factory-core/contracts/job';
-import type { CellId, ProjectId } from '@repo/factory-core/ids';
+import type { CellId, ProjectId, TodoId } from '@repo/factory-core/ids';
 import type { StoredEvent } from '@repo/factory-core/order/events';
-import { fakePrState } from '@repo/factory-core/testing';
 import {
   openRuntime,
   type OpenedRuntime,
 } from '@repo/factory-runtime/open-runtime';
-import { seedProject } from '@repo/factory-runtime/seed';
+import { seedProject, shippedLine } from '@repo/factory-runtime/seed';
 import { systemClock } from '../../clock/system-clock';
 import { createRegistry, type StationRegistry } from '../../cycle/registry';
 import { createJobRegistry } from '../../jobs/registry';
@@ -40,6 +35,7 @@ import type { PaneDriver } from '../../ports';
 import { spawnHeadless } from '../../runners/headless';
 import { prepareWorkspace } from '../../workspace';
 import { commitOf, must } from '../helpers/git';
+import { commitFactoryTo } from '../../testing/factory-fixture';
 
 type Client = FactoryClient;
 
@@ -63,7 +59,6 @@ let cellDir: string;
 let repo: string;
 let opened: OpenedRuntime | undefined;
 let listener: SocketListener | undefined;
-const prState = fakePrState();
 
 beforeEach(async () => {
   root = mkdtempSync(join(tmpdir(), 'cell-e2e-'));
@@ -74,6 +69,8 @@ beforeEach(async () => {
   repo = await createFixtureRepo(join(root, 'repo'), {
     [TODO]: todoFile({ title: 'Add login', v2: true }),
   });
+  // The repo's own `.factory/`: the Cell renders the Operator prompt from it on the worktree.
+  commitFactoryTo(repo);
   seedProject(dataDir, { projectId: PROJECT, repoUrl: repo });
 });
 
@@ -87,17 +84,24 @@ afterEach(async () => {
 
 /** Opens the runtime's data directory and serves it on its socket, the way factory-server does. */
 const serve = async (): Promise<Client> => {
-  opened = openRuntime({
-    dataDir,
-    git: gitMirror({ mirrorsDir: join(dataDir, 'mirrors') }),
-    prState,
-    config: { intakePollMs: 0, prPollMs: 0 },
-  });
+  opened = openRuntime({ dataDir });
   await opened.runtime.start();
   const socketPath = join(dataDir, 'factory.sock');
   listener = startSocketListener({ runtime: opened.runtime, socketPath });
   const client = socketFactoryClient({ socketPath });
-  await client.call('intakeSync', {});
+  // The Work order the todo file names, created through the task API on the shipped `feature` Line.
+  await client.call('createOrder', {
+    commandId: `create-${TODO}`,
+    projectId: PROJECT,
+    todoId: TODO as TodoId,
+    title: 'Add login',
+    type: 'feat',
+    body: 'Users can sign in.\n',
+    line: shippedLine('feature'),
+    priority: 'high',
+    dependsOn: [],
+    baseBranch: 'main',
+  });
   await client.call('hello', {
     cellId: CELL,
     version: '0.1.0',
