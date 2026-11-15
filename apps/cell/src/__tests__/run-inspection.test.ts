@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { FactoryClient } from '@repo/factory-core/contracts/client';
 import { WireFailure } from '@repo/factory-core/contracts/errors';
 import type { Job } from '@repo/factory-core/contracts/job';
+import { ROUTES } from '@repo/factory-core/contracts/routes';
 import type { CellId, CycleId, JobId, OrderId } from '@repo/factory-core/ids';
 import { createSystemAdapter } from '../adapters/system/system.adapter';
 import { runInspection } from '../jobs/run-inspection';
@@ -134,6 +135,33 @@ const reportedResults = (calls: Sent[]): ReportedResult[] => {
     []
   );
 };
+
+/** Tokens a command may end its output with: the machine-local shapes the server refuses in a tail. */
+const MACHINE_LOCAL_ENDINGS = [
+  '/home/factory/.local/share/factory-cell/worktrees/software-factory_v2-fix/...',
+  '/tmp/foo',
+  '~/dir',
+  'localhost:3000',
+  '127.0.0.1:7878',
+  'pid=1234',
+];
+
+/**
+ * A shell command that prints `text` exactly. It spells the text in octal, so the command itself carries
+ * no machine-local value and only the output does.
+ */
+const printing = (text: string): string =>
+  `printf '${[...Buffer.from(text, 'utf8')]
+    .map((byte) => `\\${byte.toString(8).padStart(3, '0')}`)
+    .join('')}'`;
+
+/** Whether every command the job sent parses as the Factory's submitCommand request. */
+const parsedAsSubmitted = (calls: Sent[]): boolean =>
+  calls
+    .filter((call) => call.route === 'submitCommand')
+    .every(
+      (call) => ROUTES.submitCommand.request.safeParse(call.request).success,
+    );
 
 describe('inspection job', () => {
   it('starts the Cycle from the worktree HEAD before any check is reported', async () => {
@@ -321,5 +349,65 @@ describe('inspection job', () => {
     await runInspection(context, inspectionJob(['true']), aborted.signal);
 
     expect(calls).toEqual([]);
+  });
+
+  describe('machine-local values in the output', () => {
+    it.each(MACHINE_LOCAL_ENDINGS)(
+      'reports a passing inspection whose output ends with %s, and every request parses',
+      async (ending) => {
+        const { context, calls } = contextWith();
+
+        await runInspection(
+          context,
+          inspectionJob([printing(`checks ran\n${ending}\n`)]),
+          signal(),
+        );
+
+        expect(commandsOf(calls, 'ReportInspection')).toHaveLength(1);
+        expect(commandsOf(calls, 'ReportInspection')[0]).toMatchObject({
+          passed: true,
+        });
+        expect(parsedAsSubmitted(calls)).toBe(true);
+      },
+    );
+
+    it.each(MACHINE_LOCAL_ENDINGS)(
+      'fails the Cycle with a crash detail that parses when the output of a check ends with %s',
+      async (ending) => {
+        const { context, calls } = contextWith((sent) => {
+          if (sent.route === 'blobPut') {
+            throw new Error(`store refused at ${ending}`);
+          }
+          return accepting(sent);
+        });
+
+        await expect(
+          runInspection(context, inspectionJob(['true']), signal()),
+        ).rejects.toThrow();
+
+        expect(commandsOf(calls, 'FailCycle')).toEqual([
+          expect.objectContaining({ reason: 'crashed', cycleId: CYCLE }),
+        ]);
+        expect(parsedAsSubmitted(calls)).toBe(true);
+      },
+    );
+
+    it('keeps the full output, machine-local values included, in the log blob', async () => {
+      const { context, calls } = contextWith();
+
+      await runInspection(
+        context,
+        inspectionJob([printing('reached /tmp/foo at localhost:3000\n')]),
+        signal(),
+      );
+
+      const [upload] = calls.filter((call) => call.route === 'blobPut');
+      const logged = Buffer.from(
+        (upload?.request as unknown as { base64: string }).base64,
+        'base64',
+      ).toString('utf8');
+      expect(logged).toContain('/tmp/foo');
+      expect(logged).toContain('localhost:3000');
+    });
   });
 });
