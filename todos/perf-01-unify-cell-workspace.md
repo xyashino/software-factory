@@ -4,6 +4,7 @@ priority: high
 depends_on: []
 line: feature
 factory: v2
+plan: cell-perf
 ---
 
 # perf-01: Unify Cell workspace preparation and eliminate redundant git fetches

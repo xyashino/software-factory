@@ -4,6 +4,7 @@ priority: high
 depends_on: [perf-01-unify-cell-workspace]
 line: feature
 factory: v2
+plan: cell-perf
 ---
 
 # perf-02: Replace workspace.setup with declarative workflow changeover

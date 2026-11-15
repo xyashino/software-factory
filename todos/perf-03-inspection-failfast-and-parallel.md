@@ -1,9 +1,10 @@
 ---
 status: todo
 priority: high
-depends_on: [perf-01-unify-cell-workspace]
+depends_on: [perf-02-workflow-changeover]
 line: feature
 factory: v2
+plan: cell-perf
 ---
 
 # perf-03: Fail-fast parallel inspections, event-driven station wakeup, and leaner delivery

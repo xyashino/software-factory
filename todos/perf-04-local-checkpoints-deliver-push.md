@@ -1,9 +1,10 @@
 ---
 status: todo
 priority: high
-depends_on: [perf-01-unify-cell-workspace]
+depends_on: [perf-03-inspection-failfast-and-parallel]
 line: feature
 factory: v2
+plan: cell-perf
 type: perf
 ---
 

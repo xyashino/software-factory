@@ -4,6 +4,7 @@ priority: high
 depends_on: [perf-04-local-checkpoints-deliver-push]
 line: feature
 factory: v2
+plan: cell-perf
 type: feat
 ---
 
