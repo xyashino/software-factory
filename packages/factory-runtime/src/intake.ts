@@ -182,7 +182,15 @@ export const syncProject = async (
     diagnostics: [],
   };
 
-  const record = (
+  // The rows as they stand, updated by each write of this pass: a todo recorded twice writes once.
+  const stored = new Map(tracked);
+  /**
+   * Writes a todo's row unless it already holds these values. The row is the cache key: a sync at the
+   * same commit with the same file and diagnostic writes nothing (an idle poll). No state is kept in
+   * memory, so a restart cannot skip a write it never made. The definitions are not in the key: a
+   * changed Line reaches only new Work orders, and those are created through commands, not here.
+   */
+  const record = async (
     todoId: TodoId,
     contentHash: string,
     diagnostic: string | null,
@@ -194,7 +202,17 @@ export const syncProject = async (
       seenCommit: commit,
       diagnostic,
     };
-    return ports.intake.upsert(row);
+    const prior = stored.get(todoId);
+    if (
+      prior &&
+      prior.contentHash === row.contentHash &&
+      prior.seenCommit === row.seenCommit &&
+      prior.diagnostic === row.diagnostic
+    ) {
+      return;
+    }
+    stored.set(todoId, row);
+    await ports.intake.upsert(row);
   };
 
   const diagnose = (todoId: TodoId, kind: string, message: string): string => {

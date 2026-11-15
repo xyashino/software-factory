@@ -33,6 +33,15 @@ describe('runtime timing knobs from the environment', () => {
     );
   });
 
+  it('applies the intake and PR poll intervals the operator sets', () => {
+    expect(
+      runtimeConfigFrom({
+        FACTORY_INTAKE_POLL_MS: '60000',
+        FACTORY_PR_POLL_MS: '120000',
+      }),
+    ).toEqual({ intakePollMs: 60000, prPollMs: 120000 });
+  });
+
   it('reads the cut-over flag: 0 turns the v2 todo filter off, 1 keeps it on', () => {
     expect(runtimeConfigFrom({ FACTORY_V2_ONLY: '0' })).toEqual({
       v2Only: false,

@@ -7,7 +7,7 @@ import type {
   MirroredProject,
   TodoFile,
 } from '@repo/factory-core/ports/git-mirror';
-import { runProcess } from './run';
+import { runProcess, runProcessBytes } from './run';
 
 /** A todo file directly under `todos/` (STORAGE §8, ROADMAP M4). */
 const TODO_PATH = /^todos\/[^/]+\.md$/;
@@ -100,14 +100,46 @@ export const gitMirror = (options: { mirrorsDir: string }): GitMirror => {
         'todos',
       ]);
       const paths = listed.split('\n').filter((path) => TODO_PATH.test(path));
-      const files: TodoFile[] = [];
-      for (const file of paths) {
-        files.push({
-          file,
-          text: await git(dir, ['cat-file', 'blob', `${commit}:${file}`]),
-        });
-      }
-      return files;
+      if (paths.length === 0) return [];
+      // One `cat-file --batch` process reads every blob: one request per line on stdin, one reply each.
+      const reply = await runProcessBytes(
+        ['git', '--git-dir', dir, 'cat-file', '--batch'],
+        { stdin: paths.map((file) => `${commit}:${file}\n`).join('') },
+      );
+      return batchBlobs(reply, paths);
     },
   };
+};
+
+const NEWLINE = 0x0a;
+
+/**
+ * Splits the reply of `git cat-file --batch` into one text per path, in order. Each reply is a header
+ * line (`<oid> blob <size>`), then `size` bytes of content, then a newline. The size counts bytes, so
+ * the content is cut by bytes and decoded afterwards: multibyte text stays whole.
+ */
+const batchBlobs = (
+  reply: Uint8Array,
+  paths: readonly string[],
+): TodoFile[] => {
+  const decoder = new TextDecoder();
+  const files: TodoFile[] = [];
+  let at = 0;
+  for (const file of paths) {
+    const end = reply.indexOf(NEWLINE, at);
+    if (end === -1) throw new Error(`cat-file --batch: no reply for ${file}`);
+    const header = decoder.decode(reply.subarray(at, end));
+    const match = /^[0-9a-f]+ blob (\d+)$/.exec(header);
+    if (!match) {
+      throw new Error(`cat-file --batch: ${file} is not a blob (${header})`);
+    }
+    const start = end + 1;
+    const size = Number(match[1]);
+    files.push({
+      file,
+      text: decoder.decode(reply.subarray(start, start + size)),
+    });
+    at = start + size + 1;
+  }
+  return files;
 };
