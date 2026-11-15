@@ -1,5 +1,4 @@
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { createConnection } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -89,30 +88,23 @@ const fakeClient = (refuse?: { code: string; detail: string }) => {
   return { client, submitted };
 };
 
-/** One request to the Mechanic's operator socket, sent as `factory-operator` sends it. */
-const askOperator = (
+/** One request to the Mechanic's operator endpoint, sent as `factory-operator` sends it. */
+const askOperator = async (
   env: Record<string, string>,
   body: Record<string, unknown>,
-): Promise<Record<string, unknown>> =>
-  new Promise((resolve, reject) => {
-    const socket = createConnection(env.FACTORY_OPERATOR_SOCKET ?? '');
-    let data = '';
-    socket.setEncoding('utf8');
-    socket.on('connect', () =>
-      socket.write(
-        `${JSON.stringify({ token: env.FACTORY_CYCLE_TOKEN, ...body })}\n`,
-      ),
-    );
-    socket.on('data', (chunk: string) => {
-      data += chunk;
-    });
-    socket.on('end', () =>
-      resolve(JSON.parse(data) as Record<string, unknown>),
-    );
-    socket.on('error', reject);
+): Promise<Record<string, unknown>> => {
+  const response = await fetch(env.FACTORY_OPERATOR_URL ?? '', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      authorization: `Bearer ${env.FACTORY_CYCLE_TOKEN ?? ''}`,
+    },
+    body: JSON.stringify({ token: env.FACTORY_CYCLE_TOKEN, ...body }),
   });
+  return (await response.json()) as Record<string, unknown>;
+};
 
-/** A pane whose Mechanic, once the pane opens, runs `onOpen` / sends `script` to the operator socket. */
+/** A pane whose Mechanic, once the pane opens, runs `onOpen` / sends `script` to the operator endpoint. */
 const scriptedPane = (
   script: Record<string, unknown>[],
   seen: Seen,

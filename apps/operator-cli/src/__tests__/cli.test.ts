@@ -16,12 +16,10 @@ const CLI = fileURLToPath(new URL('../cli.ts', import.meta.url));
 const TOKEN = 'b'.repeat(48);
 
 let root: string;
-let socketPath: string;
 let stubProcess: { kill(): void } | undefined;
 
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), 'op-cli-'));
-  socketPath = join(root, 'op.sock');
 });
 
 afterEach(() => {
@@ -32,26 +30,29 @@ afterEach(() => {
 
 const STUB = fileURLToPath(new URL('./stub-cell.ts', import.meta.url));
 
-/** A stub Cell socket in its own process: it records each request line and answers with `reply`. */
-const stubCell = async (reply: unknown): Promise<void> => {
-  stubProcess = Bun.spawn(['bun', STUB, socketPath, JSON.stringify(reply)], {
+/** A stub Cell endpoint in its own process: it records each request body and answers with `reply`. */
+const stubCell = async (reply: unknown): Promise<string> => {
+  stubProcess = Bun.spawn(['bun', STUB, root, JSON.stringify(reply)], {
     stdout: 'ignore',
     stderr: 'ignore',
   });
+  const urlFile = join(root, 'url');
   for (let attempt = 0; attempt < 200; attempt += 1) {
-    if (existsSync(socketPath)) return;
+    if (existsSync(urlFile)) return readFileSync(urlFile, 'utf8');
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
-  throw new Error('the stub Cell socket never appeared');
+  throw new Error('the stub Cell endpoint never came up');
 };
 
-/** The requests the stub Cell has received, one JSON line each. */
-const receivedRequests = (): string[] =>
-  existsSync(`${socketPath}.log`)
-    ? readFileSync(`${socketPath}.log`, 'utf8')
+/** The requests the stub Cell has received, one JSON body each. */
+const receivedRequests = (): string[] => {
+  const log = join(root, 'requests.log');
+  return existsSync(log)
+    ? readFileSync(log, 'utf8')
         .split('\n')
         .filter((line) => line.trim() !== '')
     : [];
+};
 
 /** Runs the CLI as a process with the given environment; returns its exit code and output. */
 const runCli = async (
@@ -157,13 +158,13 @@ describe('factory-operator argv', () => {
 
 describe('factory-operator process', () => {
   it('exits 0 and prints the reply result for a verb the Cell accepts', async () => {
-    await stubCell({
+    const url = await stubCell({
       ok: true,
       result: { cycleId: '01J', outputs: ['plan.md'] },
     });
 
     const run = await runCli(['context'], {
-      FACTORY_OPERATOR_SOCKET: socketPath,
+      FACTORY_OPERATOR_URL: url,
       FACTORY_CYCLE_TOKEN: TOKEN,
     });
 
@@ -179,14 +180,14 @@ describe('factory-operator process', () => {
   });
 
   it('exits 1 and names the code when the Cell refuses the verb', async () => {
-    await stubCell({
+    const url = await stubCell({
       ok: false,
       code: 'precondition',
       message: 'the Cycle is not live',
     });
 
     const run = await runCli(['done'], {
-      FACTORY_OPERATOR_SOCKET: socketPath,
+      FACTORY_OPERATOR_URL: url,
       FACTORY_CYCLE_TOKEN: TOKEN,
     });
 
@@ -198,12 +199,13 @@ describe('factory-operator process', () => {
     const run = await runCli(['done'], { FACTORY_CYCLE_TOKEN: TOKEN });
 
     expect(run.code).toBe(2);
-    expect(run.stderr).toContain('FACTORY_OPERATOR_SOCKET is not set');
+    expect(run.stderr).toContain('FACTORY_OPERATOR_URL is not set');
   });
 
-  it('exits 3 when the socket cannot be reached', async () => {
+  it('exits 3 when the Cell endpoint cannot be reached', async () => {
+    // Port 1 on loopback is closed: nothing listens there, so the connection is refused.
     const run = await runCli(['done'], {
-      FACTORY_OPERATOR_SOCKET: join(root, 'missing.sock'),
+      FACTORY_OPERATOR_URL: 'http://127.0.0.1:1',
       FACTORY_CYCLE_TOKEN: TOKEN,
     });
 
@@ -227,9 +229,9 @@ describe('factory-operator process', () => {
       );
       return;
     }
-    await stubCell({ ok: true, result: {} });
+    const url = await stubCell({ ok: true, result: {} });
     const env = {
-      FACTORY_OPERATOR_SOCKET: socketPath,
+      FACTORY_OPERATOR_URL: url,
       FACTORY_CYCLE_TOKEN: TOKEN,
     };
     // The first spawn pays the cold module cache; it is run and not timed.
@@ -248,7 +250,7 @@ describe('factory-operator process', () => {
     expect(median).toBeLessThan(100);
   });
 
-  it('talks only to its socket: no network stack, no other path', () => {
+  it('talks only to the Cell endpoint: no socket file, no unix socket', () => {
     const sources = ['cli.ts', 'client.ts', 'usage.ts'].map((name) =>
       readFileSync(
         fileURLToPath(new URL(`../${name}`, import.meta.url)),
@@ -256,10 +258,8 @@ describe('factory-operator process', () => {
       ),
     );
     for (const source of sources) {
-      expect(source).not.toMatch(
-        /fetch\(|node:http|node:https|node:dgram|\bhttp:\/\//,
-      );
+      expect(source).not.toMatch(/node:net|createConnection|op\.sock|\.sock\b/);
     }
-    expect(sources[1]).toContain('createConnection(socketPath)');
+    expect(sources[1]).toContain('fetch(url');
   });
 });
