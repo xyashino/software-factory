@@ -27,7 +27,7 @@ import { longPollClaim, type ClaimDeps } from './claim';
 import type { CommandHandler } from './command-handler';
 import { notFound, RuntimeError } from './errors';
 import { heartbeat } from './heartbeat';
-import type { IntakeReport } from './intake';
+import type { IntakeReport, IntakeSource } from './intake';
 import { createJoinToken, revokeJoinToken } from './join-tokens';
 import {
   addProject,
@@ -163,7 +163,7 @@ const requireResult = (result: CommandResult | undefined): CommandResult => {
 
 /** What the composition root provides beyond the ports: intake and the admin operations. */
 export interface OperationExtras {
-  sync(projectId?: ProjectId): Promise<IntakeReport[]>;
+  sync(projectId?: ProjectId, source?: IntakeSource): Promise<IntakeReport[]>;
   admin: RuntimeAdmin;
 }
 
@@ -387,7 +387,10 @@ export const createOperations = (
       }
     },
     intakeSync: async (request) => {
-      const projects = await extras.sync(request.projectId);
+      const source: IntakeSource | undefined = request.files
+        ? { files: request.files, replace: request.replace ?? false }
+        : undefined;
+      const projects = await extras.sync(request.projectId, source);
       const created = projects.reduce(
         (total, report) => total + report.created.length,
         0,

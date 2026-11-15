@@ -49,7 +49,10 @@ export interface RuntimeConfig {
   logTailChars: number;
   /** The Operator's own CLI, listed in every prompt (PROTOCOL §3.3). */
   operatorCommands: string[];
-  /** Intake poll interval (ROADMAP M4). 0 turns the timer off; `sync` still works. */
+  /**
+   * Git intake poll interval (ROADMAP M4). 0 (the default) turns the timer off: todos come in through
+   * `factory sync`, which sends the local `todos/` folder. Set it to pull the base branch on a timer.
+   */
   intakePollMs: number;
   /** PR state poll interval for delivered Work orders. 0 turns the timer off. */
   prPollMs: number;
@@ -77,7 +80,7 @@ export const DEFAULT_CONFIG: RuntimeConfig = {
     'factory-operator block --reason "<why>" --handover <file>',
     'factory-operator context',
   ],
-  intakePollMs: 60_000,
+  intakePollMs: 0,
   prPollMs: 300_000,
   v2Only: true,
   feedPollMs: 1_000,

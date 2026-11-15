@@ -377,7 +377,7 @@ describe('factory against a running server', () => {
     expect(result.stderr).toContain('factory-server admin import');
   });
 
-  it('sync runs intake against the project repo and creates a Work order', async () => {
+  it('sync --git runs intake against the project repo and creates a Work order', async () => {
     const repoDir = scratch();
     const syncDir = scratch();
     try {
@@ -411,7 +411,7 @@ describe('factory against a running server', () => {
       ]);
 
       await seed(syncDir, true, ['--no-orders', '--repo', repoDir]);
-      const result = await factory(syncDir, ['sync']);
+      const result = await factory(syncDir, ['sync', '--git']);
       const board = await factory(syncDir, ['status']);
 
       expect(result.code).toBe(0);
@@ -419,6 +419,34 @@ describe('factory against a running server', () => {
       expect(board.stdout).toContain('software-factory:add-sso');
     } finally {
       rmSync(repoDir, { recursive: true, force: true });
+      rmSync(syncDir, { recursive: true, force: true });
+    }
+  });
+
+  it('sync replaces the board with a local todo folder', async () => {
+    const todosDir = scratch();
+    const syncDir = scratch();
+    try {
+      const write = (name: string, title: string) =>
+        writeFileSync(
+          join(todosDir, `${name}.md`),
+          `---\nstatus: todo\nfactory: v2\n---\n\n# ${title}\n\nBody.\n`,
+        );
+      write('first', 'First');
+      await seed(syncDir, true, ['--no-orders']);
+
+      const created = await factory(syncDir, ['sync', '--dir', todosDir]);
+      rmSync(join(todosDir, 'first.md'));
+      write('second', 'Second');
+      const replaced = await factory(syncDir, ['sync', '--dir', todosDir]);
+
+      expect(created.code).toBe(0);
+      expect(created.stdout).toContain('created: first');
+      expect(replaced.code).toBe(0);
+      expect(replaced.stdout).toContain('created: second');
+      expect(replaced.stdout).toContain('cancelled: first');
+    } finally {
+      rmSync(todosDir, { recursive: true, force: true });
       rmSync(syncDir, { recursive: true, force: true });
     }
   });

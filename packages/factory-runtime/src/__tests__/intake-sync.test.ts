@@ -234,4 +234,96 @@ describe('intake sync', () => {
       w.runtime.sync('no-such-project' as typeof PROJECT),
     ).rejects.toMatchObject({ wire: { code: 'not_found' } });
   });
+  describe('from a local folder', () => {
+    const local = (files: { file: string; text: string }[]) => ({
+      files,
+      replace: true,
+    });
+
+    it('creates Work orders from the given files without reading git', async () => {
+      const w = world();
+      w.git.setTodos([
+        { file: 'todos/from-git.md', text: todo({ title: 'Git', v2: true }) },
+      ]);
+
+      const [report] = await w.runtime.sync(
+        undefined,
+        local([
+          {
+            file: 'todos/from-folder.md',
+            text: todo({ title: 'Folder', v2: true }),
+          },
+        ]),
+      );
+
+      expect(report?.created).toEqual(['from-folder']);
+      expect((await board(w)).map((row) => row.todoId)).toEqual([
+        'from-folder',
+      ]);
+    });
+
+    it('cancels every unfinished Work order not in the folder, claimed or not', async () => {
+      const w = world();
+      await w.runtime.sync(
+        undefined,
+        local([
+          { file: 'todos/old-a.md', text: todo({ title: 'A', v2: true }) },
+          { file: 'todos/old-b.md', text: todo({ title: 'B', v2: true }) },
+        ]),
+      );
+      await createOrder(w, { todoId: 'untracked' });
+      await helloCell(w, CELL);
+      await w.runtime.call('claim', { cellId: CELL, waitMs: 0 });
+
+      const [report] = await w.runtime.sync(
+        undefined,
+        local([
+          { file: 'todos/new.md', text: todo({ title: 'New', v2: true }) },
+        ]),
+      );
+
+      expect(report?.created).toEqual(['new']);
+      expect([...(report?.cancelled ?? [])].sort()).toEqual([
+        'old-a',
+        'old-b',
+        'untracked',
+      ]);
+      const statuses = Object.fromEntries(
+        (await board(w)).map((row) => [row.todoId, row.status]),
+      );
+      expect(statuses).toMatchObject({
+        'old-a': 'cancelled',
+        'old-b': 'cancelled',
+        untracked: 'cancelled',
+      });
+      expect(statuses.new).not.toBe('cancelled');
+    });
+
+    it('changes nothing when the same folder is synced again', async () => {
+      const w = world();
+      const files = [
+        { file: 'todos/a.md', text: todo({ title: 'A', v2: true }) },
+      ];
+      await w.runtime.sync(undefined, local(files));
+
+      const [again] = await w.runtime.sync(undefined, local(files));
+
+      expect(again).toMatchObject({ created: [], updated: [], cancelled: [] });
+    });
+
+    it('needs one project to sync a folder into', async () => {
+      const w = world();
+      await w.runtime.call('projectAdd', {
+        projectId: 'second' as typeof PROJECT,
+        repoUrl: 'https://example.test/second.git',
+        baseBranch: 'main',
+        maxRunning: 2,
+        depPolicy: 'delivered',
+      });
+
+      await expect(w.runtime.sync(undefined, local([]))).rejects.toMatchObject({
+        wire: { code: 'precondition' },
+      });
+    });
+  });
 });

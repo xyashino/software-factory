@@ -9,9 +9,9 @@ import type { ProjectId } from '@repo/factory-core/ids';
 import type { StoredEvent } from '@repo/factory-core/order/events';
 import { createAdmin, type RuntimeAdmin } from './admin';
 import { createCommandHandler, type CommandHandler } from './command-handler';
-import { asRuntimeError, notFound } from './errors';
+import { asRuntimeError, notFound, RuntimeError } from './errors';
 import { feedFrom } from './feed';
-import { syncProject, type IntakeReport } from './intake';
+import { syncProject, type IntakeReport, type IntakeSource } from './intake';
 import { createNotifier } from './notifier';
 import { type CallOptions, createOperations } from './operations';
 import type { RuntimePorts, Timers } from './ports';
@@ -44,8 +44,11 @@ export interface Runtime {
    * Commits made through it wake the claims waiting on the queue, as any other commit does.
    */
   commands: CommandHandler;
-  /** Intake now, for one project or for every registered project (PROTOCOL §3.1). */
-  sync(projectId?: ProjectId): Promise<IntakeReport[]>;
+  /**
+   * Intake now, for one project or for every registered project (PROTOCOL §3.1). With `source`, the
+   * todo files come from the caller instead of git, for exactly one project.
+   */
+  sync(projectId?: ProjectId, source?: IntakeSource): Promise<IntakeReport[]>;
   /** One PR state pass over the delivered Work orders; returns how many PRs it asked about (ROADMAP M4). */
   pollPrStates(): Promise<number>;
   /** Every stored event after `afterGlobalSeq`, then each new one, until `signal` aborts (PROTOCOL §3.1). */
@@ -108,14 +111,27 @@ export const createRuntime = (ports: RuntimePorts): Runtime => {
   const handler = createCommandHandler(ports, () => notifier.wake());
   const admin = createAdmin(ports, handler);
 
-  const sync = async (projectId?: ProjectId): Promise<IntakeReport[]> => {
+  const sync = async (
+    projectId?: ProjectId,
+    source?: IntakeSource,
+  ): Promise<IntakeReport[]> => {
     const projects = (await ports.projects.list()).filter(
       (project) => projectId === undefined || project.projectId === projectId,
     );
     if (projectId !== undefined && projects.length === 0) throw notFound();
+    // A local folder is one project's todos: which one must be clear.
+    if (source && projects.length !== 1) {
+      throw new RuntimeError({
+        code: 'precondition',
+        detail:
+          projects.length === 0
+            ? 'no project is registered'
+            : 'several projects are registered; name one to sync a folder into',
+      });
+    }
     const reports: IntakeReport[] = [];
     for (const project of projects) {
-      reports.push(await syncProject(ports, handler, project));
+      reports.push(await syncProject(ports, handler, project, source));
     }
     return reports;
   };

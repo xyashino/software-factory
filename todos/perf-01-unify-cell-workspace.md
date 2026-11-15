@@ -36,6 +36,6 @@ Unify the two separate workspace preparation paths in `apps/cell` so all jobs on
 ## Acceptance criteria
 
 - [ ] `run_operator_station`, `run_inspection`, and `deliver` share one `prepareWorkspace` implementation, one mirror, and one worktree per `workspace.dir`.
-- [ ] Concurrent slots on the same Cell serialize mirror operations via `withMirrorLock`.
+- [ ] Mirror operations stay serialized via `withMirrorLock` (a Cell runs one Job at a time, but a continuation and a stopping Job may overlap).
 - [ ] `lines/*.yml` no longer duplicate `git fetch origin` in `workspace.sync`, and pinned-SHA jobs skip `git fetch` when the commit is already present in the mirror.
 - [ ] `pnpm ci:verify` passes.

@@ -192,14 +192,28 @@ export const streamEventsResponseSchema = z
   })
   .strict();
 
+/** A todo file sent by the Supervisor: `todos/<name>.md` and its text. */
+export const intakeFileSchema = z
+  .object({
+    file: z.string().regex(/^todos\/[^/]+\.md$/),
+    text: z.string().max(256 * 1024),
+  })
+  .strict();
+
 /**
  * Runs intake now (PROTOCOL §3.1, `/v1/supervisor/intake/sync`) for one project or every
  * registered project. Intake is idempotent, so the answer does not depend on `commandId`.
+ *
+ * With `files`, intake reads those todo files instead of the project's git base branch, and the
+ * project is the one named (or the only one registered). With `replace`, every unfinished Work
+ * order of that project whose todo is not among `files` is cancelled, claimed or not.
  */
 export const intakeSyncRequestSchema = z
   .object({
     commandId: z.string().min(1).max(128).optional(),
     projectId: projectIdSchema.optional(),
+    files: z.array(intakeFileSchema).max(1000).optional(),
+    replace: z.boolean().optional(),
   })
   .strict();
 

@@ -1,6 +1,6 @@
 ---
 status: todo
-priority: medium
+priority: low
 line: feature
 factory: v2
 plan: factory-demo
