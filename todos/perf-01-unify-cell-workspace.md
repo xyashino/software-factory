@@ -17,7 +17,7 @@ Unify the two separate workspace preparation paths in `apps/cell` so all jobs on
 - `apps/cell/src/workspace.ts` (used by `run-job.ts` for `run_operator_station`)
 - `apps/cell/src/workspace/prepare.ts`, `mirror.ts`, `worktree.ts`, `cache.ts`, `lru.ts` (used by `run-inspection.ts` and `deliver.ts`)
 - `apps/cell/src/jobs/run-job.ts`, `run-inspection.ts`, `deliver.ts`
-- `packages/factory-definitions/lines/fast.yml`, `standard.yml`, `feature.yml`
+- `packages/factory-definitions/starter/.factory/lines/{fast,standard,feature}.yml`, `.factory/lines/{fast,standard,feature}.yml`
 - `docs/RULES.md`, `docs/PROTOCOL.md`
 
 ## Deliverables
@@ -27,7 +27,7 @@ Unify the two separate workspace preparation paths in `apps/cell` so all jobs on
    - Keep a single bare mirror per repository/project and a single worktree per `workspace.dir` (e.g. `worktrees/<dirOf(orderId)>`), protected by the per-mirror mutex (`withMirrorLock`), LRU eviction (`inUse` guard), and `.cell/` exclusion.
    - Ensure operator stations, inspections, and delivery for the same Work order on the same Cell reuse the same worktree (`node_modules`, `.turbo`, build artifacts) instead of cloning/installing twice.
 2. **Eliminate redundant `git fetch`:**
-   - Remove `git fetch origin` from `workspace.sync.exec` in `packages/factory-definitions/lines/{fast,standard,feature}.yml` (`ensureMirror` already runs `git fetch --prune origin` on the mirror).
+   - Remove `git fetch origin` from `workspace.sync.exec` in `packages/factory-definitions/starter/.factory/lines/{fast,standard,feature}.yml` and `.factory/lines/{fast,standard,feature}.yml` (`ensureMirror` already runs `git fetch --prune origin` on the mirror).
    - When `job.base` is a pinned `CommitSha` and that commit already exists in the local bare mirror (`git cat-file -e <sha>^{commit}`), skip the remote `git fetch` on continuation/reuse.
 3. **Tests & ADR:**
    - Update and consolidate `apps/cell/src/__tests__/workspace.test.ts`, `operator-workspace.test.ts`, `run-inspection.test.ts`, `deliver.test.ts`, and `packages/factory-definitions/src/__tests__/shipped.test.ts`.

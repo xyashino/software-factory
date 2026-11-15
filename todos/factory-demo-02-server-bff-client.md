@@ -28,11 +28,10 @@ Connect `apps/factory-demo` to `factory-server` HTTP API via type-safe Astro bac
    - Proxy routes:
      - `GET /api/board`, `GET /api/plans`, `GET /api/plans/[id]`, `GET /api/orders/[id]`
      - `POST /api/orders/[id]/answer`, `resume`, `reopen`, `nudge`, `cancel`, `reprioritise`
-     - `POST /api/intake/sync`
      - `GET /api/cells`, `DELETE /api/cells/[id]`
      - `GET /api/join-tokens`, `POST /api/join-tokens`, `DELETE /api/join-tokens/[id]`
      - `GET /api/projects`, `POST /api/projects`, `POST /api/projects/[id]`, `DELETE /api/projects/[id]`
-     - `GET /api/admin/export`, `POST /api/admin/rebuild-projections`, `POST /api/admin/recover`
+     - `GET /api/admin/export`, `POST /api/admin/rebuild-projections`
      - `GET /api/blobs/[ref]` (stream/text fetch for prompt & inspection blobs)
      - `GET /api/stream` (SSE proxy forwarding `GET /v1/stream?after=...` with `Last-Event-ID`)
    - Map `factory-server` wire errors (`unauthorized`, `unavailable`, `precondition`, `conflict`, `invalid`, `not_found`) to clean JSON status responses.
