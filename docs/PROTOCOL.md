@@ -12,7 +12,7 @@ runs the runtime. HTTP routes below are the remote transport, not a requirement 
 | Supervisor via `factory`        | Local: operating-system account over the socket; remote: supervisor token (`FACTORY_TOKEN`) | `factory-server` via the socket, or its supervisor API  | everything a Supervisor may do                                                  |
 | Cell, enrolling                 | join token (`FACTORY_JOIN_TOKEN`), created by `factory cells token create`                  | Remote `POST /v1/cell/join`                             | obtaining a Cell credential                                                     |
 | Cell, enrolled                  | Cell credential, returned once by `join`                                                    | `factory-server` via the socket, or the remote Cell API | writes only to Work orders for which it holds the current epoch; reads any blob |
-| Operator via `factory-operator` | per-Cycle local token (`FACTORY_CYCLE_TOKEN`), random, created by the Cell                  | its Cell's unix socket only                             | only its own Cycle                                                              |
+| Operator via `factory-operator` | per-Cycle local token (`FACTORY_CYCLE_TOKEN`), random, created by the Cell                  | its Cell's localhost HTTP endpoint only                 | only its own Cycle                                                              |
 
 Tokens are opaque random strings. The runtime stores only their hashes.
 
@@ -40,7 +40,7 @@ Tokens are opaque random strings. The runtime stores only their hashes.
   proxy. The server does not terminate TLS itself in v2.0. WebSocket is not used in v2.0.
 - Remote Cells open **no inbound port**. Everything the Factory needs to tell a Cell arrives in
   responses to requests the Cell makes (claim long-poll and heartbeat).
-- `factory-operator` talks to its Cell over a unix socket (`$FACTORY_OPERATOR_SOCKET`, mode `0600`).
+- `factory-operator` talks to its Cell over localhost HTTP (`$FACTORY_OPERATOR_URL`, §3.3).
 
 ## 3. APIs
 
@@ -144,7 +144,29 @@ only in remote mode.
 With `dryRun: true` the runtime runs `decide` and returns the events it _would_ append, or the error,
 and stores nothing (no events, no idempotency record). Cells use it before a checkpoint push (§8.2).
 
-### 3.3 Operator API (`factory-operator` → Cell, unix socket)
+### 3.3 Operator API (`factory-operator` → Cell, localhost HTTP)
+
+The Cell serves one endpoint per Cycle on `http://127.0.0.1:<port>`, bound to the loopback address on
+an OS-assigned port (`port 0`). The Cell passes its URL as `FACTORY_OPERATOR_URL` and the Cycle token as
+`FACTORY_CYCLE_TOKEN`. There is no socket file and no path-length limit, so the same code runs on every
+operating system.
+
+- Request: `POST <FACTORY_OPERATOR_URL>` with `Content-Type: application/json`. The body is one verb
+  object (`op` plus that verb's fields) with the Cycle token in its `token` field. The token may
+  instead be sent as `Authorization: Bearer <token>`; when both are present, the header is checked.
+- Token: checked first, in constant time (`timingSafeEqual` on equal-length buffers). A missing or wrong
+  token is refused with `401`; no verb is dispatched.
+- Body: validated against the verb schema (`operatorRequestSchema`, unknown fields refused). The body
+  is limited to 1 MiB.
+- Reply: one `OperatorReply` JSON object (`{ ok: true, result? }` or `{ ok: false, code, message }`).
+  The HTTP status is `200` for an accepted verb; a refusal uses `401` (`unauthorized`), `400`
+  (`invalid`, including a body that is not JSON), `413` (body too large), `405` (anything but `POST`,
+  with `Allow: POST`), `409` (`rejected`, `stale_epoch`, `not_live`, `precondition`) or `500`
+  (`internal`).
+- Lifetime: the endpoint starts with the Cycle or Mechanic job and closes when that job ends.
+  Open connections are closed with it.
+
+The verbs of the Operator:
 
 | Verb                                                        | Maps to                                                                      |
 | :---------------------------------------------------------- | :--------------------------------------------------------------------------- |
@@ -533,8 +555,9 @@ Executing `run_operator_station`:
 1. Fetch the mirror; create or reset the worktree at `base`; run `sync` + `setup` unless the worktree
    is already prepared at that commit. On failure → `ReportWorkspaceFailed`.
 2. `StartCycle`.
-3. Download and write `inputs` blobs to their paths; create the Cycle socket token.
-4. Open a Herdr pane (or a headless process) with `FACTORY_OPERATOR_SOCKET`, `FACTORY_CYCLE_TOKEN`,
+3. Download and write `inputs` blobs to their paths; create the Cycle token and start the Operator
+   endpoint on `127.0.0.1` (port `0`, OS-assigned).
+4. Open a Herdr pane (or a headless process) with `FACTORY_OPERATOR_URL`, `FACTORY_CYCLE_TOKEN`,
    the runner command and the prompt blob.
 5. Loop: heartbeat (shared), observe the pane, `watch` → remind / fail / block; deliver signals.
    When repeated `idle` / `silent` reminders cross the stall-alert threshold before `timeoutMs`, the

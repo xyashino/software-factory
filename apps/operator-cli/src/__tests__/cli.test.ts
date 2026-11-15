@@ -16,12 +16,11 @@ const CLI = fileURLToPath(new URL('../cli.ts', import.meta.url));
 const TOKEN = 'b'.repeat(48);
 
 let root: string;
-let socketPath: string;
+let stubUrl: string;
 let stubProcess: { kill(): void } | undefined;
 
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), 'op-cli-'));
-  socketPath = join(root, 'op.sock');
 });
 
 afterEach(() => {
@@ -32,23 +31,30 @@ afterEach(() => {
 
 const STUB = fileURLToPath(new URL('./stub-cell.ts', import.meta.url));
 
-/** A stub Cell socket in its own process: it records each request line and answers with `reply`. */
-const stubCell = async (reply: unknown): Promise<void> => {
-  stubProcess = Bun.spawn(['bun', STUB, socketPath, JSON.stringify(reply)], {
-    stdout: 'ignore',
-    stderr: 'ignore',
-  });
+/**
+ * A stub Cell endpoint in its own process: it records each request body and answers with `reply`
+ * at `status`. Sets `stubUrl` to the base URL it listens on.
+ */
+const stubCell = async (reply: unknown, status = 200): Promise<void> => {
+  stubProcess = Bun.spawn(
+    ['bun', STUB, root, JSON.stringify(reply), String(status)],
+    { stdout: 'ignore', stderr: 'ignore' },
+  );
+  const urlFile = join(root, 'url');
   for (let attempt = 0; attempt < 200; attempt += 1) {
-    if (existsSync(socketPath)) return;
+    if (existsSync(urlFile)) {
+      stubUrl = readFileSync(urlFile, 'utf8');
+      return;
+    }
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
-  throw new Error('the stub Cell socket never appeared');
+  throw new Error('the stub Cell endpoint never came up');
 };
 
-/** The requests the stub Cell has received, one JSON line each. */
+/** The requests the stub Cell has received, one JSON body each. */
 const receivedRequests = (): string[] =>
-  existsSync(`${socketPath}.log`)
-    ? readFileSync(`${socketPath}.log`, 'utf8')
+  existsSync(join(root, 'requests.log'))
+    ? readFileSync(join(root, 'requests.log'), 'utf8')
         .split('\n')
         .filter((line) => line.trim() !== '')
     : [];
@@ -163,7 +169,7 @@ describe('factory-operator process', () => {
     });
 
     const run = await runCli(['context'], {
-      FACTORY_OPERATOR_SOCKET: socketPath,
+      FACTORY_OPERATOR_URL: stubUrl,
       FACTORY_CYCLE_TOKEN: TOKEN,
     });
 
@@ -178,15 +184,32 @@ describe('factory-operator process', () => {
     });
   });
 
-  it('exits 1 and names the code when the Cell refuses the verb', async () => {
-    await stubCell({
-      ok: false,
-      code: 'precondition',
-      message: 'the Cycle is not live',
-    });
+  it('posts JSON and presents the token as a Bearer header', async () => {
+    await stubCell({ ok: true, result: {} });
 
     const run = await runCli(['done'], {
-      FACTORY_OPERATOR_SOCKET: socketPath,
+      FACTORY_OPERATOR_URL: stubUrl,
+      FACTORY_CYCLE_TOKEN: TOKEN,
+    });
+
+    expect(run.code).toBe(0);
+    expect(readFileSync(join(root, 'auth.log'), 'utf8').trim()).toBe(
+      `Bearer ${TOKEN}`,
+    );
+  });
+
+  it('exits 1 and names the code when the Cell refuses the verb', async () => {
+    await stubCell(
+      {
+        ok: false,
+        code: 'precondition',
+        message: 'the Cycle is not live',
+      },
+      409,
+    );
+
+    const run = await runCli(['done'], {
+      FACTORY_OPERATOR_URL: stubUrl,
       FACTORY_CYCLE_TOKEN: TOKEN,
     });
 
@@ -198,17 +221,17 @@ describe('factory-operator process', () => {
     const run = await runCli(['done'], { FACTORY_CYCLE_TOKEN: TOKEN });
 
     expect(run.code).toBe(2);
-    expect(run.stderr).toContain('FACTORY_OPERATOR_SOCKET is not set');
+    expect(run.stderr).toContain('FACTORY_OPERATOR_URL is not set');
   });
 
-  it('exits 3 when the socket cannot be reached', async () => {
+  it('exits 3 when the endpoint cannot be reached', async () => {
     const run = await runCli(['done'], {
-      FACTORY_OPERATOR_SOCKET: join(root, 'missing.sock'),
+      FACTORY_OPERATOR_URL: 'http://127.0.0.1:1',
       FACTORY_CYCLE_TOKEN: TOKEN,
     });
 
     expect(run.code).toBe(3);
-    expect(run.stderr).toContain('cannot reach the Cell');
+    expect(run.stderr).toContain('cannot reach the Cell at http://127.0.0.1:1');
   });
 
   it('starts in under 100 ms, the median of five runs after a warm-up', async () => {
@@ -229,7 +252,7 @@ describe('factory-operator process', () => {
     }
     await stubCell({ ok: true, result: {} });
     const env = {
-      FACTORY_OPERATOR_SOCKET: socketPath,
+      FACTORY_OPERATOR_URL: stubUrl,
       FACTORY_CYCLE_TOKEN: TOKEN,
     };
     // The first spawn pays the cold module cache; it is run and not timed.
@@ -248,18 +271,21 @@ describe('factory-operator process', () => {
     expect(median).toBeLessThan(100);
   });
 
-  it('talks only to its socket: no network stack, no other path', () => {
-    const sources = ['cli.ts', 'client.ts', 'usage.ts'].map((name) =>
-      readFileSync(
-        fileURLToPath(new URL(`../${name}`, import.meta.url)),
-        'utf8',
-      ),
+  it('talks only to its endpoint: fetch in the client, no socket or other path', () => {
+    const [cli, client, usage] = ['cli.ts', 'client.ts', 'usage.ts'].map(
+      (name) =>
+        readFileSync(
+          fileURLToPath(new URL(`../${name}`, import.meta.url)),
+          'utf8',
+        ),
     );
-    for (const source of sources) {
+    for (const source of [cli, client, usage]) {
       expect(source).not.toMatch(
-        /fetch\(|node:http|node:https|node:dgram|\bhttp:\/\//,
+        /node:net|createConnection|node:dgram|node:https/,
       );
+      expect(source).not.toMatch(/\bhttp:\/\/127|\bop\.sock\b/);
     }
-    expect(sources[1]).toContain('createConnection(socketPath)');
+    expect(client).toContain('fetch(url');
+    expect(cli).not.toContain('fetch(');
   });
 });

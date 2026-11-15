@@ -33,7 +33,7 @@ software-factory/
 │   │       │   ├── run-inspection.ts
 │   │       │   └── deliver.ts
 │   │       ├── cycle/             # runtime loop: observe → core/cycle.watch → act; signals; handover on leave
-│   │       ├── operator-socket.ts # unix socket for factory-operator; Cycle tokens
+│   │       ├── operator-socket.ts # localhost HTTP endpoint for factory-operator; Cycle tokens
 │   │       ├── checkpoint.ts      # PROTOCOL §8.2: commit + trailers + dry run + push --force-with-lease
 │   │       └── adapters/          # carried over from v1: herdr, git, github, process, runners/*
 │   │
@@ -83,7 +83,7 @@ versions from the pnpm catalog.
 | `factory-db`          | `drizzle-orm`, core                                    | Store implementations, migrations, export/import file format                                                        | Domain decisions (`decide`, `nextJob`, `toProjection` calls)          |
 | `factory-runtime`     | core, db, definitions                                  | Shared application use cases, orchestration, intake, prompts, event feed; run inside `factory-server`               | Transport (socket or HTTP); Cell execution                          |
 | `apps/server`         | `hono`, runtime                                        | Core process: writer lock, Unix socket listener, optional TCP HTTP listener, auth, server lifecycle, admin entrypoints | Own application decisions or a second runtime implementation          |
-| `apps/cell`         | core, socket client contracts (adapters use Bun APIs)  | Job execution, adapters, Cycle runtime, Operator socket, checkpoints; socket client to `factory-server` or remote FactoryClient | `factory-db`, `factory-definitions`, the runtime library (everything arrives in the `Job`) |
+| `apps/cell`         | core, socket client contracts (adapters use Bun APIs)  | Job execution, adapters, Cycle runtime, Operator endpoint, checkpoints; socket client to `factory-server` or remote FactoryClient | `factory-db`, `factory-definitions`, the runtime library (everything arrives in the `Job`) |
 | `apps/cli`            | `citty`, `picocolors`, core, definitions, socket client | Supervisor client selection (socket or remote), config and rendering                                                | `factory-db`, the runtime library, HTTP details, Cell code           |
 | `apps/operator-cli`   | `citty`, core (contracts only)                         | The Operator verbs                                                                                                  | Anything else; must start in < 100 ms                                 |
 
@@ -124,7 +124,7 @@ Allowed imports (row imports column):
 
 `apps/cell` and `apps/cli` reach the runtime only through the socket client over the contracts in
 `factory-core`; they import no `factory-runtime` code. `apps/server` (`factory-server`) is the only
-process that runs the runtime and opens the database. The Operator socket is per Cell and is
+process that runs the runtime and opens the database. The Operator endpoint is per Cycle, on localhost HTTP, and is
 separate from the server socket.
 
 ## 4. Enforcement
