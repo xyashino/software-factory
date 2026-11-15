@@ -34,7 +34,7 @@ export interface JobContext {
   headlessOperators?: boolean;
   /**
    * Told the continuation a job-ending command handed back (PROTOCOL §4). Set per job by `runJob`, which
-   * returns it to the slot so the Cell runs it.
+   * returns it to the claim loop so the Cell runs it.
    */
   onContinuation?: (next: Job) => void;
   /** The GitHub port for a repo, opened on a directory of its worktree. Tests inject a fake. */

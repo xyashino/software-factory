@@ -24,7 +24,6 @@ const INFO = {
   projects: ['software-factory'],
   runners: ['claude'],
   capabilities: [],
-  slots: 1,
 };
 
 const locks: WriterLock[] = [];
@@ -178,5 +177,19 @@ describe('cell store', () => {
     expect(record?.revokedAt).toBe(9);
     expect(record?.info?.runners).toEqual(['claude']);
     expect(await cells.list()).toHaveLength(1);
+  });
+
+  it('still loads a cell whose stored info has the removed slots field', async () => {
+    const { db, store, writer } = setup();
+    const cells = sqliteCellStore(db, writer, store.gate);
+    const legacy = { ...INFO, slots: 2 };
+    await cells.hello({ cellId: CELL, name: 'laptop', info: legacy, at: 5 });
+
+    const record = await cells.get(CELL);
+
+    expect(record?.info).toMatchObject({
+      projects: ['software-factory'],
+      runners: ['claude'],
+    });
   });
 });

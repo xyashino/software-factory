@@ -39,13 +39,13 @@ export const entry = (overrides: Partial<QueueEntry> = {}): QueueEntry => ({
   ...overrides,
 });
 
-/** A Cell that serves the shop project, has a free slot and no runner or capability tags. */
+/** A Cell that serves the shop project, is not busy and has no runner or capability tags. */
 export const cell = (overrides: Partial<CellView> = {}): CellView => ({
   cellId: CELL,
   projects: [PROJECT],
   runners: [],
   capabilities: [],
-  freeSlots: 1,
+  busy: false,
   ...overrides,
 });
 

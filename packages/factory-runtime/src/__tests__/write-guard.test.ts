@@ -11,7 +11,6 @@ const hello = {
   projects: [PROJECT],
   runners: ['claude'],
   capabilities: [],
-  slots: 1,
 };
 
 describe('write guard on every write path', () => {

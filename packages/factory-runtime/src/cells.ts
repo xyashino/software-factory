@@ -34,7 +34,6 @@ export const hello = async (
       projects: request.projects,
       runners: request.runners,
       capabilities: request.capabilities,
-      slots: request.slots,
     },
     at: ports.clock.now(),
   });

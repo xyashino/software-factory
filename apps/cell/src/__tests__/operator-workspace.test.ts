@@ -35,7 +35,7 @@ const jobFor = (overrides: Partial<Job> = {}): Job =>
 
 describe('operator workspace', () => {
   it('prepares two Work orders of one repo at once on a fresh Cell, both ok', async () => {
-    // Two slots of one Cell prepare at the same time: the first clone must not break the second.
+    // Two preparations of one repo at the same time (the mirror lock takes them in turn): the first clone must not break the second.
     const cellDir = join(dir, 'cell-fresh');
     const [first, second] = await Promise.all([
       prepareWorkspace({

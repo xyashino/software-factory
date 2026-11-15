@@ -139,14 +139,13 @@ export const readQueue = async (
 ): Promise<Queue> =>
   queueOf(await loadQueueSnapshot(ports), ports.clock.now(), replace);
 
-/** The Cell's offer as `selectClaimable` reads it: free slots are its slots less its live leases. */
+/** The Cell's offer as `selectClaimable` reads it: a Cell is busy while it holds any live lease. */
 export const cellView = (
   cellId: CellId,
   info: {
     projects: string[];
     runners: string[];
     capabilities: string[];
-    slots: number;
   },
   heldLeases: number,
 ): CellView => ({
@@ -154,5 +153,5 @@ export const cellView = (
   projects: info.projects as ProjectId[],
   runners: info.runners,
   capabilities: info.capabilities,
-  freeSlots: Math.max(0, info.slots - heldLeases),
+  busy: heldLeases > 0,
 });

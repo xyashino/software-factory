@@ -45,7 +45,7 @@ const countReads = (w: World) => {
 describe('queue reads per command (perf-04)', () => {
   it('a claim reads the orders and the registry twice: once to choose the job, once to build it', async () => {
     const w = world();
-    await helloCell(w, CELL, 1, ['claude']);
+    await helloCell(w, CELL, ['claude']);
     await createOrder(w, { todoId: 'todo-a' });
     const counts = countReads(w);
 
@@ -60,7 +60,7 @@ describe('queue reads per command (perf-04)', () => {
   it('a continuation reads the orders and the project registry once each, for the whole command', async () => {
     const w = world();
     // The plan Station runs on `claude`, the plan review on `cursor`: CompleteCycle hands the next job on.
-    await helloCell(w, CELL, 1, ['claude', 'cursor']);
+    await helloCell(w, CELL, ['claude', 'cursor']);
     const orderId = (await createOrder(w, { todoId: 'todo-a' })) as OrderId;
     const claimed = await w.runtime.call('claim', { cellId: CELL, waitMs: 0 });
     const job = claimed.job;

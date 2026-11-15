@@ -27,7 +27,6 @@ export const helloRequestSchema = z
     projects: z.array(projectIdSchema).max(64),
     runners: z.array(z.string().min(1).max(64)).max(32),
     capabilities: z.array(z.string().min(1).max(64)).max(32),
-    slots: z.number().int().min(1).max(64),
   })
   .strict();
 

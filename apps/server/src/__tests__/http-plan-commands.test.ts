@@ -120,7 +120,6 @@ const joinAndHello = async (): Promise<{
       projects: [PROJECT],
       runners: ['claude'],
       capabilities: [],
-      slots: 1,
     },
   });
   expect(hello.status).toBe(200);

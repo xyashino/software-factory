@@ -137,8 +137,8 @@ describe('selectClaimable: the claimable rule', () => {
     ).toEqual([]);
   });
 
-  it('skips every Work order when the Cell has no free slot', () => {
-    expect(claimableIds([entry()], cell({ freeSlots: 0 }))).toEqual([]);
+  it('skips every Work order when the Cell is busy', () => {
+    expect(claimableIds([entry()], cell({ busy: true }))).toEqual([]);
   });
 
   it('keeps only the claimable Work orders of a mixed queue', () => {

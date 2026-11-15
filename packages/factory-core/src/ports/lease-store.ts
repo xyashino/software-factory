@@ -25,7 +25,7 @@ export interface LeaseStore {
   expired(now: number): Promise<Lease[]>;
   /** Every lease, in no particular order (boot grace). */
   list(): Promise<Lease[]>;
-  /** The leases one Cell holds (heartbeat, revocation, slot count). */
+  /** The leases one Cell holds (heartbeat, revocation, busy check). */
   forCell(cellId: CellId): Promise<Lease[]>;
   /** Removes the lease of an order. Deleting a missing lease is a no-op. */
   delete(orderId: LeaseStreamId): Promise<void>;

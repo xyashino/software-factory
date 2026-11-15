@@ -18,12 +18,12 @@ export const cellDataDirOf = (env: NodeJS.ProcessEnv): string =>
     ? join(env.XDG_DATA_HOME, 'factory-cell')
     : join(homedir(), '.local', 'share', 'factory-cell');
 
-/** Default slots: one Cell process runs this many Jobs at once unless the config says otherwise. */
-export const DEFAULT_SLOTS = 2;
+/** The key cell-single-order removed: one Cell runs one Work order, so the setting has no meaning now. */
+const REMOVED_SLOTS_MESSAGE =
+  'config.toml: slots: removed (one Cell runs one Work order at a time); run one Cell per instance directory (hostname-N) for parallel work';
 
 const cellConfigSchema = z
   .object({
-    slots: z.number().int().min(1).max(64).default(DEFAULT_SLOTS),
     projects: z.array(projectIdSchema).max(64).default([]),
     runners: z.array(z.string().min(1).max(64)).max(32).default([]),
     capabilities: z.array(z.string().min(1).max(64)).max(32).default([]),
@@ -44,7 +44,6 @@ const cellConfigSchema = z
   .strict();
 
 export interface CellConfig {
-  slots: number;
   projects: ProjectId[];
   runners: string[];
   capabilities: string[];
@@ -57,7 +56,10 @@ export interface CellConfig {
 
 /** Parses the TOML text of a config file. Unknown keys and wrong types are refused, with the path named. */
 export const parseConfig = (text: string): CellConfig => {
-  const parsed = cellConfigSchema.safeParse(Bun.TOML.parse(text));
+  const raw: unknown = Bun.TOML.parse(text);
+  if (typeof raw === 'object' && raw !== null && 'slots' in raw)
+    throw new Error(REMOVED_SLOTS_MESSAGE);
+  const parsed = cellConfigSchema.safeParse(raw);
   if (!parsed.success) {
     const issue = parsed.error.issues[0];
     throw new Error(
@@ -66,7 +68,6 @@ export const parseConfig = (text: string): CellConfig => {
   }
   const data = parsed.data;
   return {
-    slots: data.slots,
     projects: data.projects,
     runners: data.runners,
     capabilities: data.capabilities,

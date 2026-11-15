@@ -28,7 +28,8 @@ export interface CellView {
   projects: ProjectId[];
   runners: string[];
   capabilities: string[];
-  freeSlots: number;
+  /** True while the Cell holds a live lease: it runs one Work order at a time (PROTOCOL §5.2). */
+  busy: boolean;
 }
 
 /** CORE §8: the clock and the per-project concurrency limits a selection runs against. */

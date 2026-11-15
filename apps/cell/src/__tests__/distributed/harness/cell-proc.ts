@@ -73,7 +73,6 @@ export interface CellOptions {
   /** The fake `gh` state directory and the fake runner shims' directory, on PATH. */
   ghDir: string;
   fakeBin: string;
-  slots?: number;
   /** Extra environment, for example the suite's knobs. */
   env?: Record<string, string>;
 }
@@ -98,16 +97,15 @@ export interface RunningCell {
   alive(): boolean;
 }
 
-const START_LINE = /factory-cell: \d+ slot\(s\) running as (\S+)/;
+const START_LINE = /factory-cell: running as (\S+)/;
 
-/** Writes the Cell's config and starts it. Resolves once the Cell has said hello and runs its slots. */
+/** Writes the Cell's config and starts it. Resolves once the Cell has said hello and runs its claim loop. */
 export const startCell = async (
   name: string,
   options: CellOptions,
 ): Promise<RunningCell> => {
   const paths = cellPathsIn(options.root);
   const config = [
-    `slots = ${options.slots ?? 1}`,
     'projects = ["software-factory"]',
     'runners = ["claude", "cursor"]',
     'headless_operators = true',

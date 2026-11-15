@@ -135,7 +135,6 @@ export const createFakeCell = (
       projects: [projectId],
       runners: ['claude', 'cursor', 'antigravity'],
       capabilities: [],
-      slots: 1,
     });
   };
 

@@ -156,7 +156,7 @@ describe('the root of a plan waits for the branch (CORE §12.6, P3)', () => {
     const w = world();
     w.git.setTodos(chainTodos());
     await w.runtime.sync();
-    await helloCell(w, CELL, 2);
+    await helloCell(w, CELL);
     const plans = createPlanCommands(w.ports, () => undefined);
     const planId = (await planOf(w))!.planId;
     await plans.submit({

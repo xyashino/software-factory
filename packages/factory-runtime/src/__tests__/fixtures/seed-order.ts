@@ -117,7 +117,6 @@ const seed = async (
       projects: [PROJECT],
       runners: ['claude'],
       capabilities: [],
-      slots: 1,
     });
     const claimed = await runtime.call('claim', {
       cellId: CELL as CellId,

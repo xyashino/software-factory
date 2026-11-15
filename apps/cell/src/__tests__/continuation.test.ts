@@ -4,7 +4,7 @@ import type { Job } from '@repo/factory-core/contracts/job';
 import { MAX_CLAIM_WAIT_MS } from '@repo/factory-core/contracts/cell';
 import type { CellId, JobId } from '@repo/factory-core/ids';
 import { createJobRegistry } from '../jobs/registry';
-import { runSlot } from '../loops/claim';
+import { runClaimLoop } from '../loops/claim';
 
 const CELL = '01J0000000000000000000000W' as CellId;
 const FIRST = '01J0000000000000000000000A' as JobId;
@@ -18,24 +18,26 @@ const jobNamed = (jobId: JobId): Job => ({ jobId }) as unknown as Job;
  * would give it some other job, and the continuation would expire on its lease.
  */
 describe('a job that ends with a continuation', () => {
-  it('runs the continuation in the same slot, before it claims again', async () => {
+  it('runs the continuation on the same Cell, before it claims again', async () => {
     const claimed: JobId[] = [];
     const ran: JobId[] = [];
+    const events: string[] = [];
     let stopped = false;
     const client = {
       call: vi.fn(async () => {
+        events.push('claim');
         if (claimed.length === 0) {
           claimed.push(FIRST);
           return { job: jobNamed(FIRST) };
         }
-        // The first claim is the only one this test expects: any later claim ends the slot.
+        // The first claim is the only one this test expects: any later claim ends the loop.
         claimed.push('claimed-again' as JobId);
         stopped = true;
         return { job: null };
       }),
     };
 
-    await runSlot({
+    await runClaimLoop({
       client: client as unknown as FactoryClient,
       cellId: CELL,
       registry: createJobRegistry(),
@@ -46,11 +48,13 @@ describe('a job that ends with a continuation', () => {
       sleep: async () => undefined,
       runJob: async (job) => {
         ran.push(job.jobId);
+        events.push(`run ${job.jobId}`);
         return job.jobId === FIRST ? jobNamed(NEXT) : null;
       },
     });
 
     expect(ran).toEqual([FIRST, NEXT]);
+    expect(events).toEqual(['claim', `run ${FIRST}`, `run ${NEXT}`, 'claim']);
   });
 
   it('is released at once when the Cell is leaving, so the Work order goes back to the queue', async () => {
@@ -66,7 +70,7 @@ describe('a job that ends with a continuation', () => {
       }),
     };
 
-    await runSlot({
+    await runClaimLoop({
       client: client as unknown as FactoryClient,
       cellId: CELL,
       registry: createJobRegistry(),

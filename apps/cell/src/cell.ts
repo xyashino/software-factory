@@ -21,7 +21,7 @@ import { runJob } from './jobs/run-job';
 import type { JobContext } from './jobs/send';
 import { leaveCell } from './leave';
 import { createHeartbeat } from './loops/heartbeat';
-import { runSlot } from './loops/claim';
+import { runClaimLoop } from './loops/claim';
 import type { PaneDriver } from './ports';
 
 /** Loop timings the Factory does not decide: a test shortens them; the hello answer sets the rest. */
@@ -65,16 +65,16 @@ export interface RunningCell {
    * over, waits up to the leave cap while heartbeats keep running, and then stops the Cell.
    */
   leave(pollMs?: number): Promise<{ remaining: number }>;
-  /** Resolves once every slot has left its loop (after `stop`, a slot leaves at its next claim). */
-  readonly slotsDone: Promise<void>;
+  /** Resolves once the claim loop has left (after `stop`, the loop leaves at its next claim). */
+  readonly loopDone: Promise<void>;
 }
 
 const wait = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
- * Starts a Cell (PROTOCOL §5): `hello` for the runtime config, then one claim loop per slot and one
- * shared heartbeat loop. The heartbeat's self-fence uses the Factory's `selfFenceMs`, so the Cell stops
+ * Starts a Cell (PROTOCOL §5): `hello` for the runtime config, then one claim loop and one heartbeat
+ * loop. The heartbeat's self-fence uses the Factory's `selfFenceMs`, so the Cell stops
  * its jobs before their lease can expire. A Cell that cannot reach the Factory at hello does not start.
  */
 export const startCell = async (options: CellOptions): Promise<RunningCell> => {
@@ -85,7 +85,6 @@ export const startCell = async (options: CellOptions): Promise<RunningCell> => {
     projects: config.projects,
     runners: config.runners,
     capabilities: config.capabilities,
-    slots: config.slots,
   });
 
   const heartbeatMs = options.timing?.heartbeatMs ?? hello.config.heartbeatMs;
@@ -173,21 +172,19 @@ export const startCell = async (options: CellOptions): Promise<RunningCell> => {
     }
   };
 
-  const slots = Array.from({ length: config.slots }, () =>
-    runSlot({
-      client,
-      cellId,
-      registry,
-      isFenced: () => heartbeat.fenced,
-      isStopped,
-      waitMs,
-      idlePauseMs,
-      sleep,
-      runJob: runHeld,
-      onError: options.onError,
-      onUnauthorized: unauthorized,
-    }),
-  );
+  const loop = runClaimLoop({
+    client,
+    cellId,
+    registry,
+    isFenced: () => heartbeat.fenced,
+    isStopped,
+    waitMs,
+    idlePauseMs,
+    sleep,
+    runJob: runHeld,
+    onError: options.onError,
+    onUnauthorized: unauthorized,
+  });
 
   const beat = setInterval(() => {
     void heartbeat.tick();
@@ -223,6 +220,6 @@ export const startCell = async (options: CellOptions): Promise<RunningCell> => {
       });
       return leaving;
     },
-    slotsDone: Promise.all(slots).then(() => undefined),
+    loopDone: loop,
   };
 };

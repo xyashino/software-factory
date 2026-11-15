@@ -1,12 +1,12 @@
 export const usage = `usage: factory-cell [--help]
 
 A Cell runs Jobs for the Factory. It is a client of the running factory-server over
-$FACTORY_DATA_DIR/factory.sock: it says hello, claims one Job per slot, keeps its leases with
-one heartbeat loop, stops its jobs when it cannot reach the Factory for 45 s, and runs
-Inspections, Operator stations and Deliveries.
+$FACTORY_DATA_DIR/factory.sock: it says hello, claims one Job at a time, keeps its lease with
+one heartbeat loop, stops its job when it cannot reach the Factory for 45 s, and runs
+Inspections, Operator stations and Deliveries. Run more Cells (one instance directory each)
+for more parallel Work orders.
 
 config:  ~/.config/factory-cell/config.toml (or $XDG_CONFIG_HOME/factory-cell/config.toml)
-           slots = 2                   concurrent Jobs (default 2)
            projects = ["my-project"]   projects this Cell may run
            runners = ["claude"]        runners it can start
            capabilities = []           declared capabilities

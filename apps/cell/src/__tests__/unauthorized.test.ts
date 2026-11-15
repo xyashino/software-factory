@@ -5,7 +5,7 @@ import { WireFailure } from '@repo/factory-core/contracts/errors';
 import { MAX_CLAIM_WAIT_MS } from '@repo/factory-core/contracts/cell';
 import type { CellId, JobId } from '@repo/factory-core/ids';
 import { createJobRegistry } from '../jobs/registry';
-import { runSlot } from '../loops/claim';
+import { runClaimLoop } from '../loops/claim';
 import { createHeartbeat } from '../loops/heartbeat';
 import { isUnauthorized } from '../remote-client';
 
@@ -35,13 +35,13 @@ describe('isUnauthorized', () => {
 });
 
 describe('a refused credential on the claim loop', () => {
-  it('stops the slot at once, runs no job, and reports it instead of retrying', async () => {
+  it('stops the claim loop at once, runs no job, and reports it instead of retrying', async () => {
     const { client, call } = failingClient(refused());
     const onUnauthorized = vi.fn();
     const onError = vi.fn();
     const ran: JobId[] = [];
 
-    await runSlot({
+    await runClaimLoop({
       client,
       cellId: CELL,
       registry: createJobRegistry(),
@@ -71,7 +71,7 @@ describe('a refused credential on the claim loop', () => {
     const onUnauthorized = vi.fn();
     let stopped = false;
 
-    await runSlot({
+    await runClaimLoop({
       client,
       cellId: CELL,
       registry: createJobRegistry(),

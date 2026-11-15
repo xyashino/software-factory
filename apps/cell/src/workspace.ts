@@ -98,8 +98,8 @@ export const prepareWorkspace = async (input: {
   const mirror = join(dataDir, 'repos', `${job.projectId}.git`);
   mkdirSync(join(dataDir, 'repos'), { recursive: true });
 
-  // Two slots of one Cell may prepare one repo at once: they take turns on its mirror, so the first
-  // clone is finished before a second fetch reads it.
+  // The mirror lives in this instance directory, so only this Cell's own work reads it. The lock keeps
+  // concurrent preparations of one repo in turn, so the first clone is finished before a second fetch reads it.
   const fetched = await withMirrorLock(mirror, async () => {
     if (!existsSync(join(mirror, 'HEAD'))) {
       // Cloned under a temporary name and renamed into place, so a Cell killed mid-clone leaves no

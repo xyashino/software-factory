@@ -643,7 +643,7 @@ interface CellView {
   projects: ProjectId[];
   runners: string[];
   capabilities: string[];
-  freeSlots: number;
+  busy: boolean; // true while the Cell holds a live lease (one Work order at a time)
 }
 interface Limits {
   now: number;
@@ -713,7 +713,7 @@ stuck step and send a live `Nudge` (decisions 20261114-112011).
 
 ### 9.2 Question hold
 
-While a question is open the Operator waits in its pane and the Cell keeps its slot. After
+While a question is open the Operator waits in its pane and the Cell keeps its job. After
 `questionHoldMs` (default 30 min) the Cell types the `handoverRequest` prompt ("write your Handover
 and run `factory-operator block`"); if the Operator does not comply within 5 min the Cell reports
 `BlockCycle{source: runtime, reason: question_timeout}`.

@@ -87,7 +87,7 @@ flowchart LR
   end
 
   subgraph CellHost["Cell execution"]
-    C["factory-cell (socket client, N slots)"]
+    C["factory-cell (socket client, one Work order at a time)"]
     RT["Cycle runtime"]
     H["Herdr panes"]
     OP["Operator"]
@@ -153,7 +153,7 @@ sequenceDiagram
   S->>D: open local database under writer lock
   S->>S: listen on $FACTORY_DATA_DIR/factory.sock (0600)
   S->>R: start intake, scheduling, reaper and lease loops
-  C->>S: connect over socket, hello (contract version, slots)
+  C->>S: connect over socket, hello (contract version)
   loop while the run is active
     C->>S: claim (long-poll, up to 25 s)
     S->>R: nextJob, new epoch, record job_claimed

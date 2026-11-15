@@ -246,7 +246,7 @@ CREATE TABLE cells (
   joined_at     INTEGER NOT NULL,
   revoked_at    INTEGER,
   last_seen_at  INTEGER,
-  info          TEXT                                    -- JSON from /hello: version, projects, runners, capabilities, slots
+  info          TEXT                                    -- JSON from /hello: version, projects, runners, capabilities (a legacy slots key is ignored on read)
 );
 
 CREATE TABLE join_tokens (

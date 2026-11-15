@@ -84,7 +84,7 @@ const connect = async (
  * `factory-cell`: a client of the running `factory-server`, over `factory.sock` (PROTOCOL §2) or, in
  * remote mode, over HTTP. It reads
  * its config, claims an exclusive instance directory, keeps its identity, says hello, and runs one claim
- * loop per slot with one heartbeat loop. SIGINT stops claims and aborts running jobs immediately; SIGTERM
+ * loop with one heartbeat loop. SIGINT stops claims and aborts running jobs immediately; SIGTERM
  * initiates a graceful leave, asking live Operator stations to hand over before stopping.
  */
 const main = async (): Promise<void> => {
@@ -135,9 +135,7 @@ const main = async (): Promise<void> => {
         `factory-cell: instance #${instanceClaim.instance} using ${cellDataDir}`,
       );
     }
-    console.log(
-      `factory-cell: ${config.slots} slot(s) running as ${identity.cellId}`,
-    );
+    console.log(`factory-cell: running as ${identity.cellId}`);
   };
 
   /**

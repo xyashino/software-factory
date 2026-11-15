@@ -83,7 +83,7 @@ HTTP routes below; local mode sends the same operations over the Unix socket to 
 | `POST`                    | `/v1/orders/:id/cancel`        | `Cancel`                                                                                                                                                    |
 | `POST`                    | `/v1/orders/:id/priority`      | `Reprioritise`                                                                                                                                              |
 | `POST`                    | `/v1/intake/sync`              | Run intake now instead of waiting for the next poll                                                                                                         |
-| `GET`                     | `/v1/cells`                    | Cells, their last heartbeat, slots, current jobs                                                                                                            |
+| `GET`                     | `/v1/cells`                    | Cells, their last heartbeat, busy state, current job                                                                                                        |
 | `DELETE`                  | `/v1/cells/:id`                | Revoke a Cell                                                                                                                                               |
 | `POST` / `GET` / `DELETE` | `/v1/join-tokens`              | Create (returns the token once) / list / revoke join tokens                                                                                                 |
 | `GET`                     | `/v1/projects`                 | Project registry: every registered project, with its base branch, max running and dependency policy                                                         |
@@ -130,7 +130,7 @@ only in remote mode.
 | Method | Path                            | Purpose                                                                                                                                                                                                                                             |
 | :----- | :------------------------------ | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `POST` | `/v1/cell/join`                 | `{ joinToken, name }` → `{ cellId, credential }`. The only call authenticated by a join token.                                                                                                                                                      |
-| `POST` | `/v1/cell/hello`                | Announce version, projects, runners, capabilities, slots. Returns runtime config (TTL, intervals).                                                                                                                                                  |
+| `POST` | `/v1/cell/hello`                | Announce version, projects, runners, capabilities. Returns runtime config (TTL, intervals).                                                                                                                                                  |
 | `POST` | `/v1/cell/claim`                | Long-poll (≤ 25 s) for one job. Returns `Job` or `204`.                                                                                                                                                                                             |
 | `POST` | `/v1/cell/heartbeat`            | Extend the leases of all held jobs at once. Returns per-job `ok \| stale` and pending **signals**.                                                                                                                                                  |
 | `GET`  | `/v1/blobs/:ref`                | Download a blob named in a `Job` (prompt, inputs).                                                                                                                                                                                                  |
@@ -301,7 +301,7 @@ includes `next`, a lost response and a retry give the Cell the same job. The wor
 the Line keeps moving without a queue round trip. The runtime MAY skip this when a higher-priority
 Work order is waiting.
 
-The Cell runs the continuation in the same slot, before it claims again. A Cell that is stopping or
+The Cell runs the continuation on the same Cell, before it claims again. A Cell that is stopping or
 fenced will not run it: a stopping Cell releases it at once with `ReleaseJob` (§9), a fenced Cell
 sends nothing (§5.4) and lets the lease lapse. A `ReleaseJob` never returns a continuation: the Work
 order goes back to the queue, not to the Cell that released it.
@@ -478,7 +478,7 @@ The trailers make a Work order's progress recoverable from git alone until deliv
 
 ```text
 ~/.config/factory-cell/
-└── config.toml                    # Factory URL, join token, slots, projects, runners, capabilities
+└── config.toml                    # Factory URL, join token, projects, runners, capabilities
 ~/.local/state/factory-cell/
 └── credential                     # the Cell credential from `join` (mode 0600)
 ~/.local/share/factory-cell/       # everything here is a cache: deleting it loses nothing

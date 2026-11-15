@@ -123,7 +123,7 @@ export const claimOnce = async (
   const cell = await assertCell(ports, cellId);
   const held = (await ports.leases.forCell(cellId)).length;
   const view = cellView(cellId, cell.info, held);
-  if (view.freeSlots <= 0) return null;
+  if (view.busy) return null;
   const planJob = await claimPlanOnce(deps, cellId, view);
   if (planJob) return planJob;
   const queue = await readQueue(ports);

@@ -17,7 +17,7 @@ afterEach(() => {
 
 /** A Cell holding one plan job, with its Cycle started. */
 const startedJob = async (w: World) => {
-  await helloCell(w, CELL, 1, ['claude']);
+  await helloCell(w, CELL, ['claude']);
   const orderId = await createOrder(w, { todoId: 'todo-a' });
   const claimed = await w.runtime.call('claim', {
     cellId: CELL,
@@ -175,7 +175,7 @@ describe('completing a job', () => {
   it('releases the lease when the Cycle ends the job', async () => {
     const w = world();
     running = w;
-    await helloCell(w, CELL, 1, ['claude']);
+    await helloCell(w, CELL, ['claude']);
     const orderId = await createOrder(w, { todoId: 'todo-a' });
     const { job } = await w.runtime
       .call('claim', { cellId: CELL, waitMs: 0 })

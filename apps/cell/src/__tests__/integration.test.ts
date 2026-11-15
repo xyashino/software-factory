@@ -39,7 +39,7 @@ const FIXTURE = fileURLToPath(
 );
 const CELL = '01J0000000000000000000000W' as CellId;
 const ORDER = 'software-factory:todo-1' as OrderId;
-const ONE_SLOT = parseConfig('slots = 1\nprojects = ["software-factory"]');
+const ONE_CELL = parseConfig('projects = ["software-factory"]');
 
 let root: string;
 let origin: string;
@@ -241,7 +241,6 @@ describe('Cell over the socket', () => {
       projects: ['software-factory'],
       runners: [],
       capabilities: [],
-      slots: 1,
     });
 
     expect(answer.config.selfFenceMs).toBeGreaterThan(0);
@@ -267,7 +266,6 @@ describe('Cell over the socket', () => {
       projects: ['software-factory'],
       runners: [],
       capabilities: [],
-      slots: 1,
     });
 
     const claimed = await client.call('claim', { cellId: CELL, waitMs: 0 });
@@ -303,7 +301,7 @@ describe('Cell over the socket', () => {
     const running: RunningCell = await startCell({
       client,
       cellId: CELL,
-      config: ONE_SLOT,
+      config: ONE_CELL,
       cellDataDir,
       system: createSystemAdapter(),
       clock: systemClock,
@@ -335,7 +333,7 @@ describe('Cell over the socket', () => {
     const running = await startCell({
       client,
       cellId: CELL,
-      config: ONE_SLOT,
+      config: ONE_CELL,
       cellDataDir,
       system: createSystemAdapter(),
       clock: systemClock,
@@ -364,7 +362,6 @@ describe('Cell over the socket', () => {
       projects: ['software-factory'],
       runners: [],
       capabilities: [],
-      slots: 1,
     });
     const claimed = await socket.call('claim', { cellId: CELL, waitMs: 0 });
     const job = claimed.job as Job;
@@ -419,7 +416,6 @@ describe('Cell over the socket', () => {
       projects: ['software-factory'],
       runners: ['claude'],
       capabilities: [],
-      slots: 1,
     });
     const mainSha = git(origin, 'rev-parse', 'HEAD');
     const created: Array<{ branch: string; base: string; title: string }> = [];
@@ -454,7 +450,7 @@ describe('Cell over the socket', () => {
     const running: RunningCell = await startCell({
       client,
       cellId: CELL,
-      config: ONE_SLOT,
+      config: ONE_CELL,
       cellDataDir,
       system: createSystemAdapter(),
       clock: systemClock,
