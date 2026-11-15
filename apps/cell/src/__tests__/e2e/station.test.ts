@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -20,6 +20,7 @@ import {
 import { seedProject, shippedLine } from '@repo/factory-runtime/seed';
 import { systemClock } from '../../clock/system-clock';
 import { createRegistry, type StationRegistry } from '../../cycle/registry';
+import { CELL_DIR } from '../../checkpoint';
 import { createJobRegistry } from '../../jobs/registry';
 import { leaveCell } from '../../leave';
 import {
@@ -216,6 +217,34 @@ describe('Operator station against the runtime', () => {
     expect(onBranch.body).toContain('Factory-Outcome: passed');
     expect(onBranch.body).toContain(`Factory-Order: ${job.orderId}`);
     expect(next?.orderId ?? job.orderId).toBe(job.orderId);
+  });
+
+  it('writes the station prompt inside the worktree .cell/, removes it after the Cycle, and keeps git status clean', async () => {
+    const client = await serve();
+    const job = await claim(client);
+    const runner = job.station?.operator?.runner ?? 'claude';
+    let kickoff = '';
+    const scripted: RunnerLaunch = {
+      binary: 'bun',
+      kickoffArgs: (text) => {
+        kickoff = text;
+        return [SCRIPT, 'done', text];
+      },
+    };
+    const deps = {
+      ...depsFor(client, job, 'done'),
+      runners: { [runner]: scripted },
+    };
+
+    await runOperatorStation(job, deps);
+
+    const promptPath = /^Read (\S+) and follow/.exec(kickoff)?.[1] ?? '';
+    expect(promptPath).toContain(join(cellDir, 'worktrees'));
+    expect(promptPath).toContain(join(CELL_DIR, 'cycles'));
+    expect(promptPath.endsWith('prompt.md')).toBe(true);
+    expect(existsSync(promptPath)).toBe(false);
+    const events = await eventsOf(client, job);
+    expect(hasEvent(events, 'cycle_completed')).toBe(true);
   });
 
   it('records a failed verdict with its feedback and the failed outcome', async () => {

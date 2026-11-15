@@ -3,6 +3,7 @@ import {
   mkdirSync,
   readFileSync,
   realpathSync,
+  rmSync,
   writeFileSync,
 } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative } from 'node:path';
@@ -289,7 +290,10 @@ export const runOperatorStation = async (
 
   const cycleDir = join(deps.dataDir, 'cycles', cycleDirName(cycleId));
   mkdirSync(cycleDir, { recursive: true });
-  const promptPath = join(cycleDir, 'prompt.md');
+  // The prompt lives in the worktree's git-excluded `.cell/`, so the Operator reads it from its working directory.
+  const promptDir = join(worktree, CELL_DIR, 'cycles', cycleDirName(cycleId));
+  mkdirSync(promptDir, { recursive: true });
+  const promptPath = join(promptDir, 'prompt.md');
   writeFileSync(promptPath, promptText);
   for (const output of outputs)
     mkdirSync(dirname(join(worktree, output.path)), { recursive: true });
@@ -849,6 +853,7 @@ export const runOperatorStation = async (
     }
     waiters.clear();
     await socket?.close();
+    rmSync(promptDir, { recursive: true, force: true });
     // The usage arrives after the Cycle may have ended: no epoch, no liveness check (PROTOCOL §9 step 7).
     if (!deps.signal?.aborted) {
       const usage = readUsage(deps.runners[operator.runner], stdoutPath);
