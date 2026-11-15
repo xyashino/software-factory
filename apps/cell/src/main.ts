@@ -3,9 +3,11 @@ import { hostname } from 'node:os';
 import type { FactoryClient } from '@repo/factory-core/contracts/client';
 import type { CellId } from '@repo/factory-core/ids';
 import { WireFailure } from '@repo/factory-core/contracts/errors';
-import { readConfig, cellDataDirOf } from './config';
+import { readConfig, repoCellDataDir } from './config';
 import { loadCellConfig } from './repo-config';
 import { startCell, type RunningCell } from './cell';
+import { ensureRepoProject } from './repo-project';
+import { runGit } from './git';
 import {
   factoryDataDirOf,
   socketFactoryClient,
@@ -102,9 +104,9 @@ const connect = async (
 
 /**
  * `factory-cell`: a client of the running `factory-server`, over `factory.sock` (PROTOCOL §2) or, in
- * remote mode, over HTTP. It reads
- * its config, claims an exclusive instance directory, keeps its identity, says hello, and runs one claim
- * loop with one heartbeat loop. SIGINT stops claims and aborts running jobs immediately; SIGTERM
+ * remote mode, over HTTP. It reads its config for the repository it runs in, registers that repository's
+ * project when the Factory lacks it, claims an exclusive instance directory, keeps its identity, says
+ * hello, and runs one claim loop with one heartbeat loop. SIGINT stops claims and aborts running jobs immediately; SIGTERM
  * initiates a graceful leave, asking live Operator stations to hand over before stopping.
  */
 const main = async (): Promise<void> => {
@@ -125,7 +127,8 @@ const main = async (): Promise<void> => {
       console.log(`factory-cell: config from ${applied}`);
     }
   }
-  const baseCellDataDir = config.cellDataDir ?? cellDataDirOf(env);
+  const baseCellDataDir =
+    config.cellDataDir ?? repoCellDataDir(loaded.repoRoot);
   const instanceClaim = claimInstanceDir(baseCellDataDir);
   const cellDataDir = instanceClaim.cellDataDir;
   const remote = config.factoryUrl !== undefined;
@@ -141,10 +144,17 @@ const main = async (): Promise<void> => {
       env,
       instanceClaim.instance,
     );
+    const repo = await ensureRepoProject({
+      client,
+      runGit,
+      repoRoot: loaded.repoRoot,
+      configured: config.projects,
+      log: console.log,
+    });
     const running = await startCell({
       client,
       cellId: identity.cellId,
-      config,
+      config: { ...config, projects: repo.projects },
       cellDataDir,
       system: createSystemAdapter(),
       clock: systemClock,

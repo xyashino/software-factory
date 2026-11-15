@@ -27,6 +27,7 @@ import {
   type MigrationPlan,
 } from './migration';
 import { defaultRepoDir, repoLineSnapshots } from './repo-lines';
+import { repoOriginUrl } from './repo-origin';
 
 const stringFlag = (args: Record<string, unknown>, name: string) =>
   args[name] === undefined ? undefined : String(args[name]);
@@ -205,9 +206,25 @@ const migrate = (args: Record<string, unknown>) =>
     const sources = readTodoSources(dir, repoDir);
     const { projects } = await ctx.client.call('projectList', {});
     if (!projects.some((project) => project.projectId === projectId)) {
-      throw new Error(
-        `project ${projectId} is not registered; run factory project add ${projectId} --repo <url> first`,
-      );
+      if (args.register !== true) {
+        throw new Error(
+          `project ${projectId} is not registered; run factory project add ${projectId} --repo <url> first, or pass --register inside a repository with an origin`,
+        );
+      }
+      const origin = await repoOriginUrl(repoDir);
+      if (origin === undefined) {
+        throw new Error(
+          `project ${projectId} is not registered and ${repoDir} has no origin remote to register it from`,
+        );
+      }
+      await ctx.client.call('projectAdd', {
+        projectId,
+        repoUrl: origin,
+        baseBranch: 'main',
+        maxRunning: 2,
+        depPolicy: 'delivered',
+      });
+      console.error(`registered ${projectId} from ${origin}`);
     }
     const { orders } = await ctx.client.call('board', {});
     const { plans } = await ctx.client.call('plans', {});
@@ -291,6 +308,11 @@ export const todosMigrateCommand = defineCommand({
       type: 'boolean',
       description:
         'Delete each file the server has confirmed (never on a dry run)',
+    },
+    register: {
+      type: 'boolean',
+      description:
+        'Register the project from the repository origin when it is not registered yet',
     },
   },
   run: ({ args }) => migrate(args),

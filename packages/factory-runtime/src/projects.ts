@@ -21,6 +21,13 @@ export interface ProjectAddInput {
   depPolicy: 'delivered' | 'merged';
 }
 
+/** The settings a project added without them gets: the same defaults `factory project add` uses. */
+export const PROJECT_DEFAULTS = {
+  baseBranch: 'main',
+  maxRunning: 2,
+  depPolicy: 'delivered',
+} as const satisfies Omit<ProjectAddInput, 'projectId' | 'repoUrl'>;
+
 const precondition = (detail: string): RuntimeError =>
   new RuntimeError({ code: 'precondition', detail });
 
@@ -74,6 +81,35 @@ export const addProject = async (
   const result = await ports.projects.add(input, ports.clock.now());
   throwUnlessDone(result, input.projectId);
   return { project: await storedRecord(ports, input.projectId) };
+};
+
+/**
+ * Makes sure a project is registered (PROTOCOL §3.1). An existing id is left as it is: its record keeps
+ * its base branch, max running, dependency policy and repo url. A missing id is added with the given
+ * settings. Two Cells that ensure the same id at once both succeed: the loser of the race reads the
+ * winner's record.
+ */
+export const ensureProject = async (
+  ports: RuntimePorts,
+  input: { projectId: ProjectId; repoUrl: string },
+): Promise<{ project: ProjectRecord; created: boolean }> => {
+  ports.writer.assertHeld();
+  const existing = (await ports.projects.list()).find(
+    (project) => project.projectId === input.projectId,
+  );
+  if (existing) return { project: existing, created: false };
+  const result = await ports.projects.add(
+    { ...input, ...PROJECT_DEFAULTS },
+    ports.clock.now(),
+  );
+  if (!result.ok && result.reason === 'exists') {
+    return {
+      project: await storedRecord(ports, input.projectId),
+      created: false,
+    };
+  }
+  throwUnlessDone(result, input.projectId);
+  return { project: await storedRecord(ports, input.projectId), created: true };
 };
 
 /**

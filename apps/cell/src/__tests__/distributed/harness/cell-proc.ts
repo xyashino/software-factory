@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { cellRepo } from '../../helpers/cell-repo';
 import type { CellId } from '@repo/factory-core/ids';
 import {
   captureOutput,
@@ -105,6 +106,8 @@ export const startCell = async (
   options: CellOptions,
 ): Promise<RunningCell> => {
   const paths = cellPathsIn(options.root);
+  // The Cell runs in its root's repository: --repo-dir, with an origin to register the project from.
+  await cellRepo(options.root);
   const config = [
     'projects = ["software-factory"]',
     'runners = ["claude", "cursor"]',
@@ -133,7 +136,7 @@ export const startCell = async (
       : { FACTORY_JOIN_TOKEN: options.joinToken }),
     ...(options.env ?? {}),
   };
-  const child = spawnGroup(['bun', CELL_MAIN], env);
+  const child = spawnGroup(['bun', CELL_MAIN, '--repo-dir', options.root], env);
   const output: OutputCapture = captureOutput(child.stdout);
   const errors: OutputCapture = captureOutput(child.stderr);
   let exited = false;

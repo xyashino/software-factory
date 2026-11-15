@@ -26,6 +26,7 @@ import { createJoinToken, revokeJoinToken } from './join-tokens';
 import type { Revocation } from './revocations';
 import {
   addProject,
+  ensureProject,
   listProjects,
   removeProject,
   setProject,
@@ -420,6 +421,7 @@ export const createOperations = (
     },
     projectList: () => listProjects(ports),
     projectAdd: (request) => addProject(ports, request),
+    cellProjectEnsure: (request) => ensureProject(ports, request),
     projectSet: (request) => {
       const { projectId, ...patch } = request;
       return setProject(ports, projectId, patch);
