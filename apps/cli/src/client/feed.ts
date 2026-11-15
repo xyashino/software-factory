@@ -20,15 +20,25 @@ export const latestSeq = async (client: FactoryClient): Promise<number> => {
   }
 };
 
+/** How long a poll that came back empty and early waits before the next one (no server to hold it). */
+export const FEED_IDLE_PAUSE_MS = 1_000;
+
+const sleep = (ms: number): Promise<void> =>
+  new Promise((resolve) => setTimeout(resolve, ms));
+
 /**
  * Waits for the next stored events after `cursor` (a long-poll of up to 25 s per call, repeated until
  * something arrives). Returns the events and the new cursor. The caller decides what to print.
+ *
+ * With no server socket the poll is answered at once and empty; then the wait is a pause between
+ * polls, so the loop does not spin on the one-shot server.
  */
 export const nextEvents = async (
   client: FactoryClient,
   cursor: number,
 ): Promise<{ events: StoredEvent[]; cursor: number }> => {
   for (;;) {
+    const startedAt = Date.now();
     const batch = await client.call('supervisorEvents', {
       afterGlobalSeq: cursor,
       waitMs: FEED_WAIT_MS,
@@ -37,5 +47,8 @@ export const nextEvents = async (
       return { events: batch.events, cursor: batch.nextSeq };
     }
     cursor = batch.nextSeq;
+    if (Date.now() - startedAt < FEED_WAIT_MS / 2) {
+      await sleep(FEED_IDLE_PAUSE_MS);
+    }
   }
 };

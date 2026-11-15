@@ -85,6 +85,20 @@ describe('factory-server --once', () => {
     expect(second.code).toBe(0);
   });
 
+  it('answers a feed long-poll at once, so it never holds the writer lock for the wait', async () => {
+    const started = Date.now();
+    const result = await runOnce(
+      JSON.stringify({
+        route: 'supervisorEvents',
+        request: { afterGlobalSeq: 0, waitMs: 25_000 },
+      }),
+    );
+
+    expect(result.code).toBe(0);
+    expect(Date.now() - started).toBeLessThan(10_000);
+    expect(JSON.parse(result.stdout).ok).toBe(true);
+  });
+
   it('exits with code 3 while another process holds the data directory', async () => {
     const holder = Bun.spawn(['bun', MAIN, '--data-dir', dataDir], {
       env: { ...process.env, FACTORY_DATA_DIR: '' },

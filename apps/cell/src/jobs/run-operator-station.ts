@@ -58,6 +58,8 @@ import type {
 } from '../ports';
 import type { WorkspaceResult } from '../workspace';
 import { getBlob, putBlob } from './blobs';
+import { todoOf } from './job-shape';
+import { logCommandOf } from './pane-commands';
 import { workspaceDetailOf } from './workspace-detail';
 
 /** The usage a runner reports in its output: tokens, and the cost when the runner names one. */
@@ -129,17 +131,6 @@ const operatorBinOf = (cycleDir: string): string => {
   chmodSync(shim, 0o755);
   return binDir;
 };
-
-/** The command the task's `logs` tab runs: the Traveler of its Work order, followed (`factory log -f`). */
-const logCommandOf = (orderId: string): string => {
-  const cli = fileURLToPath(
-    new URL('../../../cli/src/cli.ts', import.meta.url),
-  );
-  return `"${process.execPath}" "${cli}" log "${orderId}" -f`;
-};
-
-const todoOf = (orderId: string): string =>
-  orderId.slice(orderId.indexOf(':') + 1);
 
 const isInside = (root: string, path: string): boolean => {
   const rel = relative(root, path);

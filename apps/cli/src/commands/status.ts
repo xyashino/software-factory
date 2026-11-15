@@ -7,7 +7,11 @@ import {
   printJson,
   withErrors,
 } from '../context';
-import { isHiddenByDefault, renderBoard } from '../render/board';
+import {
+  isHiddenByDefault,
+  renderActionNeeded,
+  renderBoard,
+} from '../render/board';
 
 export const statusCommand = defineCommand({
   meta: {
@@ -51,6 +55,8 @@ export const statusCommand = defineCommand({
           printJson({ orders: rows });
         } else {
           console.log(renderBoard(rows, ctx.paint, ctx.now()));
+          const needed = renderActionNeeded(rows, ctx.paint);
+          if (needed !== '') console.log(`\n${needed}`);
         }
         if (frame >= limit) return;
         const next = await nextEvents(ctx.client, cursor);

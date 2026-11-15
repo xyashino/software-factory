@@ -28,7 +28,8 @@ import {
   type ShellContext,
 } from '../workspace/shell';
 import { getBlob } from './blobs';
-import { orderIdOf } from './job-shape';
+import { orderIdOf, todoOf } from './job-shape';
+import { logCommandOf } from './pane-commands';
 
 /** What the Mechanic is told to do when its incident says `nudge` (CORE §14.3). */
 export const MECHANIC_NUDGE =
@@ -437,7 +438,8 @@ export const runMechanic = async (
     const addDirs = worktree ? [repairDir, worktree] : [repairDir];
     await deps.pane.open({
       name,
-      task: orderId,
+      task: todoOf(orderId),
+      logCommand: logCommandOf(job.orderId),
       command: [
         adapter.kind,
         ...adapter.startArgs({
@@ -459,6 +461,21 @@ export const runMechanic = async (
         .read(name)
         .catch(() => ({ operator: 'unknown' as const }));
       if (reading.operator === 'gone') break;
+      if (reading.operator === 'blocked') {
+        // A folder-trust or runner prompt stops the Mechanic: confirm it as the station does. If it
+        // cannot be confirmed, hand the Andon to the Supervisor instead of leaving the Work order stuck.
+        const trusted = await deps.pane.confirmTrust(name).catch(() => false);
+        if (!trusted) {
+          await recordIncident({
+            op: 'escalate',
+            token,
+            diagnosis:
+              'the Mechanic pane stopped on a prompt it could not confirm',
+            outcome: 'escalated to the Supervisor',
+          });
+          break;
+        }
+      }
       await deps.sleep(deps.tickMs);
     }
   } finally {

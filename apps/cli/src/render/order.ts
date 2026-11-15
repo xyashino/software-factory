@@ -46,30 +46,79 @@ export const incidentsOf = (events: readonly StoredEvent[]): string[] =>
     ];
   });
 
-const cyclesOf = (events: readonly StoredEvent[]): string[] => {
-  const cycles = new Map<string, { station: string; n: number; end: string }>();
+/**
+ * The outcome of each Cycle of a Work order, in start order. A Cycle is `running` until an event ends
+ * it: a recorded verdict (`verdict_recorded`) or inspection (`inspection_finished`) ends a review
+ * station with `passed` or `failed`; the `cycle_*` events end any Cycle with their own outcome.
+ */
+export const cyclesOf = (
+  events: readonly StoredEvent[],
+): Array<{ cycleId: string; station: string; n: number; end: string }> => {
+  const cycles = new Map<
+    string,
+    { cycleId: string; station: string; n: number; end: string }
+  >();
+  const end = (cycleId: string, outcome: string): void => {
+    const cycle = cycles.get(cycleId);
+    if (cycle) cycles.set(cycleId, { ...cycle, end: outcome });
+  };
   for (const stored of events) {
     const event = stored.event;
     if (event.type === 'cycle_started') {
       cycles.set(event.cycleId, {
+        cycleId: event.cycleId,
         station: event.stationId,
         n: event.n,
         end: 'running',
       });
-    } else if (
-      event.type === 'cycle_completed' ||
-      event.type === 'cycle_failed' ||
-      event.type === 'cycle_blocked' ||
-      event.type === 'cycle_handed_over'
-    ) {
-      const cycle = cycles.get(event.cycleId);
-      if (cycle) cycles.set(event.cycleId, { ...cycle, end: event.type });
+    } else if (event.type === 'verdict_recorded') {
+      end(event.cycleId, event.pass ? 'passed' : 'failed');
+    } else if (event.type === 'inspection_finished') {
+      end(event.cycleId, event.passed ? 'passed' : 'failed');
+    } else if (event.type === 'cycle_completed') {
+      end(event.cycleId, 'passed');
+    } else if (event.type === 'cycle_failed') {
+      end(event.cycleId, 'failed');
+    } else if (event.type === 'cycle_blocked') {
+      end(event.cycleId, 'blocked');
+    } else if (event.type === 'cycle_handed_over') {
+      end(event.cycleId, 'handed_over');
     }
   }
-  return [...cycles.entries()].map(
-    ([cycleId, cycle]) =>
-      `  #${cycle.n} ${cycle.station.padEnd(12)} ${shortId(cycleId)}  ${cycle.end}`,
-  );
+  return [...cycles.values()];
+};
+
+/**
+ * The copy-pasteable next commands for a Work order in its current state (`factory show`). Empty for
+ * a delivered or merged Work order, which has nothing left for the Supervisor to do.
+ */
+export const actionsOf = (order: OrderDetail['order']): string[] => {
+  const id = order.orderId;
+  switch (order.status) {
+    case 'andon':
+      return [
+        `factory resume ${id}`,
+        `factory resume ${id} --from <station> --note "..."`,
+        `factory cancel ${id} --reason "..."`,
+      ];
+    case 'waiting_answer':
+      return [
+        `factory answer ${id} "..."`,
+        `factory cancel ${id} --reason "..."`,
+      ];
+    case 'cancelled':
+      return [`factory reopen ${id}`];
+    case 'queued':
+      return [
+        `factory prio ${id} <high|medium|low>`,
+        `factory cancel ${id} --reason "..."`,
+      ];
+    case 'delivered':
+    case 'merged':
+      return [];
+    default:
+      return [`factory cancel ${id} --reason "..."`];
+  }
 };
 
 /**
@@ -97,13 +146,20 @@ export const renderOrder = (
   if (question) {
     lines.push(`question  ${shortId(question.questionId)}: ${question.text}`);
   }
-  const cycles = cyclesOf(events);
+  const cycles = cyclesOf(events).map(
+    (cycle) =>
+      `  #${cycle.n} ${cycle.station.padEnd(12)} ${shortId(cycle.cycleId)}  ${cycle.end}`,
+  );
   if (cycles.length > 0) {
     lines.push('cycles', ...cycles);
   }
   const incidents = incidentsOf(events);
   if (incidents.length > 0) {
     lines.push('incidents', ...incidents);
+  }
+  const actions = actionsOf(order);
+  if (actions.length > 0) {
+    lines.push('actions', ...actions.map((action) => `  ${action}`));
   }
   return lines.join('\n');
 };

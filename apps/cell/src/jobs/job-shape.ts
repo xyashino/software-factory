@@ -19,3 +19,7 @@ export const orderIdOf = (job: Job): OrderId => {
   }
   return job.orderId as OrderId;
 };
+
+/** The todo of a Work order: the part of its OrderId after the `:`. Its Herdr workspace is named by it. */
+export const todoOf = (orderId: string): string =>
+  orderId.slice(orderId.indexOf(':') + 1);

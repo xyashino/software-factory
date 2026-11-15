@@ -4,13 +4,20 @@ import { describeFailure } from '../render/failure';
 import {
   ageOf,
   type BoardRow,
+  actionNeededOf,
   isHiddenByDefault,
   paintHolder,
   paintStatus,
+  renderActionNeeded,
   renderBoard,
   TERMINAL_WINDOW_MS,
 } from '../render/board';
-import { openQuestionOf, renderOrder } from '../render/order';
+import {
+  actionsOf,
+  cyclesOf,
+  openQuestionOf,
+  renderOrder,
+} from '../render/order';
 import { colorPaint, paintFor, plainPaint } from '../render/paint';
 import {
   familyOf,
@@ -23,7 +30,7 @@ import {
 const ESC = '\u001b[';
 const NOW = Date.UTC(2026, 10, 14, 12, 0, 0);
 
-const row = (overrides: Partial<BoardRow> = {}): BoardRow =>
+const row = (overrides: Record<string, unknown> = {}): BoardRow =>
   ({
     orderId: 'software-factory:todo-a',
     projectId: 'software-factory',
@@ -45,8 +52,9 @@ const row = (overrides: Partial<BoardRow> = {}): BoardRow =>
     prUrl: null,
     prState: null,
     updatedAt: NOW,
+    dependsOn: [],
     ...overrides,
-  }) as BoardRow;
+  }) as unknown as BoardRow;
 
 const stored = (seq: number, event: Record<string, unknown>): StoredEvent =>
   ({
@@ -225,6 +233,204 @@ describe('questions', () => {
     );
 
     expect(text).toContain('question  01M7CX0F: Which branch?');
+  });
+});
+
+const CYCLE = '01M7CX0FY9EC8TJ78WPDB8XSSD';
+const started = (seq: number, cycleId: string, stationId: string) =>
+  stored(seq, {
+    type: 'cycle_started',
+    cycleId,
+    jobId: `job-${cycleId}`,
+    stationId,
+    n: 1,
+    cause: 'advance',
+    baseCommit: 'a'.repeat(40),
+  });
+
+describe('cycle outcomes', () => {
+  it('closes a review station on its recorded verdict, passed or failed', () => {
+    const passed = cyclesOf([
+      started(1, CYCLE, 'plan-review'),
+      stored(2, {
+        type: 'verdict_recorded',
+        cycleId: CYCLE,
+        pass: true,
+        artifacts: [],
+      }),
+    ]);
+    const failed = cyclesOf([
+      started(1, CYCLE, 'quality-gate'),
+      stored(2, {
+        type: 'verdict_recorded',
+        cycleId: CYCLE,
+        pass: false,
+        artifacts: [],
+      }),
+    ]);
+
+    expect(passed[0]?.end).toBe('passed');
+    expect(failed[0]?.end).toBe('failed');
+  });
+
+  it('closes an audit station on its inspection result, passed or failed', () => {
+    const passed = cyclesOf([
+      started(1, CYCLE, 'audit'),
+      stored(2, {
+        type: 'inspection_finished',
+        cycleId: CYCLE,
+        passed: true,
+        results: [],
+      }),
+    ]);
+    const failed = cyclesOf([
+      started(1, CYCLE, 'audit'),
+      stored(2, {
+        type: 'inspection_finished',
+        cycleId: CYCLE,
+        passed: false,
+        results: [],
+      }),
+    ]);
+
+    expect(passed[0]?.end).toBe('passed');
+    expect(failed[0]?.end).toBe('failed');
+  });
+
+  it('keeps a Cycle without an ending event running', () => {
+    expect(cyclesOf([started(1, CYCLE, 'build')])[0]?.end).toBe('running');
+  });
+
+  it('shows the outcome, not the raw event type, in the order detail', () => {
+    const text = renderOrder(
+      {
+        order: row({ status: 'queued' }),
+        events: [
+          started(1, CYCLE, 'audit'),
+          stored(2, {
+            type: 'inspection_finished',
+            cycleId: CYCLE,
+            passed: true,
+            results: [],
+          }),
+        ],
+      },
+      plainPaint,
+      NOW,
+    );
+
+    expect(text).toContain('audit');
+    expect(text).toContain('passed');
+    expect(text).not.toContain('running');
+  });
+});
+
+describe('actions', () => {
+  it('suggests resume, resume from a station and cancel for an Andon', () => {
+    const lines = actionsOf(row({ status: 'andon' }));
+
+    expect(lines).toEqual([
+      'factory resume software-factory:todo-a',
+      'factory resume software-factory:todo-a --from <station> --note "..."',
+      'factory cancel software-factory:todo-a --reason "..."',
+    ]);
+  });
+
+  it('suggests the answer command while a question waits', () => {
+    expect(actionsOf(row({ status: 'waiting_answer' }))[0]).toBe(
+      'factory answer software-factory:todo-a "..."',
+    );
+  });
+
+  it('suggests reopen for a cancelled Work order', () => {
+    expect(actionsOf(row({ status: 'cancelled' }))).toEqual([
+      'factory reopen software-factory:todo-a',
+    ]);
+  });
+
+  it('suggests priority and cancel for a queued Work order', () => {
+    expect(actionsOf(row({ status: 'queued' }))).toEqual([
+      'factory prio software-factory:todo-a <high|medium|low>',
+      'factory cancel software-factory:todo-a --reason "..."',
+    ]);
+  });
+
+  it('suggests nothing for a delivered Work order', () => {
+    expect(actionsOf(row({ status: 'merged' }))).toEqual([]);
+  });
+
+  it('prints an actions section at the bottom of the order detail', () => {
+    const text = renderOrder(
+      { order: row({ status: 'cancelled' }), events: [] },
+      plainPaint,
+      NOW,
+    );
+
+    expect(
+      text.endsWith('actions\n  factory reopen software-factory:todo-a'),
+    ).toBe(true);
+  });
+
+  it('prints no actions section when the state has no next command', () => {
+    const text = renderOrder(
+      { order: row({ status: 'merged' }), events: [] },
+      plainPaint,
+      NOW,
+    );
+
+    expect(text).not.toContain('actions');
+  });
+});
+
+describe('action needed', () => {
+  it('lists the rows that wait for the Supervisor, with the reason and the command', () => {
+    const lines = actionNeededOf([
+      row({
+        orderId: 'software-factory:a',
+        status: 'andon',
+        andonReason: 'build failed',
+      }),
+      row({ orderId: 'software-factory:b', status: 'waiting_answer' }),
+      row({ orderId: 'software-factory:c', status: 'running' }),
+    ]);
+
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toContain('andon: build failed');
+    expect(lines[0]).toContain('factory resume software-factory:a');
+    expect(lines[1]).toContain('factory answer software-factory:b');
+  });
+
+  it('names the dependencies that hold a Work order back', () => {
+    const lines = actionNeededOf([
+      row({
+        orderId: 'software-factory:d',
+        status: 'waiting_deps',
+        dependsOn: ['software-factory:a'],
+      } as Partial<BoardRow>),
+      row({
+        orderId: 'software-factory:e',
+        status: 'deps_broken',
+        dependsOn: ['software-factory:x'],
+      } as Partial<BoardRow>),
+    ]);
+
+    expect(lines[0]).toContain('waiting on software-factory:a');
+    expect(lines[1]).toContain('software-factory:x is broken');
+  });
+
+  it('prints nothing when no row needs the Supervisor', () => {
+    expect(renderActionNeeded([row({ status: 'running' })], plainPaint)).toBe(
+      '',
+    );
+  });
+
+  it('prints a titled block when a row needs the Supervisor', () => {
+    const text = renderActionNeeded(
+      [row({ status: 'waiting_answer' })],
+      plainPaint,
+    );
+
+    expect(text.split('\n')[0]).toBe('Action needed');
   });
 });
 

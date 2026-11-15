@@ -513,4 +513,77 @@ describe('the Mechanic job run (CORE §14.3, §14.4)', () => {
       'Resume',
     ]);
   });
+
+  it('opens its pane in the Work order todo workspace, with the order log tab', async () => {
+    const { client } = fakeClient();
+    const seen = newSeen();
+    const pane = scriptedPane([incident('resume')], seen);
+
+    await runMechanic(mechanicJob(), depsFor(dataDir, client, pane));
+
+    expect(seen.spec?.task).toBe('v2-24-mechanic');
+    expect(seen.spec?.name).toMatch(/^mechanic_[0-9a-f]{6}_1$/);
+    expect(seen.spec).toMatchObject({
+      logCommand: expect.stringContaining(` log "${ORDER_ID}" -f`),
+    });
+  });
+
+  it('keeps polling a blocked pane once the folder-trust screen is confirmed', async () => {
+    const { client, submitted } = fakeClient();
+    const seen = newSeen();
+    let reads = 0;
+    let confirms = 0;
+    const pane: PaneDriver = {
+      open: async (spec) => {
+        seen.spec = spec;
+      },
+      type: async () => undefined,
+      read: async () => {
+        reads += 1;
+        return { operator: reads === 1 ? 'blocked' : 'gone' };
+      },
+      tail: async () => '',
+      close: async (name) => {
+        seen.closed.push(name);
+      },
+      confirmTrust: async () => {
+        confirms += 1;
+        return true;
+      },
+      closeTask: async () => undefined,
+    };
+
+    await runMechanic(mechanicJob(), depsFor(dataDir, client, pane));
+
+    expect(confirms).toBe(1);
+    expect(reads).toBe(2);
+    expect(submitted).toHaveLength(0);
+  });
+
+  it('escalates a blocked pane it cannot confirm, so the Work order is not left stuck', async () => {
+    const { client, submitted } = fakeClient();
+    const seen = newSeen();
+    const pane: PaneDriver = {
+      open: async (spec) => {
+        seen.spec = spec;
+      },
+      type: async () => undefined,
+      read: async () => ({ operator: 'blocked' }),
+      tail: async () => '',
+      close: async (name) => {
+        seen.closed.push(name);
+      },
+      confirmTrust: async () => false,
+      closeTask: async () => undefined,
+    };
+
+    await runMechanic(mechanicJob(), depsFor(dataDir, client, pane));
+
+    expect(submitted).toHaveLength(1);
+    expect(submitted[0]?.command).toMatchObject({
+      type: 'RecordIncident',
+      action: { kind: 'escalate' },
+    });
+    expect(seen.closed).toHaveLength(1);
+  });
 });
