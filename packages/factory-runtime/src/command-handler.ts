@@ -9,6 +9,7 @@ import type {
 import type { OrderCommand } from '@repo/factory-core/order/commands';
 import { decide } from '@repo/factory-core/order/decide';
 import { evolve } from '@repo/factory-core/order/evolve';
+import { MECHANIC_BUDGET } from '@repo/factory-core/order/next';
 import { nextJob } from '@repo/factory-core/order/next-job';
 import {
   toProjection,
@@ -218,6 +219,20 @@ export const createCommandHandler = (
           detail: pending.detail,
         },
       ]);
+    }
+    if (pending.kind === 'escalate_andon') {
+      // The Mechanic budget is spent: the factory hands the Andon over with an incident (CORE §14.4).
+      const escalation = decide(
+        stateOf(working),
+        {
+          type: 'EscalateAndon',
+          diagnosis: `the mechanic budget of ${MECHANIC_BUDGET} is spent`,
+          outcome: 'escalated to the supervisor',
+        },
+        decideContext({ now, ids, actor: { kind: 'factory' } }, new Map()),
+      );
+      if (!escalation.ok) throw new Error('the factory could not escalate');
+      working = appendTo(working, escalation.value);
     }
 
     let next: Job | null = null;

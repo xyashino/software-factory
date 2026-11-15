@@ -14,6 +14,7 @@ import type { OrderCommand } from '../order/commands';
 import type { Actor, StoredEvent } from '../order/events';
 import { evolve } from '../order/evolve';
 import { nextJob } from '../order/next-job';
+import { isStationJob } from '../order/next';
 import type { WorkOrderState } from '../order/state';
 import { raiseAndon } from './steps';
 
@@ -81,7 +82,7 @@ const commandFor = (
   };
   const stationOfJob = () => {
     const pending = nextJob({ ...state, activeJob: undefined });
-    return pending.kind === 'job' && pending.job.kind !== 'deliver'
+    return pending.kind === 'job' && isStationJob(pending.job)
       ? pending.job
       : undefined;
   };
@@ -105,7 +106,7 @@ const commandFor = (
       const pending = nextJob({ ...state, activeJob: undefined });
       const base =
         pending.kind === 'job' &&
-        pending.job.kind !== 'deliver' &&
+        isStationJob(pending.job) &&
         pending.job.base !== 'branch_base'
           ? pending.job.base
           : commitOf(intent.commit);
@@ -467,7 +468,12 @@ const prerequisite = (
   const started =
     job.cycleId !== undefined &&
     state.cycles.some((cycle) => cycle.cycleId === job.cycleId);
-  if (!started && job.kind !== 'deliver' && needsCycle.includes(intent.kind)) {
+  if (
+    !started &&
+    job.kind !== 'deliver' &&
+    job.kind !== 'mechanic' &&
+    needsCycle.includes(intent.kind)
+  ) {
     const start = commandFor(
       { kind: 'start', goodBase: true, commit: 1 },
       state,

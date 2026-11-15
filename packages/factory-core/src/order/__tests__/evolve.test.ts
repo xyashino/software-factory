@@ -687,6 +687,7 @@ describe('evolve: andon_raised', () => {
       reason: 'no_retry',
       detail: 'no retry declared',
       at: 2000,
+      triage: 'mechanic',
     });
   });
 });

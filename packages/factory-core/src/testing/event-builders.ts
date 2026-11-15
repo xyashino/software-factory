@@ -3,6 +3,7 @@ import {
   cellIdSchema,
   commitShaSchema,
   cycleIdSchema,
+  incidentIdSchema,
   jobIdSchema,
   orderIdOf,
   projectIdSchema,
@@ -35,6 +36,7 @@ export const jobIdOf = (n: number) => jobIdSchema.parse(ulid('J', n));
 export const cellIdOf = (n: number) => cellIdSchema.parse(ulid('K', n));
 export const resumeIdOf = (n: number) => resumeIdSchema.parse(ulid('R', n));
 export const questionIdOf = (n: number) => questionIdSchema.parse(ulid('Q', n));
+export const incidentIdOf = (n: number) => incidentIdSchema.parse(ulid('W', n));
 export const commitOf = (n: number) => commitShaSchema.parse(hex(n, 40));
 export const blobOf = (n: number) =>
   blobRefSchema.parse(`sha256:${hex(n, 64)}`);
@@ -335,6 +337,21 @@ export const reopened = (
   ...over,
 });
 
+export const incidentRecorded = (
+  over: Partial<Fields<'incident_recorded'>> = {},
+): Ev<'incident_recorded'> => ({
+  type: 'incident_recorded',
+  incidentId: incidentIdOf(1),
+  by: 'mechanic',
+  andonAt: 0,
+  andonReason: 'cycle_blocked',
+  diagnosis: 'the Operator reported a block',
+  action: { kind: 'resume' },
+  changes: [],
+  outcome: 'the Work order resumed',
+  ...over,
+});
+
 export const PR_URL = 'https://github.com/example/software-factory/pull/42';
 
 export const deliveryFinished = (
@@ -476,6 +493,7 @@ export const samples: { [T in OrderEvent['type']]: Ev<T> } = {
   andon_raised: andonRaised(),
   resumed: resumed(),
   reopened: reopened(),
+  incident_recorded: incidentRecorded(),
   delivery_finished: deliveryFinished(),
   delivery_failed: deliveryFailed(),
   pr_state_changed: prStateChanged(),

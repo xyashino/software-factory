@@ -20,11 +20,22 @@ export type JobSpec =
       cause: CycleCause;
       base: CommitSha | 'branch_base';
     }
-  | { kind: 'deliver'; base: CommitSha };
+  | { kind: 'deliver'; base: CommitSha }
+  | { kind: 'mechanic'; andonAt: number; n: number }; // no workspace; the Mechanic triages the Andon (CORE §14.4)
 
 export type Next =
   | { kind: 'done' }
   | { kind: 'busy' } // a job is active
   | { kind: 'await_supervisor'; cause: 'andon' }
   | { kind: 'raise_andon'; reason: AndonReason; detail: string } // the Factory appends andon_raised
+  | { kind: 'escalate_andon' } // transient: the Factory records the escalation as an incident (CORE §14.4)
   | { kind: 'job'; job: JobSpec };
+
+/** A job of a Station: it runs a Cycle. A deliver or a Mechanic job runs none. */
+export const isStationJob = (
+  job: JobSpec,
+): job is Extract<JobSpec, { stationId: StationId }> =>
+  job.kind === 'run_operator_station' || job.kind === 'run_inspection';
+
+/** Mechanic jobs one Work order may spend on its Andons, lost ones included (CORE §14.4). */
+export const MECHANIC_BUDGET = 2;

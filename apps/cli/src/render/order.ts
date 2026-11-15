@@ -27,6 +27,25 @@ export const openQuestionOf = (
 };
 
 /** The Cycles of a Work order, each with the event that ended it, if any. */
+/**
+ * The incidents of a Work order (CORE §14.2), oldest first: what the Mechanic or the Supervisor did
+ * about each Andon, with each file or config it changed and the commit or blob that holds it.
+ */
+export const incidentsOf = (events: readonly StoredEvent[]): string[] =>
+  events.flatMap(({ event }) => {
+    if (event.type !== 'incident_recorded') return [];
+    const head = `incident ${shortId(event.incidentId)}  ${event.andonReason}  ${event.action.kind} by ${event.by}`;
+    const changes = event.changes.map(
+      (change) => `  ${change.kind} ${change.path} = ${change.ref}`,
+    );
+    return [
+      head,
+      `  diagnosis ${event.diagnosis}`,
+      ...changes,
+      `  outcome   ${event.outcome}`,
+    ];
+  });
+
 const cyclesOf = (events: readonly StoredEvent[]): string[] => {
   const cycles = new Map<string, { station: string; n: number; end: string }>();
   for (const stored of events) {
@@ -81,6 +100,10 @@ export const renderOrder = (
   const cycles = cyclesOf(events);
   if (cycles.length > 0) {
     lines.push('cycles', ...cycles);
+  }
+  const incidents = incidentsOf(events);
+  if (incidents.length > 0) {
+    lines.push('incidents', ...incidents);
   }
   return lines.join('\n');
 };

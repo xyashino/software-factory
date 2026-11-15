@@ -5,6 +5,7 @@ import {
   cellIdSchema,
   commitShaSchema,
   cycleIdSchema,
+  incidentIdSchema,
   jobIdSchema,
   orderIdSchema,
   projectIdSchema,
@@ -114,6 +115,7 @@ export const jobKindSchema = z.enum([
   'run_operator_station',
   'run_inspection',
   'deliver',
+  'mechanic',
 ]);
 export const workspaceStageSchema = z.enum([
   'fetch',
@@ -179,7 +181,26 @@ export const actorSchema = z.discriminatedUnion('kind', [
     })
     .strict(),
   z.object({ kind: z.literal('supervisor'), name: shortText }).strict(),
+  /** The Mechanic, the on-call triage role (CORE §14). Auditable apart from the Supervisor (R5). */
+  z.object({ kind: z.literal('mechanic'), name: shortText }).strict(),
 ]);
+
+/** What the Mechanic did about an Andon (CORE §14.2). */
+export const incidentActionSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('resume') }).strict(),
+  z.object({ kind: z.literal('cancel') }).strict(),
+  z.object({ kind: z.literal('nudge') }).strict(),
+  z.object({ kind: z.literal('escalate') }).strict(),
+  z.object({ kind: z.literal('repair') }).strict(),
+]);
+/** One workflow file or config the Mechanic changed, with the commit or blob that holds it. */
+export const incidentChangeSchema = z
+  .object({
+    kind: z.enum(['file', 'config']),
+    path: shortText,
+    ref: z.union([commitShaSchema, blobRefSchema]),
+  })
+  .strict();
 
 const orderCreatedSchema = z
   .object({
@@ -391,6 +412,20 @@ const reopenedSchema = z
   })
   .strict();
 
+/** CORE §14.2: the Mechanic's record of an Andon: what went wrong, what it did, what it changed. */
+const incidentRecordedSchema = z
+  .object({
+    type: z.literal('incident_recorded'),
+    incidentId: incidentIdSchema,
+    by: shortText,
+    andonAt: nonNegativeInt,
+    andonReason: andonReasonSchema,
+    diagnosis: freeText,
+    action: incidentActionSchema,
+    changes: z.array(incidentChangeSchema).max(16),
+    outcome: freeText,
+  })
+  .strict();
 const deliveryFinishedSchema = z
   .object({
     type: z.literal('delivery_finished'),
@@ -461,6 +496,7 @@ export const orderEventSchema = z.discriminatedUnion('type', [
   andonRaisedSchema,
   resumedSchema,
   reopenedSchema,
+  incidentRecordedSchema,
   deliveryFinishedSchema,
   deliveryFailedSchema,
   prStateChangedSchema,
@@ -483,6 +519,8 @@ export const storedEventSchema = z
   .strict();
 
 export type Actor = z.infer<typeof actorSchema>;
+export type IncidentAction = z.infer<typeof incidentActionSchema>;
+export type IncidentChange = z.infer<typeof incidentChangeSchema>;
 export type CycleCause = z.infer<typeof cycleCauseSchema>;
 export type AndonReason = z.infer<typeof andonReasonSchema>;
 export type ResumeMode = z.infer<typeof resumeModeSchema>;

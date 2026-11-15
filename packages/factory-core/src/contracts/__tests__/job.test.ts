@@ -142,3 +142,63 @@ describe('Job contract: Work order jobs keep their shape', () => {
     expect(jobSchema.safeParse(job).success).toBe(false);
   });
 });
+
+/** A Mechanic job: no workspace, no station, a mechanic block with its prompt (CORE §14.4). */
+const mechanicJob = {
+  jobId: JOB_ID,
+  orderId: ORDER_ID,
+  projectId: 'software-factory',
+  epoch: 1,
+  kind: 'mechanic',
+  repo: {
+    url: 'https://example.test/sf.git',
+    baseBranch: 'main',
+    branch: 'factory/todo-a',
+  },
+  base: { branchBase: 'main' },
+  mechanic: {
+    andonAt: 2000,
+    n: 1,
+    promptBlob: BLOB,
+    operator: {
+      profile: 'mechanic',
+      runner: 'claude',
+      model: 'opus',
+      permission: 'write',
+      headless: false,
+      timeoutMs: 600000,
+    },
+  },
+};
+
+describe('Job contract: Mechanic jobs (CORE §14.4)', () => {
+  it('accepts a mechanic job with its block and no workspace', () => {
+    expect(jobSchema.safeParse(mechanicJob).success).toBe(true);
+  });
+
+  it('rejects a mechanic job without the runner it runs with', () => {
+    const mechanic: Record<string, unknown> = { ...mechanicJob.mechanic };
+    delete mechanic.operator;
+    expect(jobSchema.safeParse({ ...mechanicJob, mechanic }).success).toBe(
+      false,
+    );
+  });
+
+  it('rejects a mechanic job that has a workspace', () => {
+    const job = { ...mechanicJob, workspace: workJob.workspace };
+    expect(jobSchema.safeParse(job).success).toBe(false);
+  });
+
+  it('rejects a mechanic job without its block', () => {
+    const job: Record<string, unknown> = { ...mechanicJob };
+    delete job.mechanic;
+    expect(jobSchema.safeParse(job).success).toBe(false);
+  });
+
+  it('rejects a station job that carries a mechanic block', () => {
+    expect(
+      jobSchema.safeParse({ ...workJob, mechanic: mechanicJob.mechanic })
+        .success,
+    ).toBe(false);
+  });
+});

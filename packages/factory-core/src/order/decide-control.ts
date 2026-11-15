@@ -1,4 +1,9 @@
-import { questionIdSchema, resumeIdSchema } from '../ids';
+import {
+  type BlobRef,
+  incidentIdSchema,
+  questionIdSchema,
+  resumeIdSchema,
+} from '../ids';
 import { findStation, stationIndex } from '../line/snapshot';
 import { err, ok } from '../result';
 import type { CommandOf, DecideContext } from './commands';
@@ -6,16 +11,19 @@ import {
   type Decision,
   fenced,
   invalidIf,
+  mechanicName,
   missingBlobs,
+  operatorName,
   precondition,
   refuseIfTerminal,
   requireActor,
   requireLive,
   runningCycle,
   stationOfCycle,
+  supervisorIncident,
   supervisorName,
 } from './decide-guards';
-import type { OrderEvent } from './events';
+import type { IncidentAction, IncidentChange, OrderEvent } from './events';
 import type { WorkOrderState } from './state';
 
 /** The Operator asks the Supervisor one question; only one may be open at a time (CORE §5.2). */
@@ -53,7 +61,7 @@ export const answer = (
   command: CommandOf<'Answer'>,
   ctx: DecideContext,
 ): Decision => {
-  const by = supervisorName(ctx);
+  const by = operatorName(ctx);
   if (!by.ok) return by;
   const question = state.questions.find(
     (candidate) => candidate.questionId === command.questionId,
@@ -110,7 +118,7 @@ export const nudge = (
   command: CommandOf<'Nudge'>,
   ctx: DecideContext,
 ): Decision => {
-  const by = supervisorName(ctx);
+  const by = operatorName(ctx);
   if (!by.ok) return by;
   const cycle = runningCycle(state);
   if (!cycle) return err(precondition('no Cycle is running'));
@@ -134,13 +142,26 @@ export const resume = (
   command: CommandOf<'Resume'>,
   ctx: DecideContext,
 ): Decision => {
-  const by = supervisorName(ctx);
+  const by = operatorName(ctx);
   if (!by.ok) return by;
   // A cancelled Work order stays cancelled: an Andon raised before the cancel does not reopen it.
   const terminal = refuseIfTerminal(state);
   if (terminal) return err(terminal);
   const andon = state.andon;
   if (!andon) return err(precondition('no Andon is raised'));
+  // A mechanic job works on the Andon until its incident ends the job (CORE §14.4).
+  if (ctx.actor.kind !== 'mechanic' && state.activeJob?.kind === 'mechanic') {
+    return err(precondition('the mechanic is working on the Andon'));
+  }
+  // The Mechanic clears an Andon only after it has recorded the incident for it (CORE §14.3).
+  if (
+    ctx.actor.kind === 'mechanic' &&
+    !state.incidents.some((incident) => incident.andonAt === andon.at)
+  ) {
+    return err(
+      precondition('the mechanic records the incident before it resumes'),
+    );
+  }
   if (command.grantRetries === 0) {
     return err({
       code: 'invalid',
@@ -176,6 +197,7 @@ export const resume = (
   const blobProblem = invalidIf(missingBlobs(ctx, [command.noteBlob]));
   if (blobProblem) return err(blobProblem);
   const events: OrderEvent[] = [
+    ...supervisorIncident(state, ctx, 'resume'),
     {
       type: 'resumed',
       resumeId: resumeIdSchema.parse(ctx.ids.next()),
@@ -183,6 +205,107 @@ export const resume = (
       mode,
       noteBlob: command.noteBlob,
       grantRetries,
+    },
+  ];
+  return ok(events);
+};
+
+/** Only a repair changes files or config, and a repair names what it changed (CORE §14.2). */
+const incidentShapeIssues = (
+  action: IncidentAction,
+  changes: IncidentChange[],
+): string[] => {
+  if (action.kind === 'repair' && changes.length === 0) {
+    return ['a repair names the files or config it changed'];
+  }
+  if (action.kind !== 'repair' && changes.length > 0) {
+    return [`${action.kind} changes no files or config`];
+  }
+  return [];
+};
+
+/**
+ * The Mechanic records the incident of the open Andon before it acts on it. Exactly one incident per
+ * Andon (CORE §14.2). A change ref is a commit sha or a blob; only a blob must exist in the store.
+ */
+export const recordIncident = (
+  state: WorkOrderState,
+  command: CommandOf<'RecordIncident'>,
+  ctx: DecideContext,
+): Decision => {
+  const by = mechanicName(ctx);
+  if (!by.ok) return by;
+  const terminal = refuseIfTerminal(state);
+  if (terminal) return err(terminal);
+  const andon = state.andon;
+  if (!andon) return err(precondition('no Andon is raised'));
+  if (state.incidents.some((incident) => incident.andonAt === andon.at)) {
+    return err(precondition('the Andon already has an incident'));
+  }
+  const fence = fenced(state, ctx);
+  if (!fence.ok) return fence;
+  if (fence.value.kind !== 'mechanic') {
+    return err(precondition('only a mechanic job triages an Andon'));
+  }
+  const blobRefs = command.changes.map((change) =>
+    change.ref.startsWith('sha256:') ? (change.ref as BlobRef) : undefined,
+  );
+  const invalid = invalidIf([
+    ...incidentShapeIssues(command.action, command.changes),
+    ...missingBlobs(ctx, blobRefs),
+  ]);
+  if (invalid) return err(invalid);
+  const events: OrderEvent[] = [
+    {
+      type: 'incident_recorded',
+      incidentId: incidentIdSchema.parse(ctx.ids.next()),
+      by: by.value,
+      andonAt: andon.at,
+      andonReason: andon.reason,
+      diagnosis: command.diagnosis,
+      action: command.action,
+      changes: command.changes,
+      outcome: command.outcome,
+    },
+  ];
+  return ok(events);
+};
+
+/**
+ * The factory escalates an Andon whose Mechanic budget is spent (CORE §14.4). The escalation is an
+ * incident with action `escalate`, so the Supervisor gets the Andon with its incident attached.
+ */
+export const escalateAndon = (
+  state: WorkOrderState,
+  command: CommandOf<'EscalateAndon'>,
+  ctx: DecideContext,
+): Decision => {
+  const denied = requireActor(ctx, ['factory']);
+  if (denied) return err(denied);
+  const terminal = refuseIfTerminal(state);
+  if (terminal) return err(terminal);
+  const andon = state.andon;
+  if (!andon) return err(precondition('no Andon is raised'));
+  if (andon.triage === 'supervisor') {
+    return err(precondition('the Andon is already with the supervisor'));
+  }
+  if (state.incidents.some((incident) => incident.andonAt === andon.at)) {
+    return err(precondition('the Andon already has an incident'));
+  }
+  if (state.activeJob) {
+    return err(precondition('a job holds the Work order'));
+  }
+  const events: OrderEvent[] = [
+    {
+      type: 'incident_recorded',
+      incidentId: incidentIdSchema.parse(ctx.ids.next()),
+      by: 'factory',
+      andonAt: andon.at,
+      andonReason: andon.reason,
+      diagnosis: command.diagnosis,
+      action: { kind: 'escalate' },
+      changes: [],
+      outcome: command.outcome,
     },
   ];
   return ok(events);

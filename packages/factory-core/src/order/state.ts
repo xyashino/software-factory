@@ -4,6 +4,7 @@ import type {
   CellId,
   CommitSha,
   CycleId,
+  IncidentId,
   JobId,
   OrderId,
   PlanSlug,
@@ -16,6 +17,8 @@ import type {
 import type {
   AndonReason,
   CycleCause,
+  IncidentAction,
+  IncidentChange,
   InspectionResult,
   JobKind,
   Spec,
@@ -91,6 +94,21 @@ export interface QuestionRecord {
   answer?: { by: string; text: string; at: number };
 }
 
+/** A Mechanic's incident (CORE §14.2). `andonAt` names the Andon it triaged (its `andon_raised` time). */
+export type AndonTriage = 'mechanic' | 'supervisor';
+
+export interface IncidentRecord {
+  incidentId: IncidentId;
+  by: string;
+  andonAt: number;
+  andonReason: AndonReason;
+  diagnosis: string;
+  action: IncidentAction;
+  changes: IncidentChange[];
+  outcome: string;
+  at: number;
+}
+
 export interface ActiveJob {
   jobId: JobId;
   kind: JobKind;
@@ -131,7 +149,12 @@ export interface WorkOrderState {
     { commit: CommitSha; afterStation: StationId | null } | undefined;
   notes: StationNote[];
   questions: QuestionRecord[]; // full history; at most one with status 'open'
-  andon?: { reason: AndonReason; detail: string; at: number } | undefined;
+  /** `triage` is who holds the Andon: the Mechanic first, the Supervisor after an escalation (CORE §14.4). */
+  andon?:
+    | { reason: AndonReason; detail: string; at: number; triage: AndonTriage }
+    | undefined;
+  mechanicRuns: number; // Mechanic jobs claimed for this Work order, lost ones included (CORE §14.4)
+  incidents: IncidentRecord[]; // full history; at most one per Andon (CORE §14.2)
   activeJob?: ActiveJob | undefined;
   epoch: number; // the last issued epoch, 0 before any claim
   workspaceFailures: { cellId: CellId; jobId: JobId; at: number }[]; // consecutive; see CORE §4.3 rule 10

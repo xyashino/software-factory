@@ -4,6 +4,7 @@ import type { OrderEvent } from '../events';
 import type { WorkOrderState } from '../state';
 import {
   andonRaised,
+  incidentRecorded,
   cancelled,
   cellIdOf,
   commitOf,
@@ -98,13 +99,22 @@ describe('holderOf', () => {
     expect(holderOf(state).kind).toBe('cell');
   });
 
-  it('holds the Work order with the supervisor when an Andon is raised and no job runs', () => {
+  it('holds the Work order with the mechanic when an Andon is raised and no job runs', () => {
     expect(
       holderOf(foldEvents(created(), andonRaised({ reason: 'no_retry' }))),
-    ).toEqual({
-      kind: 'supervisor',
-      cause: 'andon',
-    });
+    ).toEqual({ kind: 'mechanic' });
+  });
+
+  it('holds the Work order with the supervisor once the Andon has an incident', () => {
+    expect(
+      holderOf(
+        foldEvents(
+          created(),
+          andonRaised({ reason: 'no_retry' }),
+          incidentRecorded({ andonAt: 2000, action: { kind: 'escalate' } }),
+        ),
+      ),
+    ).toEqual({ kind: 'supervisor', cause: 'andon' });
   });
 
   it('holds nothing once the Work order is delivered', () => {

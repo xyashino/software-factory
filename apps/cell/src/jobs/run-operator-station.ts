@@ -553,6 +553,14 @@ export const runOperatorStation = async (
             outputs: outputs.map((output) => output.path),
           },
         };
+      case 'incident':
+      case 'escalate':
+        // The Mechanic's verbs belong to a Mechanic job, never to a Station Cycle (CORE §14.4).
+        return {
+          ok: false,
+          code: 'precondition',
+          message: `${req.op} is a mechanic verb; this Cycle is a Station`,
+        };
     }
   };
 

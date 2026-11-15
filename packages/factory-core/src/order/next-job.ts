@@ -2,7 +2,7 @@ import type { CommitSha, StationId } from '../ids';
 import { findStation, stationAt, type Station } from '../line/snapshot';
 import type { AndonReason, CycleCause } from './events';
 import { latestCycle, requireCycle } from './evolve-helpers';
-import type { JobSpec, Next } from './next';
+import { MECHANIC_BUDGET, type JobSpec, type Next } from './next';
 import type { CycleOutcome, CycleState, WorkOrderState } from './state';
 
 /** Outcomes of an infrastructure failure: restarted, never judged (CORE §5.3). */
@@ -49,6 +49,27 @@ const stationJob = (
   return station.kind === 'inspection'
     ? { kind: 'run_inspection', stationId, n, cause, base }
     : { kind: 'run_operator_station', stationId, n, cause, base };
+};
+
+/**
+ * Row 3: an open Andon. The Mechanic triages it while it has budget and no incident yet; an
+ * escalated Andon, or one whose Mechanic already recorded an incident, waits for the Supervisor.
+ */
+const andonRow = (
+  state: WorkOrderState,
+  open: NonNullable<WorkOrderState['andon']>,
+): Next => {
+  if (open.triage === 'supervisor') {
+    return { kind: 'await_supervisor', cause: 'andon' };
+  }
+  if (state.incidents.some((incident) => incident.andonAt === open.at)) {
+    return { kind: 'await_supervisor', cause: 'andon' };
+  }
+  if (state.mechanicRuns >= MECHANIC_BUDGET) return { kind: 'escalate_andon' };
+  return {
+    kind: 'job',
+    job: { kind: 'mechanic', andonAt: open.at, n: state.mechanicRuns + 1 },
+  };
 };
 
 /** Row 5: answer a `resumed` or `reopened` before looking at the old Cycle again. */
@@ -158,7 +179,7 @@ export const nextJob = (state: WorkOrderState): Next => {
   // 2
   if (state.activeJob) return { kind: 'busy' };
   // 3
-  if (state.andon) return { kind: 'await_supervisor', cause: 'andon' };
+  if (state.andon) return andonRow(state, state.andon);
   // 4
   if (state.workspaceFailures.length >= 2) {
     return andon(

@@ -128,8 +128,20 @@ const OPERATOR_COMMANDS = new Set([
 ]);
 
 /**
- * The actor a Cell's command is run as: the Operator of its Cycle, or the Cell itself. The plan commands a
- * Cell sends (the reports and `ReleaseJob`) are all the Cell's own; `decidePlan` refuses any other actor.
+ * Commands a Mechanic job sends through its Cell (CORE §14.3): the incident it records, and the
+ * Resume or Cancel that follows it. The Cell sends them only for its Mechanic job.
+ */
+const MECHANIC_COMMANDS = new Set([
+  'RecordIncident',
+  'Resume',
+  'Cancel',
+  'Nudge',
+]);
+
+/**
+ * The actor a Cell's command is run as: the Operator of its Cycle, the Mechanic of its job, or the Cell
+ * itself. The plan commands a Cell sends (the reports and `ReleaseJob`) are all the Cell's own;
+ * `decidePlan` refuses any other actor.
  */
 export const actorOfCellCommand = (
   cellId: CellId,
@@ -137,6 +149,9 @@ export const actorOfCellCommand = (
 ): Actor => {
   if (OPERATOR_COMMANDS.has(command.type) && 'cycleId' in command) {
     return { kind: 'operator', cellId, cycleId: command.cycleId };
+  }
+  if (MECHANIC_COMMANDS.has(command.type)) {
+    return { kind: 'mechanic', name: 'mechanic' };
   }
   return { kind: 'cell', cellId };
 };

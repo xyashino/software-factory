@@ -3,6 +3,7 @@ import type { LineSnapshot } from '../line/snapshot';
 import type { OrderEvent, StoredEvent } from './events';
 import {
   applyAndonRaised,
+  applyIncidentRecorded,
   applyReopened,
   applyResumed,
 } from './evolve-control';
@@ -43,6 +44,8 @@ const createOrder = (stored: StoredEvent, ev: Created): WorkOrderState => ({
   recovered: [],
   notes: [],
   questions: [],
+  incidents: [],
+  mechanicRuns: 0,
   epoch: 0,
   workspaceFailures: [],
   resumedWaiting: false,
@@ -62,6 +65,9 @@ const claimJob = (
   },
   epoch: ev.epoch,
   resumedWaiting: false,
+  // A claimed Mechanic job spends the budget, lost or not (CORE §14.4).
+  mechanicRuns:
+    ev.kind === 'mechanic' ? state.mechanicRuns + 1 : state.mechanicRuns,
 });
 
 const failWorkspace = (
@@ -169,6 +175,8 @@ export const evolve = (
       return applyResumed(state, ev);
     case 'reopened':
       return applyReopened(state, ev);
+    case 'incident_recorded':
+      return applyIncidentRecorded(state, ev, stored.at);
     case 'cycle_started':
     case 'cycle_completed':
     case 'verdict_recorded':

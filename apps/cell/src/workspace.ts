@@ -94,6 +94,10 @@ export const prepareWorkspace = async (input: {
   const git = input.git ?? runGit;
   const shell = input.shell ?? runShell;
   const { job, dataDir } = input;
+  // The Mechanic never gets a Work order worktree (CORE §14.3): reaching this with one is refused.
+  if (job.kind === 'mechanic') {
+    throw new Error(`mechanic job ${job.jobId} has no worktree`);
+  }
   const workspace = workspaceOf(job);
   const mirror = join(dataDir, 'repos', `${job.projectId}.git`);
   mkdirSync(join(dataDir, 'repos'), { recursive: true });

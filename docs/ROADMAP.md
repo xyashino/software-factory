@@ -193,11 +193,11 @@ opens the database and no network listener is needed.
 
 ## M8. Portability (R1)
 
-| Todo                      | Depends on              | Scope                                                                                                   |
-| :------------------------ | :---------------------- | :------------------------------------------------------------------------------------------------------ |
-| `factory-m8-backup`       | M4                      | Litestream example in `deploy/`, restore runbook. **Done** (`v2-16-portability`)                        |
+| Todo                      | Depends on              | Scope                                                                                                             |
+| :------------------------ | :---------------------- | :---------------------------------------------------------------------------------------------------------------- |
+| `factory-m8-backup`       | M4                      | Litestream example in `deploy/`, restore runbook. **Done** (`v2-16-portability`)                                  |
 | `factory-m8-move`         | `factory-m8-backup`, M7 | Test: export from Factory A mid-run, import into Factory B, Cells re-joined, every Work order completes. **Done** |
-| `factory-m8-git-recovery` | M7                      | `order_recovered` (CORE §4.3 rule 11, §5.2) + rebuild from git (STORAGE §8). **Done**                   |
+| `factory-m8-git-recovery` | M7                      | `order_recovered` (CORE §4.3 rule 11, §5.2) + rebuild from git (STORAGE §8). **Done**                             |
 
 ## M9. Cut-over
 
@@ -215,8 +215,13 @@ Reintroduce v1's on-call operator as the **Mechanic**, a separate module: handle
 (`incident` sub-entity with its own budget, deciding whether to `Resume`, `Cancel` or escalate to
 the Supervisor), answers `question_asked` when it can, and can intervene mid-Cycle on repeated stall
 alerts (`Nudge` with sanitized pane-tail context, or `Cancel` / escalation) without editing the
-worktree (`decisions/20261113-230000`, `20261114-112011`). Specified in CORE when M10 starts;
-nothing before M10 depends on it.
+worktree (`decisions/20261113-230000`, `20261114-112011`). Specified in CORE §14 (status in §14.1);
+nothing before M10 depends on it. Slice 1 (`v2-24-mechanic`) builds the incident record and the
+Mechanic's authority in `factory-core`. Slice 2 (`v2-24-mechanic`) adds the `mechanic` job kind, the
+`nextJob` triage row and budget, the factory escalation, the contracts, the runtime job, the operator
+verbs `incident` and `escalate`, and the CLI `show` and `log`. Slice 3 adds the Cell's pane run for a
+Mechanic job in a repair checkout, the worktree guard, the trust-screen known case and the actor the
+Mechanic's commands run as. The distributed `factory-m10` scenarios are still to come (CORE §14.6).
 
 ## Requirement coverage
 

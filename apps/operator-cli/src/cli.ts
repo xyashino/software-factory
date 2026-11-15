@@ -24,6 +24,37 @@ const flagValue = (
   return at < 0 ? undefined : args[at + 1];
 };
 
+/** Every value of a repeatable flag, in order. */
+const flagValues = (args: readonly string[], flag: string): string[] =>
+  args.flatMap((arg, i) =>
+    arg === flag && args[i + 1] !== undefined ? [args[i + 1] as string] : [],
+  );
+
+const INCIDENT_ACTIONS = ['resume', 'cancel', 'nudge', 'escalate', 'repair'];
+
+/** `--change file:<path>=<ref>` or `config:<path>=<ref>`: one file or config the repair changed. */
+const changeOf = (text: string) => {
+  const match = /^(file|config):([^=]+)=(.+)$/.exec(text);
+  if (!match) {
+    throw new OperatorError(
+      `--change takes file:<path>=<ref> or config:<path>=<ref>, not "${text}"`,
+      2,
+    );
+  }
+  return {
+    kind: match[1] as 'file' | 'config',
+    path: match[2] as string,
+    ref: match[3] as string,
+  };
+};
+
+const requiredFlag = (args: readonly string[], flag: string): string => {
+  const value = flagValue(args, flag);
+  if (value === undefined || value.trim() === '')
+    throw new OperatorError(`${flag} needs a value`, 2);
+  return value;
+};
+
 const positional = (args: readonly string[]): string[] => {
   const out: string[] = [];
   for (let i = 0; i < args.length; i += 1) {
@@ -84,6 +115,27 @@ export const toRequest = (argv: readonly string[]): OperatorVerb => {
         handover: readFileArg(flagValue(rest, '--handover'), '--handover'),
       };
     }
+    case 'incident': {
+      const action = requiredFlag(rest, '--action');
+      if (!INCIDENT_ACTIONS.includes(action))
+        throw new OperatorError(
+          `--action takes ${INCIDENT_ACTIONS.join(', ')}, not "${action}"`,
+          2,
+        );
+      return {
+        op: 'incident',
+        diagnosis: requiredFlag(rest, '--diagnosis'),
+        action: action as 'resume',
+        outcome: requiredFlag(rest, '--outcome'),
+        changes: flagValues(rest, '--change').map(changeOf) as never,
+      };
+    }
+    case 'escalate':
+      return {
+        op: 'escalate',
+        diagnosis: requiredFlag(rest, '--diagnosis'),
+        outcome: requiredFlag(rest, '--outcome'),
+      };
     default:
       throw new OperatorError(
         verb === undefined ? usage : `unknown command "${verb}"\n${usage}`,

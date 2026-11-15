@@ -18,6 +18,7 @@ import {
 } from '../../testing/event-builders';
 import type { OrderEvent, StoredEvent } from '../events';
 import { isLive } from '../evolve-helpers';
+import { isStationJob } from '../next';
 import { nextJob } from '../next-job';
 import type { WorkOrderState } from '../state';
 import { arbIntents, arbLine } from './generators';
@@ -329,9 +330,12 @@ describe('I9 no silent stop', () => {
             ).not.toBe('done');
           }
           if (stored.event.type === 'andon_raised') {
-            expect(nextJob(state).kind, `event ${index}`).toBe(
-              'await_supervisor',
-            );
+            // The Mechanic triages a new Andon first (CORE §14.4); the escalation follows.
+            const next = nextJob(state);
+            expect(
+              next.kind === 'job' && next.job.kind === 'mechanic',
+              `event ${index}`,
+            ).toBe(true);
           }
           if (
             stored.event.type === 'resumed' ||
@@ -375,7 +379,7 @@ describe('I11 bounded machine loss', () => {
                 ? nextJob({ ...before, activeJob: undefined })
                 : undefined;
               claimedStation =
-                pending?.kind === 'job' && pending.job.kind !== 'deliver'
+                pending?.kind === 'job' && isStationJob(pending.job)
                   ? pending.job.stationId
                   : undefined;
             }

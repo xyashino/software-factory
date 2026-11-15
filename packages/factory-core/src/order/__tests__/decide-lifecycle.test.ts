@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { decide } from '../decide';
 import {
   andonRaised,
+  incidentRecorded,
   blobOf,
   cancelled,
   commitOf,
@@ -336,8 +337,12 @@ describe('ClaimJob', () => {
     });
   });
 
-  it('refuses a claim while an Andon is raised', () => {
-    const state = stateOf([created(), andonRaised()]);
+  it('refuses a Station claim while an escalated Andon is open', () => {
+    const state = stateOf([
+      created(),
+      andonRaised(),
+      incidentRecorded({ andonAt: 2000, action: { kind: 'escalate' } }),
+    ]);
 
     const result = decide(state, claimJob, contextOf());
 
@@ -348,6 +353,18 @@ describe('ClaimJob', () => {
         detail: 'the Work order is held by supervisor',
       },
     });
+  });
+
+  it('claims a Mechanic job for a new Andon, with no Cycle', () => {
+    const state = stateOf([created(), andonRaised()]);
+
+    const result = decide(state, claimJob, contextOf());
+
+    expect(result).toMatchObject({
+      ok: true,
+      value: [{ type: 'job_claimed', kind: 'mechanic' }],
+    });
+    expect(result.ok && result.value[0]).not.toHaveProperty('cycleId');
   });
 
   it('refuses a claim on a delivered order', () => {
