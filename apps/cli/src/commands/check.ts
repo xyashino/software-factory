@@ -3,14 +3,14 @@ import { defineCommand } from 'citty';
 import { check } from '@repo/factory-definitions/check';
 import { withErrors } from '../context';
 
-/** The Definitions package of this checkout: Operator profiles, Lines and templates. */
+/** The `.factory/` directory of this checkout: Operator profiles, Lines and templates. */
 export const DEFINITIONS_ROOT = fileURLToPath(
-  new URL('../../../../packages/factory-definitions', import.meta.url),
+  new URL('../../../../.factory', import.meta.url),
 );
 
 /**
  * `factory check`: validates Operator profiles, Lines and templates offline (PROTOCOL §10). It reads
- * the Definitions package only; no server, no database. Exits 1 when any definition is wrong.
+ * the repository's `.factory/` only; no server, no database. Exits 1 when any definition is wrong.
  */
 export const checkCommand = defineCommand({
   meta: {

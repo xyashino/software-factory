@@ -7,6 +7,7 @@ import { parseLine } from '../line-schema';
 import { readDefinitions } from '../load';
 
 const PACKAGE_ROOT = join(import.meta.dirname, '..', '..');
+const FACTORY_ROOT = join(PACKAGE_ROOT, '..', '..', '.factory');
 const VALID = join(
   import.meta.dirname,
   'fixtures',
@@ -16,7 +17,7 @@ const VALID = join(
 );
 const FILE = 'lines/feature.yml';
 
-const { definitions } = readDefinitions(PACKAGE_ROOT);
+const { definitions } = readDefinitions(FACTORY_ROOT);
 const operators = definitions.operators;
 
 const snapshotOf = (text: string) => {
@@ -54,7 +55,7 @@ describe('toLineSnapshot', () => {
     const json = JSON.stringify(snapshotOf(validText));
     expect(json).not.toContain('timeout');
     expect(json).not.toContain('model');
-    expect(json).not.toContain(PACKAGE_ROOT);
+    expect(json).not.toContain(FACTORY_ROOT);
   });
 
   it('validates the result with the core snapshot schema', () => {
