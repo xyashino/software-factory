@@ -122,9 +122,14 @@ same body as its HTTP route, with `projectId` in the body on `set` and `remove`.
 - Remove: refused as `precondition` while the project has any Work order or event. A project
   with history is never deleted, so projections stay rebuildable (STORAGE §4).
 - An unknown `projectId` on set or remove answers `not_found`.
-- A newly added project is served only by Cells whose config lists it (`projects` in the Cell's
-  `config.toml`, §9). The Factory does not push projects to Cells: a Cell's `hello` lists its projects,
-  and the queue offers it only Work orders of those projects.
+- Ensure (Cell route `cell/projects/ensure`, HTTP `POST /v1/cell/projects/ensure`, credential `cell`):
+  `projectId` and `repoUrl`. A missing project is added with the add defaults and `created: true`; an
+  existing one is answered as stored with `created: false` and never changed (its base branch, max running,
+  dependency policy and repo url stay). Two Cells that ensure the same id both succeed. A Cell runs it at
+  start, before `hello` (§9).
+- A project is served only by Cells whose `hello` lists it. The Factory does not push projects to Cells: a
+  Cell lists its projects at `hello`, and the queue offers it only Work orders of those projects. A Cell
+  lists the project of its repository (§9) and the projects its config names.
 
 ### 3.2 Cell operations (Cell → runtime)
 
@@ -517,9 +522,9 @@ The trailers make a Work order's progress recoverable from git alone until deliv
 ```text
 ~/.config/factory-cell/
 └── config.toml                    # Factory URL, join token, projects, runners, capabilities
-~/.local/state/factory-cell/
-└── credential                     # the Cell credential from `join` (mode 0600)
-~/.local/share/factory-cell/       # everything here is a cache: deleting it loses nothing
+<repo>/.factory-local/cell/        # the Cell's state for its repository (gitignored); cell-2, ... per extra instance
+├── credential                     # the Cell credential from `join` (mode 0600)
+├── cell.lock                      # the instance's writer lock
 ├── repos/<projectId>.git          # bare mirror, fetched before every job
 ├── worktrees/<todoId>/            # one per Work order held recently; LRU-evicted
 │   └── .cell/                     # inputs, outputs, Cycle scratch (excluded from git)
@@ -527,6 +532,12 @@ The trailers make a Work order's progress recoverable from git alone until deliv
 ```
 
 Deleting the credential makes the Cell join again as a new Cell; nothing else is lost.
+
+The data directory is `cell_data_dir` when the config sets it, else `<repo>/.factory-local/cell` (repo-scoped,
+ADR `factory-add-repo-scoped-cell`). A Cell starts only inside a repository (`--repo-dir <path>` or the working
+directory), at startup it ensures the repository's project (§3.1) from its `origin` remote, and it refuses a
+repository with no origin. The project is `projects[0]` of the config when set, else the repository directory
+name normalized to a project id.
 
 Executing `run_operator_station`:
 
@@ -580,7 +591,7 @@ The Cell exits when every job is released. A Cell that simply vanishes is handle
 | `factory cells [rm <id>]`                                                                                        | List or revoke Cells                                                                            |
 | `factory cells token create [--ttl <d>] \| ls \| rm <id>`                                                        | Manage join tokens                                                                              |
 | `factory project ls`                                                                                             | List the registered projects                                                                    |
-| `factory project add <id> --repo <url> [--base-branch <b>] [--dep-policy delivered\|merged] [--max-running <n>]` | Register a project (§3.1). A Cell serves it only if its config lists it                         |
+| `factory project add <id> --repo <url> [--base-branch <b>] [--dep-policy delivered\|merged] [--max-running <n>]` | Register a project (§3.1). A Cell serves it when it runs in a repository with this origin or its config lists it |
 | `factory project set <id> [--base-branch <b>] [--dep-policy delivered\|merged] [--max-running <n>]`              | Change a project (§3.1); `--base-branch` is refused while it has an open Work order             |
 | `factory project rm <id>`                                                                                        | Remove a project with no history (§3.1)                                                         |
 | `factory check [--dir <repoRoot>]`                                                                               | Offline: validate `<repo>/.factory/` (Operator profiles, Lines, prompt and PR templates) and cross-check `.nitpick/` when present (no Factory needed) |
@@ -588,7 +599,7 @@ The Cell exits when every job is released. A Cell that simply vanishes is handle
 | `factory order create --project <id> --todo-id <slug> --title <text> --type <t> --line <name> [--repo-dir <path>] [--priority ...] [--plan <slug>] [--depends-on <id,…>] [--base-branch <b>] (--file <path> \| --body <text> \| --file -)` | Create a Work order (§3.3). The Line is read and validated from `<repoDir>/.factory/lines/<name>.yml` and pinned as its snapshot |
 | `factory order pr-state <orderId> <open\|merged\|closed> --pr-url <url>`                                        | Set a Work order's PR state by hand: the fallback when no webhook is configured (§3.6). The order must already have a PR |
 | `factory plan create --project <id> --slug <slug> [--repo-dir <path>] [--base-branch <b>] --members <files…>`   | Create an Order Plan (§3.3): the members, each a todo file, in chain order; each Line is read from `<repoDir>/.factory/lines/` |
-| `factory todos migrate [--dir <todos>] [--repo-dir <path>] --project <id> [--dry-run] [--all] [--remove]`        | One-time import of a `todos/` folder: plans via `createPlan`, standalone todos via `createOrder`, in dependency order. Idempotent; `--remove` deletes files only after the server confirmed them |
+| `factory todos migrate [--dir <todos>] [--repo-dir <path>] --project <id> [--dry-run] [--all] [--remove] [--register]` | One-time import of a `todos/` folder: plans via `createPlan`, standalone todos via `createOrder`, in dependency order. Idempotent; `--remove` deletes files only after the server confirmed them. `--register` adds an unregistered project from the repo's origin (`projectAdd`, the add defaults) |
 | `factory admin export <file>`                                                                                    | STORAGE §7                                                                                      |
 
 `factory-server` is the core process: `factory run` is its local start command. It owns the database

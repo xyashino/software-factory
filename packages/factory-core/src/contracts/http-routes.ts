@@ -166,6 +166,11 @@ export const HTTP_ROUTES = {
     auth: 'supervisor',
   },
   hello: { method: 'POST', path: '/v1/cell/hello', auth: 'cell' },
+  cellProjectEnsure: {
+    method: 'POST',
+    path: '/v1/cell/projects/ensure',
+    auth: 'cell',
+  },
   claim: { method: 'POST', path: '/v1/cell/claim', auth: 'cell' },
   heartbeat: { method: 'POST', path: '/v1/cell/heartbeat', auth: 'cell' },
   submitCommand: {

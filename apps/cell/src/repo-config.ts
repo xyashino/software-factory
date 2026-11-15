@@ -51,6 +51,8 @@ export const mergeConfigs = (
 export interface LoadedConfig {
   /** the effective config: defaults, then the user's file, then the repo's */
   config: CellConfig;
+  /** the repository root the Cell runs in: `--repo-dir`, or the one the working directory is in */
+  repoRoot: string;
   /** the user's config file, which may not exist */
   userPath: string;
   /** the committed repository config applied over the user's, when the repo has one */
@@ -68,10 +70,18 @@ export interface LoadOptions {
 }
 
 /**
+ * True when `dir` is a repository root: it holds a `.factory/` or a `.git`. `findRepoRoot` finds the same
+ * marks upward; `--repo-dir` is checked against them without a search.
+ */
+export const isRepoRoot = (dir: string): boolean =>
+  existsSync(join(dir, '.factory')) || existsSync(join(dir, '.git'));
+
+/**
  * The Cell's config for a run in a repository (PROTOCOL §2, §10). Three layers, each key by key over the
  * one before: `~/.config/factory-cell/config.toml`, then `<repo>/.factory/cell.toml`, then
- * `<repo>/.factory-local/cell.toml`. A repository is `--repo-dir`, or else the one the working directory is
- * in. A layer that is absent is skipped; with no repository only the user's file applies.
+ * `<repo>/.factory-local/cell.toml`. The repository is `--repo-dir` (which must be a repository root), or
+ * else the one the working directory is in. A Cell outside a repository is refused: it has no repository
+ * to register a project from and no `.factory-local/` to keep its state in.
  */
 export const loadCellConfig = (options: LoadOptions): LoadedConfig => {
   const userPath = configPath(options.env);
@@ -79,6 +89,16 @@ export const loadCellConfig = (options: LoadOptions): LoadedConfig => {
     options.repoDir !== undefined
       ? resolve(options.repoDir)
       : findRepoRoot(options.cwd ?? process.cwd());
+  if (root === undefined) {
+    throw new Error(
+      'not inside a repository; run factory-cell from a repository or pass --repo-dir <path>',
+    );
+  }
+  if (options.repoDir !== undefined && !isRepoRoot(root)) {
+    throw new Error(
+      `--repo-dir ${root} is not a repository root (no .factory/ or .git there)`,
+    );
+  }
   const repoPath = existingFile(root, REPO_CONFIG_FILE);
   const localPath = existingFile(root, LOCAL_CONFIG_FILE);
 
@@ -89,15 +109,17 @@ export const loadCellConfig = (options: LoadOptions): LoadedConfig => {
   if (localPath !== undefined) {
     config = mergeConfigs(config, readPartialConfig(localPath));
   }
-  return { config: toCellConfig(config), userPath, repoPath, localPath };
+  return {
+    config: toCellConfig(config),
+    repoRoot: root,
+    userPath,
+    repoPath,
+    localPath,
+  };
 };
 
-/** `<root>/<file>` when the repository root is known and the file exists there; undefined otherwise. */
-const existingFile = (
-  root: string | undefined,
-  file: string,
-): string | undefined => {
-  if (root === undefined) return undefined;
+/** `<root>/<file>` when the file exists there; undefined otherwise. */
+const existingFile = (root: string, file: string): string | undefined => {
   const candidate = join(root, file);
   return existsSync(candidate) ? candidate : undefined;
 };

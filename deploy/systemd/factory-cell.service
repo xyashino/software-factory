@@ -2,6 +2,8 @@
 # Local mode: the Cell is a client of factory.sock, so it runs as the same user as factory-server.
 # Remote mode: set FACTORY_JOIN_TOKEN in /etc/factory/factory-cell.env (the join token is read once,
 # the Cell keeps its own credential afterwards), and set factory_url in the Cell's config.toml.
+# The Cell runs in one repository: --repo-dir (and WorkingDirectory) name its root, and the Cell keeps
+# its state in <repo>/.factory-local/cell. Change /var/lib/factory/repo to the checkout this Cell serves.
 # Install: copy to /etc/systemd/system/, then systemctl enable --now factory-cell
 
 [Unit]
@@ -15,9 +17,9 @@ Type=simple
 EnvironmentFile=-/etc/factory/factory-cell.env
 Environment=FACTORY_DATA_DIR=/var/lib/factory
 Environment=XDG_CONFIG_HOME=%S/factory-cell/config
-Environment=XDG_DATA_HOME=%S/factory-cell/data
+WorkingDirectory=/var/lib/factory/repo
 # The binary must be on the PATH of the unit: `factory-cell` from the package that installs it.
-ExecStart=/usr/bin/env factory-cell
+ExecStart=/usr/bin/env factory-cell --repo-dir /var/lib/factory/repo
 Restart=on-failure
 RestartSec=5
 
@@ -35,6 +37,7 @@ UMask=0077
 NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=yes
+ReadWritePaths=/var/lib/factory/repo
 PrivateTmp=yes
 ProtectKernelTunables=yes
 ProtectControlGroups=yes

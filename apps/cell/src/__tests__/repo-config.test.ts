@@ -96,16 +96,30 @@ describe('mergeConfigs', () => {
 });
 
 describe('loadCellConfig', () => {
-  it('reads only the user file when the working directory has no repository', () => {
+  it('refuses to start outside a repository and names --repo-dir', () => {
     const lone = join(base, 'lone');
     mkdirSync(lone);
-    const loaded = loadCellConfig({
-      env: userEnv('worktree_limit = 5\n'),
-      cwd: lone,
-    });
 
-    expect(loaded.config.worktreeLimit).toBe(5);
-    expect(loaded.repoPath).toBeUndefined();
+    expect(() => loadCellConfig({ env: userEnv(), cwd: lone })).toThrow(
+      /not inside a repository.*--repo-dir/,
+    );
+  });
+
+  it('refuses --repo-dir that is not a repository root', () => {
+    const plain = join(base, 'plain');
+    mkdirSync(plain);
+
+    expect(() =>
+      loadCellConfig({ env: userEnv(), repoDir: plain, cwd: base }),
+    ).toThrow(/--repo-dir .* is not a repository root/);
+  });
+
+  it('answers the repository root it runs in', () => {
+    const root = repoWith('rooted');
+    const nested = join(root, 'src');
+    mkdirSync(nested);
+
+    expect(loadCellConfig({ env: userEnv(), cwd: nested }).repoRoot).toBe(root);
   });
 
   it('applies the repo cell.toml over the user file when run inside the repo', () => {
@@ -134,6 +148,7 @@ describe('loadCellConfig', () => {
     });
 
     expect(loaded.config.worktreeLimit).toBe(3);
+    expect(loaded.repoRoot).toBe(root);
     expect(loaded.repoPath).toBe(join(root, REPO_CONFIG_FILE));
   });
 

@@ -221,3 +221,54 @@ describe('project registry over the three transports', () => {
     });
   }, 60_000);
 });
+
+describe('cell project ensure (PROTOCOL §3.1)', () => {
+  it('adds a missing project with the defaults and keeps an existing one as it is', async () => {
+    const outcomes = await overSocket([
+      {
+        route: 'cellProjectEnsure',
+        request: { projectId: 'demo', repoUrl: repo },
+      },
+      { route: 'projectSet', request: { projectId: 'demo', maxRunning: 3 } },
+      {
+        route: 'cellProjectEnsure',
+        request: {
+          projectId: 'demo',
+          repoUrl: 'https://example.test/other.git',
+        },
+      },
+      { route: 'projectList', request: {} },
+    ]);
+
+    expect(outcomes[0]).toEqual({
+      ok: true,
+      response: {
+        project: {
+          projectId: 'demo',
+          repoUrl: repo,
+          baseBranch: 'main',
+          maxRunning: 2,
+          depPolicy: 'delivered',
+        },
+        created: true,
+      },
+    });
+    expect(outcomes[2]).toEqual({
+      ok: true,
+      response: {
+        project: {
+          projectId: 'demo',
+          repoUrl: repo,
+          baseBranch: 'main',
+          maxRunning: 3,
+          depPolicy: 'delivered',
+        },
+        created: false,
+      },
+    });
+    expect(outcomes[3]).toMatchObject({
+      ok: true,
+      response: { projects: [{ projectId: 'demo', maxRunning: 3 }] },
+    });
+  }, 60_000);
+});

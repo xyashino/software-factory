@@ -44,6 +44,7 @@ const wait = (ms: number): Promise<void> =>
 /** The Cell's routes only: a supervisor route is not for a Cell, so it is refused before any call. */
 const CELL_ROUTES: ReadonlySet<string> = new Set([
   'hello',
+  'cellProjectEnsure',
   'claim',
   'heartbeat',
   'submitCommand',

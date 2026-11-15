@@ -82,8 +82,8 @@ export const projectLsCommand = defineCommand({
 });
 
 /**
- * `factory project add <id> --repo <url> [...]`. A Cell serves the project only if its config lists it,
- * so the hint names that on stderr, where a script does not read it.
+ * `factory project add <id> --repo <url> [...]`. A Cell serves the project when it runs in a repository
+ * with that origin or its config lists it, so the hint names both on stderr, where a script does not read it.
  */
 export const projectAddCommand = defineCommand({
   meta: { name: 'add', description: 'Register a project' },
@@ -120,7 +120,7 @@ export const projectAddCommand = defineCommand({
       if (ctx.json) return printJson({ project });
       console.log(`added ${project.projectId}`);
       console.error(
-        `a Cell serves ${project.projectId} only if its config lists it (projects in config.toml)`,
+        `a Cell serves ${project.projectId} when it runs in a repository with this origin, or when its config lists it (projects in config.toml)`,
       );
     }),
 });

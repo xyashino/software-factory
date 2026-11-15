@@ -62,7 +62,7 @@ describe('factory project in a fresh data directory', () => {
     expect(added.code).toBe(0);
     expect(added.stdout).toContain('added demo');
     expect(added.stderr).toContain(
-      'a Cell serves demo only if its config lists it',
+      'a Cell serves demo when it runs in a repository with this origin, or when its config lists it',
     );
 
     const listed = await factory(dataDir, ['project', 'ls']);
