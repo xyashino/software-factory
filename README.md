@@ -48,7 +48,7 @@ In any repository you want the Factory to run:
 factory init --dir .            # writes .factory/ (lines/, operators/, templates/)
 factory check --dir .           # validates .factory/ (and .nitpick/ when present)
 
-# 2. start the server (one per Factory; keeps factory.sock in its data directory)
+# 2. start the server (one per Factory; writes its discovery file server.json into its data directory)
 factory-server                  # or: factory run
 
 # 3. run a Cell inside the repository (reads .factory/cell.toml over ~/.config/factory-cell/config.toml)

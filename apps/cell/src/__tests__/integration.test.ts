@@ -25,7 +25,7 @@ import { startCell, type RunningCell } from '../cell';
 import { parseConfig } from '../config';
 import { createSystemAdapter } from '../adapters/system/system.adapter';
 import { systemClock } from '../clock/system-clock';
-import { socketFactoryClient, socketPathIn } from '../factory-client';
+import { discoveryIn } from '../factory-client';
 import { createJobRegistry } from '../jobs/registry';
 import { runJob } from '../jobs/run-job';
 import type { JobContext } from '../jobs/send';
@@ -33,12 +33,18 @@ import { createHeartbeat } from '../loops/heartbeat';
 import { factoryFiles } from '../testing/factory-fixture';
 import { commitFile, git, makeRepo } from '../testing/git-repo';
 import type { GithubPort } from '../ports/github.port';
+import { joinCell } from './helpers/join';
+import { splitClient } from './helpers/split-client';
+import { supervisorClient } from './helpers/supervisor-client';
 
 /** The fixture server: factory-server over a seeded data directory, spawned by path (no import). */
 const FIXTURE = fileURLToPath(
   new URL('../../../server/src/testing/serve-fixture.ts', import.meta.url),
 );
-const CELL = '01J0000000000000000000000W' as CellId;
+/** The Cell's id, named by the Factory when the test's Cell joins (set by `startFactory`). */
+let CELL: CellId;
+/** The test's client to the running fixture: supervisor routes and the Cell's own routes. */
+let current: FactoryClient | undefined;
 const ORDER = 'software-factory:todo-1' as OrderId;
 const ONE_CELL = parseConfig('projects = ["software-factory"]');
 
@@ -67,7 +73,8 @@ afterEach(async () => {
 });
 
 /**
- * Starts the fixture server with `checks` as the quality gate, and waits until its socket listens.
+ * Starts the fixture server with `checks` as the quality gate, and waits until its discovery file names
+ * it. The test's Cell then joins with the discovery file's join token, as a local Cell does.
  * `continuation` false keeps every next job in the queue, so the test's own Cell claims it.
  */
 const startFactory = async (
@@ -87,14 +94,24 @@ const startFactory = async (
   );
   children.push(child);
   for (let waited = 0; waited < 20_000; waited += 50) {
-    if (existsSync(socketPathIn(dataDir))) return child;
+    const discovery = discoveryIn(dataDir);
+    if (discovery !== undefined) {
+      const supervisor = supervisorClient(discovery.url, discovery.token);
+      const joined = await joinCell(discovery.url, discovery.joinToken);
+      CELL = joined.cellId;
+      current = splitClient(supervisor, joined.client);
+      return child;
+    }
     await Bun.sleep(50);
   }
-  throw new Error('the fixture server did not open its socket');
+  throw new Error('the fixture server did not write its discovery file');
 };
 
-const socketClient = (): FactoryClient =>
-  socketFactoryClient({ socketPath: socketPathIn(dataDir) });
+/** The client of the running fixture, set by `startFactory`. */
+const socketClient = (): FactoryClient => {
+  if (current === undefined) throw new Error('no fixture server is running');
+  return current;
+};
 
 /** The Order's events, as their type names, in order. */
 const eventTypes = async (client: FactoryClient): Promise<string[]> => {
@@ -193,6 +210,7 @@ const playStation = async (
   const send = async (step: string, command: OrderCommand) => {
     await client.call('submitCommand', {
       cellId: CELL,
+      jobId: job.jobId,
       orderId: job.orderId,
       commandId: `${job.jobId}:${step}`,
       epoch: job.epoch,
@@ -233,7 +251,7 @@ const playStation = async (
   });
 };
 
-describe('Cell over the socket', () => {
+describe('Cell over HTTP', () => {
   it('says hello and gets the runtime config back', async () => {
     await startFactory(['echo inspected']);
 
@@ -249,14 +267,17 @@ describe('Cell over the socket', () => {
     expect(answer.config.leaseTtlMs).toBeGreaterThan(answer.config.selfFenceMs);
   });
 
-  it('serves the socket and opens no TCP listener', async () => {
+  it('serves HTTP on a loopback TCP listener, and opens no Unix socket', async () => {
     const child = await startFactory(['echo inspected']);
 
     const own = socketInodes(child.pid);
     const listening = listeningTcpInodes();
 
     expect(own.size).toBeGreaterThan(0);
-    expect([...own].filter((inode) => listening.has(inode))).toEqual([]);
+    expect(
+      [...own].filter((inode) => listening.has(inode)).length,
+    ).toBeGreaterThan(0);
+    expect(existsSync(join(dataDir, 'factory.sock'))).toBe(false);
   });
 
   it('claims an Inspection job, keeps it alive, and reports it accepted, in that order', async () => {

@@ -1,3 +1,4 @@
+import { randomBytes, randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -7,13 +8,16 @@ import {
 import { openForAdmin, runAdminCommand } from './admin-command';
 import { runOnce } from './once';
 import { startHttpListener, type HttpListener } from './http/listener';
-import { remoteConfigFrom, type RemoteConfig } from './http/config';
+import { listenerConfigFrom, type ListenerConfig } from './http/config';
+import { removeDiscovery, writeDiscovery } from './http/discovery';
 import { runtimeConfigFrom } from './runtime-config';
-import { startSocketListener, type SocketListener } from './socket/listener';
 import { usage } from './usage';
 
-/** The socket inside the data directory (PROTOCOL §2). */
-export const SOCKET_FILE_NAME = 'factory.sock';
+/**
+ * How long the join token a local Cell enrolls with stays valid (PROTOCOL §3.2). A new one is minted on
+ * every start, and the previous one is revoked on a clean shutdown, so it only outlives a crash by this much.
+ */
+export const LOCAL_JOIN_TTL_S = 24 * 60 * 60;
 
 /** The data directory: `$FACTORY_DATA_DIR`, else `~/.local/share/factory` (STORAGE §1). */
 export const dataDirFromEnv = (env: NodeJS.ProcessEnv): string =>
@@ -52,11 +56,12 @@ const stripDataDirFlag = (argv: readonly string[]): string[] => {
 
 /**
  * `factory-server`: the single writer of a Factory data directory (STORAGE §1). It takes the writer
- * lock, arms the runtime's boot grace, serves the socket, and shuts down cleanly on
- * SIGINT or SIGTERM: the listener stops, the socket file is removed, the lock is released.
+ * lock, arms the runtime's boot grace, serves HTTP + SSE on its address (PROTOCOL §2), writes the
+ * discovery file for local clients, and shuts down cleanly on SIGINT or SIGTERM: the discovery file is
+ * removed, the listener stops, the local join token is revoked, the lock is released.
  *
  * The signal handlers are installed before anything is opened, so a signal that arrives while the
- * server starts still goes through the same shutdown, and the socket file is never left behind.
+ * server starts still goes through the same shutdown.
  */
 const main = async (): Promise<void> => {
   if (process.argv.includes('--help')) {
@@ -77,10 +82,10 @@ const main = async (): Promise<void> => {
     process.exitCode = await runAdminCommand(positional.slice(1), dataDir);
     return;
   }
-  let remote: RemoteConfig;
+  let listenerConfig: ListenerConfig;
   let timing: ReturnType<typeof runtimeConfigFrom>;
   try {
-    remote = remoteConfigFrom(process.env);
+    listenerConfig = listenerConfigFrom(process.env);
     timing = runtimeConfigFrom(process.env);
   } catch (error) {
     console.error(`factory-server: ${(error as Error).message}`);
@@ -90,16 +95,25 @@ const main = async (): Promise<void> => {
   const state: {
     stopping: boolean;
     opened?: OpenedRuntime;
-    listener?: SocketListener;
     http?: HttpListener;
+    localToken?: string;
+    localJoinTokenId?: string;
   } = { stopping: false };
 
   const shutdown = async (signal: string): Promise<void> => {
     if (state.stopping) return;
     state.stopping = true;
     console.log(`factory-server: ${signal}, shutting down`);
+    // The discovery file goes first, so no local client is pointed at a listener that is closing.
+    if (state.localToken !== undefined) {
+      removeDiscovery(dataDir, state.localToken);
+    }
     await state.http?.stop();
-    await state.listener?.stop();
+    if (state.opened && state.localJoinTokenId !== undefined) {
+      await state.opened.runtime
+        .call('joinTokenRevoke', { joinTokenId: state.localJoinTokenId })
+        .catch(() => undefined);
+    }
     state.opened?.close();
     process.exit(0);
   };
@@ -122,23 +136,43 @@ const main = async (): Promise<void> => {
 
   await opened.runtime.start();
   if (state.stopping) return;
-  const listener = startSocketListener({
-    runtime: opened.runtime,
-    socketPath: join(dataDir, SOCKET_FILE_NAME),
+
+  // The local supervisor token lives in memory only; the join token is a runtime token, revoked on exit.
+  const localToken = randomBytes(32).toString('base64url');
+  const joinToken = await opened.runtime.call('joinTokenCreate', {
+    commandId: `local-${randomUUID()}`,
+    name: 'local-cells',
+    ttlSeconds: LOCAL_JOIN_TTL_S,
   });
-  state.listener = listener;
-  console.log(`factory-server: listening on ${listener.socketPath}`);
-  if (remote.enabled) {
+  state.localJoinTokenId = joinToken.joinTokenId;
+
+  try {
     state.http = startHttpListener({
       runtime: opened.runtime,
-      hostname: remote.hostname,
-      port: remote.port,
-      ...(remote.githubWebhookSecret !== undefined
-        ? { githubWebhookSecret: remote.githubWebhookSecret }
+      hostname: listenerConfig.hostname,
+      port: listenerConfig.port,
+      localToken,
+      ...(listenerConfig.githubWebhookSecret !== undefined
+        ? { githubWebhookSecret: listenerConfig.githubWebhookSecret }
         : {}),
     });
-    console.log(`factory-server: remote listening on ${state.http.url}`);
+  } catch (error) {
+    console.error(
+      `factory-server: cannot listen on ${listenerConfig.hostname}:${listenerConfig.port}: ${(error as Error).message}`,
+    );
+    await opened.runtime
+      .call('joinTokenRevoke', { joinTokenId: joinToken.joinTokenId })
+      .catch(() => undefined);
+    opened.close();
+    process.exit(1);
   }
+  state.localToken = localToken;
+  writeDiscovery(dataDir, {
+    url: state.http.url,
+    token: localToken,
+    joinToken: joinToken.token,
+  });
+  console.log(`factory-server: listening on ${state.http.url}`);
 };
 
 if (import.meta.main) {

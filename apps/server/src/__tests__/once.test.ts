@@ -41,7 +41,7 @@ const runOnce = async (
 };
 
 describe('factory-server --once', () => {
-  it('runs one read, prints its answer and exits without leaving a socket', async () => {
+  it('runs one read, prints its answer and exits without leaving a listener', async () => {
     const result = await runOnce(
       JSON.stringify({ route: 'board', request: {} }),
     );

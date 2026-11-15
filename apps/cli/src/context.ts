@@ -67,8 +67,9 @@ export interface Context {
 }
 
 /**
- * The client of the settings in force: the socket in local mode, HTTP in remote mode. Remote mode
- * needs its token; it never reads or writes the local data directory.
+ * The client of the settings in force: HTTP to the running server in both modes. Local mode finds the
+ * server in the data directory's discovery file and needs no token; remote mode needs `FACTORY_TOKEN`
+ * and never reads or writes the local data directory.
  */
 const clientFor = (settings: Settings): FactoryClient => {
   if (settings.remoteUrl === undefined) {

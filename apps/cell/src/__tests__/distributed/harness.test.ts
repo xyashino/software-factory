@@ -19,10 +19,7 @@ const statusOf = async (
 
 describe('the distributed harness', () => {
   it('starts one Factory and one Cell behind the proxy, and delivers one Work order end to end', async () => {
-    world = await createWorld(
-      { 'add-login': todo('Add login') },
-      { remote: true },
-    );
+    world = await createWorld({ 'add-login': todo('Add login') });
     const remoteUrl = world.factory.remoteUrl;
     if (remoteUrl === undefined)
       throw new Error('the remote listener did not start');

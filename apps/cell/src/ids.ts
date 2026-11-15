@@ -33,6 +33,6 @@ export const newUlid = (now: number): string => {
   return encodeTime(now) + encodeRandom(random);
 };
 
-/** A new Cell identity: the local socket's cellId is a ULID the Cell keeps (PROTOCOL §5.1). */
+/** A new Cell identity: a ULID the Cell keeps (PROTOCOL §5.1). */
 export const newCellId = (now: () => number = Date.now): CellId =>
   newUlid(now()) as CellId;

@@ -13,8 +13,8 @@ import { cellIdSchema, type CellId } from '@repo/factory-core/ids';
 export const IDENTITY_FILE_NAME = 'credential';
 
 /**
- * Who this Cell is. The local socket needs only the cellId, which the Cell makes once and keeps; the
- * remote join (v2-18) adds the credential the Factory issues.
+ * Who this Cell is: the cellId and the credential the Factory issues when the Cell joins (PROTOCOL §3.2).
+ * The Cell keeps both, so a restart reuses them and does not join again.
  */
 export interface CellIdentity {
   cellId: CellId;

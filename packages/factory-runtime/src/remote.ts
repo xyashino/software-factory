@@ -29,7 +29,7 @@ export const sameHash = (stored: string, presented: string): boolean => {
 /**
  * What the remote transport needs from the runtime, and nothing more (PROTOCOL §1, §2). Every
  * credential check is here, so the server holds no token table of its own and the hashes never leave
- * the runtime. The socket does not use it: local trust is the operating-system account.
+ * the runtime. The local supervisor token is not stored: the server checks it in memory (PROTOCOL §1).
  */
 export interface RemoteAccess {
   /** Enrolls a Cell with a join token (PROTOCOL §3.2). The credential is returned once. */

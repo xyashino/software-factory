@@ -72,7 +72,6 @@ describe('ten Cells, fifty Work orders, Cells joining and leaving', () => {
       Object.fromEntries(
         names.map((name, index) => [name, todo(`Todo ${index + 1}`)]),
       ),
-      { remote: true },
     );
     const w = world;
     const remoteUrl = w.factory.remoteUrl;

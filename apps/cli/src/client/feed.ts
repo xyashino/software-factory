@@ -30,7 +30,7 @@ const sleep = (ms: number): Promise<void> =>
  * Waits for the next stored events after `cursor` (a long-poll of up to 25 s per call, repeated until
  * something arrives). Returns the events and the new cursor. The caller decides what to print.
  *
- * With no server socket the poll is answered at once and empty; then the wait is a pause between
+ * With no running server the poll is answered at once and empty; then the wait is a pause between
  * polls, so the loop does not spin on the one-shot server.
  */
 export const nextEvents = async (

@@ -421,7 +421,7 @@ describe('join and Cell routes', () => {
 });
 
 describe('routes that must not exist over HTTP', () => {
-  it('answers the socket paths with 404', async () => {
+  it('answers the retired /v1/supervisor/ paths with 404', async () => {
     const token = await supervisorToken();
 
     const socketPath = await send({
@@ -461,17 +461,25 @@ describe('routes that must not exist over HTTP', () => {
     expect(response.status).toBe(404);
   });
 
-  it('has no route that backs up to a server path', async () => {
+  it('backs up to a server path only for the local supervisor token', async () => {
     const token = await supervisorToken();
+    const json = { file: '/tmp/anything.db' };
 
-    const response = await send({
+    const remote = await send({
       method: 'POST',
       path: '/v1/admin/backup',
       token,
-      json: { file: '/tmp/anything.db' },
+      json,
+    });
+    const anonymous = await send({
+      method: 'POST',
+      path: '/v1/admin/backup',
+      json,
     });
 
-    expect(response.status).toBe(404);
+    expect(remote.status).toBe(401);
+    expect(await bodyOf(remote)).toEqual({ code: 'unauthorized' });
+    expect(anonymous.status).toBe(401);
   });
 });
 

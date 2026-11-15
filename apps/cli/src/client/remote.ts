@@ -5,7 +5,6 @@ import {
   encodeHttpCall,
   refusalOf,
 } from '@repo/factory-core/contracts/http-codec';
-import { HTTP_UNMAPPED } from '@repo/factory-core/contracts/http-routes';
 import {
   ROUTES,
   type RouteName,
@@ -15,9 +14,21 @@ import {
 import type { StoredEvent } from '@repo/factory-core/order/events';
 
 /**
- * The FactoryClient of the Supervisor CLI in remote mode (PROTOCOL §2, §3.0). Every call goes over
- * TCP HTTP to the server's routes, encoded and decoded by the shared codec. The socket is not used,
- * and no local data directory is read or written. Refusals keep their wire error (`WireFailure`).
+ * No answer from the server at its address: nothing listens there, or the connection dropped. The
+ * transport takes this as "no running server" and falls back to a one-shot run; a refusal never is.
+ */
+export class ServerUnreachable extends WireFailure {
+  constructor() {
+    super({ code: 'unavailable' });
+    this.name = 'ServerUnreachable';
+  }
+}
+
+/**
+ * The FactoryClient of the Supervisor CLI (PROTOCOL §2, §3.0). Every call goes over HTTP to the
+ * server's routes, encoded and decoded by the shared codec. Local and remote mode both use it: local
+ * mode reads the server's address and local token from the discovery file. Refusals keep their wire
+ * error (`WireFailure`).
  */
 export interface RemoteClientOptions {
   /** The server's address, e.g. `http://factory.example:7878`. */
@@ -30,8 +41,6 @@ export interface RemoteClientOptions {
 const FEED_HOLD_MS = 25_000;
 /** A feed read with `waitMs: 0` still waits this long for events the server already holds. */
 const MIN_FEED_HOLD_MS = 100;
-
-const unavailable = (): WireFailure => new WireFailure({ code: 'unavailable' });
 
 /** Splits complete SSE blocks out of a buffer; the rest stays for the next chunk. */
 const takeBlocks = (buffer: string): { blocks: string[]; rest: string } => {
@@ -53,7 +62,7 @@ const eventOf = (block: string): StoredEvent | undefined => {
 
 /**
  * The event feed as the CLI reads it: the events after `afterGlobalSeq`, from `GET /v1/stream`. It
- * returns at once with what the stream has sent, or after `waitMs` with nothing. The socket answers
+ * returns at once with what the stream has sent, or after `waitMs` with nothing. The long-poll answers
  * the same question with a long-poll; this is that answer over server-sent events.
  */
 const eventsAfter = async (
@@ -69,20 +78,25 @@ const eventsAfter = async (
   const events: StoredEvent[] = [];
   let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
   try {
-    const response = await fetch(
-      `${options.baseUrl}/v1/stream?after=${afterGlobalSeq}`,
-      {
-        headers: { authorization: `Bearer ${options.token}` },
-        signal: controller.signal,
-      },
-    );
+    let response: Response;
+    try {
+      response = await fetch(
+        `${options.baseUrl}/v1/stream?after=${afterGlobalSeq}`,
+        {
+          headers: { authorization: `Bearer ${options.token}` },
+          signal: controller.signal,
+        },
+      );
+    } catch {
+      throw new ServerUnreachable();
+    }
     if (!response.ok) {
       throw refusalOf(
         response.status,
         new Uint8Array(await response.arrayBuffer()),
       );
     }
-    if (!response.body) throw unavailable();
+    if (!response.body) throw new ServerUnreachable();
     reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
@@ -109,8 +123,8 @@ const eventsAfter = async (
 };
 
 /**
- * Builds the remote FactoryClient. A transport failure (no answer) is `unavailable`, the same code the
- * socket path gives after its retries, so the command's error reads the same in both modes.
+ * Builds the FactoryClient for one server. A transport failure (no answer) throws `ServerUnreachable`,
+ * which is a `WireFailure` with code `unavailable`, so a command's error reads the same whatever the cause.
  */
 export const remoteFactoryClient = (
   options: RemoteClientOptions,
@@ -129,11 +143,6 @@ export const remoteFactoryClient = (
         Math.min(feed.waitMs ?? 0, FEED_HOLD_MS),
       );
       return ROUTES.supervisorEvents.response.parse(page) as RouteResponse<K>;
-    }
-    if (route in HTTP_UNMAPPED) {
-      throw new Error(
-        `${route} runs on the Factory host, not over the network: ${HTTP_UNMAPPED[route as keyof typeof HTTP_UNMAPPED]}`,
-      );
     }
     const parsed = ROUTES[route].request.parse(request) as RouteRequest<K>;
     const encoded = encodeHttpCall(route, parsed);
@@ -154,7 +163,7 @@ export const remoteFactoryClient = (
         body,
       });
     } catch {
-      throw unavailable();
+      throw new ServerUnreachable();
     }
     const bytes = new Uint8Array(await response.arrayBuffer());
     const answer = decodeHttpAnswer(route, parsed, response.status, bytes);

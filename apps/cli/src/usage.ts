@@ -1,6 +1,6 @@
 export const usage = `usage: factory <command> [options]
 
-The Supervisor command line. Talks to a running factory-server over $FACTORY_DATA_DIR/factory.sock;
+The Supervisor command line. Talks to a running factory-server over HTTP (found in $FACTORY_DATA_DIR/server.json);
 with no server running, a write or a read runs one command under the writer lock and exits.
 
   factory run                               start factory-server in the foreground

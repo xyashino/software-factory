@@ -42,7 +42,7 @@ describe('factory-cell boundaries', () => {
 
   it('rejects an import of factory-server from Cell source', async () => {
     const rules = await reportedRules(
-      `import { startSocketListener } from '@repo/factory-server/socket/listener';`,
+      `import { startHttpListener } from '@repo/factory-server/http/listener';`,
     );
     expect(rules).toContain('no-restricted-imports');
   });
@@ -50,7 +50,7 @@ describe('factory-cell boundaries', () => {
   it('allows the e2e tests to boot the runtime and the server', async () => {
     const eslint = new ESLint({ cwd: PACKAGE_DIR });
     const [result] = await eslint.lintText(
-      `import { openRuntime } from '@repo/factory-runtime/open-runtime';\nimport { startSocketListener } from '@repo/factory-server/socket/listener';`,
+      `import { openRuntime } from '@repo/factory-runtime/open-runtime';\nimport { startHttpListener } from '@repo/factory-server/http/listener';`,
       { filePath: resolve(PACKAGE_DIR, 'src/__tests__/e2e/probe.ts') },
     );
     expect(

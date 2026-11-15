@@ -3,10 +3,11 @@
 ## Goal
 
 Turn a todo into a verified pull request by sending it down a declarative production Line, as in
-v1. **The server over a local Unix socket is the core of v2.0**: one `factory-server` process owns the
-local database through the writer lock, runs the queue, and serves the CLI and Cells over
-`$FACTORY_DATA_DIR/factory.sock`. It needs no network listener. An **optional, later distributed mode**
-adds TCP with HTTP/SSE to the same server so Cells on other machines can join. In either mode, Work order state is portable,
+v1. **The server over HTTP + SSE is the core of v2.0**: one `factory-server` process owns the
+local database through the writer lock, runs the queue, and serves the CLI and Cells over one HTTP
+listener, `127.0.0.1:7878` by default. Local clients find it through the discovery file
+`$FACTORY_DATA_DIR/server.json`, so no token is set by hand. The same listener serves other machines,
+so Cells on other machines can join with no second transport. On Windows, Linux and macOS alike. In either mode, Work order state is portable,
 protected against duplicate processing, and resumable from the Station where it stopped.
 
 ## Requirements
@@ -27,7 +28,8 @@ protected against duplicate processing, and resumable from the Station where it 
 - **A highly available distributed control plane.** Distributed mode has one active `factory-server`.
   If it is down briefly, remote Cells keep going; if it is down past the self-fence window, in-flight
   Cycles are lost and restarted (PROTOCOL §11). HA is possible later because state is append-only
-  (OPEN-QUESTIONS Q1). Local mode does not require a network listener; it uses the local Unix socket.
+  (OPEN-QUESTIONS Q1). Local mode uses the same loopback HTTP listener as remote mode; it binds
+  no address beyond loopback unless `FACTORY_BIND` says so.
 - **Multi-tenant or untrusted Cells.** Cells are machines you own.
 - **A web UI.** The HTTP API and the event stream are designed so one can be added (`apps/web`).
 - **Parallel Stations inside one Work order.** One Work order runs one Station at a time.
@@ -40,7 +42,7 @@ protected against duplicate processing, and resumable from the Station where it 
 
 | Principle                                                      | Meaning                                                                                                                                                                                                                                     |
 | :------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **The runtime decides, the Cell executes**                     | `nextJob` runs in the `factory-server` runtime. A Cell never chooses what to do next; it asks for a job and reports what happened. In local mode, the server listens on the Unix socket; in distributed mode, it also exposes HTTP over TCP. |
+| **The runtime decides, the Cell executes**                     | `nextJob` runs in the `factory-server` runtime. A Cell never chooses what to do next; it asks for a job and reports what happened. The server serves one HTTP + SSE listener, local and remote alike. |
 | **The core is pure**                                           | `evolve`, `decide`, `nextJob`, `toProjection`, `selectClaimable` and the Cycle policy perform no I/O and read no clock. Time arrives in events and commands.                                                                                |
 | **Events are facts about the Work order, not about a machine** | No absolute path, pane id, hostname-dependent value or process id is part of the Traveler. Machine-local runtime data stays on the Cell.                                                                                                    |
 | **One writer per Work order at a time**                        | A Traveler accepts writes only from the holder of the current lease epoch (plus the Supervisor and the runtime).                                                                                                                            |
@@ -57,50 +59,51 @@ The core is one process, `factory-server` (`apps/server`), which runs the shared
 application API. Commands, validation and domain decisions do not vary by transport. Local and remote
 databases are independent sources of truth (STORAGE §1).
 
-The server does not start a network listener in local mode. It uses the local Unix socket
-`$FACTORY_DATA_DIR/factory.sock` (mode 0600), and trust is the operating-system account. One writer owns
-the local database through an exclusive lock (STORAGE §1): `factory run` (the local start command for
-the server) holds it for its lifetime. The server runs no timer and no loop: expired leases are reaped
-lazily on claim, heartbeat and board reads (PROTOCOL §5.4). The CLI and
-Cells are socket clients and never open the database. If no server is running, a one-shot CLI write
+The server runs one HTTP + SSE listener, on loopback `127.0.0.1:7878` unless `FACTORY_BIND` says
+otherwise. On start it writes `$FACTORY_DATA_DIR/server.json` (mode 0600 on POSIX): the listener's URL,
+a local supervisor token and a local join token. The local supervisor token exists only in the server's
+memory, and the file is removed on a clean shutdown (PROTOCOL §2). One writer owns the local database
+through an exclusive lock (STORAGE §1): `factory run` (the local start command for the server) holds it
+for its lifetime. The server runs no timer and no loop: expired leases are reaped lazily on claim,
+heartbeat and board reads (PROTOCOL §5.4). The CLI and Cells are HTTP clients and never open the database. If no server is running, a one-shot CLI write
 may start the runtime in-process for that command while holding the writer lock; reads are always allowed.
-Distributed mode (optional, M4R, built after the local core) adds TCP with HTTP/SSE to the same server
-so Cells on other machines can join.
+Distributed mode is the same listener reached from other machines (remote Cells and CLIs over a private
+network or TLS proxy); it adds no second transport.
 
 ```mermaid
 flowchart LR
   subgraph Supervisor["Supervisor"]
-    CLI["factory CLI (socket client)"]
+    CLI["factory CLI (HTTP client)"]
   end
 
   subgraph Server["factory-server (core process)"]
     APP["factory-runtime: use cases, lazy reaper, leases"]
     DB[("SQLite: Travelers, projections, leases, blobs")]
-    SOCK["Unix socket listener factory.sock (0600)"]
+    HTTP["HTTP/SSE listener (Hono) on 127.0.0.1:7878"]
+    DISC["server.json discovery file (0600)"]
+    HTTP --> APP
     APP --> DB
-    SOCK --> APP
   end
 
   subgraph Remote["Optional distributed mode"]
-    HTTP["TCP listener: HTTP/SSE (Hono)"]
     REMOTE["Remote Cell or CLI"]
-    REMOTE --> HTTP
+    REMOTE -->|"FACTORY_URL / factory_url"| HTTP
   end
 
   subgraph CellHost["Cell execution"]
-    C["factory-cell (socket client, one Work order at a time)"]
+    C["factory-cell (HTTP client, one Work order at a time)"]
     RT["Cycle runtime"]
     H["Herdr panes"]
     OP["Operator"]
     FXO["factory-operator"]
     C --> RT --> H --> OP
     OP --> FXO
-    FXO -->|"per-Cell unix socket"| C
+    FXO -->|"per-Cell localhost endpoint"| C
   end
 
-  CLI -->|"unix socket"| SOCK
-  C -->|"unix socket"| SOCK
-  HTTP --> APP
+  CLI -->|"HTTP, address and token from"| DISC
+  C -->|"HTTP, address and join token from"| DISC
+  C -->|"HTTP"| HTTP
 
   GIT[("git remote + GitHub")]
   C -->|"push checkpoints, open PR"| GIT
@@ -111,13 +114,13 @@ flowchart LR
 
 | Component                                          | Owns                                                                                                                                                                                           | Never does                                                                              |
 | :------------------------------------------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :-------------------------------------------------------------------------------------- |
-| **`factory-runtime`** (`packages/factory-runtime`) | Application use cases; database lifecycle; queue; leases and epochs; the lazy reaper; pull request state records; `decide` for commands; `nextJob`; prompt rendering; the event feed used by `factory-server`                 | Transport (socket or HTTP), run Operators, touch Herdr, run Inspections, create worktrees, open PRs |
-| **Cell** (`apps/cell`, `factory-cell`)             | Its mirror and worktrees; Herdr panes; runner adapters; Inspection execution; the Cycle runtime (watch, reminders, prompt delivery); the local Operator socket; checkpoint pushes; PR creation | Decide the next Station; write to the database; talk to another Cell                    |
+| **`factory-runtime`** (`packages/factory-runtime`) | Application use cases; database lifecycle; queue; leases and epochs; the lazy reaper; pull request state records; `decide` for commands; `nextJob`; prompt rendering; the event feed used by `factory-server` | Transport (HTTP), run Operators, touch Herdr, run Inspections, create worktrees, open PRs |
+| **Cell** (`apps/cell`, `factory-cell`)             | Its mirror and worktrees; Herdr panes; runner adapters; Inspection execution; the Cycle runtime (watch, reminders, prompt delivery); the local Operator endpoint; checkpoint pushes; PR creation | Decide the next Station; write to the database; talk to another Cell                    |
 | **`factory-operator`** (`apps/operator-cli`)       | Passing an Operator's verbs to its Cell                                                                                                                                                        | Know the Factory's address or any Factory credential                                    |
-| **`factory`** (`apps/cli`)                         | Rendering; config and client selection; socket client to the running server (or remote client); one-shot in-process fallback; offline `factory check`                          | Depend directly on the runtime library, HTTP details or storage adapters                |
+| **`factory`** (`apps/cli`)                         | Rendering; config and client selection; HTTP client to the running server (local via the discovery file, or remote); one-shot fallback; offline `factory check`                  | Depend directly on the runtime library, HTTP details or storage adapters                |
 | **core** (`packages/factory-core`)                 | Domain types, schemas, pure functions, transport-neutral DTOs and ports                                                                                                                        | Any I/O                                                                                 |
 | **runtime** (`packages/factory-runtime`)           | Application use cases composed over core ports and storage; shared by local and server modes                                                                                                   | HTTP transport and Cell execution                                                       |
-| **server** (`apps/server`, `factory-server`)       | Core process: owns the database through the writer lock; Unix socket listener; optional TCP HTTP/SSE listener; auth; server lifecycle                                                | Own a second implementation of application decisions                                    |
+| **server** (`apps/server`, `factory-server`)       | Core process: owns the database through the writer lock; the HTTP/SSE listener; the discovery file; auth; server lifecycle                                                             | Own a second implementation of application decisions                                    |
 | **db** (`packages/factory-db`)                     | The `EventStore`, `BlobStore`, `LeaseStore` implementations and migrations                                                                                                                     | Domain decisions                                                                        |
 | **definitions** (`packages/factory-definitions`)   | Schemas, validators and parsers (`line-schema`, `line-validate`, `line-snapshot`, `operator-profile`, `templates`, `nitpick-catalog`, `load`); the runtime prompts (`templates/runtime/`); starter scaffold assets | Repo-specific workflow and PR templates (those are in each repo's `.factory/`); runtime state |
 
@@ -144,7 +147,7 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-  A["Operator (untrusted output)"] -- "Cycle token, local socket only" --> C["Cell"]
+  A["Operator (untrusted output)"] -- "Cycle token, localhost endpoint only" --> C["Cell"]
   C -- "Cell credential + lease epoch (remote mode)" --> S["Factory runtime"]
   J["new Cell"] -- "join token, /v1/cell/join only" --> S
   U["Supervisor via factory"] -- "supervisor token (remote mode) or local OS account (local mode)" --> S
@@ -160,7 +163,7 @@ flowchart LR
 
 ## End-to-end flows
 
-### F0. Local run over the Unix socket (no network listener)
+### F0. Local run over HTTP (loopback listener, discovery file)
 
 ```mermaid
 sequenceDiagram
@@ -168,12 +171,12 @@ sequenceDiagram
   participant S as factory-server (factory run)
   participant R as factory-runtime
   participant D as local SQLite
-  participant C as factory-cell (socket client)
+  participant C as factory-cell (HTTP client)
   U->>S: factory run
   S->>D: open local database under writer lock
-  S->>S: listen on $FACTORY_DATA_DIR/factory.sock (0600)
+  S->>S: listen on 127.0.0.1:7878, write $FACTORY_DATA_DIR/server.json (0600)
   S->>R: arm boot grace (every lease gets a full TTL; no timer)
-  C->>S: connect over socket, hello (contract version)
+  C->>S: read server.json, join with its join token (once), then hello (contract version)
   loop while the run is active
     C->>S: claim (long-poll, up to 25 s)
     S->>R: nextJob, new epoch, record job_claimed
@@ -219,7 +222,7 @@ sequenceDiagram
     C->>S: heartbeat (all held jobs)
   end
   H->>O: Operator calls factory-operator done
-  O->>C: done (local socket)
+  O->>C: done (localhost endpoint)
   C->>C: validate artifacts, commit
   C->>S: upload blobs, dry-run CompleteCycle
   C->>C: push checkpoint (force-with-lease)
@@ -286,7 +289,7 @@ sequenceDiagram
 | Term                | Meaning                                                                                                                                                                             |
 | :------------------ | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **the factory**     | The whole system.                                                                                                                                                                   |
-| **Factory runtime** | The application and scheduling layer that owns the active database and Travelers. It runs inside the core process `factory-server`, which serves it over the Unix socket locally and, optionally, TCP HTTP in distributed mode. |
+| **Factory runtime** | The application and scheduling layer that owns the active database and Travelers. It runs inside the core process `factory-server`, which serves it over HTTP on loopback (and, optionally, to remote machines) locally and, optionally, TCP HTTP in distributed mode. |
 | **Cell**            | A manufacturing cell (`factory-cell`): a replaceable compute device that joins, runs Cycles, and leaves at any time.                                                                                      |
 | **Line**            | A declarative production workflow: an ordered list of Stations plus delivery settings.                                                                                              |
 | **Station**         | One step on a Line: an **Operator station** or an **Inspection**.                                                                                                                   |

@@ -215,7 +215,7 @@ describe('creating a Work order over HTTP', () => {
 });
 
 describe('a command for a job the Cell no longer holds', () => {
-  it('is refused with stale_epoch (409), as the socket refuses it, not with a server error', async () => {
+  it('is refused with stale_epoch (409), not with a server error', async () => {
     const token = await supervisorToken();
     await createOrderOver(token);
     const cell = await joinAndHello();

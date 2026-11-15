@@ -15,18 +15,23 @@ export interface HttpListener {
 }
 
 /**
- * Serves the runtime on TCP (PROTOCOL §2). It is started beside the Unix socket only when remote mode
- * is on; the socket listener is unaffected. The caller holds the writer lock, as for the socket.
+ * Serves the runtime over HTTP + SSE (PROTOCOL §2): the one transport of `factory-server`, for local
+ * clients and remote ones alike. The caller holds the writer lock. `localToken`, when given, is the
+ * supervisor credential of local clients; it lives in memory only and is never stored by the runtime.
  */
 export const startHttpListener = (options: {
   runtime: Runtime;
   hostname: string;
   port: number;
   githubWebhookSecret?: string;
+  localToken?: string;
 }): HttpListener => {
   const app = createHttpApp(options.runtime, {
     ...(options.githubWebhookSecret !== undefined
       ? { githubWebhookSecret: options.githubWebhookSecret }
+      : {}),
+    ...(options.localToken !== undefined
+      ? { localToken: options.localToken }
       : {}),
   });
   const server = Bun.serve({

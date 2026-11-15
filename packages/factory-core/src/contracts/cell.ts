@@ -171,7 +171,7 @@ export const blobPutResponseSchema = z.object({ ref: blobRefSchema }).strict();
 
 /**
  * `POST /v1/cell/join` (PROTOCOL §3.2): the join token enrolls a Cell and gets it a credential. The
- * credential is returned once; the runtime keeps its hash. Remote only: the socket has no join.
+ * credential is returned once; the runtime keeps its hash. Every Cell joins, local or remote, over HTTP.
  */
 export const joinRequestSchema = z
   .object({

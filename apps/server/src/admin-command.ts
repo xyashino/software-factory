@@ -70,7 +70,7 @@ const runTokenCommand = async (
 /**
  * `factory-server admin <backup|export|import|rebuild-projections> [file]`: one shot against a data
  * directory that no server runs on. The writer lock decides: a running server makes this fail with
- * a pointer to the socket route (`factory admin`), which runs the same operation inside that server.
+ * a pointer to the local route (`factory admin`), which runs the same operation inside that server.
  * Prints the result as JSON on stdout. Returns the process exit code.
  */
 export const runAdminCommand = async (
