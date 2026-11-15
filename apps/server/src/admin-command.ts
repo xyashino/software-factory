@@ -5,8 +5,6 @@ import {
   type OpenedRuntime,
 } from '@repo/factory-runtime/open-runtime';
 import type { RuntimeConfig } from '@repo/factory-runtime/ports';
-import { ghPrState } from './adapters/pr-state';
-import { gitMirror } from './adapters/git-mirror';
 import { adminUsage } from './usage';
 
 /** The admin operations of STORAGE §7, by their command names. */
@@ -15,29 +13,23 @@ const OPERATIONS = [
   'export',
   'import',
   'rebuild-projections',
-  'recover',
 ] as const;
 /** Operations that take no file argument. */
-const NO_FILE = new Set<Operation>(['rebuild-projections', 'recover']);
+const NO_FILE = new Set<Operation>(['rebuild-projections']);
 type Operation = (typeof OPERATIONS)[number];
 
 const isOperation = (name: string | undefined): name is Operation =>
   OPERATIONS.includes(name as Operation);
 
 /**
- * Opens the data directory as its single writer, with the real git and PR adapters. `config` carries
- * the timing knobs the environment set (runtime-config.ts); it is empty in production.
+ * Opens the data directory as its single writer. The server runs no git and no gh: repositories and
+ * pull requests reach it through the task API and the GitHub webhook. `config` carries the timing
+ * knobs the environment set (runtime-config.ts); it is empty in production.
  */
 export const openForAdmin = (
   dataDir: string,
   config: Partial<RuntimeConfig> = {},
-): OpenedRuntime =>
-  openRuntime({
-    dataDir,
-    git: gitMirror({ mirrorsDir: `${dataDir}/mirrors` }),
-    prState: ghPrState(),
-    config,
-  });
+): OpenedRuntime => openRuntime({ dataDir, config });
 
 /**
  * `factory-server admin token create <name>` (PROTOCOL §1): creates a supervisor token through the
@@ -129,9 +121,6 @@ export const runAdminCommand = async (
         break;
       case 'rebuild-projections':
         console.log(JSON.stringify({ rows: await admin.rebuildProjections() }));
-        break;
-      case 'recover':
-        console.log(JSON.stringify(await admin.recover()));
         break;
     }
     return 0;

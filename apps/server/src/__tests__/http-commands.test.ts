@@ -4,19 +4,17 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Job } from '@repo/factory-core/contracts/job';
 import type { CellId, OrderId, ProjectId } from '@repo/factory-core/ids';
-import { fakePrState } from '@repo/factory-core/testing';
 import {
   openRuntime,
   type OpenedRuntime,
 } from '@repo/factory-runtime/open-runtime';
 import { seedProject } from '@repo/factory-runtime/seed';
-import { gitMirror } from '../adapters/git-mirror';
 import { createHttpApp } from '../http/app';
-import { createFixtureRepo, todoFile } from './e2e/fixture-repo';
+import { orderRequest } from '../testing/order-request';
 
 /**
- * The supervisor command routes, intake sync and both heartbeat paths, over the Hono app with the real
- * git adapter: each one is answered from the same runtime the socket uses (PROTOCOL §3.1, §3.2).
+ * The supervisor command routes, Work order creation and both heartbeat paths, over the Hono app: each
+ * one is answered from the same runtime the socket uses (PROTOCOL §3.1, §3.2).
  */
 
 const PROJECT = 'software-factory' as ProjectId;
@@ -34,16 +32,11 @@ beforeEach(async () => {
   root = mkdtempSync(join(tmpdir(), 'factory-http-commands-'));
   const dataDir = join(root, 'data');
   mkdirSync(dataDir);
-  const repo = await createFixtureRepo(join(root, 'repo'), {
-    'add-login': todoFile({ title: 'Add login', v2: true }),
+  seedProject(dataDir, {
+    projectId: PROJECT,
+    repoUrl: 'https://example.test/software-factory.git',
   });
-  seedProject(dataDir, { projectId: PROJECT, repoUrl: repo });
-  opened = openRuntime({
-    dataDir,
-    git: gitMirror({ mirrorsDir: join(dataDir, 'mirrors') }),
-    prState: fakePrState(),
-    config: { intakePollMs: 0, prPollMs: 0 },
-  });
+  opened = openRuntime({ dataDir });
   await opened.runtime.start();
   app = createHttpApp(opened.runtime);
 });
@@ -81,13 +74,13 @@ const supervisorToken = async (): Promise<string> =>
 /** A fresh command id, one per call, the way the CLI sends one per invocation. */
 const nextCommandId = (): string => `cmd-http-${(commandSeq += 1)}`;
 
-/** Syncs intake over HTTP so the fixture order exists on the board. */
-const syncIntake = async (token: string): Promise<void> => {
+/** Creates the fixture Work order over HTTP so it exists on the board. */
+const createOrderOver = async (token: string): Promise<void> => {
   const response = await send({
     method: 'POST',
-    path: '/v1/intake/sync',
+    path: '/v1/orders',
     token,
-    json: {},
+    json: orderRequest(PROJECT, 'add-login'),
   });
   expect(response.status).toBe(200);
 };
@@ -203,19 +196,19 @@ const command = (
 const orderPath = (suffix: string): string =>
   `/v1/orders/${encodeURIComponent(ORDER)}${suffix}`;
 
-describe('intake sync over HTTP', () => {
-  it('registers the repository todo as a Work order on the board', async () => {
+describe('creating a Work order over HTTP', () => {
+  it('registers the Work order it is sent and lists it on the board', async () => {
     const token = await supervisorToken();
 
-    const sync = await send({
+    const created = await send({
       method: 'POST',
-      path: '/v1/intake/sync',
+      path: '/v1/orders',
       token,
-      json: {},
+      json: orderRequest(PROJECT, 'add-login'),
     });
     const board = await send({ path: '/v1/board', token });
 
-    expect(sync.status).toBe(200);
+    expect(created.status).toBe(200);
     const body = (await board.json()) as { orders: { orderId: string }[] };
     expect(body.orders.map((row) => row.orderId)).toContain(ORDER);
   });
@@ -224,7 +217,7 @@ describe('intake sync over HTTP', () => {
 describe('a command for a job the Cell no longer holds', () => {
   it('is refused with stale_epoch (409), as the socket refuses it, not with a server error', async () => {
     const token = await supervisorToken();
-    await syncIntake(token);
+    await createOrderOver(token);
     const cell = await joinAndHello();
     const job = await claimJob(cell);
     const released = await send({
@@ -260,7 +253,7 @@ describe('a command for a job the Cell no longer holds', () => {
 describe('the heartbeat over HTTP', () => {
   it('reports a job the Cell holds as ok while its lease is live', async () => {
     const token = await supervisorToken();
-    await syncIntake(token);
+    await createOrderOver(token);
     const cell = await joinAndHello();
     const job = await claimJob(cell);
 
@@ -272,7 +265,7 @@ describe('the heartbeat over HTTP', () => {
 
   it('delivers a nudge as a signal on the next beat, and acks it once', async () => {
     const token = await supervisorToken();
-    await syncIntake(token);
+    await createOrderOver(token);
     const cell = await joinAndHello();
     const job = await claimJob(cell);
     await startCycle(cell, job);
@@ -300,7 +293,7 @@ describe('the heartbeat over HTTP', () => {
 
   it('reports a job the supervisor cancelled as stale on the next beat', async () => {
     const token = await supervisorToken();
-    await syncIntake(token);
+    await createOrderOver(token);
     const cell = await joinAndHello();
     const job = await claimJob(cell);
 
@@ -317,7 +310,7 @@ describe('the heartbeat over HTTP', () => {
 describe('supervisor command routes over HTTP', () => {
   it('changes the priority and answers with the command result', async () => {
     const token = await supervisorToken();
-    await syncIntake(token);
+    await createOrderOver(token);
 
     const response = await command(token, orderPath('/priority'), {
       priority: 'low',
@@ -336,7 +329,7 @@ describe('supervisor command routes over HTTP', () => {
 
   it('refuses an answer to a question that was never asked with 404', async () => {
     const token = await supervisorToken();
-    await syncIntake(token);
+    await createOrderOver(token);
 
     const response = await command(token, orderPath('/answer'), {
       questionId: UNASKED_QUESTION,
@@ -349,7 +342,7 @@ describe('supervisor command routes over HTTP', () => {
 
   it('refuses a resume or a reopen of an order with no stopped station', async () => {
     const token = await supervisorToken();
-    await syncIntake(token);
+    await createOrderOver(token);
 
     const resume = await command(token, orderPath('/resume'), {
       mode: { kind: 'retry_station' },
@@ -375,7 +368,7 @@ describe('supervisor command routes over HTTP', () => {
   });
 
   it('refuses a Cell credential on every supervisor command route', async () => {
-    await syncIntake(await supervisorToken());
+    await createOrderOver(await supervisorToken());
     const cell = await joinAndHello();
 
     const responses = await Promise.all([
@@ -392,7 +385,7 @@ describe('supervisor command routes over HTTP', () => {
       command(cell.credential, orderPath('/reopen'), { stationId: 'plan' }),
       send({
         method: 'POST',
-        path: '/v1/intake/sync',
+        path: '/v1/orders',
         token: cell.credential,
         json: {},
       }),

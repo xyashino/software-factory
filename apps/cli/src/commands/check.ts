@@ -1,26 +1,50 @@
-import { fileURLToPath } from 'node:url';
+import { existsSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { defineCommand } from 'citty';
 import { check } from '@repo/factory-definitions/check';
-import { withErrors } from '../context';
-
-/** The Definitions package of this checkout: Operator profiles, Lines and templates. */
-export const DEFINITIONS_ROOT = fileURLToPath(
-  new URL('../../../../packages/factory-definitions', import.meta.url),
-);
+import { nitpickCatalog } from '@repo/factory-definitions/nitpick-catalog';
+import { FACTORY_DIR } from '@repo/factory-definitions/load';
+import { globalArgs, printJson, withErrors } from '../context';
 
 /**
- * `factory check`: validates Operator profiles, Lines and templates offline (PROTOCOL §10). It reads
- * the Definitions package only; no server, no database. Exits 1 when any definition is wrong.
+ * `factory check [--dir <repoRoot>]`: validates `<repoRoot>/.factory/` (Operator profiles, Lines, prompt
+ * and PR templates) offline (PROTOCOL §10). When the repository has a `.nitpick/` catalog, declared
+ * rules and skills are cross-checked against it. No server, no database. Exits 1 when any definition
+ * is wrong, printing one diagnostic per file; `--json` prints `{ok, errors}` instead.
  */
 export const checkCommand = defineCommand({
   meta: {
     name: 'check',
-    description: 'Validate Operator profiles, Lines and templates (offline)',
+    description:
+      'Validate .factory/ definitions and the .nitpick cross-check (offline)',
   },
-  args: {},
-  run: () =>
+  args: {
+    ...globalArgs,
+    dir: {
+      type: 'string',
+      description: 'The repository root (default: the working directory)',
+    },
+  },
+  run: ({ args }) =>
     withErrors(async () => {
-      const errors = check(DEFINITIONS_ROOT);
+      const repo = resolve(
+        typeof args.dir === 'string' ? args.dir : process.cwd(),
+      );
+      const factoryRoot = join(repo, FACTORY_DIR);
+      if (!existsSync(factoryRoot)) {
+        throw new Error(
+          `no ${FACTORY_DIR}/ in ${repo}; run factory init to scaffold it`,
+        );
+      }
+      const catalog = existsSync(join(repo, '.nitpick', 'config.ts'))
+        ? await nitpickCatalog(repo)
+        : undefined;
+      const errors = check(factoryRoot, { catalog });
+      if (args.json === true) {
+        printJson({ ok: errors.length === 0, errors });
+        if (errors.length > 0) process.exitCode = 1;
+        return;
+      }
       if (errors.length === 0) {
         console.log('definitions pass');
         return;

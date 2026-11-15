@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { z } from 'zod';
@@ -22,26 +22,36 @@ export const cellDataDirOf = (env: NodeJS.ProcessEnv): string =>
 const REMOVED_SLOTS_MESSAGE =
   'config.toml: slots: removed (one Cell runs one Work order at a time); run one Cell per instance directory (hostname-N) for parallel work';
 
-const cellConfigSchema = z
+/** Default worktrees kept on disk per repo before the least recently used are evicted. */
+const DEFAULT_WORKTREE_LIMIT = 8;
+
+/**
+ * Every key of a config file, with no defaults: a file (or a repo's `.factory/cell.toml`) sets only the
+ * keys it names. Unknown keys and wrong types are refused.
+ */
+const partialConfigSchema = z
   .object({
-    projects: z.array(projectIdSchema).max(64).default([]),
-    runners: z.array(z.string().min(1).max(64)).max(32).default([]),
-    capabilities: z.array(z.string().min(1).max(64)).max(32).default([]),
+    projects: z.array(projectIdSchema).max(64).optional(),
+    runners: z.array(z.string().min(1).max(64)).max(32).optional(),
+    capabilities: z.array(z.string().min(1).max(64)).max(32).optional(),
     /** The data directory of the local `factory-server`, which holds `factory.sock`. */
     factory_data_dir: z.string().min(1).optional(),
     /** Where the Cell keeps its mirrors, worktrees and identity. */
     cell_data_dir: z.string().min(1).optional(),
     /** Worktrees kept on disk before the least recently used are evicted. */
-    worktree_limit: z.number().int().min(1).max(256).default(8),
+    worktree_limit: z.number().int().min(1).max(256).optional(),
     /** Remote mode (PROTOCOL §2): the Factory's HTTP address. Unset means the local socket. */
     factory_url: z.string().url().optional(),
     /**
      * Runs every Operator station headless (the runner's print mode, no Herdr pane). Off by default:
      * Lines run their Operators in panes. Tests turn it on to run real Cell processes without Herdr.
      */
-    headless_operators: z.boolean().default(false),
+    headless_operators: z.boolean().optional(),
   })
   .strict();
+
+/** A config file as written: only the keys it names. */
+export type PartialConfig = z.infer<typeof partialConfigSchema>;
 
 export interface CellConfig {
   projects: ProjectId[];
@@ -54,41 +64,54 @@ export interface CellConfig {
   headlessOperators: boolean;
 }
 
-/** Parses the TOML text of a config file. Unknown keys and wrong types are refused, with the path named. */
-export const parseConfig = (text: string): CellConfig => {
+/**
+ * Parses the TOML text of a config file, keeping only the keys it names. Unknown keys and wrong types
+ * are refused, with the path named. `source` names the file in the message.
+ */
+export const parsePartialConfig = (
+  text: string,
+  source = 'config.toml',
+): PartialConfig => {
   const raw: unknown = Bun.TOML.parse(text);
   if (typeof raw === 'object' && raw !== null && 'slots' in raw)
     throw new Error(REMOVED_SLOTS_MESSAGE);
-  const parsed = cellConfigSchema.safeParse(raw);
+  const parsed = partialConfigSchema.safeParse(raw);
   if (!parsed.success) {
     const issue = parsed.error.issues[0];
     throw new Error(
-      `config.toml: ${issue?.path.join('.') || '(root)'}: ${issue?.message ?? 'invalid'}`,
+      `${source}: ${issue?.path.join('.') || '(root)'}: ${issue?.message ?? 'invalid'}`,
     );
   }
-  const data = parsed.data;
-  return {
-    projects: data.projects,
-    runners: data.runners,
-    capabilities: data.capabilities,
-    factoryDataDir: data.factory_data_dir,
-    cellDataDir: data.cell_data_dir,
-    worktreeLimit: data.worktree_limit,
-    headlessOperators: data.headless_operators,
-    ...(data.factory_url !== undefined ? { factoryUrl: data.factory_url } : {}),
-  };
+  return parsed.data;
+};
+
+/** The effective config: defaults for every key no file names. */
+export const toCellConfig = (partial: PartialConfig): CellConfig => ({
+  projects: partial.projects ?? [],
+  runners: partial.runners ?? [],
+  capabilities: partial.capabilities ?? [],
+  factoryDataDir: partial.factory_data_dir,
+  cellDataDir: partial.cell_data_dir,
+  worktreeLimit: partial.worktree_limit ?? DEFAULT_WORKTREE_LIMIT,
+  headlessOperators: partial.headless_operators ?? false,
+  ...(partial.factory_url !== undefined
+    ? { factoryUrl: partial.factory_url }
+    : {}),
+});
+
+/**
+ * Parses the TOML text of a config file into the effective config (defaults applied). Unknown keys and
+ * wrong types are refused, with the path named.
+ */
+export const parseConfig = (text: string): CellConfig =>
+  toCellConfig(parsePartialConfig(text));
+
+/** The partial config at `path`; a missing file names no keys. */
+export const readPartialConfig = (path: string): PartialConfig => {
+  if (!existsSync(path)) return {};
+  return parsePartialConfig(readFileSync(path, 'utf8'), path);
 };
 
 /** The config at `path`; a missing file is an empty config (defaults only, no projects). */
-export const readConfig = (path: string): CellConfig => {
-  let text: string;
-  try {
-    text = readFileSync(path, 'utf8');
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-      return parseConfig('');
-    }
-    throw error;
-  }
-  return parseConfig(text);
-};
+export const readConfig = (path: string): CellConfig =>
+  toCellConfig(readPartialConfig(path));

@@ -16,6 +16,8 @@ export interface ClaimDeps {
   ports: RuntimePorts;
   handler: CommandHandler;
   notifier: Notifier;
+  /** The lazy reaper: expired leases return to the queue before a claim is offered (PROTOCOL §5.4). */
+  reap: () => Promise<number>;
 }
 
 /**
@@ -121,6 +123,7 @@ export const claimOnce = async (
 ): Promise<Job | null> => {
   const { ports, handler } = deps;
   const cell = await assertCell(ports, cellId);
+  await deps.reap();
   const held = (await ports.leases.forCell(cellId)).length;
   const view = cellView(cellId, cell.info, held);
   if (view.busy) return null;

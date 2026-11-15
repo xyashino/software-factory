@@ -10,6 +10,7 @@ import {
 } from '@repo/factory-core/ids';
 import type { OrderCommand } from '@repo/factory-core/order/commands';
 import { canonicalJson } from '@repo/factory-definitions/line-snapshot';
+import { shippedDefinitions } from '../test-kit';
 import {
   openRuntime,
   type OpenedRuntime,
@@ -38,7 +39,7 @@ const createOrder = async (
   opened: OpenedRuntime,
   todoId: string,
 ): Promise<void> => {
-  const loaded = opened.ports.definitions.lines.get('feature');
+  const loaded = shippedDefinitions().lines.get('feature');
   if (!loaded) throw new Error('the feature Line does not load');
   const body = `Body of ${todoId}`;
   const bodyBlob = sha256Ref(body);

@@ -52,7 +52,7 @@ const stripDataDirFlag = (argv: readonly string[]): string[] => {
 
 /**
  * `factory-server`: the single writer of a Factory data directory (STORAGE §1). It takes the writer
- * lock, runs the runtime's boot grace and reaper, serves the socket, and shuts down cleanly on
+ * lock, arms the runtime's boot grace, serves the socket, and shuts down cleanly on
  * SIGINT or SIGTERM: the listener stops, the socket file is removed, the lock is released.
  *
  * The signal handlers are installed before anything is opened, so a signal that arrives while the
@@ -133,6 +133,9 @@ const main = async (): Promise<void> => {
       runtime: opened.runtime,
       hostname: remote.hostname,
       port: remote.port,
+      ...(remote.githubWebhookSecret !== undefined
+        ? { githubWebhookSecret: remote.githubWebhookSecret }
+        : {}),
     });
     console.log(`factory-server: remote listening on ${state.http.url}`);
   }

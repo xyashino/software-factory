@@ -46,7 +46,6 @@ describe('remote Cell client', () => {
         config: {
           leaseTtlMs: 60000,
           heartbeatMs: 15000,
-          reaperMs: 5000,
           selfFenceMs: 45000,
         },
       }),
@@ -105,7 +104,6 @@ describe('remote Cell client', () => {
       config: {
         leaseTtlMs: 1,
         heartbeatMs: 1,
-        reaperMs: 1,
         selfFenceMs: 1,
       },
     });

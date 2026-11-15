@@ -21,7 +21,7 @@ Tokens are opaque random strings. The runtime stores only their hashes.
 - **Cell credentials** identify one Cell (`cellId`). A Cell keeps its credential in its config
   directory and reuses it across restarts, so it keeps its identity and its warm worktrees. A Cell
   with no credential, or one rejected with `401`, joins again and becomes a new Cell.
-- Revoking a Cell (`factory cells rm <id>`) makes its active leases expire at the next reaper pass.
+- Revoking a Cell (`factory cells rm <id>`) makes its active leases expire; the next claim, heartbeat or board read reaps them (§5.4).
 - In remote mode, the **first supervisor token** is created on the Factory host with
   `factory-server admin token create <name>`, which writes through the runtime to its database.
   There is no network path that creates a supervisor token. Local mode uses the local operating-system
@@ -47,7 +47,7 @@ Tokens are opaque random strings. The runtime stores only their hashes.
 ### 3.0 Client adapters
 
 The CLI depends on the transport-neutral `FactoryClient` contract, not on HTTP. Its operations cover
-board/order/event/blob reads, Supervisor commands, intake sync, project registry, Cell administration,
+board/order/event/blob reads, Supervisor commands, the task API, project registry, Cell administration,
 admin operations and event subscription. The Cell uses the corresponding Cell client operations: initialize, claim,
 heartbeat, submit command, and read/write blobs.
 
@@ -82,14 +82,18 @@ HTTP routes below; local mode sends the same operations over the Unix socket to 
 | `POST`                    | `/v1/orders/:id/nudge`         | `Nudge`                                                                                                                                                     |
 | `POST`                    | `/v1/orders/:id/cancel`        | `Cancel`                                                                                                                                                    |
 | `POST`                    | `/v1/orders/:id/priority`      | `Reprioritise`                                                                                                                                              |
-| `POST`                    | `/v1/intake/sync`              | Run intake now instead of waiting for the next poll                                                                                                         |
+| `POST`                    | `/v1/orders`                   | `createOrder`: a Work order from `projectId`, `todoId`, `title`, `type`, `body` (markdown spec), `line` (a `LineSnapshot`, pinned as sent, hash verified), `priority`, `dependsOn`, optional `plan`, `baseBranch`. Idempotent by `commandId`. Socket path `supervisor/orders/create` |
+| `POST`                    | `/v1/plans`                    | `createPlan`: `projectId`, `slug`, optional `baseBranch`, `members[]` (`todoId`, `title`, `type`, `body`, `line`, `priority`) in chain order. Creates the plan, each member's Work order and the chain. Idempotent by `commandId`. Socket path `supervisor/plans/create` |
+| `POST`                    | `/v1/orders/:id/pr-state`      | `recordPrState`: `prUrl`, `state` (`open \| merged \| closed`). Refused as `precondition` while the Work order has no PR. Socket path `supervisor/orders/pr-state` |
+| `POST`                    | `/v1/plans/:id/pr-state`       | `recordPlanPrState`: `prUrl`, `state`. Refused as `precondition` while the plan has no PR. Socket path `supervisor/plans/pr-state` |
+| `POST`                    | `/v1/webhooks/github`          | GitHub `pull_request` webhook (§3.6): records a PR's state on the Work order or plan holding its URL. Outside bearer auth                                  |
 | `GET`                     | `/v1/cells`                    | Cells, their last heartbeat, busy state, current job                                                                                                        |
 | `DELETE`                  | `/v1/cells/:id`                | Revoke a Cell                                                                                                                                               |
 | `POST` / `GET` / `DELETE` | `/v1/join-tokens`              | Create (returns the token once) / list / revoke join tokens                                                                                                 |
 | `GET`                     | `/v1/projects`                 | Project registry: every registered project, with its base branch, max running and dependency policy                                                         |
 | `POST`                    | `/v1/projects`                 | Register a project: `projectId`, `repoUrl`, `baseBranch`, `maxRunning`, `depPolicy`. Refused as `precondition` when the id exists                           |
 | `POST`                    | `/v1/projects/:id`             | Change `baseBranch`, `maxRunning` or `depPolicy` (at least one). `repoUrl` cannot change (remove and re-add). Rules below                                   |
-| `DELETE`                  | `/v1/projects/:id`             | Remove a project. Refused as `precondition` while it has any Work order, event or intake row                                                                |
+| `DELETE`                  | `/v1/projects/:id`             | Remove a project. Refused as `precondition` while it has any Work order or event                                                                            |
 | `GET`                     | `/v1/stream`                   | Server-sent events: every stored event from `Last-Event-ID` (= `globalSeq`)                                                                                 |
 | `GET`                     | `/v1/admin/export`             | Remote export endpoint. Import is a local runtime admin operation, never an HTTP route.                                                                     |
 
@@ -99,7 +103,7 @@ retries).
 **Order Plans.** The board row of a Work order gains `plan`, `baseBranch` and `dependsOn`. The
 `resume` and `cancel` routes also accept a `PlanId` (`<projectId>:plan:<slug>`, CORE §2) in place of an
 order id and then run `Resume` or `Cancel` on the plan (CORE §12.3); `factory plan status` prints that
-id next to an Andon. The plan routes are read-only; plans are created by intake, never by a request.
+id next to an Andon. The plan routes are read-only; a plan is created by `POST /v1/plans`, never by the server itself.
 In remote and `--once` mode they are the same operations over the same contracts (RULES §6.5).
 
 Project registry (`/v1/projects`). The socket paths are `supervisor/projects` (list),
@@ -115,7 +119,7 @@ same body as its HTTP route, with `projectId` in the body on `set` and `remove`.
   (running orders must not switch base; v2-21 pins the base per Work order). Setting the same base
   branch is a no-op. `repoUrl` is not accepted (the body is strict): mirrors and Cell checkouts would go
   stale, so remove and re-add the project.
-- Remove: refused as `precondition` while the project has any Work order, event or intake row. A project
+- Remove: refused as `precondition` while the project has any Work order or event. A project
   with history is never deleted, so projections stay rebuildable (STORAGE §4).
 - An unknown `projectId` on set or remove answers `not_found`.
 - A newly added project is served only by Cells whose config lists it (`projects` in the Cell's
@@ -216,7 +220,14 @@ interface Job {
       headless: boolean;
       timeoutMs;
     };
-    promptBlob?: BlobRef;
+    // The Cell renders the Operator prompt from these inputs and the repo's own `.factory/` (its profile,
+    // templates, rules and skills). The server sends no rendered prompt and no repo template.
+    prompt?: {
+      taskId: string; // the todo id, as `{{taskId}}`
+      todoBodyBlob: BlobRef; // the spec body
+      context: CycleContext; // the Cycle's inputs, notes, feedback, resume and outputs (CORE §7), as blob refs
+      budget: { retry: number; max: number };
+    };
     inputs?: { blob: BlobRef; path: string }[]; // relative to the worktree
     outputs?: { key: string; path: string; required: boolean }[];
     verdict?: boolean;
@@ -232,12 +243,23 @@ interface Job {
     exec?: string[];
     inspectionTimeoutMs?: number;
   };
+  // deliver: the Cell renders the commit message, the PR title and the PR body from these refs and the repo's
+  // `.factory/templates/pr/`. It removes `todos/<taskId>.md` only when that file exists (intake orders have one;
+  // API-created orders do not).
   deliver?: {
-    title: string;
-    bodyBlob: BlobRef;
-    commitMessage: string;
-    removeTodo: string;
+    taskId: string;
+    type: string;
+    title: string; // the spec title, the fallback subject of the generated commit
+    todoBodyBlob: BlobRef;
+    commitBlob?: BlobRef; // the builder's commit artifact, when the Line delivers one
+    reportBlob?: BlobRef; // the builder's report artifact
+    logCommand: string;
+    verification: (
+      | { kind: 'inspection'; stationId: string; commands: string[] }
+      | { kind: 'operator'; stationId: string; profile: string }
+    )[];
   };
+  // mechanic: `incident: { reason, detail }`; the Cell renders the incident prompt from it.
   plan?: {
     // plan_* jobs only
     slug: string;
@@ -314,7 +336,7 @@ order goes back to the queue, not to the Cell that released it.
 | :----------------- | :------------------------------------------------- |
 | Lease TTL          | 60 s                                               |
 | Heartbeat interval | 15 s                                               |
-| Reaper interval    | 5 s                                                |
+| Reaping            | lazy: on claim, heartbeat and board reads (§5.4)   |
 | Cell self-fence    | no successful heartbeat for 45 s                   |
 | Factory boot grace | every lease's expiry is set to `now + TTL` on boot |
 
@@ -322,15 +344,16 @@ All four are Factory settings, returned to Cells by `hello`. Self-fence MUST sta
 A Factory that is unreachable for longer than the self-fence window costs every in-flight Cycle
 (§11); raise TTL and self-fence together if Factory restarts are slow (OPEN-QUESTIONS Q16).
 
-**Test knobs.** `factory-server` reads five environment variables, one per setting above:
-`FACTORY_LEASE_TTL_MS`, `FACTORY_HEARTBEAT_MS`, `FACTORY_REAPER_MS`, `FACTORY_SELF_FENCE_MS` and
-`FACTORY_CLAIM_TICK_MS` (the claim re-read interval, `DEFAULT_CONFIG.claimTickMs`). Each takes a positive
+**Test knobs.** `factory-server` reads four environment variables, one per setting above:
+`FACTORY_LEASE_TTL_MS`, `FACTORY_HEARTBEAT_MS`, `FACTORY_SELF_FENCE_MS` and
+`FACTORY_CLAIM_TICK_MS` (the claim re-read interval, `DEFAULT_CONFIG.claimTickMs`). There is no reaper
+or poll interval: the server runs no timer. Each takes a positive
 whole number of milliseconds. Unset, the defaults above apply; production sets none of them. The
 distributed suite (`pnpm --filter @repo/factory-cell test:distributed`) runs with short timings. A
 self-fence that is not below the TTL is refused at start (`apps/server/src/runtime-config.ts`).
 
 **Cut-over flag.** `FACTORY_V2_ONLY` (`1` or `0`, `RuntimeConfig.v2Only`) is a Factory setting, not a
-timing knob. Unset means `1`: intake turns only todos with `factory: v2` in their frontmatter into Work
+timing knob. Unset means `1`: the Supervisor's todo intake turns only todos with `factory: v2` in their frontmatter into Work
 orders and skips the rest silently, because v1 owns them (ROADMAP M9; v1's `pick-todo.ts` skips the
 same todos). `0` makes v2 take every todo, and is for after the trial only, once v1 is frozen. Any other
 value is refused at start. Trial runbook: [TRIAL.md](TRIAL.md).
@@ -372,10 +395,25 @@ names it.
 
 ### 5.4 Reaper
 
-Every 5 s: for each lease with `expiresAt < now`, run `ExpireLease` through the standard command
-loop (`decide(ExpireLease)` → `cycle_failed{lost}` + `job_lost{lease_expired}`, delete the lease,
-then evaluate `nextJob` and append `andon_raised` if the restart budget is spent). Otherwise the Work
-order returns to the queue and `nextJob` restarts the Station (CORE §5.3).
+There is no timer. The reaper runs lazily, inside the write transaction of the read or write that asks
+for it: `claim` (before the queue is selected), `heartbeat`, and the board and order reads. Each pass
+runs, for every lease with `expiresAt < now`, `ExpireLease` through the standard command loop
+(`decide(ExpireLease)` → `cycle_failed{lost}` + `job_lost{lease_expired}`, delete the lease, then
+evaluate `nextJob` and append `andon_raised` if the restart budget is spent). The Work order returns to
+the queue and `nextJob` restarts the Station (CORE §5.3). A dead Cell's lease is back in the queue on the
+next claim, heartbeat or board read. Boot grace (§5.1) holds the reaper until one TTL after start.
+
+### 3.6 GitHub webhook
+
+`POST /v1/webhooks/github` takes GitHub's `pull_request` deliveries. It sits outside bearer auth: its
+credential is the HMAC of the raw body, `X-Hub-Signature-256: sha256=<hex HMAC-SHA256>` with the secret
+in `GITHUB_WEBHOOK_SECRET`, compared in constant time. A missing or wrong signature is `401 unauthorized`;
+with no secret configured the route answers `503 not_configured`, and a delivery without an
+`X-GitHub-Delivery` id is `422 invalid`. `opened` and `reopened` record the PR as `open`; `closed` records
+`merged` when GitHub says `merged: true` and `closed` otherwise. Every other event or action is
+acknowledged (`200`) and records nothing. The state is recorded on every Work order and every Order Plan
+whose stored `prUrl` is the PR's URL, with the delivery id as the command id, so a redelivery records
+nothing new (the body answers `{ recorded }`). A stream already at that state is left alone.
 
 ## 6. Idempotency
 
@@ -528,7 +566,7 @@ The Cell exits when every job is released. A Cell that simply vanishes is handle
 
 | Command                                                                                                          | Purpose                                                                                         |
 | :--------------------------------------------------------------------------------------------------------------- | :---------------------------------------------------------------------------------------------- |
-| `factory run`                                                                                                    | Start the server (core): owns the database, intake, scheduling, reaper, listens on the socket   |
+| `factory run`                                                                                                    | Start the server (core): owns the database, serves the task API and state, listens on the socket |
 | `factory status [--watch] [--all]`                                                                               | The board; `--watch` follows the runtime event feed locally or `/v1/stream` remotely            |
 | `factory show <order>`                                                                                           | Work order detail, Cycles, Andon, Handover                                                      |
 | `factory log <order> [-f]`                                                                                       | The Traveler, optionally followed                                                               |
@@ -537,7 +575,6 @@ The Cell exits when every job is released. A Cell that simply vanishes is handle
 | `factory reopen <order> --from <station> [--note "..."]`                                                         | Send a delivered, unmerged Work order back for rework                                           |
 | `factory nudge <order> "<text>"`                                                                                 | Type into a live Operator's pane                                                                |
 | `factory cancel <order>` / `factory prio <order> <level>`                                                        |                                                                                                 |
-| `factory sync`                                                                                                   | Run intake now                                                                                  |
 | `factory plan ls`                                                                                                | List Order Plans: slug, project, member count, plan PR state (CORE §12)                         |
 | `factory plan status <slug> [--project <id>]`                                                                    | The chain in order: board status, base branch, PR link and blocker per member, plus the plan PR |
 | `factory cells [rm <id>]`                                                                                        | List or revoke Cells                                                                            |
@@ -546,12 +583,17 @@ The Cell exits when every job is released. A Cell that simply vanishes is handle
 | `factory project add <id> --repo <url> [--base-branch <b>] [--dep-policy delivered\|merged] [--max-running <n>]` | Register a project (§3.1). A Cell serves it only if its config lists it                         |
 | `factory project set <id> [--base-branch <b>] [--dep-policy delivered\|merged] [--max-running <n>]`              | Change a project (§3.1); `--base-branch` is refused while it has an open Work order             |
 | `factory project rm <id>`                                                                                        | Remove a project with no history (§3.1)                                                         |
-| `factory check`                                                                                                  | Offline: validate Operator profiles, Lines and templates (no Factory needed)                    |
+| `factory check [--dir <repoRoot>]`                                                                               | Offline: validate `<repo>/.factory/` (Operator profiles, Lines, prompt and PR templates) and cross-check `.nitpick/` when present (no Factory needed) |
+| `factory init [--dir <repoRoot>] [--force]`                                                                      | Scaffold `<repo>/.factory/` (`lines/`, `operators/`, `templates/`) from the starter; refuses an existing one unless `--force` |
+| `factory order create --project <id> --todo-id <slug> --title <text> --type <t> --line <name> [--repo-dir <path>] [--priority ...] [--plan <slug>] [--depends-on <id,…>] [--base-branch <b>] (--file <path> \| --body <text> \| --file -)` | Create a Work order (§3.3). The Line is read and validated from `<repoDir>/.factory/lines/<name>.yml` and pinned as its snapshot |
+| `factory order pr-state <orderId> <open\|merged\|closed> --pr-url <url>`                                        | Set a Work order's PR state by hand: the fallback when no webhook is configured (§3.6). The order must already have a PR |
+| `factory plan create --project <id> --slug <slug> [--repo-dir <path>] [--base-branch <b>] --members <files…>`   | Create an Order Plan (§3.3): the members, each a todo file, in chain order; each Line is read from `<repoDir>/.factory/lines/` |
+| `factory todos migrate [--dir <todos>] [--repo-dir <path>] --project <id> [--dry-run] [--all] [--remove]`        | One-time import of a `todos/` folder: plans via `createPlan`, standalone todos via `createOrder`, in dependency order. Idempotent; `--remove` deletes files only after the server confirmed them |
 | `factory admin export <file>`                                                                                    | STORAGE §7                                                                                      |
-| `factory admin recover [--project <id>]`                                                                         | STORAGE §8: rebuild Work orders from git after the database is lost                             |
 
 `factory-server` is the core process: `factory run` is its local start command. It owns the database
-through the writer lock, runs intake, scheduling, the reaper and leases, and listens on the local Unix
+through the writer lock, holds tasks and state only (no intake, no git, no gh, no timer), reaps expired
+leases lazily (§5.4), and listens on the local Unix
 socket by default. Remote deployments add an optional TCP HTTP/SSE listener on the same server.
 `factory-cell` runs execution cells as socket clients; they never open the database. A CLI write
 while the server runs goes through the socket to that server. If no server runs, the CLI runs
@@ -566,14 +608,28 @@ Local socket routes beyond the HTTP table above: `supervisor/events` is the sock
 up to 25 s for the next commit); `supervisor/join-tokens` (list), `…/create` (the token is returned once)
 and `…/revoke`; `supervisor/admin/export` returns the export archive base64-encoded in JSON. A create
 carries its `commandId`: a replay of the same command is refused as `precondition`, so a retry never
-makes a second token. Intake sync (`/v1/intake/sync`, socket `supervisor/intake/sync`) is served and
-answers `{ created }`; until intake is wired (v2-10) it refuses with `precondition` and changes nothing,
-which `factory sync` prints.
+makes a second token. There is no intake route: Work orders and plans come in through `POST /v1/orders`
+and `POST /v1/plans` (the task API, §3.3), and pull request state through the GitHub webhook (§3.6).
 
 Configuration (`apps/cli`): settings come from the flag, then `FACTORY_DATA_DIR`, then the config file
 (`$FACTORY_CONFIG`, else `$XDG_CONFIG_HOME/factory/config.json`, with the keys `dataDir`, `serverBin` and
 `color`), then the default `~/.local/share/factory`. `NO_COLOR` set to a non-empty value, `--no-color`
 and `"color": false` turn colour off. The config file holds no state; it is never a second database.
+
+Every command above accepts `--json`, and works over the local socket, the one-shot `--once` run and remote
+HTTP (`FACTORY_URL` with `FACTORY_TOKEN`) the same way.
+
+Repository setup (`.factory/`, one per repo, next to `.nitpick/`). `factory init` scaffolds it from the
+starter this repo ships (`packages/factory-definitions/starter/.factory/`); `factory check` validates it.
+Lines are read from `<repo>/.factory/lines/` when a Work order or Order Plan is created: the snapshot is
+built client-side, so the server never reads a repo definition (CORE §4.4). `factory todos migrate` keeps
+the server the only writer: a file whose OrderId exists is `skipped` before the scan (never `reused_id`),
+a plan the server has is skipped with its files, and a dependency is satisfied when its file is `done` or
+gone. A todo with no `type` line takes `feat`. Without `--all`, only `factory: v2` todos migrate.
+
+The Cell reads `<repo>/.factory/cell.toml` when it runs inside a repository (`--repo-dir <path>`, else the
+repository the working directory is in). Its keys override `~/.config/factory-cell/config.toml` key by key;
+`projects` is replaced, not merged. The Cell logs `factory-cell: config from <path>` when it applies one.
 
 `factory plan ls` and `factory plan status` are read operations (§3.1) and support `--json`. `plan
 status` prints one line per member, for example
@@ -595,7 +651,7 @@ branches it skipped. Like `admin backup`, the offline form needs the writer lock
 | Remote Cell partitioned from the runtime, still running      | Self-fences at 45 s; runtime expires at 60 s; late reports get `stale_epoch`; no push without a dry run                           | The in-flight Cycle                         |
 | Cell leaves on purpose                                       | Handover, then another Cell continues from the WIP (§9)                                                                           | Nothing, if the Operator hands over in time |
 | Remote runtime restarts within the self-fence window         | Leases persist; boot grace extends them; Cells retry commands idempotently                                                        | Nothing                                     |
-| Remote runtime unreachable longer than the self-fence window | Every Cell stops its jobs at 45 s; after boot grace the reaper marks them `lost`; Stations restart, each using one `lost` restart | Every in-flight Cycle                       |
+| Remote runtime unreachable longer than the self-fence window | Every Cell stops its jobs at 45 s; after boot grace, the next claim, heartbeat or board read marks them `lost`; Stations restart, each using one `lost` restart | Every in-flight Cycle                       |
 | A response is lost, the Cell retries                         | Same `commandId` returns the stored response, including a continuation job                                                        | Nothing                                     |
 | Two Cells claim at the same instant                          | One transaction wins; the other gets the next candidate                                                                           | Nothing                                     |
 | Operator reports after its Cycle timed out                   | Cell rejects locally; if it reached the Factory, `not_live`                                                                       | Nothing                                     |

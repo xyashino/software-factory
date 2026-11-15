@@ -271,6 +271,12 @@ importers:
       '@repo/factory-core':
         specifier: workspace:*
         version: link:../../packages/factory-core
+      '@repo/factory-definitions':
+        specifier: workspace:*
+        version: link:../../packages/factory-definitions
+      '@repo/factory-runtime':
+        specifier: workspace:*
+        version: link:../../packages/factory-runtime
       zod:
         specifier: 'catalog:'
         version: 4.6.7
@@ -278,9 +284,6 @@ importers:
       '@repo/eslint-config':
         specifier: workspace:*
         version: link:../../packages/eslint-config
-      '@repo/factory-runtime':
-        specifier: workspace:*
-        version: link:../../packages/factory-runtime
       '@repo/factory-server':
         specifier: workspace:*
         version: link:../server
@@ -386,6 +389,9 @@ importers:
       '@repo/eslint-config':
         specifier: workspace:*
         version: link:../../packages/eslint-config
+      '@repo/factory-definitions':
+        specifier: workspace:*
+        version: link:../../packages/factory-definitions
       '@repo/typescript-config':
         specifier: workspace:*
         version: link:../../packages/typescript-config

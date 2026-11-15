@@ -72,10 +72,12 @@ describe('Job contract: Order Plan jobs (PROTOCOL §4)', () => {
       'deliver',
       {
         deliver: {
+          taskId: 'todo-a',
+          type: 'feat',
           title: 't',
-          bodyBlob: BLOB,
-          commitMessage: 'm',
-          removeTodo: 'todos/a.md',
+          todoBodyBlob: BLOB,
+          logCommand: 'factory log x',
+          verification: [],
         },
       },
     ],
@@ -120,10 +122,37 @@ describe('Job contract: Work order jobs keep their shape', () => {
       kind: 'deliver',
       station: undefined,
       deliver: {
+        taskId: 'todo-a',
+        type: 'feat',
         title: 'Add it',
-        bodyBlob: BLOB,
-        commitMessage: 'Add it',
-        removeTodo: 'todos/todo-a.md',
+        todoBodyBlob: BLOB,
+        commitBlob: BLOB,
+        logCommand: 'factory log software-factory:todo-a',
+        verification: [
+          {
+            kind: 'inspection',
+            stationId: 'quality-gate',
+            commands: ['pnpm test'],
+          },
+          { kind: 'operator', stationId: 'build', profile: 'builder' },
+        ],
+      },
+    };
+    expect(jobSchema.safeParse(job).success).toBe(true);
+  });
+
+  it('accepts a deliver job without a todo path, as an API-created order has none', () => {
+    const job = {
+      ...workJob,
+      kind: 'deliver',
+      station: undefined,
+      deliver: {
+        taskId: 'todo-a',
+        type: 'feat',
+        title: 'Add it',
+        todoBodyBlob: BLOB,
+        logCommand: 'factory log software-factory:todo-a',
+        verification: [],
       },
     };
     expect(jobSchema.safeParse(job).success).toBe(true);
@@ -159,7 +188,7 @@ const mechanicJob = {
   mechanic: {
     andonAt: 2000,
     n: 1,
-    promptBlob: BLOB,
+    incident: { reason: 'operator_stalled', detail: 'the pane went quiet' },
     operator: {
       profile: 'mechanic',
       runner: 'claude',

@@ -4,15 +4,13 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Job } from '@repo/factory-core/contracts/job';
 import type { CellId, ProjectId } from '@repo/factory-core/ids';
-import { fakePrState } from '@repo/factory-core/testing';
 import {
   openRuntime,
   type OpenedRuntime,
 } from '@repo/factory-runtime/open-runtime';
 import { seedProject } from '@repo/factory-runtime/seed';
-import { gitMirror } from '../adapters/git-mirror';
+import { planRequest } from '../testing/order-request';
 import { createHttpApp } from '../http/app';
-import { createFixtureRepo } from './e2e/fixture-repo';
 
 /**
  * A Cell's plan commands over HTTP (PROTOCOL §3.2, §4): the plan variant of `submitCommand` is routed by the
@@ -20,19 +18,6 @@ import { createFixtureRepo } from './e2e/fixture-repo';
  */
 
 const PROJECT = 'software-factory' as ProjectId;
-const PLAN_TODO = [
-  '---',
-  'status: todo',
-  'factory: v2',
-  'plan: xyz',
-  'priority: high',
-  '---',
-  '',
-  '# Plan root',
-  '',
-  'Users can sign in.',
-  '',
-].join('\n');
 const CELL_NAME = 'plan-cell';
 const COMMIT = 'e'.repeat(40);
 
@@ -45,16 +30,11 @@ beforeEach(async () => {
   root = mkdtempSync(join(tmpdir(), 'factory-http-plan-'));
   const dataDir = join(root, 'data');
   mkdirSync(dataDir);
-  const repo = await createFixtureRepo(join(root, 'repo'), {
-    'wo-1': PLAN_TODO,
+  seedProject(dataDir, {
+    projectId: PROJECT,
+    repoUrl: 'https://example.test/software-factory.git',
   });
-  seedProject(dataDir, { projectId: PROJECT, repoUrl: repo });
-  opened = openRuntime({
-    dataDir,
-    git: gitMirror({ mirrorsDir: join(dataDir, 'mirrors') }),
-    prState: fakePrState(),
-    config: { intakePollMs: 0, prPollMs: 0 },
-  });
+  opened = openRuntime({ dataDir });
   await opened.runtime.start();
   app = createHttpApp(opened.runtime);
 });
@@ -129,18 +109,18 @@ const joinAndHello = async (): Promise<{
 const supervisorToken = async (): Promise<string> =>
   (await opened.runtime.remote.createSupervisorToken('dev')).token;
 
-/** Syncs intake and claims the first job on offer for the Cell over HTTP. */
+/** Creates the one-member plan over HTTP, then claims the first job on offer for the Cell. */
 const syncAndClaim = async (cell: {
   cellId: CellId;
   credential: string;
 }): Promise<Job> => {
-  const sync = await send({
+  const created = await send({
     method: 'POST',
-    path: '/v1/intake/sync',
+    path: '/v1/plans',
     token: await supervisorToken(),
-    json: {},
+    json: planRequest(PROJECT, 'xyz', ['wo-1']),
   });
-  expect(sync.status).toBe(200);
+  expect(created.status).toBe(200);
   const response = await send({
     method: 'POST',
     path: '/v1/cell/claim',

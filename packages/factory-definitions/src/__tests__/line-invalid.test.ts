@@ -7,6 +7,7 @@ import { validateLine } from '../line-validate';
 import { readDefinitions } from '../load';
 
 const PACKAGE_ROOT = join(import.meta.dirname, '..', '..');
+const FACTORY_ROOT = join(PACKAGE_ROOT, '..', '..', '.factory');
 const VALID = join(
   import.meta.dirname,
   'fixtures',
@@ -16,7 +17,7 @@ const VALID = join(
 );
 const FILE = 'lines/feature.yml';
 
-const operators = readDefinitions(PACKAGE_ROOT).definitions.operators;
+const operators = readDefinitions(FACTORY_ROOT).definitions.operators;
 const validText = readFileSync(VALID, 'utf8');
 
 /** The valid fixture with one edit. The edited text must occur exactly once. */

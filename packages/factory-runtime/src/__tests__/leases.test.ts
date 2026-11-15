@@ -125,19 +125,18 @@ describe('reaper', () => {
     expect(await w.runtime.reapOnce()).toBe(0);
   });
 
-  it('runs on its timer every reaperMs while started', async () => {
+  it('starts no timer, so an expired lease waits for the next read instead of a tick', async () => {
     const w = world();
     running = w;
     await startedJob(w);
     await w.runtime.start();
     w.clock.advance(60_000 + 1);
-    await w.runtime.start();
-    expect(w.timers.pending()).toBeGreaterThan(0);
 
-    w.timers.advance(5_000);
+    w.timers.advance(60_000);
     await flush();
 
-    expect(await w.leases.forCell(CELL)).toEqual([]);
+    expect(w.timers.pending()).toBe(0);
+    expect(await w.leases.forCell(CELL)).toHaveLength(1);
   });
 });
 

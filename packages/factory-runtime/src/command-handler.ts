@@ -135,7 +135,11 @@ export const createCommandHandler = (
 ): CommandHandler => {
   const locks = orderLocks();
   const { events, blobs, leases, signals, ids, clock, writer, config } = ports;
-  const jobPorts = { blobs, definitions: ports.definitions, config };
+  const jobPorts = {
+    blobs,
+    runtimePrompts: ports.runtimePrompts,
+    config,
+  };
   const planCommands = createPlanCommands(ports, onCommit);
 
   /** The project of a Work order, from the attempt's registry read (no second `projects.list()`). */

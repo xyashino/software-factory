@@ -13,10 +13,44 @@ const tag = z
   .regex(TAG)
   .refine(isMachineIndependentId, 'tag must not name a machine-local value');
 
+const machineText = (max: number) =>
+  z
+    .string()
+    .min(1)
+    .max(max)
+    .refine(
+      isMachineIndependentText,
+      'value must not contain machine-local values',
+    );
+
+/** The Operator pool an operator Station runs with (CORE §11): its profile, runner, model and limits. */
+export const operatorPoolSchema = z
+  .object({
+    profile: tag,
+    runner: tag,
+    model: machineText(128),
+    permission: z.enum(['read', 'write']),
+    headless: z.boolean(),
+    timeoutMs: z.number().int().min(1),
+  })
+  .strict();
+
+/** A timed list of shell commands: a workspace's `sync` or `setup` (PROTOCOL §4). */
+export const commandBlockSchema = z
+  .object({
+    timeoutMs: z.number().int().min(1),
+    exec: z.array(machineText(512)).max(32),
+  })
+  .strict();
+
 export const stationSchema = z
   .object({
     id: stationIdSchema,
     kind: z.enum(['operator', 'inspection']),
+    // Execution details the Cell needs to run the Station (PROTOCOL §4). Optional for snapshots pinned before
+    // they were carried; a job that needs one of them and finds none is refused, never guessed.
+    operator: operatorPoolSchema.optional(),
+    timeoutMs: z.number().int().min(1).optional(),
     runner: tag.optional(),
     requires: z.array(tag).max(32),
     onFail: z
@@ -63,6 +97,18 @@ export const lineSnapshotSchema = z
     name: tag,
     hash: z.string().regex(SHA256),
     stations: z.array(stationSchema).min(1).max(64),
+    // Per-job workspace preparation, and the artifacts a delivery commits and reports (`<stationId>.<key>`).
+    workspace: z
+      .object({
+        sync: commandBlockSchema.optional(),
+        setup: commandBlockSchema.optional(),
+      })
+      .strict()
+      .optional(),
+    deliver: z
+      .object({ commit: machineText(128), report: machineText(128) })
+      .strict()
+      .optional(),
   })
   .strict()
   .superRefine((line, ctx) => {

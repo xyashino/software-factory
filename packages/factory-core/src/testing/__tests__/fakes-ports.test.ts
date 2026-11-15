@@ -35,7 +35,6 @@ defineProjectStoreContract({ describe, it }, 'in-memory fake', async () => {
     store: fake,
     seedOrder: fake.seedOrder,
     seedEvent: fake.seedEvent,
-    seedIntake: fake.seedIntake,
     close: async () => undefined,
   };
 });

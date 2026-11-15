@@ -15,7 +15,13 @@ import { loadDefinitions } from '../load';
 
 const PACKAGE_ROOT = join(import.meta.dirname, '..', '..');
 const REPO_ROOT = join(PACKAGE_ROOT, '..', '..');
+/** The repository's own `.factory/` (operators, lines, prompt and PR templates). */
+const FACTORY_ROOT = join(REPO_ROOT, '.factory');
 const PROJECT = projectIdSchema.parse('software-factory');
+
+/** The shipped directory a copied file comes from: runtime prompts ship with the package. */
+const sourceOf = (dir: string): string =>
+  dir === 'templates/runtime' ? PACKAGE_ROOT : FACTORY_ROOT;
 
 /** A temp copy of the operators, lines and templates, with the given edits (null deletes). */
 const copyPackage = (edits: Record<string, string | null>): string => {
@@ -28,13 +34,13 @@ const copyPackage = (edits: Record<string, string | null>): string => {
     'templates/runtime',
   ]) {
     mkdirSync(join(root, dir), { recursive: true });
-    for (const name of readdirSync(join(PACKAGE_ROOT, dir))) {
+    for (const name of readdirSync(join(sourceOf(dir), dir))) {
       const file = `${dir}/${name}`;
       const edit = edits[file];
       if (edit === null) continue;
       writeFileSync(
         join(root, file),
-        edit ?? readFileSync(join(PACKAGE_ROOT, file), 'utf8'),
+        edit ?? readFileSync(join(sourceOf(dir), file), 'utf8'),
       );
     }
   }
@@ -42,7 +48,7 @@ const copyPackage = (edits: Record<string, string | null>): string => {
 };
 
 describe('shipped definitions', () => {
-  const loaded = loadDefinitions(PACKAGE_ROOT);
+  const loaded = loadDefinitions(FACTORY_ROOT);
 
   const definitions = () => {
     if (!loaded.ok)
@@ -112,16 +118,16 @@ describe('shipped definitions', () => {
   });
 
   it('pass check() with no catalog', () => {
-    expect(check(PACKAGE_ROOT)).toEqual([]);
+    expect(check(FACTORY_ROOT)).toEqual([]);
   });
 
   it('pass check() with the .nitpick catalog: every declared rule and skill exists', async () => {
     const catalog = await nitpickCatalog(REPO_ROOT);
-    expect(check(PACKAGE_ROOT, { catalog })).toEqual([]);
+    expect(check(FACTORY_ROOT, { catalog })).toEqual([]);
   });
 
   it('pass check() with the todo scan of a clean todo', () => {
-    const errors = check(PACKAGE_ROOT, {
+    const errors = check(FACTORY_ROOT, {
       todos: {
         projectId: PROJECT,
         files: [
@@ -133,7 +139,7 @@ describe('shipped definitions', () => {
   });
 
   it('reports a todo that cannot be parsed with its file and field', () => {
-    const errors = check(PACKAGE_ROOT, {
+    const errors = check(FACTORY_ROOT, {
       todos: {
         projectId: PROJECT,
         files: [{ file: 'todos/broken.md', text: 'no frontmatter\n' }],
@@ -151,7 +157,7 @@ describe('shipped definitions', () => {
   it('reports a broken shipped line with its file and field from check()', () => {
     const root = copyPackage({
       'lines/feature.yml': readFileSync(
-        join(PACKAGE_ROOT, 'lines', 'feature.yml'),
+        join(FACTORY_ROOT, 'lines', 'feature.yml'),
         'utf8',
       ).replace('max: 3', 'max: 9'),
     });

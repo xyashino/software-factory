@@ -16,7 +16,7 @@ import {
 
 const PACKAGE_ROOT = join(import.meta.dirname, '..', '..');
 const SCHEMA_FILE = join(PACKAGE_ROOT, 'schemas', 'line.schema.json');
-const LINES = join(PACKAGE_ROOT, 'lines');
+const LINES = join(PACKAGE_ROOT, '..', '..', '.factory', 'lines');
 const VALID = join(
   import.meta.dirname,
   'fixtures',

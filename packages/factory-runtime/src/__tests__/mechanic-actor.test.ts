@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { BlobRef, CellId, CommitSha, JobId } from '@repo/factory-core/ids';
+import type { CellId, CommitSha, JobId } from '@repo/factory-core/ids';
 import type { OrderCommand } from '@repo/factory-core/order/commands';
 import type { WorkOrderState } from '@repo/factory-core/order/state';
 import { fakeBlobStore } from '@repo/factory-core/testing';
@@ -43,6 +43,8 @@ describe('the actor a Cell command runs as (CORE §14.3)', () => {
 describe('Mechanic job builder & prompt', () => {
   it('builds a mechanic job with workspace, checkpoint base, and write permission', async () => {
     const blobs = fakeBlobStore();
+    const defs = shippedDefinitions();
+    const line = defs.lines.get('standard')!.snapshot;
     const commit = 'b'.repeat(40) as CommitSha;
     const state = {
       orderId: `${PROJECT}:fix-ci`,
@@ -50,7 +52,7 @@ describe('Mechanic job builder & prompt', () => {
       todoId: 'fix-ci',
       baseBranch: 'main',
       dependsOn: [],
-      line: { name: 'standard' },
+      line,
       spec: {
         title: 'fix-ci: Fix CI',
         type: 'fix',
@@ -69,7 +71,7 @@ describe('Mechanic job builder & prompt', () => {
     const job = await buildJob(
       {
         blobs,
-        definitions: shippedDefinitions(),
+        runtimePrompts: defs.runtimePrompts,
         config: DEFAULT_CONFIG,
       },
       state,
@@ -88,9 +90,11 @@ describe('Mechanic job builder & prompt', () => {
     expect(job.base).toBe(commit);
     expect(job.mechanic?.operator.permission).toBe('write');
     expect(job.mechanic?.operator.headless).toBe(false);
-    const prompt = new TextDecoder().decode(
-      (await blobs.get(job.mechanic!.promptBlob as BlobRef))!,
-    );
+    expect(job.mechanic?.incident).toEqual({
+      reason: 'delivery_failed',
+      detail: 'pre-commit failed',
+    });
+    const prompt = buildIncidentPrompt(job.mechanic!.incident);
     expect(prompt).toContain('--action repair');
     expect(prompt).toContain('git worktree at its current commit');
   });

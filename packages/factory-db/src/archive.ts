@@ -1,23 +1,27 @@
 import type { Database } from 'bun:sqlite';
+import { count, sql } from 'drizzle-orm';
+import type { SQLiteTable } from 'drizzle-orm/sqlite-core';
 import type {
   ArchiveCounts,
   ArchivePort,
 } from '@repo/factory-core/ports/archive';
+import { type FactoryDatabase, drizzleOf } from './db';
 import { exportFactory, importFactory } from './export-import';
 import { rebuildProjections } from './rebuild-projections';
+import { blobs, events, projects as projectsTable } from './schema';
 import type { SqliteEventStore } from './sqlite-event-store';
 import { readTar } from './tar';
 import type { WriterLock } from './writer-lock';
 
 const decoder = new TextDecoder();
 
-const countOf = (db: Database, table: string): number =>
-  db.query<{ n: number }, []>(`SELECT COUNT(*) AS n FROM ${table}`).get()?.n ??
-  0;
+const countOf = (orm: FactoryDatabase, table: SQLiteTable): number =>
+  orm.select({ n: count() }).from(table).get()?.n ?? 0;
 
-const highestGlobalSeq = (db: Database): number =>
-  db
-    .query<{ n: number | null }, []>('SELECT MAX(global_seq) AS n FROM events')
+const highestGlobalSeq = (orm: FactoryDatabase): number =>
+  orm
+    .select({ n: sql<number | null>`max(${events.globalSeq})` })
+    .from(events)
     .get()?.n ?? 0;
 
 const lineCount = (bytes: Uint8Array | undefined): number => {
@@ -67,11 +71,12 @@ export const sqliteArchive = (
   store: SqliteEventStore,
   writer: WriterLock,
 ): ArchivePort => {
+  const orm = drizzleOf(db);
   const counts = (globalSeq: number): ArchiveCounts => ({
     globalSeq,
-    projects: countOf(db, 'projects'),
-    events: countOf(db, 'events'),
-    blobs: countOf(db, 'blobs'),
+    projects: countOf(orm, projectsTable),
+    events: countOf(orm, events),
+    blobs: countOf(orm, blobs),
   });
 
   return {
@@ -79,8 +84,9 @@ export const sqliteArchive = (
       store.gate.run(async () => {
         writer.assertHeld();
         await assertNew(file);
+        // raw: VACUUM INTO takes a file name as a bound parameter; Drizzle has no builder for it.
         db.run('VACUUM INTO ?', [file]);
-        return counts(highestGlobalSeq(db));
+        return counts(highestGlobalSeq(orm));
       }),
 
     exportTo: async (file, exportedAt) => {
@@ -106,7 +112,7 @@ export const sqliteArchive = (
         project,
         importedAt,
       );
-      const globalSeq = await store.gate.run(() => highestGlobalSeq(db));
+      const globalSeq = await store.gate.run(() => highestGlobalSeq(orm));
       return {
         globalSeq,
         projects: result.projects,

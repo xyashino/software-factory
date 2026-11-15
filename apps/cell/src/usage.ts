@@ -7,6 +7,8 @@ Inspections, Operator stations and Deliveries. Run more Cells (one instance dire
 for more parallel Work orders.
 
 config:  ~/.config/factory-cell/config.toml (or $XDG_CONFIG_HOME/factory-cell/config.toml)
+         <repo>/.factory/cell.toml overrides it key by key when the Cell runs in that repository
+         (the repository is --repo-dir <path>, else the one the working directory is in)
            projects = ["my-project"]   projects this Cell may run
            runners = ["claude"]        runners it can start
            capabilities = []           declared capabilities

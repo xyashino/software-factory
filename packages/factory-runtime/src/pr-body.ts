@@ -1,7 +1,7 @@
 import { PR_ADR_TOKEN } from '@repo/factory-core/contracts/job';
 import type { BlobRef } from '@repo/factory-core/ids';
 import type { WorkOrderState } from '@repo/factory-core/order/state';
-import type { ArtifactRef, Line } from '@repo/factory-definitions/line-schema';
+import type { ArtifactRef } from '@repo/factory-definitions/line-schema';
 import type { Template } from '@repo/factory-definitions/templates';
 import { renderTemplate } from './prompts/render';
 
@@ -60,19 +60,23 @@ export const extractObjective = (todoBody: string): string => {
   return section !== undefined && section !== '' ? section : todoBody.trim();
 };
 
+/** One entry of a delivery's verification list, as the job carries it: an Inspection or an Operator station. */
+export type VerificationEntry =
+  | { kind: 'inspection'; stationId: string; commands: string[] }
+  | { kind: 'operator'; stationId: string; profile: string };
+
 /**
  * The checklist: one line per Inspection command and per Operator Station. Delivery runs only after
  * every Station passed, so each line is checked.
  */
-export const verificationLines = (line: Line): string[] => {
-  const lines = line.stations.flatMap((station): string[] => {
-    if (station.kind === 'inspection') {
-      return station.exec.map((command) => `- [x] \`${command}\``);
+export const verificationLinesOf = (
+  entries: readonly VerificationEntry[],
+): string[] => {
+  const lines = entries.flatMap((entry): string[] => {
+    if (entry.kind === 'inspection') {
+      return entry.commands.map((command) => `- [x] \`${command}\``);
     }
-    const profile = line.operators[station.operator]?.profile;
-    return [
-      `- [x] Operator station \`${station.id}\`${profile === undefined ? '' : ` (${profile})`}`,
-    ];
+    return [`- [x] Operator station \`${entry.stationId}\` (${entry.profile})`];
   });
   return lines.length > 0 ? lines : ['_No verification steps in the Line._'];
 };
