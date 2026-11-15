@@ -56,7 +56,7 @@ import type {
   RunGit,
   SpawnHeadless,
 } from '../ports';
-import type { WorkspaceResult } from '../workspace';
+import type { PrepareResult } from '../workspace/prepare';
 import { getBlob, putBlob } from './blobs';
 import { workspaceDetailOf } from './workspace-detail';
 
@@ -89,7 +89,7 @@ export interface StationDeps {
   clock: Clock;
   sleep: (ms: number) => Promise<void>;
   git: RunGit;
-  workspace: (job: Job) => Promise<WorkspaceResult>;
+  workspace: (job: Job) => Promise<PrepareResult>;
   runners: Readonly<Record<string, RunnerLaunch>>;
   spawn: SpawnHeadless;
   pane?: PaneDriver;
@@ -104,7 +104,6 @@ export interface StationDeps {
   takeSignals?: () => Signal[];
 }
 
-type Stage = 'fetch' | 'sync' | 'worktree' | 'setup';
 type FailReason = 'timed_out' | 'crashed' | 'stalled' | 'start_failed' | 'lost';
 type Blobs = Record<string, BlobRef | undefined>;
 
@@ -237,12 +236,11 @@ export const runOperatorStation = async (
   const ws = await deps.workspace(job);
   if (!ws.ok) {
     if (deps.signal?.aborted) return null;
-    const logBlob = await putBlob(deps.client, encode(ws.detail), 'text/plain');
-    const stage: Stage = ws.stage;
+    const logBlob = await putBlob(deps.client, ws.log, 'text/plain');
     const reported = await submit('workspace', {
       type: 'ReportWorkspaceFailed',
-      stage,
-      detail: workspaceDetailOf(stage, ws.detail),
+      stage: ws.stage,
+      detail: workspaceDetailOf(ws.stage, ws.detail),
       logBlob,
     });
     return reported.ok ? reported.result.next : null;
@@ -251,7 +249,7 @@ export const runOperatorStation = async (
 
   const started = await submit('start', {
     type: 'StartCycle',
-    baseCommit: ws.base,
+    baseCommit: ws.head as CommitSha,
     operator: {
       profile: operator.profile,
       runner: operator.runner,

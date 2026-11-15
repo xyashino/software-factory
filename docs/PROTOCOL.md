@@ -492,8 +492,10 @@ Deleting the credential makes the Cell join again as a new Cell; nothing else is
 
 Executing `run_operator_station`:
 
-1. Fetch the mirror; create or reset the worktree at `base`; run `sync` + `setup` unless the worktree
-   is already prepared at that commit. On failure → `ReportWorkspaceFailed`.
+1. Fetch the mirror (skipped when a pinned `base` is already in it; delivery always fetches); create or
+   reset the worktree at `base`, detached; run `sync` + `setup` unless that commit was already set up in
+   the worktree. On failure → `ReportWorkspaceFailed`. Every job of one Work order on a Cell shares that
+   worktree, so the station, inspections and delivery reuse its dependencies.
 2. `StartCycle`.
 3. Download and write `inputs` blobs to their paths; create the Cycle socket token.
 4. Open a Herdr pane (or a headless process) with `FACTORY_OPERATOR_SOCKET`, `FACTORY_CYCLE_TOKEN`,

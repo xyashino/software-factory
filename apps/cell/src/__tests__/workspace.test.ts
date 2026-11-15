@@ -2,6 +2,7 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
@@ -11,6 +12,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Job } from '@repo/factory-core/contracts/job';
 import { createSystemAdapter } from '../adapters/system/system.adapter';
+import type { SystemPort } from '../ports/system.port';
 import {
   ensureMirror,
   excludeCellDir,
@@ -18,7 +20,7 @@ import {
 } from '../workspace/mirror';
 import { prepareWorkspace, type PrepareContext } from '../workspace/prepare';
 import { shellQuote } from '../workspace/shell';
-import { worktreePathOf } from '../workspace/worktree';
+import { worktreePathOf, worktreeRootOf } from '../workspace/worktree';
 import { git, makeRepo, commitFile } from '../testing/git-repo';
 
 let root: string;
@@ -52,10 +54,27 @@ const contextWith = (
   ...overrides,
 });
 
+/** A system that records each command it runs, then runs it for real. */
+const recordingSystem = (): { commands: string[]; system: SystemPort } => {
+  const real = createSystemAdapter();
+  const commands: string[] = [];
+  return {
+    commands,
+    system: {
+      run: (input) => {
+        commands.push(input.command);
+        return real.run(input);
+      },
+    },
+  };
+};
+
 /** A job with only the fields the workspace reads. */
 const jobWith = (dir: string, setup: string[] = [], sync: string[] = []): Job =>
   ({
     jobId: '01J0000000000000000000000J',
+    kind: 'run_operator_station',
+    orderId: `software-factory:${dir}`,
     repo: { url: origin, baseBranch: 'main', branch: `factory/${dir}` },
     base: { branchBase: 'main' },
     workspace: { dir, sync, setup, timeoutMs: 60_000 },
@@ -67,6 +86,8 @@ const setupRuns = (): number =>
   existsSync(counter)
     ? readFileSync(counter, 'utf8').split('\n').filter(Boolean).length
     : 0;
+
+const mirrorsOf = (): string[] => readdirSync(join(cellDataDir, 'mirrors'));
 
 describe('workspace mirror', () => {
   it('clones the repo on first use and fetches its new commits on the next', async () => {
@@ -109,17 +130,230 @@ describe('workspace mirror', () => {
 });
 
 describe('workspace prepare', () => {
-  it('puts the worktree at the branch base and reports its HEAD', async () => {
+  it('puts the worktree detached at the branch base and reports its HEAD', async () => {
     const head = git(origin, 'rev-parse', 'HEAD');
 
     const prepared = await prepareWorkspace(contextWith(), jobWith('todo-1'));
 
-    expect(prepared.ok).toBe(true);
+    expect(prepared).toMatchObject({ ok: true, head });
     if (!prepared.ok) return;
-    expect(prepared.head).toBe(head);
     expect(git(prepared.worktree, 'rev-parse', 'HEAD')).toBe(head);
+    expect(git(prepared.worktree, 'rev-parse', '--abbrev-ref', 'HEAD')).toBe(
+      'HEAD',
+    );
+    expect(existsSync(join(prepared.worktree, '.cell'))).toBe(true);
   });
 
+  it('resolves a branch-based base to the mirror branch tip', async () => {
+    const head = git(origin, 'rev-parse', 'HEAD');
+
+    const prepared = await prepareWorkspace(
+      contextWith(),
+      jobWith('todo-base'),
+    );
+
+    expect(prepared).toMatchObject({ ok: true, head });
+  });
+
+  it('keeps the .cell directory out of the status of the worktree', async () => {
+    const prepared = await prepareWorkspace(
+      contextWith(),
+      jobWith('todo-cell'),
+    );
+    if (!prepared.ok) throw new Error(prepared.detail);
+    writeFileSync(
+      join(prepared.worktree, '.cell', 'scratch.txt'),
+      'never committed',
+    );
+    writeFileSync(join(prepared.worktree, 'plan.md'), '# plan\n');
+
+    expect(git(prepared.worktree, 'status', '--porcelain')).toBe('?? plan.md');
+  });
+
+  it('reports a fetch failure with the stage it failed at', async () => {
+    const job = {
+      ...jobWith('todo-5'),
+      repo: {
+        url: join(root, 'missing.git'),
+        baseBranch: 'main',
+        branch: 'factory/x',
+      },
+    } as Job;
+
+    const prepared = await prepareWorkspace(contextWith(), job);
+
+    expect(prepared.ok).toBe(false);
+    if (prepared.ok) return;
+    expect(prepared.stage).toBe('fetch');
+  });
+
+  it('reports a missing base branch at the worktree stage', async () => {
+    const job = {
+      ...jobWith('todo-missing'),
+      base: { branchBase: 'no-such-branch' },
+    } as Job;
+
+    const prepared = await prepareWorkspace(contextWith(), job);
+
+    expect(prepared).toMatchObject({ ok: false, stage: 'worktree' });
+  });
+
+  it('reports a pinned base the mirror does not have as a worktree failure', async () => {
+    const job = { ...jobWith('todo-6'), base: 'a'.repeat(40) } as Job;
+
+    const prepared = await prepareWorkspace(contextWith(), job);
+
+    expect(prepared).toMatchObject({ ok: false, stage: 'worktree' });
+  });
+
+  it('refuses a Mechanic job, which never gets a worktree', async () => {
+    const job = { ...jobWith('todo-m'), kind: 'mechanic' } as Job;
+
+    await expect(prepareWorkspace(contextWith(), job)).rejects.toThrow(
+      'has no worktree',
+    );
+  });
+
+  it('resets an existing worktree to the base and removes the Operator leftovers', async () => {
+    const first = await prepareWorkspace(contextWith(), jobWith('todo-reset'));
+    if (!first.ok) throw new Error(first.detail);
+    writeFileSync(join(first.worktree, 'leftover.md'), 'from the last Cycle');
+
+    const again = await prepareWorkspace(contextWith(), jobWith('todo-reset'));
+
+    expect(again).toMatchObject({ ok: true });
+    expect(existsSync(join(first.worktree, 'leftover.md'))).toBe(false);
+    expect(readFileSync(join(first.worktree, 'README.md'), 'utf8')).toBe(
+      '# repo\n',
+    );
+  });
+});
+
+describe('one workspace per Cell', () => {
+  it('prepares two Work orders of one repo at once on a fresh Cell, both ok, one mirror', async () => {
+    // Two preparations of one Cell run at once: the mirror lock makes the first clone finish first.
+    const [first, second] = await Promise.all([
+      prepareWorkspace(contextWith(), jobWith('todo-add-login')),
+      prepareWorkspace(contextWith(), jobWith('todo-add-logout')),
+    ]);
+
+    expect(first.ok && second.ok).toBe(true);
+    expect(mirrorsOf()).toHaveLength(1);
+  });
+
+  it('gives station, inspection and delivery of one order the same worktree, cloned and installed once', async () => {
+    const job = jobWith('todo-shared', [countSetup()]);
+
+    const station = await prepareWorkspace(contextWith(), job);
+    const inspection = await prepareWorkspace(contextWith(), {
+      ...job,
+      jobId: '01J0000000000000000000000K',
+      kind: 'run_inspection',
+    } as Job);
+    const deliver = await prepareWorkspace(contextWith(), {
+      ...job,
+      jobId: '01J0000000000000000000000L',
+      kind: 'deliver',
+    } as Job);
+
+    expect(station.ok && inspection.ok && deliver.ok).toBe(true);
+    if (!station.ok || !inspection.ok || !deliver.ok) return;
+    expect(inspection.worktree).toBe(station.worktree);
+    expect(deliver.worktree).toBe(station.worktree);
+    expect(mirrorsOf()).toHaveLength(1);
+    expect(setupRuns()).toBe(1);
+  });
+
+  it('gives two Work orders of one repo two worktrees under one mirror', async () => {
+    await prepareWorkspace(contextWith(), jobWith('todo-x'));
+    await prepareWorkspace(contextWith(), jobWith('todo-y'));
+
+    const root = worktreeRootOf(cellDataDir, mirrorPathOf(cellDataDir, origin));
+    expect(readdirSync(root).sort()).toEqual(['todo-x', 'todo-y']);
+    expect(mirrorsOf()).toHaveLength(1);
+  });
+
+  it('keeps a worktree that a job holds, and evicts the least recently used beyond the limit', async () => {
+    const context = contextWith({ worktreeLimit: 1 });
+    const busy = await prepareWorkspace(context, jobWith('busy'));
+    await sleep(20);
+
+    await prepareWorkspace(context, jobWith('other'));
+
+    expect(busy.ok && existsSync(busy.worktree)).toBe(true);
+    context.inUse.clear();
+    await sleep(20);
+    await prepareWorkspace(context, jobWith('third'));
+    expect(busy.ok && existsSync(busy.worktree)).toBe(false);
+  });
+});
+
+describe('fetch skip', () => {
+  it('fetches the remote for a branch base, every time', async () => {
+    await prepareWorkspace(contextWith(), jobWith('todo-fetch-branch'));
+    const recorded = recordingSystem();
+    const context = contextWith({
+      shell: { system: recorded.system, logDir: join(root, 'logs') },
+    });
+
+    await prepareWorkspace(context, jobWith('todo-fetch-branch'));
+
+    expect(recorded.commands.some((c) => c.includes("'fetch'"))).toBe(true);
+  });
+
+  it('always fetches for delivery, even when the pinned base is in the mirror', async () => {
+    await prepareWorkspace(contextWith(), jobWith('todo-deliver-warm'));
+    const pinned = git(origin, 'rev-parse', 'HEAD');
+    const recorded = recordingSystem();
+    const context = contextWith({
+      shell: { system: recorded.system, logDir: join(root, 'logs') },
+    });
+
+    await prepareWorkspace(context, {
+      ...jobWith('todo-deliver-warm'),
+      kind: 'deliver',
+      base: pinned,
+    } as Job);
+
+    expect(recorded.commands.some((c) => c.includes("'fetch'"))).toBe(true);
+  });
+
+  it('skips the remote fetch when the pinned base is already in the mirror', async () => {
+    await prepareWorkspace(contextWith(), jobWith('todo-warm'));
+    const pinned = git(origin, 'rev-parse', 'HEAD');
+    const recorded = recordingSystem();
+    const context = contextWith({
+      shell: { system: recorded.system, logDir: join(root, 'logs') },
+    });
+
+    const prepared = await prepareWorkspace(context, {
+      ...jobWith('todo-pinned'),
+      base: pinned,
+    } as Job);
+
+    expect(prepared).toMatchObject({ ok: true, head: pinned });
+    expect(recorded.commands.some((c) => c.includes("'fetch'"))).toBe(false);
+  });
+
+  it('fetches when the pinned base is not in the mirror yet', async () => {
+    await prepareWorkspace(contextWith(), jobWith('todo-before'));
+    const next = commitFile(origin, 'next.txt', 'next\n');
+    const recorded = recordingSystem();
+    const context = contextWith({
+      shell: { system: recorded.system, logDir: join(root, 'logs') },
+    });
+
+    const prepared = await prepareWorkspace(context, {
+      ...jobWith('todo-after'),
+      base: next,
+    } as Job);
+
+    expect(prepared).toMatchObject({ ok: true, head: next });
+    expect(recorded.commands.some((c) => c.includes("'fetch'"))).toBe(true);
+  });
+});
+
+describe('sync and setup', () => {
   it('runs setup once per commit and skips it on the next prepare of that commit', async () => {
     const job = jobWith('todo-2', [countSetup()]);
 
@@ -139,6 +373,30 @@ describe('workspace prepare', () => {
     expect(setupRuns()).toBe(2);
   });
 
+  it('runs sync before setup, in the worktree', async () => {
+    const order = join(root, 'order.txt');
+    const line = (name: string): string =>
+      `echo ${name} >> ${shellQuote(order)}`;
+
+    const prepared = await prepareWorkspace(
+      contextWith(),
+      jobWith('todo-order', [line('setup')], [line('sync')]),
+    );
+
+    expect(prepared.ok).toBe(true);
+    expect(readFileSync(order, 'utf8')).toBe('sync\nsetup\n');
+  });
+
+  it('reports a failing sync at the sync stage and runs no setup', async () => {
+    const prepared = await prepareWorkspace(
+      contextWith(),
+      jobWith('todo-sync', [countSetup()], ['exit 2']),
+    );
+
+    expect(prepared).toMatchObject({ ok: false, stage: 'sync' });
+    expect(setupRuns()).toBe(0);
+  });
+
   it('reports a failed setup with its stage and the commands it ran', async () => {
     const prepared = await prepareWorkspace(
       contextWith(),
@@ -154,56 +412,20 @@ describe('workspace prepare', () => {
     expect(log).toContain('building');
   });
 
-  it('reports a repo that cannot be fetched as a fetch failure', async () => {
-    const job = {
-      ...jobWith('todo-5'),
-      repo: {
-        url: join(root, 'missing.git'),
-        baseBranch: 'main',
-        branch: 'factory/x',
-      },
-    } as Job;
+  it('does not mark a worktree with a failed setup as prepared', async () => {
+    const failed = await prepareWorkspace(
+      contextWith(),
+      jobWith('todo-retry', ['exit 3']),
+    );
+    expect(failed).toMatchObject({ ok: false, stage: 'setup' });
 
-    const prepared = await prepareWorkspace(contextWith(), job);
+    const again = await prepareWorkspace(
+      contextWith(),
+      jobWith('todo-retry', [countSetup()]),
+    );
 
-    expect(prepared.ok).toBe(false);
-    if (prepared.ok) return;
-    expect(prepared.stage).toBe('fetch');
-  });
-
-  it('reports a pinned base the mirror does not have as a worktree failure', async () => {
-    const job = {
-      ...jobWith('todo-6'),
-      base: 'a'.repeat(40),
-    } as unknown as Job;
-
-    const prepared = await prepareWorkspace(contextWith(), job);
-
-    expect(prepared.ok).toBe(false);
-    if (prepared.ok) return;
-    expect(prepared.stage).toBe('worktree');
-  });
-
-  it('evicts the least recently used worktree beyond the limit', async () => {
-    const context = contextWith({ worktreeLimit: 1 });
-    const first = await prepareWorkspace(context, jobWith('old'));
-    context.inUse.clear();
-    await sleep(20);
-
-    const second = await prepareWorkspace(context, jobWith('new'));
-
-    expect(first.ok && existsSync(first.worktree)).toBe(false);
-    expect(second.ok && existsSync(second.worktree)).toBe(true);
-  });
-
-  it('never evicts a worktree a job is using', async () => {
-    const context = contextWith({ worktreeLimit: 1 });
-    const first = await prepareWorkspace(context, jobWith('busy'));
-    await sleep(20);
-
-    await prepareWorkspace(context, jobWith('other'));
-
-    expect(first.ok && existsSync(first.worktree)).toBe(true);
+    expect(again).toMatchObject({ ok: true });
+    expect(setupRuns()).toBe(1);
   });
 });
 

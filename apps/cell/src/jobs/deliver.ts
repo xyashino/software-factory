@@ -8,7 +8,7 @@ import {
 import { WireFailure } from '@repo/factory-core/contracts/errors';
 import type { BlobRef, CommitSha } from '@repo/factory-core/ids';
 import { GIT_TIMEOUT_MS } from '../workspace/mirror';
-import { prepareWorkspace } from '../workspace/prepare';
+import { prepareJobWorkspace, shellFor } from './job-workspace';
 import {
   gitCommand,
   runShell,
@@ -62,21 +62,9 @@ export const runDeliver = async (
     throw new Error(`deliver job ${job.jobId} has no deliver block`);
   if (signal.aborted) return;
 
-  const shell: ShellContext = {
-    system: ctx.system,
-    logDir: join(ctx.cellDataDir, 'logs', job.jobId),
-    signal,
-  };
+  const shell: ShellContext = shellFor(ctx, job, signal);
 
-  const prepared = await prepareWorkspace(
-    {
-      shell,
-      cellDataDir: ctx.cellDataDir,
-      worktreeLimit: ctx.worktreeLimit,
-      inUse: ctx.inUse,
-    },
-    job,
-  );
+  const prepared = await prepareJobWorkspace(ctx, job, signal);
   if (!prepared.ok) {
     await reportFailed(
       ctx,

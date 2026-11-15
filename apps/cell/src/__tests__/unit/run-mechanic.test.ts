@@ -8,7 +8,8 @@ import type { FactoryClient } from '@repo/factory-core/contracts/client';
 import { jobSchema, type Job } from '@repo/factory-core/contracts/job';
 import type { BlobRef, CellId } from '@repo/factory-core/ids';
 import { runMechanic, type MechanicDeps } from '../../jobs/run-mechanic';
-import { prepareWorkspace } from '../../workspace';
+import { createSystemAdapter } from '../../adapters/system/system.adapter';
+import { prepareWorkspace } from '../../workspace/prepare';
 import {
   createHerdrPane,
   type HerdrExec,
@@ -236,7 +237,18 @@ describe('the Mechanic job run (CORE §14.3, §14.4)', () => {
 
   it('refuses to prepare a worktree for a Mechanic job', async () => {
     await expect(
-      prepareWorkspace({ job: mechanicJob(), dataDir }),
+      prepareWorkspace(
+        {
+          shell: {
+            system: createSystemAdapter(),
+            logDir: join(dataDir, 'logs'),
+          },
+          cellDataDir: dataDir,
+          worktreeLimit: 8,
+          inUse: new Set(),
+        },
+        mechanicJob(),
+      ),
     ).rejects.toThrow('has no worktree');
   });
 

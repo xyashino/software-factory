@@ -12,8 +12,8 @@ import { createRegistry } from '../cycle/registry';
 import { runGit } from '../git';
 import { cycleDirName } from '../names';
 import { spawnHeadless } from '../runners/headless';
-import { prepareWorkspace } from '../workspace';
 import { runDeliver } from './deliver';
+import { prepareJobWorkspace } from './job-workspace';
 import { runPlanJob } from './plan';
 import { runInspection } from './run-inspection';
 import { runMechanic } from './run-mechanic';
@@ -120,27 +120,36 @@ export const runJob = async (
         return continuation;
       case 'run_operator_station': {
         const station = ctx.headlessOperators ? asHeadless(job) : job;
-        return await runOperatorStation(station, {
-          client: ctx.client,
-          cellId: ctx.cellId,
-          dataDir: ctx.cellDataDir,
-          clock: { now: () => Date.now() },
-          sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
-          git: runGit,
-          workspace: (current) =>
-            prepareWorkspace({ job: current, dataDir: ctx.cellDataDir }),
-          runners: runnersFor(station, ctx.cellDataDir),
-          spawn: spawnHeadless,
-          ...(ctx.pane ? { pane: ctx.pane } : {}),
-          timing: {
-            tickMs: STATION_TICK_MS,
-            questionHoldMs: QUESTION_HOLD_MS,
-            handoverGraceMs: HANDOVER_GRACE_MS,
-          },
-          registry: ctx.stations ?? createRegistry(),
-          signal,
-          takeSignals: () => ctx.takeSignals?.(job.jobId) ?? [],
-        });
+        // The worktrees the station prepared stay in use until the station ends, so eviction keeps them.
+        const held: string[] = [];
+        try {
+          return await runOperatorStation(station, {
+            client: ctx.client,
+            cellId: ctx.cellId,
+            dataDir: ctx.cellDataDir,
+            clock: { now: () => Date.now() },
+            sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+            git: runGit,
+            workspace: async (current) => {
+              const prepared = await prepareJobWorkspace(ctx, current, signal);
+              if (prepared.ok) held.push(prepared.worktree);
+              return prepared;
+            },
+            runners: runnersFor(station, ctx.cellDataDir),
+            spawn: spawnHeadless,
+            ...(ctx.pane ? { pane: ctx.pane } : {}),
+            timing: {
+              tickMs: STATION_TICK_MS,
+              questionHoldMs: QUESTION_HOLD_MS,
+              handoverGraceMs: HANDOVER_GRACE_MS,
+            },
+            registry: ctx.stations ?? createRegistry(),
+            signal,
+            takeSignals: () => ctx.takeSignals?.(job.jobId) ?? [],
+          });
+        } finally {
+          for (const worktree of held) ctx.inUse.delete(worktree);
+        }
       }
       case 'mechanic': {
         // A Mechanic job runs in a Herdr pane, never headless, and never in a worktree (CORE §14.3).
