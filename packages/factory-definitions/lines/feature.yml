@@ -17,7 +17,7 @@ operators:
   planner:
     profile: planner
     runner: claude
-    model: sonnet
+    model: haiku
     timeout: 20m
     headless: false
     permission: write

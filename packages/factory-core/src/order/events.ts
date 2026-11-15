@@ -424,6 +424,7 @@ const incidentRecordedSchema = z
     action: incidentActionSchema,
     changes: z.array(incidentChangeSchema).max(16),
     outcome: freeText,
+    commit: commitShaSchema.optional(),
   })
   .strict();
 const deliveryFinishedSchema = z

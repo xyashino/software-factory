@@ -106,6 +106,7 @@ export interface IncidentRecord {
   action: IncidentAction;
   changes: IncidentChange[];
   outcome: string;
+  commit?: CommitSha;
   at: number;
 }
 
@@ -142,6 +143,7 @@ export interface WorkOrderState {
         resumeId: ResumeId;
         forStation: StationId;
         fromCycle?: CycleId; // absent: start fresh at that Station on the checkpoint
+        baseCommit?: CommitSha;
         noteBlob?: BlobRef;
       }
     | undefined;

@@ -165,7 +165,6 @@ export const buildJob = async (
   }
 
   if (next.job.kind === 'mechanic') {
-    // The Mechanic runs in the repair checkout, not in a worktree: no workspace (CORE §14.4).
     const andon = state.andon;
     if (!andon || andon.at !== next.job.andonAt) {
       throw refusal({
@@ -184,29 +183,28 @@ export const buildJob = async (
         detail: 'the Line names no loaded operator for the mechanic',
       });
     }
+    const latestCommit =
+      state.checkpoint?.commit ??
+      [...state.cycles].reverse().find((cycle) => cycle.commit)?.commit;
     const promptBlob = await storeText(
       ports.blobs,
       buildIncidentPrompt({ reason: andon.reason, detail: andon.detail }),
       'text/markdown',
     );
     return jobSchema.parse({
-      jobId: active.jobId,
-      orderId: state.orderId,
-      projectId: state.projectId,
-      epoch: active.epoch,
+      ...common,
       kind: 'mechanic',
-      repo: common.repo,
-      base: { branchBase },
+      base: latestCommit ?? { branchBase },
       mechanic: {
         andonAt: next.job.andonAt,
         n: next.job.n,
         promptBlob,
-        // A Mechanic always runs in a Herdr pane (PROTOCOL §9), whatever the pool says.
+        // A Mechanic always runs in a Herdr pane (PROTOCOL §9) with write permission to edit the worktree.
         operator: {
           profile: pool.profile,
           runner: pool.runner,
           model: pool.model,
-          permission: pool.permission,
+          permission: 'write',
           headless: false,
           timeoutMs: pool.timeoutMs,
         },

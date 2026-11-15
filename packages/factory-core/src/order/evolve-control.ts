@@ -45,15 +45,24 @@ const pendingFor = (
   resume: Pick<ResumedEvent, 'resumeId' | 'noteBlob'>,
   forStation: StationId,
   fromCycle?: CycleId,
+  baseCommit?: CommitSha,
 ): WorkOrderState => ({
   ...state,
   pendingResume: {
     resumeId: resume.resumeId,
     forStation,
     fromCycle,
+    ...(baseCommit !== undefined ? { baseCommit } : {}),
     noteBlob: resume.noteBlob,
   },
 });
+
+const repairCommitOf = (state: WorkOrderState): CommitSha | undefined => {
+  const andonAt = state.andon?.at;
+  if (andonAt === undefined) return undefined;
+  return state.incidents.find((incident) => incident.andonAt === andonAt)
+    ?.commit;
+};
 
 /** CORE §4.3 rule 7: the Supervisor resumes at the Andon's Station. */
 const retryStation = (
@@ -61,6 +70,7 @@ const retryStation = (
   ev: ResumedEvent,
 ): WorkOrderState => {
   const reason = state.andon?.reason;
+  const repairCommit = repairCommitOf(state);
   const station = andonStation(state);
   const cleared: WorkOrderState = {
     ...state,
@@ -80,12 +90,24 @@ const retryStation = (
     case 'cycle_blocked':
     case 'no_retry':
       return latest
-        ? pendingFor(granted, ev, latest.stationId, latest.cycleId)
+        ? pendingFor(
+            granted,
+            ev,
+            latest.stationId,
+            latest.cycleId,
+            repairCommit,
+          )
         : granted;
     case 'restart_failed':
       if (!latest) return granted;
       return {
-        ...pendingFor(granted, ev, latest.stationId, latest.cycleId),
+        ...pendingFor(
+          granted,
+          ev,
+          latest.stationId,
+          latest.cycleId,
+          repairCommit,
+        ),
         restartsUsed: resetCounter(granted.restartsUsed, latest.stationId),
         lostRestartsUsed: resetCounter(
           granted.lostRestartsUsed,
@@ -108,6 +130,7 @@ const restartFrom = (
   stationId: StationId,
 ): WorkOrderState => {
   const index = requireIndex(state, stationId);
+  const repairCommit = repairCommitOf(state);
   const restarted: WorkOrderState = {
     ...state,
     andon: undefined,
@@ -116,10 +139,16 @@ const restartFrom = (
     pendingFeedback: undefined,
     phase: { kind: 'stations', index },
     lastPassed: passedBefore(state, index),
-    checkpoint: checkpointBefore(state, index),
+    checkpoint:
+      repairCommit !== undefined
+        ? {
+            commit: repairCommit,
+            afterStation: state.checkpoint?.afterStation ?? null,
+          }
+        : checkpointBefore(state, index),
     resumedWaiting: true,
   };
-  return pendingFor(restarted, ev, stationId);
+  return pendingFor(restarted, ev, stationId, undefined, repairCommit);
 };
 
 /** The Andon is cleared and the Work order may run again (CORE §4.3 rules 7-8). */
@@ -165,6 +194,7 @@ export const applyAndonRaised = (
 /**
  * CORE §14.2: the incident joins the history and clears no Andon by itself. It ends the Mechanic job
  * that recorded it (CORE §14.4), and an `escalate` hands the Andon to the Supervisor (§14.4).
+ * When the Mechanic repaired the worktree (`commit`), that commit becomes the latest checkpoint.
  */
 export const applyIncidentRecorded = (
   state: WorkOrderState,
@@ -173,6 +203,13 @@ export const applyIncidentRecorded = (
 ): WorkOrderState => ({
   ...state,
   activeJob: state.activeJob?.kind === 'mechanic' ? undefined : state.activeJob,
+  checkpoint:
+    ev.commit !== undefined
+      ? {
+          commit: ev.commit,
+          afterStation: state.checkpoint?.afterStation ?? null,
+        }
+      : state.checkpoint,
   andon:
     state.andon && ev.action.kind === 'escalate'
       ? { ...state.andon, triage: 'supervisor' }
@@ -188,6 +225,7 @@ export const applyIncidentRecorded = (
       action: ev.action,
       changes: ev.changes,
       outcome: ev.outcome,
+      ...(ev.commit !== undefined ? { commit: ev.commit } : {}),
       at,
     },
   ],

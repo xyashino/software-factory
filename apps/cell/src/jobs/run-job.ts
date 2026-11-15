@@ -143,7 +143,7 @@ export const runJob = async (
         });
       }
       case 'mechanic': {
-        // A Mechanic job runs in a Herdr pane, never headless, and never in a worktree (CORE §14.3).
+        // A Mechanic job runs in a Herdr pane, never headless.
         if (!ctx.pane) {
           throw new Error('the Cell has no pane driver for a mechanic job');
         }
@@ -151,6 +151,9 @@ export const runJob = async (
           client: ctx.client,
           cellId: ctx.cellId,
           dataDir: ctx.cellDataDir,
+          system: ctx.system,
+          worktreeLimit: ctx.worktreeLimit,
+          inUse: ctx.inUse,
           pane: ctx.pane,
           now: () => Date.now(),
           sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),

@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createConnection } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -7,6 +7,7 @@ import type { CommandResult } from '@repo/factory-core/contracts/cell';
 import type { FactoryClient } from '@repo/factory-core/contracts/client';
 import { jobSchema, type Job } from '@repo/factory-core/contracts/job';
 import type { BlobRef, CellId } from '@repo/factory-core/ids';
+import { createSystemAdapter } from '../../adapters/system/system.adapter';
 import { runMechanic, type MechanicDeps } from '../../jobs/run-mechanic';
 import { prepareWorkspace } from '../../workspace';
 import {
@@ -15,6 +16,7 @@ import {
   type HerdrOutcome,
 } from '../../runners/herdr-pane';
 import type { LaunchSpec, PaneDriver, PaneReading } from '../../ports';
+import { git, makeRepo } from '../../testing/git-repo';
 
 const JOB_ID = '01M7FHM3CH4N1C0B0000000001';
 const ORDER_ID = 'software-factory:v2-24-mechanic';
@@ -37,7 +39,7 @@ interface Seen {
 
 const newSeen = (): Seen => ({ replies: [], closed: [] });
 
-const mechanicJob = (): Job =>
+const mechanicJob = (overrides: Partial<Job> = {}): Job =>
   jobSchema.parse({
     jobId: JOB_ID,
     orderId: ORDER_ID,
@@ -63,6 +65,7 @@ const mechanicJob = (): Job =>
         timeoutMs: 600_000,
       },
     },
+    ...overrides,
   });
 
 /** A fake runtime: records every command it is sent and answers each with an empty result. */
@@ -110,17 +113,19 @@ const askOperator = (
     socket.on('error', reject);
   });
 
-/** A pane whose Mechanic, once the pane opens, sends `script` to the operator socket one request at a time. */
+/** A pane whose Mechanic, once the pane opens, runs `onOpen` / sends `script` to the operator socket. */
 const scriptedPane = (
   script: Record<string, unknown>[],
   seen: Seen,
   read: PaneReading['operator'] = 'working',
+  onOpen?: (spec: LaunchSpec & { name: string; task: string }) => void,
 ): PaneDriver => {
   // Once the script is sent, the Mechanic has exited: a pane with no incident then reads as gone.
   let sent = false;
   return {
     open: async (spec) => {
       seen.spec = spec;
+      onOpen?.(spec);
       for (const body of script) {
         seen.replies.push(await askOperator(spec.env, body));
       }
@@ -141,6 +146,7 @@ const depsFor = (
   dataDir: string,
   client: FactoryClient,
   pane: PaneDriver,
+  extra: Partial<MechanicDeps> = {},
 ): MechanicDeps => ({
   client,
   cellId: CELL,
@@ -149,6 +155,7 @@ const depsFor = (
   now: () => Date.now(),
   sleep: async () => undefined,
   tickMs: 1,
+  ...extra,
 });
 
 const incident = (
@@ -204,7 +211,7 @@ describe('the Mechanic job run (CORE §14.3, §14.4)', () => {
     expect(seen.closed).toHaveLength(1);
   });
 
-  it('runs in the repair checkout, never a Work order worktree, and refuses the Operator verbs', async () => {
+  it('falls back to the repair dir without workspace deps and refuses the Operator verbs', async () => {
     const { client, submitted } = fakeClient();
     const seen = newSeen();
     const pane = scriptedPane(
@@ -222,6 +229,9 @@ describe('the Mechanic job run (CORE §14.3, §14.4)', () => {
     expect(seen.spec?.cwd).toContain(join(dataDir, 'repairs'));
     expect(seen.spec?.cwd).not.toContain('worktrees');
     expect(seen.spec?.cwd).not.toBe(dataDir);
+    expect(seen.spec?.env.PATH?.split(':')[0]).toContain(
+      join(dataDir, 'repairs'),
+    );
     // The Operator verbs are refused, and no command is sent for them.
     expect(seen.replies.slice(0, 3).map((reply) => reply.code)).toEqual([
       'precondition',
@@ -234,10 +244,138 @@ describe('the Mechanic job run (CORE §14.3, §14.4)', () => {
     ]);
   });
 
-  it('refuses to prepare a worktree for a Mechanic job', async () => {
-    await expect(
-      prepareWorkspace({ job: mechanicJob(), dataDir }),
-    ).rejects.toThrow('has no worktree');
+  it('prepares the Work order worktree, commits and pushes Mechanic edits, and records commit and changes', async () => {
+    const origin = join(dataDir, 'origin');
+    const head = makeRepo(origin);
+    const cellDataDir = join(dataDir, 'cell');
+    const { client, submitted } = fakeClient();
+    const seen = newSeen();
+    const inUse = new Set<string>();
+    const job = mechanicJob({
+      repo: {
+        url: origin,
+        baseBranch: 'main',
+        branch: 'factory/v2-24-mechanic',
+      },
+      base: head as Job['base'],
+      workspace: {
+        dir: 'v2-24-mechanic',
+        sync: [],
+        setup: [],
+        timeoutMs: 30_000,
+      },
+    });
+    const pane = scriptedPane(
+      [incident('repair', 'fixed failing test before deliver')],
+      seen,
+      'working',
+      (spec) => {
+        writeFileSync(join(spec.cwd, 'README.md'), '# fixed\n');
+        writeFileSync(join(spec.cwd, 'fix.ts'), 'export const fixed = true;\n');
+      },
+    );
+
+    await runMechanic(
+      job,
+      depsFor(cellDataDir, client, pane, {
+        system: createSystemAdapter(),
+        worktreeLimit: 4,
+        inUse,
+      }),
+    );
+
+    expect(seen.spec?.cwd).toContain(join(cellDataDir, 'worktrees'));
+    expect(inUse.size).toBe(0);
+    expect(seen.replies).toEqual([{ ok: true }]);
+    expect(submitted.map((s) => s.command.type)).toEqual([
+      'RecordIncident',
+      'Resume',
+    ]);
+    const recorded = submitted[0]?.command as {
+      commit?: string;
+      action?: { kind: string };
+      changes?: Array<{ kind: string; path: string; ref: string }>;
+    };
+    expect(recorded.commit).toMatch(/^[0-9a-f]{40}$/);
+    expect(recorded.commit).not.toBe(head);
+    expect(recorded.action).toEqual({ kind: 'repair' });
+    expect(recorded.changes).toEqual([
+      { kind: 'file', path: 'README.md', ref: recorded.commit },
+      { kind: 'file', path: 'fix.ts', ref: recorded.commit },
+    ]);
+    expect(git(origin, 'rev-parse', 'refs/heads/factory/v2-24-mechanic')).toBe(
+      recorded.commit,
+    );
+  });
+
+  it('falls back to the repair dir with a note when preparing the worktree fails', async () => {
+    const cellDataDir = join(dataDir, 'cell');
+    const { client, submitted } = fakeClient();
+    const seen = newSeen();
+    let capturedPrompt = '';
+    const job = mechanicJob({
+      repo: {
+        url: join(dataDir, 'missing.git'),
+        baseBranch: 'main',
+        branch: 'factory/v2-24-mechanic',
+      },
+      workspace: {
+        dir: 'v2-24-mechanic',
+        sync: [],
+        setup: [],
+        timeoutMs: 30_000,
+      },
+    });
+    const pane = scriptedPane(
+      [incident('escalate', 'repo missing')],
+      seen,
+      'working',
+      (spec) => {
+        const repairDir = spec.cwd;
+        capturedPrompt = readFileSync(join(repairDir, 'prompt.md'), 'utf8');
+      },
+    );
+
+    await runMechanic(
+      job,
+      depsFor(cellDataDir, client, pane, {
+        system: createSystemAdapter(),
+        worktreeLimit: 4,
+      }),
+    );
+
+    expect(seen.spec?.cwd).toContain(join(cellDataDir, 'repairs'));
+    expect(capturedPrompt).toContain(
+      'Preparing the Work order worktree failed',
+    );
+    expect(submitted.map((s) => s.command.type)).toEqual(['RecordIncident']);
+  });
+
+  it('prepares a worktree in workspace.ts for a Mechanic job with workspace', async () => {
+    const origin = join(dataDir, 'origin');
+    const head = makeRepo(origin);
+    const cellDataDir = join(dataDir, 'cell');
+    const job = mechanicJob({
+      repo: {
+        url: origin,
+        baseBranch: 'main',
+        branch: 'factory/v2-24-mechanic',
+      },
+      base: head as Job['base'],
+      workspace: {
+        dir: 'v2-24-mechanic',
+        sync: [],
+        setup: [],
+        timeoutMs: 30_000,
+      },
+    });
+
+    const result = await prepareWorkspace({ job, dataDir: cellDataDir });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.base).toBe(head);
+    expect(result.worktree).toContain('worktrees');
   });
 
   it('escalates an Andon it cannot resolve, with the incident attached', async () => {

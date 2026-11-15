@@ -143,7 +143,7 @@ describe('Job contract: Work order jobs keep their shape', () => {
   });
 });
 
-/** A Mechanic job: no workspace, no station, a mechanic block with its prompt (CORE §14.4). */
+/** A Mechanic job: a mechanic block with its prompt, and optional worktree workspace (CORE §14.4). */
 const mechanicJob = {
   jobId: JOB_ID,
   orderId: ORDER_ID,
@@ -184,9 +184,9 @@ describe('Job contract: Mechanic jobs (CORE §14.4)', () => {
     );
   });
 
-  it('rejects a mechanic job that has a workspace', () => {
+  it('accepts a mechanic job that carries a workspace for editing the worktree', () => {
     const job = { ...mechanicJob, workspace: workJob.workspace };
-    expect(jobSchema.safeParse(job).success).toBe(false);
+    expect(jobSchema.safeParse(job).success).toBe(true);
   });
 
   it('rejects a mechanic job without its block', () => {

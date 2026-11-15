@@ -82,7 +82,9 @@ const resumeRow = (state: WorkOrderState): Next | undefined => {
   const cause: CycleCause = from
     ? { kind: 'resume', of: from.cycleId, resumeId: pending.resumeId }
     : { kind: 'resume', resumeId: pending.resumeId };
-  const base = from ? (from.commit ?? from.baseCommit) : checkpointBase(state);
+  const base =
+    pending.baseCommit ??
+    (from ? (from.commit ?? from.baseCommit) : checkpointBase(state));
   return {
     kind: 'job',
     job: stationJob(state, pending.forStation, cause, base),

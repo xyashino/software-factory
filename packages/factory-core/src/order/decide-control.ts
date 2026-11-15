@@ -266,6 +266,7 @@ export const recordIncident = (
       action: command.action,
       changes: command.changes,
       outcome: command.outcome,
+      ...(command.commit !== undefined ? { commit: command.commit } : {}),
     },
   ];
   return ok(events);

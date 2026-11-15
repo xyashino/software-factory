@@ -247,6 +247,7 @@ const recordIncidentSchema = z
     action: incidentActionSchema,
     changes: z.array(incidentChangeSchema).max(16),
     outcome: freeText,
+    commit: shaOrUndefined,
   })
   .strict();
 

@@ -135,7 +135,7 @@ const planBlockSchema = z
 
 /**
  * A Mechanic job (CORE §14.4): triages one Andon, names the Andon by its `andon_raised` time and the
- * prompt blob. It has no workspace and runs in the repair checkout, never in a Work order worktree.
+ * prompt blob. May carry a `workspace` so the Mechanic can inspect and edit the Work order's worktree.
  */
 const mechanicSchema = z
   .object({
@@ -184,7 +184,6 @@ export const jobSchema = z
     if (job.kind === 'mechanic') {
       if (isPlanId(job.orderId)) issue('mechanic needs an OrderId');
       if (job.mechanic === undefined) issue('mechanic needs a mechanic block');
-      if (job.workspace !== undefined) issue('mechanic has no workspace');
       if (job.station !== undefined) issue('mechanic has no station');
       if (job.deliver !== undefined) issue('mechanic has no deliver block');
       if (job.plan !== undefined) issue('mechanic has no plan block');

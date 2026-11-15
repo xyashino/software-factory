@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { decide } from '../decide';
 import { orderEventSchema, storedEventSchema } from '../events';
+import { nextJob } from '../next-job';
 import {
   andonRaised,
   blobOf,
@@ -8,15 +9,19 @@ import {
   commitOf,
   contextOf,
   created,
+  cycleBlocked,
+  cycleIdOf,
+  deliveryFailed,
   generatedIdOf,
   incidentIdOf,
   incidentRecorded,
+  jobIdOf,
   nudged,
   priorityChanged,
   resumed,
   samples,
 } from './builders';
-import { claim, start, stateOf } from './histories';
+import { claim, deliveringEvents, start, stateOf } from './histories';
 
 const mechanic = (name = 'mechanic', epoch = 2) =>
   contextOf({ kind: 'mechanic', name }, { epoch });
@@ -170,6 +175,108 @@ describe('RecordIncident', () => {
     expect(result).toMatchObject({
       ok: true,
       value: [{ type: 'incident_recorded', action: { kind: 'repair' } }],
+    });
+  });
+
+  it('carries a repair commit into checkpoint and uses it as base on Resume', () => {
+    const repairSha = commitOf(9);
+    const events = [
+      created(),
+      claim(1),
+      start(1, 'plan'),
+      cycleBlocked({ cycleId: cycleIdOf(1), commit: commitOf(1) }),
+      andonRaised({ reason: 'cycle_blocked' }),
+      claim(2, 'mechanic'),
+    ];
+    const state = stateOf(events);
+
+    const recorded = decide(
+      state,
+      {
+        type: 'RecordIncident',
+        diagnosis: 'fixed config in worktree',
+        action: { kind: 'repair' },
+        changes: [{ kind: 'file', path: 'src/app.ts', ref: repairSha }],
+        outcome: 'committed repair',
+        commit: repairSha,
+      },
+      mechanic('mechanic', 2),
+    );
+    expect(recorded.ok).toBe(true);
+    if (!recorded.ok) return;
+    expect(recorded.value[0]).toMatchObject({
+      type: 'incident_recorded',
+      commit: repairSha,
+    });
+
+    const afterIncident = stateOf([...events, ...recorded.value]);
+    expect(afterIncident.checkpoint?.commit).toBe(repairSha);
+
+    const resumedDecision = decide(
+      afterIncident,
+      { type: 'Resume', mode: { kind: 'retry_station' } },
+      mechanic('mechanic', 2),
+    );
+    expect(resumedDecision.ok).toBe(true);
+    if (!resumedDecision.ok) return;
+
+    const afterResume = stateOf([
+      ...events,
+      ...recorded.value,
+      ...resumedDecision.value,
+    ]);
+    expect(nextJob(afterResume)).toMatchObject({
+      kind: 'job',
+      job: {
+        kind: 'run_operator_station',
+        base: repairSha,
+      },
+    });
+  });
+
+  it('updates delivery checkpoint when Mechanic repairs a delivery_failed Andon', () => {
+    const repairSha = commitOf(9);
+    const events = [
+      ...deliveringEvents(),
+      claim(5, 'deliver'),
+      deliveryFailed({ jobId: jobIdOf(5), detail: 'pre-commit hook failed' }),
+      andonRaised({ reason: 'delivery_failed' }),
+      claim(6, 'mechanic'),
+    ];
+    const state = stateOf(events);
+
+    const recorded = decide(
+      state,
+      {
+        type: 'RecordIncident',
+        diagnosis: 'fixed failing test before deliver commit',
+        action: { kind: 'repair' },
+        changes: [{ kind: 'file', path: 'src/app.test.ts', ref: repairSha }],
+        outcome: 'test passes',
+        commit: repairSha,
+      },
+      mechanic('mechanic', 6),
+    );
+    expect(recorded.ok).toBe(true);
+    if (!recorded.ok) return;
+
+    const afterIncident = stateOf([...events, ...recorded.value]);
+    const resumedDecision = decide(
+      afterIncident,
+      { type: 'Resume', mode: { kind: 'retry_station' } },
+      mechanic('mechanic', 6),
+    );
+    expect(resumedDecision.ok).toBe(true);
+    if (!resumedDecision.ok) return;
+
+    const afterResume = stateOf([
+      ...events,
+      ...recorded.value,
+      ...resumedDecision.value,
+    ]);
+    expect(nextJob(afterResume)).toEqual({
+      kind: 'job',
+      job: { kind: 'deliver', base: repairSha },
     });
   });
 
