@@ -7,48 +7,47 @@ factory: v2
 plan: passive-server
 ---
 
-# passive-server-03: Server stores tasks, Lines and Operators; API to create and update them
+# passive-server-03: Repo-local .factory/ config, Cell rendering, and server task API
 
 ## Objective
 
-The server is the store for the four things it owns: **tasks** (Work orders and Order Plans), **workflows** (Lines), **agents** (Operator profiles and their prompt templates) and **state** (already stored). Add Drizzle tables and API routes so tasks, Lines and Operators are created through the API, and the runtime reads Lines and Operators from the database instead of from `packages/factory-definitions/` on disk.
+Keep `factory-server` strictly for **tasks and state** (Work orders, Order Plans, events, leases, blobs, PR state). Move repository-specific definitions (`lines/`, `operators/`, `templates/prompts/`, `templates/pr/`) out of `packages/factory-definitions/` into a per-repo `.factory/` directory at the repository root (alongside `.nitpick/` for `rules` and `skills`). The Cell (`factory-cell`), running in/for the repository, reads `.factory/` and `.nitpick/` from the repository/worktree to render prompts and PR bodies and run stations, while `packages/factory-definitions/` keeps only schemas, validators, starter templates, and `templates/runtime/`. Add API routes so Work orders and Order Plans are created with a pinned `LineSnapshot` instead of the server loading definitions from disk.
 
 ## Read first
 
 - `docs/PLAN.md`, `docs/CORE.md` (Line snapshot pinning), `docs/PROTOCOL.md` (§1, §3, §4, §8.3), `docs/STORAGE.md`
-- `packages/factory-db/src/schema.ts`, `orders-table.ts`, `plans-table.ts`, `sqlite-blob-store.ts`
-- `packages/factory-definitions/src/load.ts` (`Definitions`), `line-schema.ts`, `line-validate.ts`, `line-snapshot.ts`, `operator-profile.ts`, `templates.ts`
-- `packages/factory-core/src/contracts/routes.ts`, `http-routes.ts`, `supervisor.ts`, `job.ts`
+- `packages/factory-definitions/src/load.ts`, `line-schema.ts`, `line-validate.ts`, `line-snapshot.ts`, `operator-profile.ts`, `templates.ts`, `nitpick-catalog.ts`
+- `packages/factory-core/src/contracts/routes.ts`, `http-routes.ts`, `supervisor.ts`, `job.ts`, `line/snapshot.ts`
 - `packages/factory-core/src/order/commands.ts`, `events.ts`, `decide-lifecycle.ts`; `plan/commands.ts`
-- `packages/factory-runtime/src/open-runtime.ts`, `ports.ts`, `operations.ts`, `job-builder.ts`, `intake.ts`, `plan-commands.ts`
-- `apps/cell/src/jobs/deliver.ts`
+- `packages/factory-runtime/src/open-runtime.ts`, `ports.ts`, `job-builder.ts`, `prompts/build-prompt.ts`, `prompts/incident-prompt.ts`, `pr-body.ts`, `paths.ts`
+- `apps/cell/src/jobs/run-operator-station.ts`, `run-mechanic.ts`, `deliver.ts`, `config.ts`
 
 ## Deliverables
 
-1. **Tables (`schema.ts` + generated migration):**
-   - `lines`: `name`, `version` (monotonic per name), `definition` (validated JSON), `content_hash`, `created_at`, `created_by`; primary key (`name`, `version`). The latest version is the one new Work orders pin.
-   - `operators`: same shape for Operator profiles (profile id, version, frontmatter JSON, prompt body blob).
-   - `templates`: supervisor prompt templates and PR templates, versioned the same way.
-   - Runtime prompts (`templates/runtime/`) are the factory's own protocol text: they stay bundled with the server, not stored.
-2. **Contracts (`packages/factory-core`):** routes under `auth: 'supervisor'`, each idempotent by `commandId`:
-   - `POST /v1/orders` (`createOrder`: `projectId`, `todoId`, `title`, `type`, `body` markdown spec, `line`, `priority`, `dependsOn`, optional `plan`, optional `baseBranch`).
-   - `POST /v1/plans` (`createPlan`: `projectId`, `slug`, optional `baseBranch`, ordered members validated as a linear chain).
-   - `PUT /v1/lines/:name`, `GET /v1/lines`, `GET /v1/lines/:name[?version=]`.
-   - `PUT /v1/operators/:id`, `GET /v1/operators`, `GET /v1/operators/:id`.
-   - `PUT /v1/templates/:id`, `GET /v1/templates`.
-   - `POST /v1/orders/:id/pr-state` (`recordPrState`: `open | merged | closed`) and the plan equivalent.
-3. **Runtime (`packages/factory-runtime`):**
-   - Replace the startup `loadDefinitions(DEFINITIONS_ROOT)` with a `DefinitionStore` port backed by the new tables. Validation on write reuses `factory-definitions` (`line-validate`, `operator-profile`, cross-checks such as "every Line operator profile exists"); a write that breaks a stored Line is refused.
-   - `createOrder` / `createPlan` store the spec body as a blob, compute `contentHash`, validate project and Line, pin the Line snapshot (as intake does today), and append through `CommandHandler`, waking waiting Cells.
-   - `job-builder.ts` takes Operator profiles and templates from the store at the version the Work order pinned, so editing an Operator never changes a Cycle in flight.
-   - `deliver.removeTodo` becomes optional in `jobSchema`; API-created orders omit it and `apps/cell/src/jobs/deliver.ts` skips deleting a todo file when it is absent.
-4. **Seeding:** an empty database gets no definitions automatically; `passive-server-05` adds the CLI that uploads them. Tests use a fixture helper that seeds the store from `packages/factory-definitions/src/__tests__/fixtures/valid`.
-5. **Tests:** contract tests for every route (validation, idempotency, versioning, refused invalid Line/Operator), pinning (order created on Line v1 keeps v1 after v2 is pushed), and a Cell delivering an API-created order end to end.
-6. **Docs:** `docs/PLAN.md` (server owns tasks, Lines, Operators, state), `docs/PROTOCOL.md` route table, `docs/STORAGE.md` §4 new tables.
+1. **Per-repo `.factory/` directory and `factory-definitions` split:**
+   - Move `software-factory`'s own `lines/`, `operators/`, `templates/prompts/`, and `templates/pr/` from `packages/factory-definitions/` into `.factory/` at the repository root.
+   - `packages/factory-definitions/` retains: schemas (`schemas/line.schema.json`), parsers/validators (`line-schema`, `line-validate`, `line-snapshot`, `operator-profile`, `templates`, `nitpick-catalog`, `load`), starter scaffold assets (for `factory init` in `passive-server-05`), and `templates/runtime/` (the Cell↔Operator protocol prompts).
+   - Add a repo loader helper in `factory-definitions` (e.g. `loadRepoDefinitions(repoRoot)`) that reads `<repoRoot>/.factory/` and validates `rules`/`skills` against `<repoRoot>/.nitpick/` when present.
+2. **Task & PR-state API (`packages/factory-core`, `packages/factory-runtime`, `apps/server`):**
+   - Routes under `auth: 'supervisor'`, each idempotent by `commandId`:
+     - `POST /v1/orders` (`createOrder`: `projectId`, `todoId`, `title`, `type`, `body` markdown spec, `line` as a validated `LineSnapshot`, `priority`, `dependsOn`, optional `plan`, optional `baseBranch`).
+     - `POST /v1/plans` (`createPlan`: `projectId`, `slug`, optional `baseBranch`, ordered members with `LineSnapshot` validated as a linear chain).
+     - `POST /v1/orders/:id/pr-state` (`recordPrState`: `open | merged | closed`) and the plan equivalent.
+   - `createOrder` / `createPlan` store the spec body as a blob, compute `contentHash`, pin the provided `LineSnapshot` on the order, and append through `CommandHandler`, waking waiting Cells. No `lines`, `operators`, or repo `templates` tables are added to the server DB.
+   - `deliver.removeTodo` becomes optional in `jobSchema`; API-created orders omit it and `apps/cell/src/jobs/deliver.ts` skips deleting a todo file when absent.
+3. **Cell-side prompt & PR rendering (`packages/factory-core`, `packages/factory-runtime`, `apps/cell`):**
+   - Remove server-side rendering of repo `operators/`, `templates/prompts/`, and `templates/pr/` from `job-builder.ts`; `jobSchema` carries structured job inputs/metadata (station, operator profile/runner/model/permission, cycle context, input/feedback blob refs, budget, order spec blob, delivery commit/report refs) plus server protocol `runtimePrompts`.
+   - `apps/cell` loads `.factory/` (and `.nitpick/`) from the repository worktree (or Cell repo cwd) to resolve the Operator profile, declared rules/skills, prompt templates (`templates/prompts/`), and PR templates (`templates/pr/`), rendering Cycle/Mechanic prompts and PR markdown bodies on the Cell.
+   - Keep `buildPrompt` / `buildIncidentPrompt` / `formatPrBody` validation strict: missing templates or invalid `.factory/` in the target repo fail the job cleanly with an actionable diagnostic.
+4. **Tests:**
+   - Contract tests for `createOrder`, `createPlan`, `recordPrState` (validation, idempotency, pinned `LineSnapshot` without server-side definition files).
+   - Cell tests verifying two repositories with distinct `.factory/` configs (`lines`, `operators`, `templates/pr`, `.nitpick`) run against the same `factory-server` without sharing templates or definitions on the server.
+   - End-to-end delivery of an API-created order with no `todos/*.md` in the repository.
+5. **Docs:** `docs/PLAN.md` (server owns tasks & state; each repo owns `.factory/` + `.nitpick/`), `docs/PROTOCOL.md` route and job payload tables.
 
 ## Acceptance criteria
 
-- [ ] A Work order and an Order Plan created via the API are claimed, executed and delivered with no `todos/*.md` in the repository.
-- [ ] Lines and Operators are read from the database; the server no longer reads `packages/factory-definitions/lines` or `operators` at runtime.
-- [ ] Pushing a new Line or Operator version never changes a Work order already in flight.
+- [ ] `software-factory` uses its own root `.factory/` (`lines/`, `operators/`, `templates/prompts/`, `templates/pr/`) alongside `.nitpick/`, and `packages/factory-definitions/` no longer holds repo-specific workflow/PR templates as server runtime input.
+- [ ] A Work order and an Order Plan created via `createOrder` / `createPlan` with a `LineSnapshot` are claimed, executed (prompts and PR body rendered by the Cell from the repo's `.factory/`), and delivered with no `todos/*.md` in the repository.
+- [ ] Two projects with different `.factory/` templates/operators/lines work against one `factory-server`.
 - [ ] `pnpm ci:verify` passes.
