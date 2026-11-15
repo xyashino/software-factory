@@ -10,9 +10,11 @@ import {
 } from 'drizzle-orm/sqlite-core';
 
 /**
- * The Drizzle view of `migrations/0001_init.sql` (STORAGE §4). The SQL files are the source of truth
- * for the schema; this module only mirrors them for typed queries. The parity test in
- * `__tests__/schema.test.ts` fails when the two drift. Pure declarations: no domain logic here.
+ * The only definition of the database schema (STORAGE §4, §9). `drizzle-kit generate` turns it into
+ * the migrations in `drizzle/`: never hand-write SQL for a schema change. CI (`db:check`) fails when
+ * this file and `drizzle/` drift apart. The shape equals migrations 0001-0003 of the frozen
+ * `migrations/` folder: `unique()` is emitted as a unique index, which SQLite stores with the same
+ * meaning as an inline `UNIQUE`. Pure declarations: no domain logic here.
  */
 
 export const projects = sqliteTable('projects', {

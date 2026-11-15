@@ -128,6 +128,10 @@ The contract suite tests this with two concurrent appenders and a slow `fn` (ROA
 
 ## 4. Schema
 
+`packages/factory-db/src/schema.ts` is the only definition of the schema (Drizzle). The SQL below is
+its reading, not a second source: never edit a table by hand. The migrations in
+`packages/factory-db/drizzle/` are generated from `schema.ts` (§9).
+
 ```sql
 CREATE TABLE projects (
   project_id    TEXT PRIMARY KEY,
@@ -412,7 +416,22 @@ default stands.
 
 ## 9. Migrations
 
-- Numbered SQL files in `packages/factory-db/migrations/` (`0001_init.sql`, ...), forward-only,
-  applied by the Factory on boot inside one transaction, recorded in `schema_migrations`.
+- **Source of truth:** `packages/factory-db/src/schema.ts`. Never hand-write SQL for a schema change.
+- **Adding a migration:** edit `schema.ts`, then run `pnpm --filter @repo/factory-db db:generate`
+  (add `--custom` for a change Drizzle cannot express, and comment why in that file). Commit the new
+  file and the updated `drizzle/meta/` together. `db:check` (in `pnpm ci:verify`) fails when
+  `schema.ts` and `drizzle/` drift apart, and runs `drizzle-kit check` on the snapshots.
+- **Baseline:** `drizzle/0000_baseline.sql` is generated from `schema.ts`. A fresh database is built
+  from it. It is schema-identical to migrations 0001-0003 (the test in `__tests__/schema.test.ts`).
+- **Runner:** `migrate.ts` applies `drizzle/meta/_journal.json` forward only, in one
+  `BEGIN IMMEDIATE` transaction (§3.1). Each file is recorded in `schema_migrations` under its tag. A
+  failure rolls the whole batch back. An applied name missing from `drizzle/` is an error.
+- **Legacy databases:** the hand-written `packages/factory-db/migrations/` (`0001_init.sql`,
+  `0002_join_token_command_id.sql`, `0003_order_plan.sql`) is **frozen**: never edited, never extended.
+  It is kept because a database created before the baseline still needs it. A database whose history
+  holds 0001-0003 (or a prefix of them) runs the missing legacy files in order, then records
+  `0000_baseline` as applied without running it. The data is kept. Any other unknown history is
+  refused. The legacy folder is deleted only when no supported database can need it.
 - A migration never rewrites `events`. Event changes go through `schemaVersion` + upcasters (CORE §11).
-- Projections may be dropped and rebuilt by a migration.
+- Projections may be dropped and rebuilt by a migration (migration 0003 triggers a rebuild of the
+  `orders` projection on a database that predates the baseline).

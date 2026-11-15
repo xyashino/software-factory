@@ -8,6 +8,8 @@
   },
   "scripts": {
     "check-types": "tsc --noEmit",
+    "db:check": "drizzle-kit check && bun scripts/check-drift.ts",
+    "db:generate": "drizzle-kit generate",
     "lint": "eslint src --max-warnings 0",
     "test": "bun --bun vitest run"
   },
@@ -20,6 +22,7 @@
     "@repo/typescript-config": "workspace:*",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
+    "drizzle-kit": "catalog:",
     "eslint": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
