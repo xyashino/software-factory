@@ -282,12 +282,10 @@ export const buildJob = async (
   for (const [ref, size] of await ports.blobs.stat(inputs.map((i) => i.blob))) {
     sizes.set(ref, size);
   }
+  // Only the verdict feedback is inlined. Inspection logs stay in their blobs, never in the prompt.
   const feedbackRefs: BlobRef[] = [];
   if (context.feedback?.kind === 'verdict') {
     feedbackRefs.push(context.feedback.blob);
-  }
-  if (context.feedback?.kind === 'inspection') {
-    feedbackRefs.push(...context.feedback.logBlobs);
   }
   const texts = new Map<BlobRef, string>();
   for (const ref of [state.spec.bodyBlob, ...feedbackRefs]) {
@@ -309,7 +307,6 @@ export const buildJob = async (
     },
     declared: { rules: profile.rules, skills: profile.skills },
     operatorCommands: ports.config.operatorCommands,
-    logTailChars: ports.config.logTailChars,
   });
   const promptBlob = await storeText(ports.blobs, text, 'text/markdown');
 

@@ -226,19 +226,50 @@ describe('inspection job', () => {
     expect(reportedResults(calls)[0]?.timedOut).toBe(true);
   });
 
-  it('keeps the tail to 2 KiB and strips terminal colour codes', async () => {
+  it('reports only a status as the tail of each check, never its output', async () => {
     const { context, calls } = contextWith();
 
     await runInspection(
       context,
-      inspectionJob(['yes x | head -c 5000; printf "\\033[31mRED\\033[0m\\n"']),
+      inspectionJob(
+        ['echo quiet-pass', 'echo SECRET-FAIL-LINE; exit 3', 'sleep 30'],
+        { inspectionTimeoutMs: 300 },
+      ),
       signal(),
     );
 
-    const tail = reportedResults(calls)[0]?.tail ?? '';
-    expect(tail).toContain('RED');
-    expect(tail).not.toContain('\u001b');
-    expect(new TextEncoder().encode(tail).length).toBeLessThanOrEqual(2048);
+    const tails = reportedResults(calls).map((result) => result.tail);
+    expect(tails).toEqual(['passed', 'failed (exit 3)', 'timed out']);
+    for (const tail of tails) {
+      expect(tail).not.toContain('SECRET-FAIL-LINE');
+      expect(tail).not.toContain('quiet-pass');
+    }
+  });
+
+  it('keeps the full output of each check in its log blob, colour codes included', async () => {
+    const { context, calls } = contextWith();
+
+    await runInspection(
+      context,
+      inspectionJob([
+        'yes x | head -c 5000; printf "\\033[31mRED\\033[0m\\n"; exit 1',
+      ]),
+      signal(),
+    );
+
+    const [result] = reportedResults(calls);
+    const upload = calls.find(
+      (call) =>
+        call.route === 'blobPut' && call.request.ref === result?.logBlob,
+    );
+    const stored = Buffer.from(
+      (upload?.request as unknown as { base64: string }).base64,
+      'base64',
+    ).toString('utf8');
+    expect(stored).toContain('RED');
+    expect(stored).toContain('\u001b[31m');
+    expect(stored.length).toBeGreaterThan(5000);
+    expect(result?.tail).toBe('failed (exit 1)');
   });
 
   it('uploads the full log of each check as a blob the result names', async () => {
