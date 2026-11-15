@@ -19,7 +19,7 @@ const recording = (answers: Record<string, HerdrOutcome>) => {
 const launch = {
   command: ['claude', '--print', 'hi'],
   cwd: '/work',
-  env: { FACTORY_OPERATOR_SOCKET: '/s.sock' },
+  env: { FACTORY_OPERATOR_URL: 'http://127.0.0.1:1' },
   stdoutPath: '/o',
   stderrPath: '/e',
 };
@@ -59,7 +59,7 @@ describe('herdr pane driver', () => {
         '/work',
       ]),
     );
-    expect(calls[1]).toContain('FACTORY_OPERATOR_SOCKET=/s.sock');
+    expect(calls[1]).toContain('FACTORY_OPERATOR_URL=http://127.0.0.1:1');
     expect(calls[2]).toEqual([
       'agent',
       'start',

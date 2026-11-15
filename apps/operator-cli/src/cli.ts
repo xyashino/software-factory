@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import { readFileSync } from 'node:fs';
 import type { OperatorVerb } from '@repo/factory-core/contracts/operator';
-import { callCell, OperatorError, SOCKET_ENV, TOKEN_ENV } from './client';
+import { callCell, OperatorError, URL_ENV, TOKEN_ENV } from './client';
 import { usage } from './usage';
 
 /** Reads a named file the Operator points at; a missing file is a clear error, not a crash. */
@@ -145,11 +145,11 @@ export const toRequest = (argv: readonly string[]): OperatorVerb => {
 };
 
 const main = async (argv: readonly string[]): Promise<number> => {
-  const socketPath = process.env[SOCKET_ENV];
+  const url = process.env[URL_ENV];
   const token = process.env[TOKEN_ENV];
-  if (socketPath === undefined || socketPath === '') {
+  if (url === undefined || url === '') {
     throw new OperatorError(
-      `${SOCKET_ENV} is not set: run this inside a Cycle`,
+      `${URL_ENV} is not set: run this inside a Cycle`,
       2,
     );
   }
@@ -159,7 +159,7 @@ const main = async (argv: readonly string[]): Promise<number> => {
       2,
     );
   }
-  const reply = await callCell(socketPath, toRequest(argv), token);
+  const reply = await callCell(url, toRequest(argv), token);
   if (!reply.ok) {
     process.stderr.write(`factory-operator: ${reply.code}: ${reply.message}\n`);
     return 1;

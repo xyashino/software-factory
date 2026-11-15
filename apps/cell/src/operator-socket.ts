@@ -1,36 +1,57 @@
 import { randomBytes, timingSafeEqual } from 'node:crypto';
-import { existsSync, unlinkSync, chmodSync } from 'node:fs';
-import { createServer, type Server, type Socket } from 'node:net';
+import {
+  createServer,
+  type IncomingMessage,
+  type ServerResponse,
+} from 'node:http';
 import {
   operatorRequestSchema,
   type OperatorReply,
   type OperatorRequest,
 } from '@repo/factory-core/contracts/operator';
 
-/** The file mode of the Operator socket: the operating-system account only (PROTOCOL §3.3). */
-export const OPERATOR_SOCKET_MODE = 0o600;
-
-/** A unix socket path is limited to about 108 bytes; a longer one is refused, not truncated. */
-export const MAX_SOCKET_PATH = 100;
+/** The largest request body the Operator endpoint reads; a verb's text fields are capped far below. */
+export const MAX_BODY_BYTES = 1024 * 1024;
 
 /** The per-Cycle token: 24 random bytes, hex. Never written to a log or a blob. */
 export const newCycleToken = (): string => randomBytes(24).toString('hex');
 
-export interface OperatorSocketOptions {
-  path: string;
+export interface OperatorServerOptions {
   token: string;
   /** Answers one verb. Every reply is produced here, once the request has passed the checks. */
   dispatch: (request: OperatorRequest) => Promise<OperatorReply>;
 }
 
-export interface OperatorSocket {
-  readonly path: string;
-  /** Closes the listener and removes the socket file. Idempotent. */
+export interface OperatorServer {
+  /** The base URL the Operator CLI posts to, e.g. `http://127.0.0.1:52817`. */
+  readonly url: string;
+  /** Stops the listener and drops open connections. Idempotent. */
   close(): Promise<void>;
 }
 
-const reply = (socket: Socket, body: OperatorReply): void => {
-  socket.end(`${JSON.stringify(body)}\n`);
+type Refusal = Extract<OperatorReply, { ok: false }>;
+
+/** The HTTP status of each reply code (PROTOCOL §3.3). */
+const STATUS: Record<Refusal['code'], number> = {
+  unauthorized: 401,
+  invalid: 400,
+  rejected: 409,
+  stale_epoch: 409,
+  not_live: 409,
+  precondition: 409,
+  internal: 500,
+};
+
+const statusOf = (reply: OperatorReply): number =>
+  reply.ok ? 200 : STATUS[reply.code];
+
+const send = (
+  res: ServerResponse,
+  status: number,
+  body: OperatorReply,
+): void => {
+  res.writeHead(status, { 'content-type': 'application/json' });
+  res.end(JSON.stringify(body));
 };
 
 /** Compares two tokens without leaking the position of a mismatch. */
@@ -41,29 +62,32 @@ const tokenMatches = (given: unknown, expected: string): boolean => {
   return a.length === b.length && timingSafeEqual(a, b);
 };
 
+/** The token from `Authorization: Bearer <token>`, if the header carries one. */
+const bearerToken = (header: string | undefined): string | undefined =>
+  header === undefined ? undefined : /^Bearer (.+)$/.exec(header)?.[1];
+
 /**
- * Checks one request line: the token first (constant time), then the verb schema. Returns the
- * refusal to send, or the parsed request.
+ * Checks one parsed request body: the token first (constant time; the `Authorization` header wins
+ * over the body's `token` field), then the verb schema. Returns the refusal to send, or the request.
  */
 export const readRequest = (
-  line: string,
+  body: unknown,
+  headerToken: string | undefined,
   token: string,
-):
-  | { ok: true; request: OperatorRequest }
-  | { ok: false; reply: Extract<OperatorReply, { ok: false }> } => {
-  let body: unknown;
-  try {
-    body = JSON.parse(line);
-  } catch {
+): { ok: true; request: OperatorRequest } | { ok: false; reply: Refusal } => {
+  if (typeof body !== 'object' || body === null || Array.isArray(body)) {
     return {
       ok: false,
-      reply: { ok: false, code: 'invalid', message: 'request is not JSON' },
+      reply: {
+        ok: false,
+        code: 'invalid',
+        message: 'request is not a JSON object',
+      },
     };
   }
-  const given =
-    typeof body === 'object' && body !== null && 'token' in body
-      ? (body as { token: unknown }).token
-      : undefined;
+  const bodyToken =
+    'token' in body ? (body as { token: unknown }).token : undefined;
+  const given = headerToken ?? bodyToken;
   if (!tokenMatches(given, token)) {
     return {
       ok: false,
@@ -74,7 +98,8 @@ export const readRequest = (
       },
     };
   }
-  const parsed = operatorRequestSchema.safeParse(body);
+  // The token is already verified, so the schema sees it whether it came in the header or the body.
+  const parsed = operatorRequestSchema.safeParse({ ...body, token });
   if (!parsed.success) {
     return {
       ok: false,
@@ -93,76 +118,93 @@ export const readRequest = (
 };
 
 /**
- * Serves the Operator verbs of one Cycle on a unix socket. One request per connection: a JSON line
- * in, one JSON line out. The socket is bound under a umask that keeps it private, then chmod'd to
- * 0600, so no other account ever sees it open (PROTOCOL §3.3, security.md).
+ * Serves the Operator verbs of one Cycle on a localhost HTTP port. One `POST` per verb: a JSON
+ * object in, one JSON reply out. The port is OS-assigned on `127.0.0.1` only (PROTOCOL §3.3).
  */
-export const startOperatorSocket = (
-  options: OperatorSocketOptions,
-): Promise<OperatorSocket> => {
-  if (options.path.length > MAX_SOCKET_PATH) {
-    return Promise.reject(
-      new Error(
-        `operator socket path is too long: ${options.path.length} bytes`,
-      ),
-    );
-  }
-  if (existsSync(options.path)) unlinkSync(options.path);
-
-  const open = new Set<Socket>();
-  const server: Server = createServer((socket) => {
-    open.add(socket);
-    socket.once('close', () => open.delete(socket));
-    let buffer = '';
-    let handled = false;
-    socket.setEncoding('utf8');
-    socket.on('data', (chunk: string) => {
-      if (handled) return;
-      buffer += chunk;
-      const end = buffer.indexOf('\n');
-      if (end < 0) return;
-      handled = true;
-      const checked = readRequest(buffer.slice(0, end), options.token);
+export const startOperatorServer = (
+  options: OperatorServerOptions,
+): Promise<OperatorServer> => {
+  const handle = (req: IncomingMessage, res: ServerResponse): void => {
+    if (req.method !== 'POST') {
+      res.setHeader('allow', 'POST');
+      send(res, 405, { ok: false, code: 'invalid', message: 'use POST' });
+      req.resume();
+      return;
+    }
+    const chunks: Buffer[] = [];
+    let size = 0;
+    let oversized = false;
+    req.on('data', (chunk: Buffer) => {
+      if (oversized) return;
+      size += chunk.length;
+      if (size > MAX_BODY_BYTES) {
+        oversized = true;
+        chunks.length = 0;
+        send(res, 413, {
+          ok: false,
+          code: 'invalid',
+          message: `request body is larger than ${MAX_BODY_BYTES} bytes`,
+        });
+        return;
+      }
+      chunks.push(chunk);
+    });
+    req.on('error', () => res.destroy());
+    req.on('end', () => {
+      if (oversized) return;
+      let body: unknown;
+      try {
+        body = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+      } catch {
+        send(res, 400, {
+          ok: false,
+          code: 'invalid',
+          message: 'request is not JSON',
+        });
+        return;
+      }
+      const checked = readRequest(
+        body,
+        bearerToken(req.headers.authorization),
+        options.token,
+      );
       if (!checked.ok) {
-        reply(socket, checked.reply);
+        send(res, statusOf(checked.reply), checked.reply);
         return;
       }
       options
         .dispatch(checked.request)
-        .then((answer) => reply(socket, answer))
+        .then((answer) => send(res, statusOf(answer), answer))
         .catch((error: unknown) =>
-          reply(socket, {
+          send(res, 500, {
             ok: false,
             code: 'internal',
             message: error instanceof Error ? error.message : String(error),
           }),
         );
     });
-    socket.on('error', () => socket.destroy());
-  });
+  };
 
-  return new Promise<OperatorSocket>((resolve, reject) => {
-    const previousUmask = process.umask(0o777 & ~OPERATOR_SOCKET_MODE);
-    server.once('error', (error) => {
-      process.umask(previousUmask);
-      reject(error);
-    });
-    server.listen(options.path, () => {
-      process.umask(previousUmask);
-      chmodSync(options.path, OPERATOR_SOCKET_MODE);
-      let closed = false;
+  const server = createServer(handle);
+  return new Promise<OperatorServer>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address();
+      if (address === null || typeof address === 'string') {
+        server.close();
+        reject(new Error('the operator server has no TCP address'));
+        return;
+      }
+      let closing: Promise<void> | undefined;
       resolve({
-        path: options.path,
-        close: () =>
-          new Promise<void>((done) => {
-            if (closed) return done();
-            closed = true;
-            for (const socket of open) socket.destroy();
-            server.close(() => {
-              if (existsSync(options.path)) unlinkSync(options.path);
-              done();
-            });
-          }),
+        url: `http://127.0.0.1:${address.port}`,
+        close: () => {
+          closing ??= new Promise<void>((done) => {
+            server.closeAllConnections();
+            server.close(() => done());
+          });
+          return closing;
+        },
       });
     });
   });
