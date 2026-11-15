@@ -91,3 +91,40 @@ export const renderBoard = (
   });
   return [paint.dim(header), ...lines].join('\n');
 };
+
+/**
+ * The lines of the `Action needed` summary: one per row that waits for the Supervisor (`andon`,
+ * `waiting_answer`) or is held by a dependency (`waiting_deps`, `deps_broken`), with the reason and the
+ * command that moves it on.
+ */
+export const actionNeededOf = (rows: BoardRow[]): string[] =>
+  rows.flatMap((row) => {
+    const deps = row.dependsOn.join(', ');
+    switch (row.status) {
+      case 'andon':
+        return [
+          `  ${row.orderId}  andon: ${row.andonReason ?? 'no reason recorded'}  ->  factory resume ${row.orderId}`,
+        ];
+      case 'waiting_answer':
+        return [
+          `  ${row.orderId}  waiting for an answer  ->  factory answer ${row.orderId} "..."`,
+        ];
+      case 'waiting_deps':
+        return [
+          `  ${row.orderId}  waiting on ${deps}  ->  factory show ${row.orderId}`,
+        ];
+      case 'deps_broken':
+        return [
+          `  ${row.orderId}  dependency ${deps} is broken  ->  factory show ${row.orderId}`,
+        ];
+      default:
+        return [];
+    }
+  });
+
+/** The `Action needed` block under the board, or nothing when no row needs the Supervisor. */
+export const renderActionNeeded = (rows: BoardRow[], paint: Paint): string => {
+  const lines = actionNeededOf(rows);
+  if (lines.length === 0) return '';
+  return [paint.bold('Action needed'), ...lines].join('\n');
+};

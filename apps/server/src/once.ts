@@ -59,7 +59,13 @@ export const runOnce = async (
         output: { ok: false, error: invalidWire(parsed.error.issues) },
       };
     }
-    const response = await opened.runtime.call(route, parsed.data as never);
+    // A one-shot holds the writer lock for its whole run, so a long-poll here would block every other
+    // process (a server starting up, the next one-shot) for the full wait. It answers at once instead.
+    const request =
+      route === 'supervisorEvents'
+        ? { ...parsed.data, waitMs: 0 }
+        : parsed.data;
+    const response = await opened.runtime.call(route, request as never);
     return {
       exitCode: ONCE_EXIT.ok,
       output: { ok: true, response: ROUTES[route].response.parse(response) },

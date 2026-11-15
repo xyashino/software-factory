@@ -492,6 +492,41 @@ describe('factory with no server running', () => {
     expect(elapsed).toBeLessThan(10_000);
     expect(existsSync(join(dataDir, 'factory.sock'))).toBe(false);
   });
+
+  it('log -f with no server keeps following without holding the lock, so a write still runs', async () => {
+    const follower = Bun.spawn(
+      [
+        process.execPath,
+        CLI,
+        'log',
+        PLAIN,
+        '-f',
+        '--data-dir',
+        dataDir,
+        '--no-color',
+      ],
+      { stdout: 'pipe', stderr: 'pipe', env: env(dataDir) },
+    );
+    try {
+      await Bun.sleep(2_000);
+
+      expect(follower.exitCode).toBeNull();
+      const write = await factory(dataDir, ['prio', PLAIN, 'low']);
+      expect(write.code).toBe(0);
+      expect(write.stderr).not.toContain('factory.lock');
+    } finally {
+      follower.kill('SIGTERM');
+      await follower.exited;
+    }
+  });
+
+  it('show prints the next commands for a queued Work order', async () => {
+    const result = await factory(dataDir, ['show', PLAIN]);
+
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain('actions');
+    expect(result.stdout).toContain(`factory prio ${PLAIN} <high|medium|low>`);
+  });
 });
 
 describe('a second server', () => {

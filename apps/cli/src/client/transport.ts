@@ -60,10 +60,14 @@ export const factoryClientFor = (options: TransportOptions): FactoryClient => {
           if (!(error instanceof SocketUnreachable)) throw error;
         }
       }
+      // With no socket, a feed poll is answered at once: a one-shot holds the writer lock while it
+      // waits, so a long-poll here would block a server starting up (`nextEvents` pauses between polls).
+      const oneShot =
+        route === 'supervisorEvents' ? { ...parsed, waitMs: 0 } : parsed;
       const result = await runOnce(
         { serverBin: options.serverBin, dataDir: options.dataDir },
         route,
-        parsed,
+        oneShot,
       );
       if (result.kind === 'ok') return result.response as RouteResponse<K>;
       if (result.kind === 'refused') throw new WireFailure(result.error);

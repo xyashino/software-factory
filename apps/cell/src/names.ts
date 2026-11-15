@@ -8,8 +8,10 @@ export const wipRefFor = (todoId: string, cycleId: string): string =>
   `factory-wip/${todoId}/${cycleId}`;
 
 /**
- * The Herdr agent name of a Cycle: unique per station and Cycle, within Herdr's 32-character rule
- * `^[a-z][a-z0-9_-]{0,31}$` (v1 `agentName`, ported).
+ * The Herdr agent name of a Cycle: `<station>_<hash>_<n>`, where the hash is a digest of the Cycle (or
+ * Mechanic job) id. The hash is always present, so two Cells running the same station with the same
+ * attempt number never share a name. The whole name stays within Herdr's 32-character rule
+ * `^[a-z][a-z0-9_-]{0,31}$`: the station head is cut to fit.
  */
 export const paneName = (
   stationId: string,
@@ -21,13 +23,12 @@ export const paneName = (
       .toLowerCase()
       .replace(/[^a-z0-9]/g, '-')
       .replace(/^-+|-+$/g, '') || 'station';
-  const suffix = `_${n}`;
   const head = /^[a-z]/.test(cleanStation) ? cleanStation : `s${cleanStation}`;
-  const maxHead = 32 - suffix.length;
-  if (head.length <= maxHead) return `${head}${suffix}`;
   const hash = createHash('sha256').update(cycleId).digest('hex').slice(0, 6);
-  const prefix = head.slice(0, maxHead - 7).replace(/-+$/, '');
-  return `${prefix}_${hash}${suffix}`;
+  const suffix = `_${hash}_${n}`;
+  const maxHead = 32 - suffix.length;
+  const cut = head.slice(0, maxHead).replace(/[-_]+$/, '');
+  return `${cut}${suffix}`;
 };
 
 /**
