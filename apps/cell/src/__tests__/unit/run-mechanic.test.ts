@@ -1,4 +1,10 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { createConnection } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -8,6 +14,7 @@ import type { FactoryClient } from '@repo/factory-core/contracts/client';
 import { jobSchema, type Job } from '@repo/factory-core/contracts/job';
 import type { CellId } from '@repo/factory-core/ids';
 import { createSystemAdapter } from '../../adapters/system/system.adapter';
+import { CELL_DIR } from '../../checkpoint';
 import { runMechanic, type MechanicDeps } from '../../jobs/run-mechanic';
 import { prepareWorkspace } from '../../workspace';
 import {
@@ -264,11 +271,20 @@ describe('the Mechanic job run (CORE §14.3, §14.4)', () => {
         timeoutMs: 30_000,
       },
     });
+    let promptInWorktree = '';
+    let statusBeforeEdits = '';
+    let promptDirInWorktree = '';
     const pane = scriptedPane(
       [incident('repair', 'fixed failing test before deliver')],
       seen,
       'working',
       (spec) => {
+        promptDirInWorktree = join(spec.cwd, CELL_DIR, 'repair', JOB_ID);
+        promptInWorktree = readFileSync(
+          join(promptDirInWorktree, 'prompt.md'),
+          'utf8',
+        );
+        statusBeforeEdits = git(spec.cwd, 'status', '--porcelain');
         writeFileSync(join(spec.cwd, 'README.md'), '# fixed\n');
         writeFileSync(join(spec.cwd, 'fix.ts'), 'export const fixed = true;\n');
       },
@@ -284,6 +300,12 @@ describe('the Mechanic job run (CORE §14.3, §14.4)', () => {
     );
 
     expect(seen.spec?.cwd).toContain(join(cellDataDir, 'worktrees'));
+    expect(promptInWorktree.length).toBeGreaterThan(0);
+    expect(statusBeforeEdits).toBe('');
+    expect(seen.spec?.env.FACTORY_OPERATOR_SOCKET).toContain(
+      join(cellDataDir, 'repairs'),
+    );
+    expect(existsSync(promptDirInWorktree)).toBe(false);
     expect(inUse.size).toBe(0);
     expect(seen.replies).toEqual([{ ok: true }]);
     expect(submitted.map((s) => s.command.type)).toEqual([

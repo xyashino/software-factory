@@ -13,11 +13,11 @@ import { fileURLToPath } from 'node:url';
 const CLI = fileURLToPath(
   new URL('../../../../operator-cli/src/cli.ts', import.meta.url),
 );
-const [scenario = 'done', kickoff = ''] = process.argv.slice(2);
-// The kickoff names the prompt file, which sits in the Cycle directory: that is where logs go.
-const cycleDir = dirname(
-  kickoff.replace(/^Read /, '').split(' and follow')[0] ?? '.',
-);
+/** The socket variable the Cell sets for the Operator (the same name the operator CLI reads). */
+const SOCKET_ENV = 'FACTORY_OPERATOR_SOCKET';
+const [scenario = 'done'] = process.argv.slice(2);
+// The prompt sits in the worktree's `.cell/`, but the socket sits in the Cycle directory: that is where logs go.
+const cycleDir = dirname(process.env[SOCKET_ENV] ?? '.');
 const typedLog = join(cycleDir, 'typed.log');
 
 const operator = async (

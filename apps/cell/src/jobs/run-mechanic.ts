@@ -232,7 +232,6 @@ export const runMechanic = async (
 
   const repairDir = repairDirOf(deps.dataDir, job.jobId);
   mkdirSync(repairDir, { recursive: true });
-  const promptPath = join(repairDir, 'prompt.md');
   // The Cell renders the incident prompt from the Andon the job carries (CORE §14.4).
   let promptText = renderIncidentPrompt(mechanic.incident);
 
@@ -265,6 +264,13 @@ export const runMechanic = async (
       promptText += `\n### Workspace prepare note\n\nPreparing the Work order worktree failed at \`${prepared.stage}\`: ${prepared.detail}\nYou are running in the repair directory instead.\n`;
     }
   }
+  // With a prepared worktree the prompt sits in its git-excluded `.cell/`; otherwise it stays in the repair dir.
+  const promptDir =
+    worktree !== undefined
+      ? join(worktree, CELL_DIR, 'repair', job.jobId)
+      : repairDir;
+  const promptPath = join(promptDir, 'prompt.md');
+  mkdirSync(promptDir, { recursive: true });
   writeFileSync(promptPath, promptText);
   const token = newCycleToken();
   const socketPath = join(repairDir, 'op.sock');
@@ -478,6 +484,7 @@ export const runMechanic = async (
     if (worktree !== undefined) inUse.delete(worktree);
     await deps.pane.close(name).catch(() => undefined);
     await socket?.close();
+    rmSync(promptDir, { recursive: true, force: true });
     rmSync(repairDir, { recursive: true, force: true });
   }
   return ending?.next ?? null;
