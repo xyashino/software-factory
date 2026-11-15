@@ -15,6 +15,7 @@ import type { PlanProjection } from '@repo/factory-core/plan/projection';
 import type { Spec } from '@repo/factory-core/order/events';
 import type { ProjectRecord } from '@repo/factory-core/ports/projects';
 import type { IntakeRecord } from '@repo/factory-core/ports/intake';
+import type { TodoFile } from '@repo/factory-core/ports/git-mirror';
 import type { OrderProjection } from '@repo/factory-core/order/projection';
 import { canonicalJson } from '@repo/factory-definitions/line-snapshot';
 import { todoIdOf, type Todo } from '@repo/factory-definitions/todo';
@@ -39,6 +40,25 @@ export interface IntakeReport {
   specDrift: TodoId[];
   diagnostics: { todoId: string; kind: string; message: string }[];
 }
+
+/**
+ * Todo files handed to intake directly (the Supervisor's local `todos/` folder) instead of the
+ * project's git base branch. With `replace`, the folder is the whole truth: every unfinished Work
+ * order of the project whose todo is not in it is cancelled, even after its first claim.
+ */
+export interface IntakeSource {
+  files: TodoFile[];
+  replace: boolean;
+}
+
+/** A stand-in commit for a local source: the sha1 of its files, so the same folder gives the same value. */
+const localCommitOf = (files: readonly TodoFile[]): CommitSha => {
+  const hash = createHash('sha1');
+  for (const file of [...files].sort((a, b) => a.file.localeCompare(b.file))) {
+    hash.update(file.file).update('\0').update(file.text).update('\0');
+  }
+  return hash.digest('hex') as CommitSha;
+};
 
 /** Statuses after which a Work order takes no more intake commands. */
 const TERMINAL = new Set<OrderProjection['status']>([
@@ -111,14 +131,23 @@ export const syncProject = async (
   ports: RuntimePorts,
   handler: CommandHandler,
   project: ProjectRecord,
+  source?: IntakeSource,
 ): Promise<IntakeReport> => {
   const { projectId } = project;
-  const commit = await ports.git.sync({
-    projectId,
-    repoUrl: project.repoUrl,
-    baseBranch: project.baseBranch,
-  });
-  const files = await ports.git.todoFiles(projectId, commit);
+  const replace = source?.replace ?? false;
+  let commit: CommitSha;
+  let files: TodoFile[];
+  if (source) {
+    commit = localCommitOf(source.files);
+    files = source.files;
+  } else {
+    commit = await ports.git.sync({
+      projectId,
+      repoUrl: project.repoUrl,
+      baseBranch: project.baseBranch,
+    });
+    files = await ports.git.todoFiles(projectId, commit);
+  }
   const textOf = new Map(files.map((file) => [file.file, file.text]));
   const present = new Set(files.map((file) => todoIdOf(file.file)));
   const rows = await ports.projections.orders();
@@ -263,7 +292,7 @@ export const syncProject = async (
         await record(todo.todoId, hash, null);
         continue;
       }
-      if (await claimed(ports, order.orderId)) {
+      if (!replace && (await claimed(ports, order.orderId))) {
         const diagnostic = diagnose(
           todo.todoId,
           'cancel_after_claim',
@@ -500,12 +529,12 @@ export const syncProject = async (
     );
   }
 
-  // A tracked todo whose file is gone: cancel before the first claim, else diagnose.
+  // A tracked todo whose file is gone: cancel before the first claim, else diagnose (replace: cancel).
   for (const row of tracked.values()) {
     if (present.has(row.todoId)) continue;
     const order = ordersById.get(orderIdOf(projectId, row.todoId));
     if (!order || TERMINAL.has(order.status)) continue;
-    if (await claimed(ports, order.orderId)) {
+    if (!replace && (await claimed(ports, order.orderId))) {
       const diagnostic = diagnose(
         row.todoId,
         'removed_after_claim',
@@ -523,6 +552,22 @@ export const syncProject = async (
       report.cancelled.push(row.todoId);
     });
     await record(row.todoId, row.contentHash, diagnostic);
+  }
+
+  // Replace: a Work order of this project that intake never tracked and whose todo is not in the folder.
+  if (replace) {
+    for (const order of rows) {
+      if (order.projectId !== projectId || TERMINAL.has(order.status)) continue;
+      if (present.has(order.todoId) || tracked.has(order.todoId)) continue;
+      await attempt(order.todoId, async () => {
+        await command(
+          order.orderId,
+          `${idPrefix(projectId, order.todoId)}:replaced:${commit}`,
+          { type: 'Cancel', reason: 'the todo is not in the synced folder' },
+        );
+        report.cancelled.push(order.todoId);
+      });
+    }
   }
 
   return report;

@@ -2,7 +2,7 @@
 status: todo
 priority: medium
 depends_on:
-  [factory-demo-03-board-and-orders, passive-server-03-cli-create-and-migrate]
+  [factory-demo-03-board-and-orders, passive-server-05-cli-and-migrate]
 line: feature
 factory: v2
 ---

@@ -15,6 +15,7 @@ import {
   ensureCredential,
   loadOrCreateIdentity,
 } from './identity';
+import { claimInstanceDir } from './instance-lock';
 import {
   isUnauthorized,
   joinRemote,
@@ -41,6 +42,7 @@ const connect = async (
   config: ReturnType<typeof readConfig>,
   cellDataDir: string,
   env: NodeJS.ProcessEnv,
+  instance: number,
 ): Promise<{
   identity: { cellId: CellId };
   client: FactoryClient;
@@ -58,6 +60,7 @@ const connect = async (
       target: socketPath,
     };
   }
+  const joinName = instance === 1 ? hostname() : `${hostname()}-${instance}`;
   const { cellId, credential } = await ensureCredential(
     cellDataDir,
     async () => {
@@ -67,7 +70,7 @@ const connect = async (
           `this Cell has no credential for ${baseUrl}: set FACTORY_JOIN_TOKEN to join it`,
         );
       }
-      return joinRemote({ baseUrl, joinToken, name: hostname() });
+      return joinRemote({ baseUrl, joinToken, name: joinName });
     },
   );
   return {
@@ -80,9 +83,9 @@ const connect = async (
 /**
  * `factory-cell`: a client of the running `factory-server`, over `factory.sock` (PROTOCOL §2) or, in
  * remote mode, over HTTP. It reads
- * its config, keeps its identity, says hello, and runs one claim loop per slot with one heartbeat loop.
- * SIGINT stops claims and aborts running jobs immediately; SIGTERM initiates a graceful leave, asking
- * live Operator stations to hand over before stopping.
+ * its config, claims an exclusive instance directory, keeps its identity, says hello, and runs one claim
+ * loop per slot with one heartbeat loop. SIGINT stops claims and aborts running jobs immediately; SIGTERM
+ * initiates a graceful leave, asking live Operator stations to hand over before stopping.
  */
 const main = async (): Promise<void> => {
   if (process.argv.includes('--help')) {
@@ -92,7 +95,9 @@ const main = async (): Promise<void> => {
 
   const env = process.env;
   const config = readConfig(configPath(env));
-  const cellDataDir = config.cellDataDir ?? cellDataDirOf(env);
+  const baseCellDataDir = config.cellDataDir ?? cellDataDirOf(env);
+  const instanceClaim = claimInstanceDir(baseCellDataDir);
+  const cellDataDir = instanceClaim.cellDataDir;
   const remote = config.factoryUrl !== undefined;
 
   let current: RunningCell | undefined;
@@ -104,6 +109,7 @@ const main = async (): Promise<void> => {
       config,
       cellDataDir,
       env,
+      instanceClaim.instance,
     );
     const running = await startCell({
       client,
@@ -124,6 +130,11 @@ const main = async (): Promise<void> => {
       throw error;
     });
     current = running;
+    if (instanceClaim.instance > 1) {
+      console.log(
+        `factory-cell: instance #${instanceClaim.instance} using ${cellDataDir}`,
+      );
+    }
     console.log(
       `factory-cell: ${config.slots} slot(s) running as ${identity.cellId}`,
     );
@@ -144,6 +155,7 @@ const main = async (): Promise<void> => {
       await start();
     } catch (error) {
       console.error(`factory-cell: join failed: ${messageOf(error)}`);
+      instanceClaim.release();
       process.exit(1);
     } finally {
       joining = false;
@@ -153,23 +165,34 @@ const main = async (): Promise<void> => {
   try {
     await start();
   } catch (error) {
-    if (!remote || !isUnauthorized(error)) throw error;
+    if (!remote || !isUnauthorized(error)) {
+      instanceClaim.release();
+      throw error;
+    }
     await rejoin();
   }
 
   process.once('SIGINT', () => {
     console.log('factory-cell: SIGINT, stopping');
     current?.stop();
+    instanceClaim.release();
     process.exit(0);
   });
 
   process.once('SIGTERM', () => {
     console.log('factory-cell: SIGTERM, leaving');
-    if (!current) process.exit(0);
+    if (!current) {
+      instanceClaim.release();
+      process.exit(0);
+    }
     void current.leave().then(
-      ({ remaining }) => process.exit(remaining === 0 ? 0 : 1),
+      ({ remaining }) => {
+        instanceClaim.release();
+        process.exit(remaining === 0 ? 0 : 1);
+      },
       (error: unknown) => {
         console.error(`factory-cell: leave failed: ${messageOf(error)}`);
+        instanceClaim.release();
         process.exit(1);
       },
     );

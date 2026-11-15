@@ -13,7 +13,8 @@ with no server running, a write or a read runs one command under the writer lock
   factory nudge <order> "<text>"            type into a live Operator's pane
   factory cancel <order> [--reason]
   factory prio <order> high|medium|low
-  factory sync                              run intake now
+  factory sync [--dir <d>] [--project <id>] [--git]
+                                            replace the board with ./todos (cancels orders not in it)
   factory cells [rm <id>]                   list or revoke Cells
   factory cells token create [--ttl <d>] [--name <n>] | ls | rm <id>
   factory project ls                        list the projects
