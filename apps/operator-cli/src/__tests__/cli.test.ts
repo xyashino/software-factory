@@ -13,15 +13,15 @@ import { OperatorError } from '../client';
 import { toRequest } from '../cli';
 
 const CLI = fileURLToPath(new URL('../cli.ts', import.meta.url));
+const STUB = fileURLToPath(new URL('./stub-cell.ts', import.meta.url));
 const TOKEN = 'b'.repeat(48);
 
 let root: string;
-let socketPath: string;
+let url: string;
 let stubProcess: { kill(): void } | undefined;
 
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), 'op-cli-'));
-  socketPath = join(root, 'op.sock');
 });
 
 afterEach(() => {
@@ -30,25 +30,30 @@ afterEach(() => {
   rmSync(root, { recursive: true, force: true });
 });
 
-const STUB = fileURLToPath(new URL('./stub-cell.ts', import.meta.url));
-
-/** A stub Cell socket in its own process: it records each request line and answers with `reply`. */
+/** A stub Cell endpoint in its own process: it records each request body and answers with `reply`. */
 const stubCell = async (reply: unknown): Promise<void> => {
-  stubProcess = Bun.spawn(['bun', STUB, socketPath, JSON.stringify(reply)], {
+  stubProcess = Bun.spawn(['bun', STUB, root, JSON.stringify(reply)], {
     stdout: 'ignore',
     stderr: 'ignore',
   });
   for (let attempt = 0; attempt < 200; attempt += 1) {
-    if (existsSync(socketPath)) return;
+    // The stub writes its URL in one call; an empty file is one caught mid-write.
+    const written = existsSync(join(root, 'url'))
+      ? readFileSync(join(root, 'url'), 'utf8')
+      : '';
+    if (written !== '') {
+      url = written;
+      return;
+    }
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
-  throw new Error('the stub Cell socket never appeared');
+  throw new Error('the stub Cell endpoint never started');
 };
 
-/** The requests the stub Cell has received, one JSON line each. */
+/** The requests the stub Cell has received, one JSON body per line. */
 const receivedRequests = (): string[] =>
-  existsSync(`${socketPath}.log`)
-    ? readFileSync(`${socketPath}.log`, 'utf8')
+  existsSync(join(root, 'requests.log'))
+    ? readFileSync(join(root, 'requests.log'), 'utf8')
         .split('\n')
         .filter((line) => line.trim() !== '')
     : [];
@@ -163,7 +168,7 @@ describe('factory-operator process', () => {
     });
 
     const run = await runCli(['context'], {
-      FACTORY_OPERATOR_SOCKET: socketPath,
+      FACTORY_OPERATOR_URL: url,
       FACTORY_CYCLE_TOKEN: TOKEN,
     });
 
@@ -186,7 +191,7 @@ describe('factory-operator process', () => {
     });
 
     const run = await runCli(['done'], {
-      FACTORY_OPERATOR_SOCKET: socketPath,
+      FACTORY_OPERATOR_URL: url,
       FACTORY_CYCLE_TOKEN: TOKEN,
     });
 
@@ -198,12 +203,13 @@ describe('factory-operator process', () => {
     const run = await runCli(['done'], { FACTORY_CYCLE_TOKEN: TOKEN });
 
     expect(run.code).toBe(2);
-    expect(run.stderr).toContain('FACTORY_OPERATOR_SOCKET is not set');
+    expect(run.stderr).toContain('FACTORY_OPERATOR_URL is not set');
   });
 
-  it('exits 3 when the socket cannot be reached', async () => {
+  it('exits 3 when the endpoint cannot be reached', async () => {
+    // Port 1 is never a listening Cell; the connection is refused at once.
     const run = await runCli(['done'], {
-      FACTORY_OPERATOR_SOCKET: join(root, 'missing.sock'),
+      FACTORY_OPERATOR_URL: 'http://127.0.0.1:1',
       FACTORY_CYCLE_TOKEN: TOKEN,
     });
 
@@ -229,7 +235,7 @@ describe('factory-operator process', () => {
     }
     await stubCell({ ok: true, result: {} });
     const env = {
-      FACTORY_OPERATOR_SOCKET: socketPath,
+      FACTORY_OPERATOR_URL: url,
       FACTORY_CYCLE_TOKEN: TOKEN,
     };
     // The first spawn pays the cold module cache; it is run and not timed.
@@ -248,7 +254,7 @@ describe('factory-operator process', () => {
     expect(median).toBeLessThan(100);
   });
 
-  it('talks only to its socket: no network stack, no other path', () => {
+  it('talks only to its endpoint: fetch to the URL in the environment, no socket, no other path', () => {
     const sources = ['cli.ts', 'client.ts', 'usage.ts'].map((name) =>
       readFileSync(
         fileURLToPath(new URL(`../${name}`, import.meta.url)),
@@ -256,10 +262,10 @@ describe('factory-operator process', () => {
       ),
     );
     for (const source of sources) {
-      expect(source).not.toMatch(
-        /fetch\(|node:http|node:https|node:dgram|\bhttp:\/\//,
-      );
+      expect(source).not.toMatch(/node:net|node:http|node:https|node:dgram/);
+      expect(source).not.toMatch(/\bhttp:\/\/(?!\$)/);
     }
-    expect(sources[1]).toContain('createConnection(socketPath)');
+    expect(sources[1]).toContain('fetch(url, {');
+    expect(sources[1]).toContain("method: 'POST'");
   });
 });
