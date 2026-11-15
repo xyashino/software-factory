@@ -17,18 +17,19 @@ import {
   type ShellContext,
   type ShellRun,
 } from '../workspace/shell';
+import { redactDetail } from './redact';
 import { JobStopped, type JobContext } from './send';
 
 const MAX_DETAIL_CHARS = 500;
 const COMMIT = /^[0-9a-f]{40}$/;
 
-/** The last characters of a run's output, for a failure detail. */
+/** The last characters of a run's output, for a failure detail, with machine-local values redacted. */
 const tailOfRun = (run: ShellRun): string =>
-  textOf(run).trim().slice(-MAX_DETAIL_CHARS);
+  redactDetail(textOf(run).trim(), MAX_DETAIL_CHARS, 'end');
 
 const errorText = (error: unknown): string =>
-  (error instanceof Error ? error.message : String(error)).slice(
-    0,
+  redactDetail(
+    error instanceof Error ? error.message : String(error),
     MAX_DETAIL_CHARS,
   );
 
@@ -76,7 +77,10 @@ const reportFailed = async (
   await submitPlan(
     ctx,
     job,
-    { type: 'ReportPlanJobFailed', detail: detail.slice(0, MAX_DETAIL_CHARS) },
+    {
+      type: 'ReportPlanJobFailed',
+      detail: redactDetail(detail, MAX_DETAIL_CHARS),
+    },
     signal,
     'failed',
   );

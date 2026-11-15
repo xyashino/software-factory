@@ -15,6 +15,7 @@ import {
   textOf,
   type ShellContext,
 } from '../workspace/shell';
+import { redactDetail } from './redact';
 import { putLog, submit, tailOf, type JobContext } from './send';
 import { workspaceDetailOf } from './workspace-detail';
 
@@ -24,8 +25,8 @@ export const DEFAULT_INSPECTION_TIMEOUT_MS = 600_000;
 const MAX_DETAIL_CHARS = 500;
 
 const errorText = (error: unknown): string =>
-  (error instanceof Error ? error.message : String(error)).slice(
-    0,
+  redactDetail(
+    error instanceof Error ? error.message : String(error),
     MAX_DETAIL_CHARS,
   );
 

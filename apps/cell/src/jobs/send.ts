@@ -13,6 +13,7 @@ import type { GithubPort } from '../ports/github.port';
 import type { SystemPort } from '../ports/system.port';
 import { commandIdOf } from '../factory-client';
 import { orderIdOf } from './job-shape';
+import { redactTail } from './redact';
 
 /** What a job needs from the Cell: the client, the identity, the system, and the local directories. */
 export interface JobContext {
@@ -51,7 +52,6 @@ export class JobStopped extends Error {
   }
 }
 
-const encoder = new TextEncoder();
 const TAIL_BYTES = 2048;
 
 /** The `sha256:<hex>` ref of bytes, as the server hashes them. */
@@ -109,18 +109,8 @@ export const submit = async (
 };
 
 /**
- * The last 2048 bytes of a log as text, with the terminal control sequences removed first. The cut lands
- * on a character boundary, so the tail is never a broken character.
+ * The last 2048 bytes of a log as text, with the terminal control sequences removed first and the
+ * machine-local values redacted (`tailText` refuses them). The cut lands on a character boundary.
  */
-export const tailOf = (text: string): string => {
-  const plain = stripVTControlCharacters(text);
-  let tail = '';
-  let bytes = 0;
-  for (const character of Array.from(plain).reverse()) {
-    const size = encoder.encode(character).length;
-    if (bytes + size > TAIL_BYTES) break;
-    tail = character + tail;
-    bytes += size;
-  }
-  return tail;
-};
+export const tailOf = (text: string): string =>
+  redactTail(stripVTControlCharacters(text), TAIL_BYTES);
