@@ -31,6 +31,9 @@ const PLAIN = 'software-factory:todo-b';
 
 const scratch = (): string => mkdtempSync(join(tmpdir(), 'factory-cli-'));
 
+/** This checkout's root: the repository whose `.factory/` `factory check --dir` validates. */
+const REPO_ROOT = fileURLToPath(new URL('../../../../', import.meta.url));
+
 /** A config file that does not exist, so the developer's own settings never reach a test. */
 const noConfig = (dataDir: string): string => join(dataDir, 'no-config.json');
 
@@ -376,7 +379,7 @@ describe('factory against a running server', () => {
   });
 
   it('check validates the definitions offline', async () => {
-    const result = await factory(dataDir, ['check']);
+    const result = await factory(dataDir, ['check', '--dir', REPO_ROOT]);
 
     expect(result.code).toBe(0);
     expect(result.stdout).toContain('definitions pass');

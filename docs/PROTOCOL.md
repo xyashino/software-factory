@@ -583,7 +583,12 @@ The Cell exits when every job is released. A Cell that simply vanishes is handle
 | `factory project add <id> --repo <url> [--base-branch <b>] [--dep-policy delivered\|merged] [--max-running <n>]` | Register a project (§3.1). A Cell serves it only if its config lists it                         |
 | `factory project set <id> [--base-branch <b>] [--dep-policy delivered\|merged] [--max-running <n>]`              | Change a project (§3.1); `--base-branch` is refused while it has an open Work order             |
 | `factory project rm <id>`                                                                                        | Remove a project with no history (§3.1)                                                         |
-| `factory check`                                                                                                  | Offline: validate Operator profiles, Lines and templates (no Factory needed)                    |
+| `factory check [--dir <repoRoot>]`                                                                               | Offline: validate `<repo>/.factory/` (Operator profiles, Lines, prompt and PR templates) and cross-check `.nitpick/` when present (no Factory needed) |
+| `factory init [--dir <repoRoot>] [--force]`                                                                      | Scaffold `<repo>/.factory/` (`lines/`, `operators/`, `templates/`) from the starter; refuses an existing one unless `--force` |
+| `factory order create --project <id> --todo-id <slug> --title <text> --type <t> --line <name> [--repo-dir <path>] [--priority ...] [--plan <slug>] [--depends-on <id,…>] [--base-branch <b>] (--file <path> \| --body <text> \| --file -)` | Create a Work order (§3.3). The Line is read and validated from `<repoDir>/.factory/lines/<name>.yml` and pinned as its snapshot |
+| `factory order pr-state <orderId> <open\|merged\|closed> --pr-url <url>`                                        | Set a Work order's PR state by hand: the fallback when no webhook is configured (§3.6). The order must already have a PR |
+| `factory plan create --project <id> --slug <slug> [--repo-dir <path>] [--base-branch <b>] --members <files…>`   | Create an Order Plan (§3.3): the members, each a todo file, in chain order; each Line is read from `<repoDir>/.factory/lines/` |
+| `factory todos migrate [--dir <todos>] [--repo-dir <path>] --project <id> [--dry-run] [--all] [--remove]`        | One-time import of a `todos/` folder: plans via `createPlan`, standalone todos via `createOrder`, in dependency order. Idempotent; `--remove` deletes files only after the server confirmed them |
 | `factory admin export <file>`                                                                                    | STORAGE §7                                                                                      |
 
 `factory-server` is the core process: `factory run` is its local start command. It owns the database
@@ -610,6 +615,21 @@ Configuration (`apps/cli`): settings come from the flag, then `FACTORY_DATA_DIR`
 (`$FACTORY_CONFIG`, else `$XDG_CONFIG_HOME/factory/config.json`, with the keys `dataDir`, `serverBin` and
 `color`), then the default `~/.local/share/factory`. `NO_COLOR` set to a non-empty value, `--no-color`
 and `"color": false` turn colour off. The config file holds no state; it is never a second database.
+
+Every command above accepts `--json`, and works over the local socket, the one-shot `--once` run and remote
+HTTP (`FACTORY_URL` with `FACTORY_TOKEN`) the same way.
+
+Repository setup (`.factory/`, one per repo, next to `.nitpick/`). `factory init` scaffolds it from the
+starter this repo ships (`packages/factory-definitions/starter/.factory/`); `factory check` validates it.
+Lines are read from `<repo>/.factory/lines/` when a Work order or Order Plan is created: the snapshot is
+built client-side, so the server never reads a repo definition (CORE §4.4). `factory todos migrate` keeps
+the server the only writer: a file whose OrderId exists is `skipped` before the scan (never `reused_id`),
+a plan the server has is skipped with its files, and a dependency is satisfied when its file is `done` or
+gone. A todo with no `type` line takes `feat`. Without `--all`, only `factory: v2` todos migrate.
+
+The Cell reads `<repo>/.factory/cell.toml` when it runs inside a repository (`--repo-dir <path>`, else the
+repository the working directory is in). Its keys override `~/.config/factory-cell/config.toml` key by key;
+`projects` is replaced, not merged. The Cell logs `factory-cell: config from <path>` when it applies one.
 
 `factory plan ls` and `factory plan status` are read operations (§3.1) and support `--json`. `plan
 status` prints one line per member, for example

@@ -9,3 +9,4 @@ coverage/
 .worktrees/
 .boss.lock
 .factory/
+!/packages/factory-definitions/starter/.factory/

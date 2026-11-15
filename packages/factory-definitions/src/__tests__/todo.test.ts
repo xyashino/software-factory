@@ -34,6 +34,51 @@ const viewOf = (
   delivered: new Set(delivered),
 });
 
+describe('the spec type and title', () => {
+  const parse = (text: string) => {
+    const parsed = parseTodo(PROJECT, 'todos/spec.md', text);
+    if (!parsed.ok) throw new Error(JSON.stringify(parsed.error));
+    return parsed.value.todo;
+  };
+
+  it('takes type feat when the frontmatter names none', () => {
+    expect(parse(todo('spec').text).type).toBe('feat');
+  });
+
+  it('honours a type the frontmatter names', () => {
+    expect(parse(todo('spec', 'todo', 'type: fix\n').text).type).toBe('fix');
+  });
+
+  it('refuses a type outside the change categories', () => {
+    const parsed = parseTodo(
+      PROJECT,
+      'todos/spec.md',
+      todo('spec', 'todo', 'type: bogus\n').text,
+    );
+    expect(parsed.ok).toBe(false);
+  });
+
+  it('takes the title from the H1 with the todo id prefix removed', () => {
+    const text = `---\nstatus: todo\n---\n\n# spec: Add the thing\n\nBody.\n`;
+    expect(parse(text).title).toBe('Add the thing');
+  });
+
+  it('keeps an H1 that does not start with the todo id', () => {
+    const text = `---\nstatus: todo\n---\n\n# Add the thing\n\nBody.\n`;
+    expect(parse(text).title).toBe('Add the thing');
+  });
+
+  it('falls back to the todo id when the body has no H1', () => {
+    const text = `---\nstatus: todo\n---\n\nNo heading here.\n`;
+    expect(parse(text).title).toBe('spec');
+  });
+
+  it('falls back to the todo id when the H1 is only the id prefix', () => {
+    const text = `---\nstatus: todo\n---\n\n# spec:\n\nBody.\n`;
+    expect(parse(text).title).toBe('spec');
+  });
+});
+
 describe('parseTodo', () => {
   it('reads the defaults: priority medium, no dependencies, the feature line', () => {
     const parsed = parseTodo(PROJECT, 'todos/plain.md', todo('plain').text);
