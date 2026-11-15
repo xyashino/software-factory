@@ -11,6 +11,7 @@ import {
   precondition,
   refuseIfTerminal,
   requireActor,
+  supervisorIncident,
 } from './decide-guards';
 import type { OrderEvent } from './events';
 import { holderOf } from './status';
@@ -71,7 +72,7 @@ export const cancel = (
   command: CommandOf<'Cancel'>,
   ctx: DecideContext,
 ): Decision => {
-  const denied = requireActor(ctx, ['supervisor', 'factory']);
+  const denied = requireActor(ctx, ['supervisor', 'mechanic', 'factory']);
   if (denied) return err(denied);
   if (state.phase.kind === 'delivered') {
     return err(precondition('a delivered Work order cannot be cancelled'));
@@ -79,11 +80,22 @@ export const cancel = (
   if (state.phase.kind === 'cancelled') {
     return err(precondition('the Work order is already cancelled'));
   }
+  // An Andon is not left without an incident, and the Mechanic records its own before it cancels.
+  if (
+    ctx.actor.kind === 'mechanic' &&
+    state.andon &&
+    !state.incidents.some((incident) => incident.andonAt === state.andon?.at)
+  ) {
+    return err(
+      precondition('the mechanic records the incident before it cancels'),
+    );
+  }
   const job = state.activeJob;
   const ending = job
     ? loseJob(state, job, 'cancelled', 'the Work order was cancelled')
     : [];
   const events: OrderEvent[] = [
+    ...supervisorIncident(state, ctx, 'cancel'),
     ...ending,
     { type: 'cancelled', reason: command.reason },
   ];
@@ -109,7 +121,7 @@ export const claimJob = (
   const denied = requireActor(ctx, ['factory']);
   if (denied) return err(denied);
   const holder = holderOf(state);
-  if (holder.kind !== 'queue') {
+  if (holder.kind !== 'queue' && holder.kind !== 'mechanic') {
     return err(precondition(`the Work order is held by ${holder.kind}`));
   }
   const next = nextJob(state);
@@ -119,7 +131,7 @@ export const claimJob = (
   const jobId = jobIdSchema.parse(ctx.ids.next());
   const epoch = state.epoch + 1;
   const { kind } = next.job;
-  if (next.job.kind === 'deliver') {
+  if (next.job.kind === 'deliver' || next.job.kind === 'mechanic') {
     return ok([
       { type: 'job_claimed', jobId, kind, cellId: command.cellId, epoch },
     ]);

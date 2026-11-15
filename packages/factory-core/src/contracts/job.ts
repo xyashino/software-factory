@@ -121,6 +121,20 @@ const planBlockSchema = z
   })
   .strict();
 
+/**
+ * A Mechanic job (CORE §14.4): triages one Andon, names the Andon by its `andon_raised` time and the
+ * prompt blob. It has no workspace and runs in the repair checkout, never in a Work order worktree.
+ */
+const mechanicSchema = z
+  .object({
+    andonAt: z.number().int().min(0),
+    n: z.number().int().min(1),
+    promptBlob: blobRefSchema,
+    /** The runner the Mechanic runs with: the Line's first Operator pool (CORE §14.4). */
+    operator: operatorSchema,
+  })
+  .strict();
+
 const WORK_KINDS = new Set([
   'run_operator_station',
   'run_inspection',
@@ -149,11 +163,22 @@ export const jobSchema = z
     station: stationSchema.optional(),
     deliver: deliverSchema.optional(),
     plan: planBlockSchema.optional(),
+    mechanic: mechanicSchema.optional(),
   })
   .strict()
   .superRefine((job, ctx) => {
     const issue = (message: string) =>
       ctx.addIssue({ code: z.ZodIssueCode.custom, message, path: ['kind'] });
+    if (job.kind === 'mechanic') {
+      if (isPlanId(job.orderId)) issue('mechanic needs an OrderId');
+      if (job.mechanic === undefined) issue('mechanic needs a mechanic block');
+      if (job.workspace !== undefined) issue('mechanic has no workspace');
+      if (job.station !== undefined) issue('mechanic has no station');
+      if (job.deliver !== undefined) issue('mechanic has no deliver block');
+      if (job.plan !== undefined) issue('mechanic has no plan block');
+      return;
+    }
+    if (job.mechanic !== undefined) issue(`${job.kind} has no mechanic block`);
     if (PLAN_KINDS.has(job.kind)) {
       if (!isPlanId(job.orderId)) issue(`${job.kind} needs a PlanId`);
       if (job.plan === undefined) issue(`${job.kind} needs a plan block`);

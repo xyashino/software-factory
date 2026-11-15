@@ -159,5 +159,36 @@ export const applyAndonRaised = (
   at: number,
 ): WorkOrderState => ({
   ...state,
-  andon: { reason: ev.reason, detail: ev.detail, at },
+  andon: { reason: ev.reason, detail: ev.detail, at, triage: 'mechanic' },
+});
+
+/**
+ * CORE §14.2: the incident joins the history and clears no Andon by itself. It ends the Mechanic job
+ * that recorded it (CORE §14.4), and an `escalate` hands the Andon to the Supervisor (§14.4).
+ */
+export const applyIncidentRecorded = (
+  state: WorkOrderState,
+  ev: Extract<OrderEvent, { type: 'incident_recorded' }>,
+  at: number,
+): WorkOrderState => ({
+  ...state,
+  activeJob: state.activeJob?.kind === 'mechanic' ? undefined : state.activeJob,
+  andon:
+    state.andon && ev.action.kind === 'escalate'
+      ? { ...state.andon, triage: 'supervisor' }
+      : state.andon,
+  incidents: [
+    ...state.incidents,
+    {
+      incidentId: ev.incidentId,
+      by: ev.by,
+      andonAt: ev.andonAt,
+      andonReason: ev.andonReason,
+      diagnosis: ev.diagnosis,
+      action: ev.action,
+      changes: ev.changes,
+      outcome: ev.outcome,
+      at,
+    },
+  ],
 });

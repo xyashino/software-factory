@@ -19,7 +19,12 @@ const isClaimable = (
   cell: CellView,
   limits: Limits,
 ): boolean => {
-  if (entry.holder !== 'queue' || entry.next !== 'job') return false;
+  // A Mechanic job is claimable while the Mechanic holds the Andon (CORE §8, §14.4).
+  if (
+    (entry.holder !== 'queue' && entry.holder !== 'mechanic') ||
+    entry.next !== 'job'
+  )
+    return false;
   if (entry.deps !== 'satisfied') return false;
   if (!cell.projects.includes(entry.projectId)) return false;
   if (entry.runner !== undefined && !cell.runners.includes(entry.runner))

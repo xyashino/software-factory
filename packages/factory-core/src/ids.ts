@@ -25,6 +25,7 @@ export const jobIdSchema = z.string().regex(ULID).brand<'JobId'>();
 export const cycleIdSchema = z.string().regex(ULID).brand<'CycleId'>();
 export const resumeIdSchema = z.string().regex(ULID).brand<'ResumeId'>();
 export const questionIdSchema = z.string().regex(ULID).brand<'QuestionId'>();
+export const incidentIdSchema = z.string().regex(ULID).brand<'IncidentId'>();
 export const blobRefSchema = z.string().regex(BLOB_REF).brand<'BlobRef'>();
 export const commitShaSchema = z
   .string()
@@ -40,6 +41,7 @@ export type JobId = z.infer<typeof jobIdSchema>;
 export type CycleId = z.infer<typeof cycleIdSchema>;
 export type ResumeId = z.infer<typeof resumeIdSchema>;
 export type QuestionId = z.infer<typeof questionIdSchema>;
+export type IncidentId = z.infer<typeof incidentIdSchema>;
 export type BlobRef = z.infer<typeof blobRefSchema>;
 export type CommitSha = z.infer<typeof commitShaSchema>;
 

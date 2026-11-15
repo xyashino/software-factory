@@ -25,6 +25,7 @@ const FAMILY: Record<string, EventFamily> = {
   nudged: 'cycle',
   andon_raised: 'andon',
   resumed: 'andon',
+  incident_recorded: 'andon',
   question_asked: 'question',
   question_answered: 'question',
   question_abandoned: 'question',
@@ -91,6 +92,10 @@ export const describeEvent = (event: StoredEvent['event']): string => {
       return event.text;
     case 'note_left':
       return `to ${String(event.to)}`;
+    case 'andon_raised':
+      return `${event.reason}: ${event.detail}`;
+    case 'incident_recorded':
+      return `incident ${shortId(event.incidentId)} ${event.action.kind} by ${event.by}: ${event.outcome}`;
     default:
       return '';
   }

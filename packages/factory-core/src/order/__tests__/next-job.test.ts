@@ -3,6 +3,8 @@ import type { Station } from '../../line/snapshot';
 import { makeLine, pinnedLineOf } from './builders';
 import {
   andonRaised,
+  incidentRecorded,
+  jobLost,
   blobOf,
   cancelled,
   commitOf,
@@ -63,11 +65,35 @@ describe('nextJob rows 1-3: terminal, busy, andon', () => {
     expect(next([created(), claim(1)])).toEqual({ kind: 'busy' });
   });
 
-  it('row 3: a raised Andon waits for the Supervisor', () => {
+  it('row 3: a raised Andon goes to the Mechanic first', () => {
     expect(next([created(), andonRaised()])).toEqual({
-      kind: 'await_supervisor',
-      cause: 'andon',
+      kind: 'job',
+      job: { kind: 'mechanic', andonAt: 2000, n: 1 },
     });
+  });
+
+  it('row 3: an escalated Andon waits for the Supervisor', () => {
+    expect(
+      next([
+        created(),
+        andonRaised(),
+        incidentRecorded({ andonAt: 2000, action: { kind: 'escalate' } }),
+      ]),
+    ).toEqual({ kind: 'await_supervisor', cause: 'andon' });
+  });
+
+  it('row 3: a spent Mechanic budget escalates the Andon', () => {
+    // Two Mechanic jobs were claimed and lost: the budget of two is spent (CORE §14.4).
+    expect(
+      next([
+        created(),
+        andonRaised(),
+        claim(2, 'mechanic'),
+        jobLost({ jobId: jobIdOf(2), epoch: 2 }),
+        claim(3, 'mechanic'),
+        jobLost({ jobId: jobIdOf(3), epoch: 3 }),
+      ]),
+    ).toEqual({ kind: 'escalate_andon' });
   });
 
   it('row 2 wins over row 3 when both hold', () => {

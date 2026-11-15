@@ -9,7 +9,7 @@ import type {
 import { findStation, stationIndex } from '../line/snapshot';
 import type { AndonReason, JobKind } from './events';
 import { latestCycle } from './evolve-helpers';
-import type { Next } from './next';
+import { isStationJob, type Next } from './next';
 import { type BoardStatus, type Holder, boardStatus, holderOf } from './status';
 import type { Priority, WorkOrderState } from './state';
 
@@ -71,7 +71,7 @@ const stationRef = (
   next: Next,
 ): StationRef | undefined => {
   const jobStation =
-    next.kind === 'job' && next.job.kind !== 'deliver'
+    next.kind === 'job' && isStationJob(next.job)
       ? next.job.stationId
       : undefined;
   const phaseStation =

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { stationIdSchema } from '../ids';
+import { incidentChangeSchema } from '../order/events';
 
 /**
  * The Operator socket wire (PROTOCOL §3.3): one JSON object per line from `factory-operator` to the
@@ -31,6 +32,16 @@ export const operatorRequestSchema = z.discriminatedUnion('op', [
     handover: z.string().max(65536),
   }),
   withToken({ op: z.literal('context') }),
+  /** A Mechanic job records its incident for the Andon it triages (CORE §14.2). */
+  withToken({
+    op: z.literal('incident'),
+    diagnosis: text,
+    action: z.enum(['resume', 'cancel', 'nudge', 'escalate', 'repair']),
+    changes: z.array(incidentChangeSchema).max(16),
+    outcome: text,
+  }),
+  /** A Mechanic job hands the Andon to the Supervisor, with the incident attached (CORE §14.4). */
+  withToken({ op: z.literal('escalate'), diagnosis: text, outcome: text }),
 ]);
 
 export const operatorReplySchema = z.discriminatedUnion('ok', [

@@ -189,7 +189,8 @@ interface Job {
     | 'deliver'
     | 'plan_branch'
     | 'plan_pr'
-    | 'plan_pr_ready';
+    | 'plan_pr_ready'
+    | 'mechanic'; // CORE §14.4: triages one Andon; no workspace, no station; `mechanic` block set
   repo: { url: string; baseBranch: string; branch: string };
   // Work order job: branch = factory/<todoId>; baseBranch = the project's base branch, or for a plan
   //   member the resolved plan base: `feat/<slug>` or `factory/<predecessorTodoId>` (CORE §12.5).

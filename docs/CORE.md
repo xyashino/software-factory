@@ -182,11 +182,12 @@ type CycleCause =
 
 **Supervisor control**
 
-| Event          | Payload                                                    | Notes                                                                                   |
-| :------------- | :--------------------------------------------------------- | :-------------------------------------------------------------------------------------- |
-| `andon_raised` | `reason: AndonReason, detail`                              | A **decision event**: the runtime appends it when `nextJob` returns `raise_andon` (§6). |
-| `resumed`      | `resumeId, by, mode: ResumeMode, noteBlob?, grantRetries?` | Clears the Andon (§4.3 rules 7–8).                                                      |
-| `reopened`     | `resumeId, by, stationId, noteBlob?`                       | Moves a delivered Work order back to a Station (§4.3 rule 9).                           |
+| Event               | Payload                                                                       | Notes                                                                                         |
+| :------------------ | :---------------------------------------------------------------------------- | :-------------------------------------------------------------------------------------------- |
+| `andon_raised`      | `reason: AndonReason, detail`                                                 | A **decision event**: the runtime appends it when `nextJob` returns `raise_andon` (§6).       |
+| `resumed`           | `resumeId, by, mode: ResumeMode, noteBlob?, grantRetries?`                    | Clears the Andon (§4.3 rules 7–8).                                                            |
+| `reopened`          | `resumeId, by, stationId, noteBlob?`                                          | Moves a delivered Work order back to a Station (§4.3 rule 9).                                 |
+| `incident_recorded` | `incidentId, by, andonAt, andonReason, diagnosis, action, changes[], outcome` | The Mechanic's record of an Andon, written before it acts on the Andon (§14.2, §4.3 rule 12). |
 
 ```ts
 type AndonReason =
@@ -248,6 +249,7 @@ interface WorkOrderState {
   notes: StationNote[];
   questions: QuestionRecord[]; // full history; at most one with status 'open'
   andon?: { reason: AndonReason; detail: string; at: number };
+  incidents: IncidentRecord[]; // full history; at most one per Andon (§14.2)
   activeJob?: {
     jobId: JobId;
     kind: JobKind;
@@ -397,12 +399,15 @@ afterStation: <the Station before s, or null> }`; sets `pendingResume = { forSta
    rework builds **on top of the delivered commit** (the pre-squash checkpoints no longer exist on
    the remote, PROTOCOL §8). `delivery` is kept; the next delivery updates the same PR or opens a
    new one.
-10. `job_claimed` sets `activeJob` and `epoch` and clears `resumedWaiting`. `resumed` and `reopened`
+10. **Incident** (`incident_recorded`) joins `incidents`, with `andonAt` naming the Andon it triaged.
+    It changes no job and clears no Andon. Only `resumed` clears an Andon, and a Mechanic may send
+    it only after the incident of that Andon exists (§5.2, §14.3).
+11. `job_claimed` sets `activeJob` and `epoch` and clears `resumedWaiting`. `resumed` and `reopened`
     set `resumedWaiting`. `workspace_failed` appends `{ cellId, jobId, at }` to `workspaceFailures`;
     `cycle_started`, `delivery_finished`, `delivery_failed`, `resumed` and `reopened` clear it.
     `delivery_failed` sets `deliveryFailed`. `delivery_finished` sets `delivery` and
     `phase = delivered`.
-11. **Recovery** (`order_recovered { passedStations, checkpoint, delivery? }`), a fresh Work order
+12. **Recovery** (`order_recovered { passedStations, checkpoint, delivery? }`), a fresh Work order
     only (epoch 0, no Cycle, no job ever claimed; §5.2 `RecoverOrder`). It sets:
     - `recovered = passedStations`, `checkpoint = checkpoint`, `resumedWaiting = false`;
     - without `delivery`: `phase.index = index of the first Station after passedStations`, or
@@ -464,8 +469,9 @@ before calling it.
 | `ExpireLease`           | factory (reaper)                             | `activeJob` with that epoch; lease expired (checked by caller)                                                                                                                     | `cycle_failed{lost}` if a Cycle runs, + `job_lost{lease_expired}`        |
 | `RecoverOrder`          | factory (`admin recover`)                    | `epoch == 0` (never claimed), no Cycle, not terminal, no `order_recovered` yet; `passedStations` is a non-empty prefix of the pinned Line, the whole Line when `delivery` is given | `order_recovered` (§4.3 rule 11)                                         |
 | `ReleaseJob`            | cell (leaving)                               | epoch matches                                                                                                                                                                      | as `ExpireLease` with `cell_left`                                        |
-| `Resume`                | supervisor, mechanic (M10)                   | `andon` set; mode valid for the Line; `retries_exhausted` + `retry_station` ⇒ `grantRetries ≥ 1` (default 1)                                                                       | `resumed`                                                                |
+| `Resume`                | supervisor, mechanic (M10)                   | `andon` set; mode valid for the Line; `retries_exhausted` + `retry_station` ⇒ `grantRetries ≥ 1` (default 1); mechanic: an incident of this Andon exists (§14.3)                   | `resumed`                                                                |
 | `Reopen`                | supervisor                                   | phase `delivered`; PR not `merged`; Station exists in the Line                                                                                                                     | `reopened`                                                               |
+| `RecordIncident`        | mechanic (M10)                               | not terminal; `andon` set and no incident for it yet; `repair` names its changes, other actions name none; every blob ref of a change exists (§14.2)                               | `incident_recorded`                                                      |
 | `ReportDelivery`        | cell                                         | epoch matches; job kind `deliver`                                                                                                                                                  | `delivery_finished` / `delivery_failed`                                  |
 | `RecordPrState`         | factory (intake)                             | `delivery` set                                                                                                                                                                     | `pr_state_changed`                                                       |
 
@@ -500,6 +506,7 @@ type Next =
   | { kind: 'await_supervisor'; cause: 'andon' } // holder = supervisor; Andon already recorded
   | { kind: 'raise_andon'; reason: AndonReason; detail: string } // transient: runtime appends `andon_raised` in the same tx
   | { kind: 'wait_cell'; jobId: JobId; epoch: number } // a job is already running
+  | { kind: 'escalate_andon' } // transient: the Factory records the escalation (§14.4)
   | { kind: 'job'; job: JobSpec }; // claimable; concrete JobId and epoch are assigned on ClaimJob
 
 type JobSpec =
@@ -522,7 +529,8 @@ type JobSpec =
       commands: string[];
       requires: string[];
     }
-  | { kind: 'deliver'; base: CommitSha };
+  | { kind: 'deliver'; base: CommitSha }
+  | { kind: 'mechanic'; andonAt: number; n: number }; // no workspace (§14.4)
 ```
 
 Every `JobSpec` carries `requires` so queue selection can match Cells without reading the Line again.
@@ -530,24 +538,24 @@ Every `JobSpec` carries `requires` so queue selection can match Cells without re
 
 Decision table (first matching row wins):
 
-| #   | Condition                                                                                      | Result                                                                                                                     |
-| :-- | :--------------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------- |
-| 1   | `phase` is `delivered` or `cancelled`                                                          | `done`                                                                                                                     |
-| 2   | `activeJob` is set                                                                             | `wait_cell`                                                                                                                |
-| 3   | `andon` set                                                                                    | `await_supervisor`                                                                                                         |
-| 4   | `workspaceFailures.length ≥ 2`                                                                 | `raise_andon workspace_failed`                                                                                             |
-| 5   | `pendingResume` set                                                                            | `job` for `pendingResume.forStation`, cause `resume`, base = `checkpoint` or `branch_base`                                 |
-| 6   | latest Cycle is `handed_over` for current Station, `lostRestartsUsed[s] < maxLostRestarts`     | `job` for `s`, cause `handover`, base = `latestCycle.commit` or `checkpoint` or `branch_base`                              |
-| 7   | latest Cycle is `blocked` for current Station                                                  | `raise_andon cycle_blocked`                                                                                                |
-| 8   | same, budget spent                                                                             | `raise_andon restart_failed`                                                                                               |
-| 9   | latest Cycle failed with `verdict_fail` / `inspection_fail`, Station has `onFail`, budget left | `job` of `onFail.retry`, cause `retry`, base = checkpoint                                                                  |
-| 10  | same, no `onFail`                                                                              | `raise_andon no_retry`                                                                                                     |
-| 11  | same, budget spent                                                                             | `raise_andon retries_exhausted`                                                                                            |
-| 12  | latest Cycle failed with an infrastructure reason, its budget left (§5.3)                      | `job` of the same Station, cause `restart`, base = its `baseCommit`                                                        |
-| 13  | same, budget spent                                                                             | `raise_andon restart_failed`                                                                                               |
-| 14  | `deliveryFailed` set                                                                           | `raise_andon delivery_failed`                                                                                              |
-| 15  | phase `stations`                                                                               | `job` of `stations[index]` (`run_operator_station` or `run_inspection`), cause `first`, base = checkpoint or `branch_base` |
-| 16  | phase `delivering`                                                                             | `job deliver`, base = checkpoint                                                                                           |
+| #   | Condition                                                                                                                                                                                  | Result                                                                                                                     |
+| :-- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------- |
+| 1   | `phase` is `delivered` or `cancelled`                                                                                                                                                      | `done`                                                                                                                     |
+| 2   | `activeJob` is set                                                                                                                                                                         | `wait_cell`                                                                                                                |
+| 3   | `andon` set (§14.4): `triage` is `mechanic`, no incident yet, budget left: `job mechanic`; budget spent: `escalate_andon`; `triage` `supervisor` or an incident exists: `await_supervisor` |                                                                                                                            |
+| 4   | `workspaceFailures.length ≥ 2`                                                                                                                                                             | `raise_andon workspace_failed`                                                                                             |
+| 5   | `pendingResume` set                                                                                                                                                                        | `job` for `pendingResume.forStation`, cause `resume`, base = `checkpoint` or `branch_base`                                 |
+| 6   | latest Cycle is `handed_over` for current Station, `lostRestartsUsed[s] < maxLostRestarts`                                                                                                 | `job` for `s`, cause `handover`, base = `latestCycle.commit` or `checkpoint` or `branch_base`                              |
+| 7   | latest Cycle is `blocked` for current Station                                                                                                                                              | `raise_andon cycle_blocked`                                                                                                |
+| 8   | same, budget spent                                                                                                                                                                         | `raise_andon restart_failed`                                                                                               |
+| 9   | latest Cycle failed with `verdict_fail` / `inspection_fail`, Station has `onFail`, budget left                                                                                             | `job` of `onFail.retry`, cause `retry`, base = checkpoint                                                                  |
+| 10  | same, no `onFail`                                                                                                                                                                          | `raise_andon no_retry`                                                                                                     |
+| 11  | same, budget spent                                                                                                                                                                         | `raise_andon retries_exhausted`                                                                                            |
+| 12  | latest Cycle failed with an infrastructure reason, its budget left (§5.3)                                                                                                                  | `job` of the same Station, cause `restart`, base = its `baseCommit`                                                        |
+| 13  | same, budget spent                                                                                                                                                                         | `raise_andon restart_failed`                                                                                               |
+| 14  | `deliveryFailed` set                                                                                                                                                                       | `raise_andon delivery_failed`                                                                                              |
+| 15  | phase `stations`                                                                                                                                                                           | `job` of `stations[index]` (`run_operator_station` or `run_inspection`), cause `first`, base = checkpoint or `branch_base` |
+| 16  | phase `delivering`                                                                                                                                                                         | `job deliver`, base = checkpoint                                                                                           |
 
 Notes on the order:
 
@@ -736,6 +744,7 @@ Each one is a property test (fast-check) over random command sequences, plus nam
 | I9  | **No silent stop.** For every non-terminal state, `nextJob ≠ done`; `raise_andon` is followed by `await_supervisor` once its `andon_raised` is applied; and after any `resumed` or `reopened`, `nextJob` is `job` (a resume never re-raises the Andon it cleared without a new event in between). |
 | I10 | **Idempotent commands.** Replaying any command with the same `commandId` produces no new events. (Store-level contract test.)                                                                                                                                                                     |
 | I11 | **Bounded machine loss.** Without a Supervisor command, no Station sees more than `maxRestarts + maxLostRestarts + 2` consecutive Cycles or workspace failures without a pass or an Andon.                                                                                                        |
+| I12 | **No Andon cleared without an incident (Mechanic).** A `resumed` sent by the Mechanic applies only when the incident of that Andon (`andonAt`) is in `incidents`, and each Andon has at most one incident. The Supervisor path is covered once the runtime writes its system incident (§14.5).    |
 
 ## 11. Versioning
 
@@ -1039,3 +1048,99 @@ member rows.
 | Scenario | `given(events).when(command).then(events)` and `given(events).nextJob(expected)`; every v1 scenario rewritten here (ROADMAP M1) | vitest + harness in `core/testing` |
 | Property | I1–I9, I11 and P1–P7 over generated command sequences against a generated Line (and generated plans)                            | fast-check                         |
 | Contract | One suite run against the fake and the SQLite `EventStore` (I10, concurrency)                                                   | vitest                             |
+
+## 14. Mechanic (M10)
+
+The Mechanic is the on-call operator for Andons (`decisions/20261113-230000-factory-mechanic-andon-triage.md`).
+It triages each Andon, may repair the workflow, and records what it did. This section says what is
+built and what is still specified.
+
+### 14.1 Status
+
+| Part                                                                                                                                 | Status                                                            |
+| :----------------------------------------------------------------------------------------------------------------------------------- | :---------------------------------------------------------------- |
+| Actor `mechanic`; `incident_recorded`; `RecordIncident`; the mechanic authority (§14.3); the Mechanic's `Resume` and `Cancel` guards | Built in `factory-core` (M10 slice 1)                             |
+| Supervisor `Resume` and `Cancel` record their own incident when the Andon has none (§14.5)                                           | Built in `factory-core` (M10 slice 2)                             |
+| `mechanic` job kind; the `nextJob` row 3 split; `mechanicRuns` budget; `escalate_andon` and `EscalateAndon` (§14.4)                  | Built in `factory-core` (M10 slice 2)                             |
+| Contracts: `mechanic` job block; operator verbs `incident` and `escalate`                                                            | Built (M10 slice 2)                                               |
+| Runtime: the Mechanic job built from `incident.md` (`buildIncidentPrompt`); the factory escalation on a spent budget                 | Built (M10 slice 2)                                               |
+| operator-cli verbs `incident` and `escalate`; CLI `show` and `log` show incidents                                                    | Built (M10 slice 2)                                               |
+| Cell: the Mechanic pane run in a repair checkout; the worktree guard; the trust-screen known case (§14.6)                            | Built (M10 slice 3), unit-tested with fake Herdr and fake runtime |
+| Distributed `factory-m10` scenarios                                                                                                  | Not built                                                         |
+
+### 14.2 Incident
+
+`incident_recorded { incidentId, by, andonAt, andonReason, diagnosis, action, changes[], outcome }`
+
+- `andonAt` is the `at` of the `andon_raised` the incident triaged. An Andon has **at most one**
+  incident, and it is recorded before the Andon is cleared (I12).
+- `action` is `resume | cancel | nudge | escalate | repair`. Only `repair` carries `changes`; the
+  other actions carry none. Each change is `{ kind: 'file' | 'config', path, ref }`, where `ref` is a
+  commit sha (a Line, Operator or Cell file in the definitions repo) or a blob (a config blob). At most 16.
+- `RecordIncident` (actor `mechanic`) is refused when the Work order is terminal, when no Andon is
+  open, when the open Andon already has an incident, when a `repair` names no change, when a
+  non-repair names one, or when a blob ref does not exist (`invalid`).
+- `factory show` and `factory log` show the incidents of a Work order (pending: CLI).
+
+### 14.3 Authority
+
+- The Mechanic may run `RecordIncident`, `Resume`, `Cancel`, `Nudge` and `Answer`. Any other command
+  refuses it with `precondition`, the same as any actor that is not allowed to run it.
+- The Mechanic's `Resume` applies only when the incident of the open Andon exists (I12). A refusal
+  says `the mechanic records the incident before it resumes`.
+- The Mechanic never edits the Work order's worktree. No core command changes a worktree; the Cell
+  gives a Mechanic job no workspace (`prepareWorkspace` refuses it), runs it in a repair checkout
+  under the Cell's data dir, and accepts only the `incident` and `escalate` verbs from it (§14.4).
+- The Cell sends the Mechanic's `RecordIncident`, `Resume`, `Cancel` and `Nudge` under the actor
+  `mechanic`; every other command from a Cell keeps the Cell's own actor.
+- Only the Supervisor may `Reopen` and `Reprioritise`.
+
+### 14.4 Mechanic job and budget
+
+- **Triage.** Every Andon starts with `triage: 'mechanic'` (`andon_raised`). An `incident_recorded`
+  with `action: escalate` sets `triage: 'supervisor'`. The holder is `mechanic` while the Andon is
+  triaged by the Mechanic and has no incident; otherwise it is `supervisor` (§4.2).
+- **Job kind** `mechanic`: no workspace, no station. Its job block carries `andonAt`, the attempt `n`
+  and the prompt blob (`incident.md`, rendered from the Andon reason and detail by
+  `buildIncidentPrompt`). A claim of it has no Cycle and counts one `mechanicRuns`, lost or not.
+  Its incident ends it: `incident_recorded` clears the active job when that job is a Mechanic job.
+- **`nextJob` row 3** (after the busy row 2): an open Andon returns
+  - `await_supervisor` when `triage` is `supervisor`, or when an incident already exists for it;
+  - `job mechanic` when `mechanicRuns < MECHANIC_BUDGET` (2);
+  - `escalate_andon` otherwise. The factory then appends `EscalateAndon` (actor `factory`), which
+    records an incident with `by: 'factory'` and `action: escalate`, so the Supervisor gets the Andon
+    with its incident attached.
+- **Cell run.** The Cell runs the Mechanic in a Herdr pane (PROTOCOL §9) with the prompt blob, its
+  working directory the repair checkout, never a worktree. The runner is the Line's first Operator
+  pool, carried in the job's `mechanic.operator` block. The socket takes `incident` and `escalate`;
+  every other verb is refused with `precondition`. Each verb is submitted under the job's epoch, so a
+  stale Mechanic is fenced out.
+- **Follow-up.** An incident with `resume` or `repair` is followed by `Resume` (`retry_station`); with
+  `cancel` by `Cancel`; with `nudge` by `Nudge`. An `escalate` is followed by nothing. A refused
+  follow-up is reported to the Mechanic, and the incident stays recorded.
+- **No incident.** A pane that exits, or runs past the job's `timeoutMs`, with no incident submits
+  nothing. The lease lapses, and the reaper counts the run against the budget.
+- **Lost jobs.** A Mechanic job that is lost (lease expired, Cell left) releases the job and keeps its
+  budget spent. The next `nextJob` runs another Mechanic job, or escalates. Nothing stops silently.
+- **Holder and queue.** The queue selects a Work order whose holder is `mechanic` and whose `next` is
+  a job, like a queued one (CORE §8).
+
+### 14.5 Supervisor and the incident rule
+
+- The Supervisor's `Resume` or `Cancel` of an Andon with no incident records one in the same decision
+  (`action: resume` or `cancel`, `by` the Supervisor's name), before `resumed` or `cancelled`. So no
+  Andon is cleared without an incident (I12) and no runtime step is needed for it.
+- The Supervisor's `Resume` is refused while a Mechanic job works on the Andon. The Mechanic's own
+  `Cancel` is refused until its incident is recorded.
+
+### 14.6 Open points
+
+- **Trust-screen known case.** A Herdr start refused as `agent_not_ready` while the agent sits on the
+  folder-trust screen is confirmed by the Cell (Enter on the highlighted trust option) and started
+  once more. Any other refusal keeps its error. A Mechanic whose own pane is held by that screen
+  therefore runs on, records its incident and resumes the Work order, with no Supervisor command.
+- **Not yet built.** The `factory-m10` distributed scenarios (Andon to Mechanic resume; budget spent
+  to the Supervisor; the trust-screen case end to end through the runtime). The Cell tests drive the
+  run with a fake Herdr and a fake runtime, so the end-to-end proof is still open.
+- **Live intervention** (stall alerts, `Answer` during a Cycle; `decisions/20261114-112011`) is not in
+  M10. It is specified in a later M10 pass.

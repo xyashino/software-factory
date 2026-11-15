@@ -1,4 +1,9 @@
-import type { BlobRef, CycleId, StationId } from '../ids';
+import {
+  type BlobRef,
+  type CycleId,
+  incidentIdSchema,
+  type StationId,
+} from '../ids';
 import { findStation, type Station } from '../line/snapshot';
 import { err, ok, type Result } from '../result';
 import type { DecideContext, DomainError } from './commands';
@@ -50,6 +55,56 @@ export const supervisorName = (
   ctx.actor.kind === 'supervisor'
     ? ok(ctx.actor.name)
     : err(precondition('only a supervisor may run this command'));
+
+/**
+ * The name of the Supervisor or the Mechanic, which the events record as `by`. The Mechanic shares
+ * the Supervisor's live-control commands (CORE §5.2). Refuses any other actor.
+ */
+export const operatorName = (
+  ctx: DecideContext,
+): Result<string, DomainError> =>
+  ctx.actor.kind === 'supervisor' || ctx.actor.kind === 'mechanic'
+    ? ok(ctx.actor.name)
+    : err(
+        precondition('only a supervisor or the mechanic may run this command'),
+      );
+
+/** The Mechanic's name, for the commands only the Mechanic runs (CORE §14.2). */
+export const mechanicName = (
+  ctx: DecideContext,
+): Result<string, DomainError> =>
+  ctx.actor.kind === 'mechanic'
+    ? ok(ctx.actor.name)
+    : err(precondition('only the mechanic may run this command'));
+
+/**
+ * CORE §14.5: an Andon may not be cleared or cancelled without an incident. When the Supervisor acts
+ * on an Andon that has none, the decision records one, so the same events hold the rule.
+ */
+export const supervisorIncident = (
+  state: WorkOrderState,
+  ctx: DecideContext,
+  action: 'resume' | 'cancel',
+): OrderEvent[] => {
+  const andon = state.andon;
+  if (!andon || ctx.actor.kind !== 'supervisor') return [];
+  if (state.incidents.some((incident) => incident.andonAt === andon.at)) {
+    return [];
+  }
+  return [
+    {
+      type: 'incident_recorded',
+      incidentId: incidentIdSchema.parse(ctx.ids.next()),
+      by: ctx.actor.name,
+      andonAt: andon.at,
+      andonReason: andon.reason,
+      diagnosis: andon.detail,
+      action: { kind: action },
+      changes: [],
+      outcome: `${action === 'resume' ? 'resumed' : 'cancelled'} by the supervisor`,
+    },
+  ];
+};
 
 /** Epoch fence (CORE §5.2): the caller must hold the epoch of the active job. */
 export const fenced = (

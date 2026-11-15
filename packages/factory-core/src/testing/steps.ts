@@ -12,6 +12,7 @@ import {
   PR_URL,
   stationOf,
   cellIdOf,
+  incidentIdOf,
 } from './event-builders';
 import {
   actors,
@@ -26,7 +27,7 @@ import type {
   InspectionResult,
   ResumeMode,
 } from '../order/events';
-import type { Next } from '../order/next';
+import { isStationJob, type Next } from '../order/next';
 import { nextJob } from '../order/next-job';
 
 /** The Cycle the scenario ran last, for causes that point back at it. */
@@ -156,7 +157,7 @@ export const reportDeliveryFailed = (): OrderCommand => ({
 
 /** The cause of a Station job; a deliver job has none. */
 export const causeOf = (next: Next): CycleCause => {
-  if (next.kind !== 'job' || next.job.kind === 'deliver') {
+  if (next.kind !== 'job' || !isStationJob(next.job)) {
     throw new Error(`causeOf: next is ${next.kind}, not a Station job`);
   }
   return next.job.cause;
@@ -236,7 +237,7 @@ export const beginJob = (
     throw new Error('beginJob: the claim did not start a Cycle');
   }
   const pending = nextJob({ ...state, activeJob: undefined });
-  if (pending.kind !== 'job' || pending.job.kind === 'deliver') {
+  if (pending.kind !== 'job' || !isStationJob(pending.job)) {
     throw new Error(`beginJob: next is ${pending.kind}, not a Station job`);
   }
   const base =
@@ -315,10 +316,24 @@ export const raiseAndon = (scenario: Scenario): Scenario => {
   if (next.kind !== 'raise_andon') {
     throw new Error(`raiseAndon: nextJob is ${next.kind}, not an Andon`);
   }
-  return scenario.append({
+  const raised = scenario.append({
     type: 'andon_raised',
     reason: next.reason,
     detail: next.detail,
+  });
+  // The Mechanic escalates it, so the scenario's Supervisor holds the Andon (CORE §14.4).
+  const at = raised.state()?.andon?.at;
+  if (at === undefined) throw new Error('raiseAndon: the Andon was not raised');
+  return raised.append({
+    type: 'incident_recorded',
+    incidentId: incidentIdOf(at),
+    by: 'mechanic',
+    andonAt: at,
+    andonReason: next.reason,
+    diagnosis: next.detail,
+    action: { kind: 'escalate' },
+    changes: [],
+    outcome: 'escalated to the supervisor',
   });
 };
 

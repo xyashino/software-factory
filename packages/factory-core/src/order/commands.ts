@@ -17,6 +17,8 @@ import {
   artifactsSchema,
   cycleFailureSchema,
   freeText,
+  incidentActionSchema,
+  incidentChangeSchema,
   inspectionResultSchema,
   operatorSchema,
   pinnedLineSchema,
@@ -231,6 +233,23 @@ const recoverOrderSchema = z
   })
   .strict();
 
+const escalateAndonSchema = z
+  .object({
+    type: z.literal('EscalateAndon'),
+    diagnosis: freeText,
+    outcome: freeText,
+  })
+  .strict();
+const recordIncidentSchema = z
+  .object({
+    type: z.literal('RecordIncident'),
+    diagnosis: freeText,
+    action: incidentActionSchema,
+    changes: z.array(incidentChangeSchema).max(16),
+    outcome: freeText,
+  })
+  .strict();
+
 /** Every command of CORE §5.2, discriminated by `type`. The payloads mirror the events they emit. */
 export const orderCommandSchema = z.discriminatedUnion('type', [
   createOrderSchema,
@@ -258,6 +277,8 @@ export const orderCommandSchema = z.discriminatedUnion('type', [
   reportDeliverySchema,
   recordPrStateSchema,
   recoverOrderSchema,
+  recordIncidentSchema,
+  escalateAndonSchema,
 ]);
 
 export type OrderCommand = z.infer<typeof orderCommandSchema>;

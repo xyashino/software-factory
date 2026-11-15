@@ -29,6 +29,8 @@ import {
   askQuestion,
   leaveNote,
   nudge,
+  recordIncident,
+  escalateAndon,
   reopen,
   resume,
 } from './decide-control';
@@ -95,5 +97,9 @@ export const decide = (
       return recordPrState(state, command, ctx);
     case 'RecoverOrder':
       return recoverOrder(state, command, ctx);
+    case 'RecordIncident':
+      return recordIncident(state, command, ctx);
+    case 'EscalateAndon':
+      return escalateAndon(state, command, ctx);
   }
 };

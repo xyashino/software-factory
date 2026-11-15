@@ -14,6 +14,7 @@ import type { BlobStore } from '@repo/factory-core/ports/blob-store';
 import type { Line, LineStation } from '@repo/factory-definitions/line-schema';
 import type { Definitions } from '@repo/factory-definitions/load';
 import { buildPrompt } from './prompts/build-prompt';
+import { buildIncidentPrompt } from './prompts/incident-prompt';
 import { refusal } from './errors';
 import type { RuntimeConfig } from './ports';
 
@@ -134,6 +135,56 @@ export const buildJob = async (
           state.todoId,
         ),
         removeTodo: `todos/${state.todoId}.md`,
+      },
+    });
+  }
+
+  if (next.job.kind === 'mechanic') {
+    // The Mechanic runs in the repair checkout, not in a worktree: no workspace (CORE §14.4).
+    const andon = state.andon;
+    if (!andon || andon.at !== next.job.andonAt) {
+      throw refusal({
+        code: 'precondition',
+        detail: 'the mechanic job names no open Andon',
+      });
+    }
+    // The Mechanic runs with the first Operator pool of the Line whose profile loads (CORE §14.4).
+    const pool = Object.values(line.operators).find(
+      (candidate) =>
+        ports.definitions.operators.get(candidate.profile) !== undefined,
+    );
+    if (!pool) {
+      throw refusal({
+        code: 'precondition',
+        detail: 'the Line names no loaded operator for the mechanic',
+      });
+    }
+    const promptBlob = await storeText(
+      ports.blobs,
+      buildIncidentPrompt({ reason: andon.reason, detail: andon.detail }),
+      'text/markdown',
+    );
+    return jobSchema.parse({
+      jobId: active.jobId,
+      orderId: state.orderId,
+      projectId: state.projectId,
+      epoch: active.epoch,
+      kind: 'mechanic',
+      repo: common.repo,
+      base: { branchBase },
+      mechanic: {
+        andonAt: next.job.andonAt,
+        n: next.job.n,
+        promptBlob,
+        // A Mechanic always runs in a Herdr pane (PROTOCOL §9), whatever the pool says.
+        operator: {
+          profile: pool.profile,
+          runner: pool.runner,
+          model: pool.model,
+          permission: pool.permission,
+          headless: false,
+          timeoutMs: pool.timeoutMs,
+        },
       },
     });
   }

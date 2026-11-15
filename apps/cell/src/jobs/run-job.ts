@@ -16,6 +16,7 @@ import { prepareWorkspace } from '../workspace';
 import { runDeliver } from './deliver';
 import { runPlanJob } from './plan';
 import { runInspection } from './run-inspection';
+import { runMechanic } from './run-mechanic';
 import { runOperatorStation, type RunnerLaunch } from './run-operator-station';
 import type { JobContext } from './send';
 
@@ -95,7 +96,7 @@ const runnersFor = (
 };
 
 /**
- * Dispatches a claimed job by its kind: `run_inspection`, `run_operator_station`, `deliver`, and the three
+ * Dispatches a claimed job by its kind: `run_inspection`, `run_operator_station`, `mechanic`, `deliver`, and the three
  * plan kinds. Any other kind throws `UnsupportedJobKind` before a command is sent, so its lease lapses and the
  * reaper takes it back. The job's log directory is removed when the job ends, whatever the outcome.
  */
@@ -139,6 +140,22 @@ export const runJob = async (
           registry: ctx.stations ?? createRegistry(),
           signal,
           takeSignals: () => ctx.takeSignals?.(job.jobId) ?? [],
+        });
+      }
+      case 'mechanic': {
+        // A Mechanic job runs in a Herdr pane, never headless, and never in a worktree (CORE §14.3).
+        if (!ctx.pane) {
+          throw new Error('the Cell has no pane driver for a mechanic job');
+        }
+        return await runMechanic(job, {
+          client: ctx.client,
+          cellId: ctx.cellId,
+          dataDir: ctx.cellDataDir,
+          pane: ctx.pane,
+          now: () => Date.now(),
+          sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+          tickMs: STATION_TICK_MS,
+          signal,
         });
       }
       case 'deliver':

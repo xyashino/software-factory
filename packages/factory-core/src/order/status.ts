@@ -4,6 +4,7 @@ import type { WorkOrderState } from './state';
 export type Holder =
   | { kind: 'none' } // delivered or cancelled
   | { kind: 'cell'; cellId: CellId; epoch: number } // a job is active (including open questions)
+  | { kind: 'mechanic' } // an Andon the Mechanic triages, with no incident yet (CORE §14.4)
   | { kind: 'supervisor'; cause: 'andon' }
   | { kind: 'queue' };
 
@@ -32,7 +33,15 @@ export const holderOf = (state: WorkOrderState): Holder => {
       epoch: state.activeJob.epoch,
     };
   }
-  if (state.andon) return { kind: 'supervisor', cause: 'andon' };
+  if (state.andon) {
+    const { andon } = state;
+    const triaged = state.incidents.some(
+      (incident) => incident.andonAt === andon.at,
+    );
+    return andon.triage === 'mechanic' && !triaged
+      ? { kind: 'mechanic' }
+      : { kind: 'supervisor', cause: 'andon' };
+  }
   return { kind: 'queue' };
 };
 

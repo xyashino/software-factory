@@ -9,4 +9,9 @@ Talks only to the Cell that runs this Cycle ($FACTORY_OPERATOR_SOCKET, $FACTORY_
   tell <station|supervisor> "<note>"    leave a note; does not wait
   block --reason "<why>" --handover <file>
                                         stop with a Handover the next Operator reads
-  context                               print this Cycle's inputs and outputs`;
+  context                               print this Cycle's inputs and outputs
+  incident --diagnosis "<what>" --action <resume|cancel|nudge|escalate|repair>
+           --outcome "<result>" [--change <file|config>:<path>=<ref> ...]
+                                        Mechanic only: record the incident of the Andon
+  escalate --diagnosis "<why>" --outcome "<what you tried>"
+                                        Mechanic only: hand the Andon to the Supervisor`;

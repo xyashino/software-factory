@@ -30,6 +30,7 @@ import {
 export const actors = {
   factory: { kind: 'factory' } satisfies Actor,
   supervisor: (name = 'dev'): Actor => ({ kind: 'supervisor', name }),
+  mechanic: (name = 'mechanic'): Actor => ({ kind: 'mechanic', name }),
   cell: (n = 1): Actor => ({ kind: 'cell', cellId: cellIdOf(n) }),
   operator: (cycleId: CycleId, n = 1): Actor => ({
     kind: 'operator',

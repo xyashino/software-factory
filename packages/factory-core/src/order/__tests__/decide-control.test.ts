@@ -198,7 +198,7 @@ describe('Answer', () => {
       ok: false,
       error: {
         code: 'precondition',
-        detail: 'only a supervisor may run this command',
+        detail: 'only a supervisor or the mechanic may run this command',
       },
     });
   });
@@ -325,7 +325,7 @@ describe('Nudge', () => {
       ok: false,
       error: {
         code: 'precondition',
-        detail: 'only a supervisor may run this command',
+        detail: 'only a supervisor or the mechanic may run this command',
       },
     });
   });
@@ -349,9 +349,10 @@ describe('Resume', () => {
     expect(result).toEqual({
       ok: true,
       value: [
+        expect.objectContaining({ type: 'incident_recorded', by: 'dev' }),
         {
           type: 'resumed',
-          resumeId: generatedIdOf(1),
+          resumeId: generatedIdOf(2),
           by: 'dev',
           mode: { kind: 'retry_station' },
           noteBlob: undefined,
@@ -370,7 +371,10 @@ describe('Resume', () => {
 
     expect(result).toMatchObject({
       ok: true,
-      value: [{ type: 'resumed', grantRetries: 3 }],
+      value: [
+        expect.objectContaining({ type: 'incident_recorded', by: 'dev' }),
+        { type: 'resumed', grantRetries: 3 },
+      ],
     });
   });
 
@@ -412,7 +416,10 @@ describe('Resume', () => {
 
     expect(result).toMatchObject({
       ok: true,
-      value: [{ type: 'resumed', grantRetries: undefined }],
+      value: [
+        expect.objectContaining({ type: 'incident_recorded', by: 'dev' }),
+        { type: 'resumed', grantRetries: undefined },
+      ],
     });
   });
 
@@ -436,6 +443,7 @@ describe('Resume', () => {
     expect(result).toMatchObject({
       ok: true,
       value: [
+        expect.objectContaining({ type: 'incident_recorded', by: 'dev' }),
         {
           type: 'resumed',
           mode: { kind: 'restart_from', stationId: stationOf('build') },
@@ -478,7 +486,7 @@ describe('Resume', () => {
       ok: false,
       error: {
         code: 'precondition',
-        detail: 'only a supervisor may run this command',
+        detail: 'only a supervisor or the mechanic may run this command',
       },
     });
   });

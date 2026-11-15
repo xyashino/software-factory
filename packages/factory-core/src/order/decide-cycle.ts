@@ -1,3 +1,4 @@
+import { isStationJob } from './next';
 import { err, ok } from '../result';
 import type { CommandOf, DecideContext } from './commands';
 import {
@@ -35,7 +36,7 @@ export const startCycle = (
     return err(precondition('the Cycle has already started'));
   }
   const pending = nextJob({ ...state, activeJob: undefined });
-  if (pending.kind !== 'job' || pending.job.kind === 'deliver') {
+  if (pending.kind !== 'job' || !isStationJob(pending.job)) {
     return err(precondition('the claimed job is not a Station job'));
   }
   const spec = pending.job;
