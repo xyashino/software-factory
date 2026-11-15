@@ -1,0 +1,98 @@
+@import 'tailwindcss';
+
+/* Single theme file: every design token lives here. Components use token classes only. */
+
+@theme {
+  --breakpoint-*: initial;
+  --breakpoint-320: 20rem;
+  --breakpoint-480: 30rem;
+  --breakpoint-640: 40rem;
+  --breakpoint-768: 48rem;
+  --breakpoint-1024: 64rem;
+  --breakpoint-1280: 80rem;
+  --breakpoint-1440: 90rem;
+  --breakpoint-1920: 120rem;
+
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-line: var(--line);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-focus: var(--focus);
+
+  --spacing: 0.25rem;
+  --spacing-gutter: 1rem;
+  --spacing-section: 1.5rem;
+
+  --font-sans: ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, monospace;
+
+  --container-dashboard: 90rem;
+
+  --z-skip-link: 50;
+  --z-sidebar: 10;
+
+  --radius-control: 0.5rem;
+}
+
+:root {
+  color-scheme: light;
+  --canvas: oklch(0.98 0.005 260);
+  --surface: oklch(1 0 0);
+  --ink: oklch(0.22 0.02 260);
+  --ink-muted: oklch(0.45 0.02 260);
+  --line: oklch(0.88 0.01 260);
+  --accent: oklch(0.45 0.16 265);
+  --accent-ink: oklch(0.99 0 0);
+  --focus: oklch(0.55 0.2 265);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+    --canvas: oklch(0.18 0.02 260);
+    --surface: oklch(0.23 0.02 260);
+    --ink: oklch(0.96 0.005 260);
+    --ink-muted: oklch(0.75 0.02 260);
+    --line: oklch(0.36 0.02 260);
+    --accent: oklch(0.7 0.14 265);
+    --accent-ink: oklch(0.15 0.02 260);
+    --focus: oklch(0.8 0.15 265);
+  }
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --canvas: oklch(0.18 0.02 260);
+  --surface: oklch(0.23 0.02 260);
+  --ink: oklch(0.96 0.005 260);
+  --ink-muted: oklch(0.75 0.02 260);
+  --line: oklch(0.36 0.02 260);
+  --accent: oklch(0.7 0.14 265);
+  --accent-ink: oklch(0.15 0.02 260);
+  --focus: oklch(0.8 0.15 265);
+}
+
+@utility ui-dashboard-centered {
+  width: 100%;
+  max-width: var(--container-dashboard);
+  margin-inline: auto;
+  padding-inline: var(--spacing-gutter);
+}
+
+@utility ui-skip-link {
+  position: absolute;
+  inset-inline-start: var(--spacing-gutter);
+  top: var(--spacing-gutter);
+  z-index: var(--z-skip-link);
+  padding: calc(var(--spacing) * 2) calc(var(--spacing) * 4);
+  border-radius: var(--radius-control);
+  background-color: var(--color-accent);
+  color: var(--color-accent-ink);
+  transform: translateY(-200%);
+  &:focus-visible {
+    transform: translateY(0);
+  }
+}
