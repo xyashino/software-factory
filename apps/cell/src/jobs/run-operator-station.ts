@@ -47,7 +47,7 @@ import {
 import type { StationRegistry, RunHandle } from '../cycle/registry';
 import { fillPrompt, typedFor, type RuntimePromptSet } from '../cycle/signals';
 import { cycleDirName, paneName } from '../names';
-import { newCycleToken, startOperatorSocket } from '../operator-socket';
+import { newCycleToken, startOperatorServer } from '../operator-socket';
 import type {
   Clock,
   HeadlessProcess,
@@ -295,7 +295,6 @@ export const runOperatorStation = async (
     mkdirSync(dirname(join(worktree, output.path)), { recursive: true });
   const kickoff = `Read ${promptPath} and follow it exactly. Finish with the factory-operator command it names.`;
   const token = newCycleToken();
-  const socketPath = join(cycleDir, 'op.sock');
   const stdoutPath = join(cycleDir, 'stdout.log');
   const stderrPath = join(cycleDir, 'stderr.log');
   const journal = openJournal(
@@ -772,15 +771,15 @@ export const runOperatorStation = async (
     },
   };
 
-  let socket: Awaited<ReturnType<typeof startOperatorSocket>> | undefined;
+  let server: Awaited<ReturnType<typeof startOperatorServer>> | undefined;
   deps.registry.add(handle);
   try {
-    socket = await startOperatorSocket({ path: socketPath, token, dispatch });
+    server = await startOperatorServer({ token, dispatch });
     // The Operator inherits the Cell's environment, plus the two variables its CLI reads.
     const env = {
       ...process.env,
       PATH: `${operatorBinOf(cycleDir)}:${process.env.PATH ?? ''}`,
-      FACTORY_OPERATOR_SOCKET: socketPath,
+      FACTORY_OPERATOR_URL: server.url,
       FACTORY_CYCLE_TOKEN: token,
     };
     const runner = deps.runners[operator.runner];
@@ -848,7 +847,7 @@ export const runOperatorStation = async (
       });
     }
     waiters.clear();
-    await socket?.close();
+    await server?.close();
     // The usage arrives after the Cycle may have ended: no epoch, no liveness check (PROTOCOL §9 step 7).
     if (!deps.signal?.aborted) {
       const usage = readUsage(deps.runners[operator.runner], stdoutPath);

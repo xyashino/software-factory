@@ -14,7 +14,7 @@ import type { OrderCommand } from '@repo/factory-core/order/commands';
 import { getRunner } from '../adapters/runners/registry';
 import { CELL_DIR } from '../checkpoint';
 import { paneName } from '../names';
-import { newCycleToken, startOperatorSocket } from '../operator-socket';
+import { newCycleToken, startOperatorServer } from '../operator-socket';
 import type { PaneDriver } from '../ports';
 import type { SystemPort } from '../ports/system.port';
 import { GIT_TIMEOUT_MS } from '../workspace/mirror';
@@ -68,8 +68,7 @@ type Submit = (
 >;
 
 /**
- * The repair scratch dir of one Mechanic job: holds the prompt, operator socket, logs and `bin` shim,
- * named by a hash so the socket path stays short.
+ * The repair scratch dir of one Mechanic job: holds the prompt, logs and `bin` shim, named by a hash.
  */
 const repairDirOf = (dataDir: string, jobId: string): string =>
   join(
@@ -267,7 +266,6 @@ export const runMechanic = async (
   }
   writeFileSync(promptPath, promptText);
   const token = newCycleToken();
-  const socketPath = join(repairDir, 'op.sock');
   const name = paneName('mechanic', mechanic.n, job.jobId);
   const kickoff = `Read ${promptPath} and follow it exactly. Finish with the factory-operator command it names.`;
 
@@ -417,17 +415,13 @@ export const runMechanic = async (
     }
   };
 
-  let socket: Awaited<ReturnType<typeof startOperatorSocket>> | undefined;
+  let server: Awaited<ReturnType<typeof startOperatorServer>> | undefined;
   try {
-    socket = await startOperatorSocket({
-      path: socketPath,
-      token,
-      dispatch,
-    });
+    server = await startOperatorServer({ token, dispatch });
     const env = {
       ...process.env,
       PATH: `${operatorBinOf(repairDir)}:${process.env.PATH ?? ''}`,
-      FACTORY_OPERATOR_SOCKET: socketPath,
+      FACTORY_OPERATOR_URL: server.url,
       FACTORY_CYCLE_TOKEN: token,
     };
     const cwd = worktree ?? repairDir;
@@ -477,7 +471,7 @@ export const runMechanic = async (
   } finally {
     if (worktree !== undefined) inUse.delete(worktree);
     await deps.pane.close(name).catch(() => undefined);
-    await socket?.close();
+    await server?.close();
     rmSync(repairDir, { recursive: true, force: true });
   }
   return ending?.next ?? null;

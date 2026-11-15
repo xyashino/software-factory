@@ -16,12 +16,11 @@ const CLI = fileURLToPath(new URL('../cli.ts', import.meta.url));
 const TOKEN = 'b'.repeat(48);
 
 let root: string;
-let socketPath: string;
+let cellUrl: string;
 let stubProcess: { kill(): void } | undefined;
 
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), 'op-cli-'));
-  socketPath = join(root, 'op.sock');
 });
 
 afterEach(() => {
@@ -32,23 +31,29 @@ afterEach(() => {
 
 const STUB = fileURLToPath(new URL('./stub-cell.ts', import.meta.url));
 
-/** A stub Cell socket in its own process: it records each request line and answers with `reply`. */
+/**
+ * A stub Cell endpoint in its own process: it records each request body and answers with `reply`.
+ * Sets `cellUrl` to the URL it listens on.
+ */
 const stubCell = async (reply: unknown): Promise<void> => {
-  stubProcess = Bun.spawn(['bun', STUB, socketPath, JSON.stringify(reply)], {
+  stubProcess = Bun.spawn(['bun', STUB, root, JSON.stringify(reply)], {
     stdout: 'ignore',
     stderr: 'ignore',
   });
   for (let attempt = 0; attempt < 200; attempt += 1) {
-    if (existsSync(socketPath)) return;
+    if (existsSync(join(root, 'url'))) {
+      cellUrl = readFileSync(join(root, 'url'), 'utf8');
+      return;
+    }
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
-  throw new Error('the stub Cell socket never appeared');
+  throw new Error('the stub Cell endpoint never came up');
 };
 
-/** The requests the stub Cell has received, one JSON line each. */
+/** The requests the stub Cell has received, one JSON body per line. */
 const receivedRequests = (): string[] =>
-  existsSync(`${socketPath}.log`)
-    ? readFileSync(`${socketPath}.log`, 'utf8')
+  existsSync(join(root, 'requests.log'))
+    ? readFileSync(join(root, 'requests.log'), 'utf8')
         .split('\n')
         .filter((line) => line.trim() !== '')
     : [];
@@ -163,7 +168,7 @@ describe('factory-operator process', () => {
     });
 
     const run = await runCli(['context'], {
-      FACTORY_OPERATOR_SOCKET: socketPath,
+      FACTORY_OPERATOR_URL: cellUrl,
       FACTORY_CYCLE_TOKEN: TOKEN,
     });
 
@@ -186,7 +191,7 @@ describe('factory-operator process', () => {
     });
 
     const run = await runCli(['done'], {
-      FACTORY_OPERATOR_SOCKET: socketPath,
+      FACTORY_OPERATOR_URL: cellUrl,
       FACTORY_CYCLE_TOKEN: TOKEN,
     });
 
@@ -198,12 +203,13 @@ describe('factory-operator process', () => {
     const run = await runCli(['done'], { FACTORY_CYCLE_TOKEN: TOKEN });
 
     expect(run.code).toBe(2);
-    expect(run.stderr).toContain('FACTORY_OPERATOR_SOCKET is not set');
+    expect(run.stderr).toContain('FACTORY_OPERATOR_URL is not set');
   });
 
-  it('exits 3 when the socket cannot be reached', async () => {
+  it('exits 3 when the endpoint cannot be reached', async () => {
+    // Port 1 is a privileged port nothing listens on here, so the connection is refused.
     const run = await runCli(['done'], {
-      FACTORY_OPERATOR_SOCKET: join(root, 'missing.sock'),
+      FACTORY_OPERATOR_URL: 'http://127.0.0.1:1',
       FACTORY_CYCLE_TOKEN: TOKEN,
     });
 
@@ -229,7 +235,7 @@ describe('factory-operator process', () => {
     }
     await stubCell({ ok: true, result: {} });
     const env = {
-      FACTORY_OPERATOR_SOCKET: socketPath,
+      FACTORY_OPERATOR_URL: cellUrl,
       FACTORY_CYCLE_TOKEN: TOKEN,
     };
     // The first spawn pays the cold module cache; it is run and not timed.
@@ -248,7 +254,7 @@ describe('factory-operator process', () => {
     expect(median).toBeLessThan(100);
   });
 
-  it('talks only to its socket: no network stack, no other path', () => {
+  it('talks only to its Cell endpoint: fetch to the URL it is given, no raw socket', () => {
     const sources = ['cli.ts', 'client.ts', 'usage.ts'].map((name) =>
       readFileSync(
         fileURLToPath(new URL(`../${name}`, import.meta.url)),
@@ -257,9 +263,11 @@ describe('factory-operator process', () => {
     );
     for (const source of sources) {
       expect(source).not.toMatch(
-        /fetch\(|node:http|node:https|node:dgram|\bhttp:\/\//,
+        /node:net|node:tls|node:dgram|createConnection/,
       );
+      expect(source).not.toMatch(/\bhttp:\/\/127|https?:\/\/[a-z]/);
     }
-    expect(sources[1]).toContain('createConnection(socketPath)');
+    expect(sources[1]).toContain('fetch(url');
+    expect(sources[1]).toContain("method: 'POST'");
   });
 });
