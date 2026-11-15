@@ -17,6 +17,7 @@ import { createSystemAdapter } from '../adapters/system/system.adapter';
 import { runDeliver } from '../jobs/deliver';
 import { JobStopped, type JobContext } from '../jobs/send';
 import { commitFile, git, makeRepo } from '../testing/git-repo';
+import { factoryFiles } from '../testing/factory-fixture';
 
 const CELL = '01J0000000000000000000000W' as CellId;
 const JOB = '01J0000000000000000000000J' as JobId;
@@ -24,7 +25,10 @@ const ORDER = 'software-factory:todo-1' as OrderId;
 const BRANCH = 'factory/todo-1';
 const BODY = 'The body the factory rendered.';
 const BODY_REF = `sha256:${'a'.repeat(64)}` as BlobRef;
-const COMMIT_MESSAGE = 'feat: add the feature\n\nDelivered by the factory.';
+const COMMIT_REF = `sha256:${'c'.repeat(64)}` as BlobRef;
+const COMMIT_MESSAGE =
+  'feat(factory): add the feature\n\n- Add the feature to the factory';
+const PR_TITLE = 'feat(factory): add the feature';
 const PR_URL = 'https://example.test/software-factory/pull/7';
 
 /** One call the job made: the route and the request it sent. */
@@ -49,19 +53,27 @@ let baseHead: string;
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), 'factory-cell-deliver-'));
   origin = join(root, 'origin');
-  baseHead = makeRepo(origin);
+  // The repo carries its own `.factory/`: the Cell renders the PR body from it on this worktree.
+  baseHead = makeRepo(origin, { 'README.md': '# repo\n', ...factoryFiles() });
 });
 
 afterEach(() => {
   rmSync(root, { recursive: true, force: true });
 });
 
-/** The Factory's answers when everything is accepted: the blob holds the body, commands are accepted. */
+/** The blobs the job reads: the spec body and the builder's commit, by ref. */
+const BLOB_TEXT: Record<string, string> = {
+  [BODY_REF]: BODY,
+  [COMMIT_REF]: COMMIT_MESSAGE,
+};
+
+/** The Factory's answers when everything is accepted: the blobs hold their texts, commands are accepted. */
 const accepting: Answer = (sent) => {
   if (sent.route === 'blobGet') {
+    const text = BLOB_TEXT[sent.request.ref ?? ''] ?? '';
     return {
       ref: sent.request.ref,
-      base64: Buffer.from(BODY).toString('base64'),
+      base64: Buffer.from(text).toString('base64'),
     };
   }
   return { dryRun: sent.request.dryRun === true, events: [], next: null };
@@ -74,6 +86,7 @@ const fakeGithub = (existing?: PrRef) => {
     base: string;
     title: string;
     body: string;
+    draft: boolean;
   }> = [];
   let pr = existing;
   const port: GithubPort = {
@@ -123,10 +136,15 @@ const deliverJob = (base: Job['base'] = { branchBase: 'main' }): Job =>
     base,
     workspace: { dir: 'todo-1', sync: [], setup: [], timeoutMs: 60_000 },
     deliver: {
+      taskId: 'todo-1',
+      type: 'feat',
       title: 'Add the feature',
-      bodyBlob: BODY_REF,
-      commitMessage: COMMIT_MESSAGE,
-      removeTodo: 'todos/todo-1.md',
+      todoBodyBlob: BODY_REF,
+      commitBlob: COMMIT_REF,
+      logCommand: `factory log ${ORDER}`,
+      verification: [
+        { kind: 'operator', stationId: 'build', profile: 'builder' },
+      ],
     },
   }) as unknown as Job;
 
@@ -168,7 +186,7 @@ const reportsOf = (calls: Sent[]) =>
     .map((call) => call.request.command?.result);
 
 describe('deliver job', () => {
-  it('delivers the work branch as one commit on the base, with the job message and a PR', async () => {
+  it('delivers the work branch as one commit on the base, with the rendered message and PR', async () => {
     commitOnBranch('wip-1.txt', 'one\n');
     const tipBefore = commitOnBranch('wip-2.txt', 'two\n');
     const { context, calls, github } = contextWith();
@@ -184,17 +202,36 @@ describe('deliver job', () => {
     );
     expect(tip).not.toBe(tipBefore);
     expect(github.created).toEqual([
-      {
+      expect.objectContaining({
         branch: BRANCH,
         base: 'main',
-        title: 'Add the feature',
-        body: BODY,
+        title: PR_TITLE,
         draft: false,
-      },
+      }),
     ]);
+    expect(github.created[0]?.body).toContain('Task: `todo-1` (feat)');
+    expect(github.created[0]?.body).toContain(BODY);
     expect(reportsOf(calls)).toEqual([
       { status: 'finished', prUrl: PR_URL, commit: tip },
     ]);
+  });
+
+  it('falls back to a generated commit when the builder wrote no usable one', async () => {
+    commitOnBranch('wip-1.txt', 'one\n');
+    const noCommit = { ...deliverJob() } as Job;
+    const job = {
+      ...noCommit,
+      deliver: { ...noCommit.deliver, commitBlob: undefined },
+    } as Job;
+    const { context, github } = contextWith();
+
+    await runDeliver(context, job, signal());
+
+    const tip = branchTip();
+    expect(git(origin, 'log', '-1', '--format=%s', tip)).toBe(
+      'feat(factory): Add the feature',
+    );
+    expect(github.created[0]?.title).toBe('feat(factory): Add the feature');
   });
 
   it('rebases the branch onto a moved base before it squashes', async () => {
@@ -226,6 +263,22 @@ describe('deliver job', () => {
     expect(String(report?.detail)).toMatch(/^rebase conflict/);
   });
 
+  it('reports a failed delivery and pushes nothing when the repo has no .factory/', async () => {
+    const tipBefore = commitOnBranch('wip-1.txt', 'one\n');
+    git(origin, 'checkout', '-q', 'main');
+    git(origin, 'rm', '-r', '-q', '.factory');
+    git(origin, 'commit', '-q', '-m', 'drop the definitions');
+    const { context, calls, github } = contextWith();
+
+    await runDeliver(context, deliverJob(), signal());
+
+    expect(branchTip()).toBe(tipBefore);
+    expect(github.created).toEqual([]);
+    const [report] = reportsOf(calls);
+    expect(report).toMatchObject({ status: 'failed' });
+    expect(String(report?.detail)).toMatch(/invalid \.factory\//);
+  });
+
   it('reuses the open PR of the branch and creates none', async () => {
     commitOnBranch('wip-1.txt', 'one\n');
     const existing: PrRef = {
@@ -244,56 +297,42 @@ describe('deliver job', () => {
     ]);
   });
 
-  it('takes the PR body from the blob, not the title', async () => {
+  it('renders the PR body from the todo body and the repo template, not from the title', async () => {
     commitOnBranch('wip-1.txt', 'one\n');
     const { context, github } = contextWith();
 
     await runDeliver(context, deliverJob(), signal());
 
-    expect(github.created[0]?.body).toBe(BODY);
-    expect(github.created[0]?.body).not.toBe('Add the feature');
+    expect(github.created[0]?.body).toContain(BODY);
+    expect(github.created[0]?.body).not.toBe(PR_TITLE);
   });
 
   it('fills the PR ADR section with the decisions/ entry the commit adds', async () => {
     commitOnBranch('decisions/20261115-120000-factory-add-thing.md', '---\n');
     commitOnBranch('wip-1.txt', 'one\n');
-    const withToken: Answer = (sent) =>
-      sent.route === 'blobGet'
-        ? {
-            ref: sent.request.ref,
-            base64: Buffer.from(`## ADR\n\n${PR_ADR_TOKEN}\n`).toString(
-              'base64',
-            ),
-          }
-        : accepting(sent);
-    const { context, github } = contextWith(withToken);
+    const { context, github } = contextWith();
 
     await runDeliver(context, deliverJob(), signal());
 
-    expect(github.created[0]?.body).toBe(
-      '## ADR\n\n- Path: `decisions/20261115-120000-factory-add-thing.md`\n',
+    expect(github.created[0]?.body).toContain(
+      '- Path: `decisions/20261115-120000-factory-add-thing.md`',
     );
+    expect(github.created[0]?.body).not.toContain(PR_ADR_TOKEN);
   });
 
   it('says so in the PR when the commit adds no decisions/ entry', async () => {
     commitOnBranch('wip-1.txt', 'one\n');
-    const withToken: Answer = (sent) =>
-      sent.route === 'blobGet'
-        ? {
-            ref: sent.request.ref,
-            base64: Buffer.from(PR_ADR_TOKEN).toString('base64'),
-          }
-        : accepting(sent);
-    const { context, github } = contextWith(withToken);
+    const { context, github } = contextWith();
 
     await runDeliver(context, deliverJob(), signal());
 
-    expect(github.created[0]?.body).toBe(
+    expect(github.created[0]?.body).toContain(
       '_No decisions/ entry recorded for this change._',
     );
+    expect(github.created[0]?.body).not.toContain(PR_ADR_TOKEN);
   });
 
-  it('removes the todo file in the same commit', async () => {
+  it('removes the todo file of its task in the same commit', async () => {
     commitOnBranch('todos/todo-1.md', '---\nstatus: todo\n---\n');
     commitOnBranch('wip-1.txt', 'one\n');
     const { context } = contextWith();
@@ -305,7 +344,7 @@ describe('deliver job', () => {
     expect(files).not.toContain('todos/todo-1.md');
   });
 
-  it('still delivers when the todo file is already gone', async () => {
+  it('delivers an API-created order whose repo holds no todo file, and removes nothing', async () => {
     commitOnBranch('wip-1.txt', 'one\n');
     const { context, calls } = contextWith();
 
@@ -314,6 +353,7 @@ describe('deliver job', () => {
     expect(reportsOf(calls)).toEqual([
       expect.objectContaining({ status: 'finished', commit: branchTip() }),
     ]);
+    expect(filesOf(branchTip())).toContain('wip-1.txt');
   });
 
   it('delivers again onto the same branch and PR after a reopen', async () => {
@@ -358,27 +398,6 @@ describe('deliver job', () => {
     expect(github.created).toEqual([]);
     expect(reportsOf(calls)).toEqual([]);
   });
-
-  it.each(['../outside.md', '/etc/outside.md'])(
-    'refuses the todo path %s and pushes nothing',
-    async (removeTodo) => {
-      const tipBefore = commitOnBranch('wip-1.txt', 'one\n');
-      const job = deliverJob();
-      const unsafe = {
-        ...job,
-        deliver: { ...job.deliver, removeTodo },
-      } as Job;
-      const { context, calls, github } = contextWith(accepting);
-
-      await runDeliver(context, unsafe, signal());
-
-      expect(branchTip()).toBe(tipBefore);
-      expect(github.created).toEqual([]);
-      const [report] = reportsOf(calls);
-      expect(report).toMatchObject({ status: 'failed' });
-      expect(String(report?.detail)).toMatch(/^todo path/);
-    },
-  );
 
   it('reports a failed push and overwrites nothing when the remote moved', async () => {
     commitOnBranch('wip-1.txt', 'one\n');

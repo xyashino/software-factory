@@ -14,8 +14,8 @@ import { getRunner } from '../adapters/runners/registry';
 import { paneName } from '../names';
 import { newCycleToken, startOperatorSocket } from '../operator-socket';
 import type { PaneDriver } from '../ports';
-import { getBlob } from './blobs';
 import { orderIdOf } from './job-shape';
+import { renderIncidentPrompt } from './render';
 
 /** What the Mechanic is told to do when its incident says `nudge` (CORE §14.3). */
 export const MECHANIC_NUDGE =
@@ -79,7 +79,8 @@ export const runMechanic = async (
   const repairDir = repairDirOf(deps.dataDir, job.jobId);
   mkdirSync(repairDir, { recursive: true });
   const promptPath = join(repairDir, 'prompt.md');
-  writeFileSync(promptPath, await getBlob(deps.client, mechanic.promptBlob));
+  // The Cell renders the incident prompt from the Andon the job carries (CORE §14.4).
+  writeFileSync(promptPath, renderIncidentPrompt(mechanic.incident));
   const token = newCycleToken();
   const socketPath = join(repairDir, 'op.sock');
   const name = paneName('mechanic', mechanic.n, job.jobId);

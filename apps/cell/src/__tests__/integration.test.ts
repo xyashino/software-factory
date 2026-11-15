@@ -30,6 +30,7 @@ import { createJobRegistry } from '../jobs/registry';
 import { runJob } from '../jobs/run-job';
 import type { JobContext } from '../jobs/send';
 import { createHeartbeat } from '../loops/heartbeat';
+import { factoryFiles } from '../testing/factory-fixture';
 import { commitFile, git, makeRepo } from '../testing/git-repo';
 import type { GithubPort } from '../ports/github.port';
 
@@ -52,7 +53,8 @@ beforeEach(() => {
   origin = join(root, 'origin');
   dataDir = join(root, 'factory');
   cellDataDir = join(root, 'cell');
-  makeRepo(origin);
+  // The origin carries the shipped `.factory/`: the Cell renders the Operator prompt and the PR body from it.
+  makeRepo(origin, { 'README.md': '# repo\n', ...factoryFiles() });
   mkdirSync(dataDir, { recursive: true });
 });
 

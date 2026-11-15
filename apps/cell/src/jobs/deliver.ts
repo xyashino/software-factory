@@ -1,12 +1,12 @@
-import { mkdirSync, writeFileSync } from 'node:fs';
-import { isAbsolute, join } from 'node:path';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import {
   adrSectionOf,
   PR_ADR_TOKEN,
   type Job,
 } from '@repo/factory-core/contracts/job';
 import { WireFailure } from '@repo/factory-core/contracts/errors';
-import type { BlobRef, CommitSha } from '@repo/factory-core/ids';
+import type { CommitSha } from '@repo/factory-core/ids';
 import { GIT_TIMEOUT_MS } from '../workspace/mirror';
 import { prepareWorkspace } from '../workspace/prepare';
 import {
@@ -17,7 +17,9 @@ import {
   type ShellContext,
   type ShellRun,
 } from '../workspace/shell';
+import { getBlob } from './blobs';
 import { redactDetail } from './redact';
+import { RenderFailed, renderDelivery, type RenderedDelivery } from './render';
 import { JobStopped, submit, type JobContext } from './send';
 
 const MAX_DETAIL_CHARS = 500;
@@ -141,12 +143,6 @@ const reportFailed = async (
   );
 };
 
-/** Reads a blob as UTF-8 text through the socket. */
-const blobText = async (ctx: JobContext, ref: BlobRef): Promise<string> => {
-  const answer = await ctx.client.call('blobGet', { ref });
-  return Buffer.from(answer.base64, 'base64').toString('utf8');
-};
-
 /** Runs one git command in the worktree. */
 const git = (
   shell: ShellContext,
@@ -162,10 +158,6 @@ const git = (
 /** A delivery that cannot finish here: the job reports it as failed, and nothing is pushed. */
 class DeliveryFailed extends Error {}
 
-/** A todo path the delivery may remove: relative, and no `..` segment, so it stays inside the repo. */
-const isRepoRelative = (path: string): boolean =>
-  path !== '' && !isAbsolute(path) && !path.split(/[\\/]/).includes('..');
-
 const deliverWorktree = async (
   ctx: JobContext,
   job: Job,
@@ -178,12 +170,6 @@ const deliverWorktree = async (
   const branch = job.repo.branch;
   const baseRef = `refs/heads/${job.repo.baseBranch}`;
   const branchRef = `refs/heads/${branch}`;
-
-  if (!isRepoRelative(deliver.removeTodo)) {
-    throw new DeliveryFailed(
-      `todo path is not a relative path inside the repo: ${deliver.removeTodo}`,
-    );
-  }
 
   const baseRun = await git(shell, worktree, [
     'rev-parse',
@@ -229,18 +215,30 @@ const deliverWorktree = async (
     return;
   }
 
+  // The commit, the PR title and the PR body come from the repo's own `.factory/` on this worktree (PROTOCOL §4).
+  let rendered: RenderedDelivery;
+  try {
+    rendered = await renderDelivery({
+      deliver,
+      worktree,
+      blobs: (ref) => getBlob(ctx.client, ref),
+    });
+  } catch (error) {
+    if (!(error instanceof RenderFailed)) throw error;
+    await reportFailed(ctx, job, error.message, signal);
+    return;
+  }
+
   const squashed = await git(shell, worktree, ['reset', '--soft', baseRef]);
   if (!succeeded(squashed)) {
     throw new DeliveryFailed(`squash failed: ${tailOfRun(squashed)}`);
   }
 
-  await git(shell, worktree, [
-    'rm',
-    '-f',
-    '--ignore-unmatch',
-    '--',
-    deliver.removeTodo,
-  ]);
+  // An intake order's todo file leaves with its delivery; an API-created order has none, so nothing is removed.
+  const todoPath = `todos/${deliver.taskId}.md`;
+  if (existsSync(join(worktree, todoPath))) {
+    await git(shell, worktree, ['rm', '-f', '--', todoPath]);
+  }
 
   const staged = await git(shell, worktree, [
     'diff',
@@ -255,7 +253,7 @@ const deliverWorktree = async (
   const logDir = shell.logDir;
   mkdirSync(logDir, { recursive: true });
   const messageFile = join(logDir, 'commit-message.txt');
-  writeFileSync(messageFile, `${deliver.commitMessage}\n`);
+  writeFileSync(messageFile, `${rendered.commitMessage}\n`);
   const committed = await git(shell, worktree, [
     ...IDENTITY,
     'commit',
@@ -288,9 +286,7 @@ const deliverWorktree = async (
         .map((path) => path.trim())
         .filter((path) => /^decisions\/.+\.md$/.test(path))
     : [];
-  const body = (await blobText(ctx, deliver.bodyBlob))
-    .split(PR_ADR_TOKEN)
-    .join(adrSectionOf(decisions));
+  const body = rendered.body.split(PR_ADR_TOKEN).join(adrSectionOf(decisions));
 
   // The push goes to the repo URL, not to `origin`: the mirror is a `--mirror` clone, and git refuses an
   // explicit refspec on a mirror remote.
@@ -349,7 +345,7 @@ const deliverWorktree = async (
           await github.createPr({
             branch,
             base: job.repo.baseBranch,
-            title: deliver.title,
+            title: rendered.title,
             body,
             draft: false,
           })

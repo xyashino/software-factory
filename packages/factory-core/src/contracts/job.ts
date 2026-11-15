@@ -12,6 +12,7 @@ import {
   stationIdSchema,
 } from '../ids';
 import { cycleCauseSchema, jobKindSchema } from '../order/events';
+import { cycleContextSchema } from '../order/context-schema';
 import { planJobKindSchema } from '../plan/events';
 
 /**
@@ -68,6 +69,24 @@ const runtimePromptsSchema = z
   })
   .strict();
 
+/**
+ * What the Cell renders the Operator prompt from (PROTOCOL §4, §9): the task id, the order spec body, the Cycle
+ * context and the retry budget. The prompt text and the Operator profile are the Cell's, read from `.factory/`.
+ */
+const promptInputsSchema = z
+  .object({
+    taskId: z.string().min(1).max(128),
+    todoBodyBlob: blobRefSchema,
+    context: cycleContextSchema,
+    budget: z
+      .object({
+        retry: z.number().int().min(0),
+        max: z.number().int().min(0),
+      })
+      .strict(),
+  })
+  .strict();
+
 const stationSchema = z
   .object({
     stationId: stationIdSchema,
@@ -75,7 +94,7 @@ const stationSchema = z
     n: z.number().int().min(1),
     cause: cycleCauseSchema,
     operator: operatorSchema.optional(),
-    promptBlob: blobRefSchema.optional(),
+    prompt: promptInputsSchema.optional(),
     inputs: z
       .array(z.object({ blob: blobRefSchema, path: relativePath }).strict())
       .max(64)
@@ -111,12 +130,39 @@ export const adrSectionOf = (addedDecisions: readonly string[]): string =>
     ? '_No decisions/ entry recorded for this change._'
     : addedDecisions.map((path) => `- Path: \`${path}\``).join('\n');
 
+/** One line of a PR body's verification list: an Inspection's commands, or an Operator station and its profile. */
+const verificationSchema = z.discriminatedUnion('kind', [
+  z
+    .object({
+      kind: z.literal('inspection'),
+      stationId: stationIdSchema,
+      commands: z.array(z.string().min(1).max(512)).max(32),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal('operator'),
+      stationId: stationIdSchema,
+      profile: z.string().min(1).max(64),
+    })
+    .strict(),
+]);
+
+/**
+ * A delivery (PROTOCOL §4): the spec and the artifacts a delivery commits and reports, as blob refs. The commit
+ * message, the PR title and the PR body are the Cell's to render from them and `.factory/`.
+ * `removeTodo` is gone: an API-created order has no todo file to remove.
+ */
 const deliverSchema = z
   .object({
+    taskId: z.string().min(1).max(128),
+    type: z.string().min(1).max(32),
     title: z.string().min(1).max(256),
-    bodyBlob: blobRefSchema,
-    commitMessage: z.string().min(1).max(4096),
-    removeTodo: relativePath,
+    todoBodyBlob: blobRefSchema,
+    commitBlob: blobRefSchema.optional(),
+    reportBlob: blobRefSchema.optional(),
+    logCommand: z.string().min(1).max(256),
+    verification: z.array(verificationSchema).max(64),
   })
   .strict();
 
@@ -141,7 +187,13 @@ const mechanicSchema = z
   .object({
     andonAt: z.number().int().min(0),
     n: z.number().int().min(1),
-    promptBlob: blobRefSchema,
+    /** The Andon the Mechanic triages; the Cell renders the incident prompt from it. */
+    incident: z
+      .object({
+        reason: z.string().min(1).max(64),
+        detail: z.string().max(65536),
+      })
+      .strict(),
     /** The runner the Mechanic runs with: the Line's first Operator pool (CORE §14.4). */
     operator: operatorSchema,
   })

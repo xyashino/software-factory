@@ -301,20 +301,14 @@ CREATE TABLE blobs (
 
 CREATE TABLE supervisor_tokens (token_hash TEXT PRIMARY KEY, name TEXT NOT NULL, created_at INTEGER NOT NULL);
 
-CREATE TABLE intake (
-  project_id    TEXT NOT NULL,
-  todo_id       TEXT NOT NULL,
-  content_hash  TEXT NOT NULL,
-  seen_commit   TEXT NOT NULL,
-  diagnostic    TEXT,                                   -- e.g. unparseable frontmatter, reused id
-  PRIMARY KEY (project_id, todo_id)
-);
+-- No `intake` table. It was dropped by migration 0001_drop_intake (passive-server-04): intake read the
+-- repository's todo files, and the server reads none. Idempotency of every write is the `commands` table.
 ```
 
 **`projects` is mutable configuration, not an event stream.** The registry (PROTOCOL §3.1) is written by
 `add`, `set` and `remove`, each under the writer lock. A change writes no event and is in no Traveler.
 Its rows are part of the export and import (§7, `projects.jsonl`), and a projection rebuild does not
-touch them. `remove` refuses a project that has any `orders`, `events` or `intake` row, so a project
+touch them. `remove` refuses a project that has any `orders` or `events` row, so a project
 with history is never deleted; `set` refuses a `base_branch` change while a Work order of the project is
 not terminal. `repo_url` never changes in place.
 
@@ -394,49 +388,20 @@ Three tools, from cheapest to most portable:
    Leases, tokens, Cells, signals and the idempotency table are not exported. In remote mode, create a
    supervisor token and join token, then let the Cells join again; local mode uses no such tokens.
 
-## 8. Rebuild from git (last resort, no backup at all)
+## 8. No rebuild from git
 
-Best-effort recovery when the database is gone and no backup exists. Run it with
-`factory admin recover [--project <id>]` (socket) or `factory-server admin recover` (offline, the
-server must be stopped). It is idempotent: a second run appends nothing.
+The server is a pure store (decision 20261115-200000-factory-server-is-a-pure-store): it holds tasks and state, and it
+never runs `git` or `gh` and never reads a repository's `.factory/`. A lost database therefore has no git
+rebuild. The recovery paths are the ones §7 names: a Litestream replica, a snapshot from `backup`, or an
+export archive from `export`, imported into an empty database (`import`).
 
-1. **Intake.** `syncProject` runs first and recreates every Work order from `todos/*.md` at
-   `origin/<baseBranch>`. A todo that was merged is gone from the base branch and gets no order.
-2. **Branch scan.** For each Work order without a job ever claimed (epoch 0, no Cycle), read the
-   branch `factory/<todoId>` on the mirror, newest commit first. The first commit whose message has
-   the trailers `Factory-Order`, `Factory-Station` and `Factory-Outcome: passed` (PROTOCOL §8.2)
-   is the checkpoint. `passedStations` is the pinned Line's Stations up to and including
-   `Factory-Station`. `Factory-Order` is only checked to be present: a rebuilt database has new
-   OrderIds. Commits without the trailers (failed, blocked or handed over Cycles, or none) are
-   skipped. A branch with no such commit recovers nothing and the Work order starts from its first
-   Station, as a new one does.
-3. **PR check.** The PR for the branch is looked up on the host (`gh pr list --head`). An open or
-   merged PR makes the Work order delivered: the checkpoint becomes the branch tip the PR was
-   opened from, all Stations count as passed, and `delivery` records the PR and its state. A closed
-   PR without merge does not count.
-4. **Append.** The runtime submits `RecoverOrder` with the command id
-   `recover:<orderId>:<checkpoint sha>`, which appends `order_recovered` (CORE §4.3 rule 11). The
-   next job is the first Station after `passedStations`, on the checkpoint commit (CORE §6).
+With none of them, the Work orders are created again through the task API: each Supervisor sends
+`POST /v1/orders` or `POST /v1/plans` with the pinned `LineSnapshot`, and the Cells take the repositories'
+`.factory/` and todos from the repositories themselves. The history (events, questions, budgets, counters,
+leases) and the artifacts of the passed Stations are not recovered. `order_recovered` (CORE §4.3 rule 11)
+stays in the event vocabulary for the histories that carry it; no path appends it now.
 
-Plans are recovered the same way: intake recreates each plan from the `plan:` todos, and the
-`plan_branch` job finds an existing `feat/<slug>` and records its tip, so no second branch is made
-(PROTOCOL §4). An open `feat/<slug> → <baseBranch>` PR is found by `plan_pr`. 3. The runtime appends
-`order_recovered { passedStations, checkpoint }`. Artifacts of passed
-
-Limits, which are the honest cost of git-only recovery:
-
-- Artifacts of the passed Stations are not in git, so the Work order resumes from the first Station
-  that has not passed. Its Cycle gets no inputs from the recovered Stations (CORE §6).
-- Work orders whose PR was merged are not recovered: their todo is gone from the base branch, which
-  is correct, they are finished.
-- Lost: the "unique for all time" memory of old `TodoId`s, questions, notes, budgets, retry and
-  restart counters, leases and Cells.
-- A Station that passed but whose commit was never pushed is not recovered (the push comes before
-  the command, PROTOCOL §8.2 step 5).
-
-Whether outputs should also be committed to a side ref so recovery is complete is OPEN-QUESTIONS
-Q7. The test of the recovery (`git-recovery.test.ts`) shows that the resume works without it, so the
-default stands.
+Keep a `backup` or `export` on a schedule, so the case of a lost database with no copy does not arise.
 
 ## 9. Migrations
 

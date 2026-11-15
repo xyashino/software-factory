@@ -1,18 +1,8 @@
 import { type BlobKind, SWEEP_AGE_MS, fitBlob } from '../blob-rules';
-import type {
-  BlobRef,
-  CellId,
-  CommitSha,
-  JobId,
-  ProjectId,
-  TodoId,
-} from '../ids';
+import type { BlobRef, CellId, JobId, ProjectId } from '../ids';
 import type { BlobStore } from '../ports/blob-store';
 import type { Clock } from '../ports/clock';
-import type { BranchLog, GitMirror, TodoFile } from '../ports/git-mirror';
-import type { IntakeRecord, IntakeStore } from '../ports/intake';
 import type { Lease, LeaseStore, LeaseStreamId } from '../ports/lease-store';
-import type { PrForBranch, PrState, PrStatePort } from '../ports/pr-state';
 import type {
   ProjectPatch,
   ProjectRecord,
@@ -122,97 +112,6 @@ export const fakeLeaseStore = (): LeaseStore => {
   };
 };
 
-/** An in-memory `IntakeStore`, keyed like the `intake` table: by project and todo. */
-export const fakeIntakeStore = (): IntakeStore & {
-  rows(): IntakeRecord[];
-} => {
-  const rows = new Map<string, IntakeRecord>();
-  const keyOf = (projectId: ProjectId, todoId: TodoId) =>
-    `${projectId}\u0000${todoId}`;
-  return {
-    rows: () => [...rows.values()],
-    get: async (projectId, todoId) => rows.get(keyOf(projectId, todoId)),
-    forProject: async (projectId) =>
-      [...rows.values()].filter((row) => row.projectId === projectId),
-    upsert: async (record) => {
-      rows.set(keyOf(record.projectId, record.todoId), record);
-    },
-  };
-};
-
-/**
- * An in-memory git mirror. `setTodos` replaces the files at a new commit, so a test moves the
- * repository forward the way a push does. Commits are numbered, not hashed.
- */
-export interface FakeGitMirror extends GitMirror {
-  setTodos(files: TodoFile[]): CommitSha;
-  /** Replaces the branches the mirror lists; a test gives each branch its commits, newest first. */
-  setBranches(branches: BranchLog[]): void;
-}
-
-export const fakeGitMirror = (): FakeGitMirror => {
-  let files: TodoFile[] = [];
-  let branches: BranchLog[] = [];
-  let count = 0;
-  let head = commitOf(count);
-  return {
-    setTodos: (next) => {
-      files = next.map((file) => ({ ...file }));
-      count += 1;
-      head = commitOf(count);
-      return head;
-    },
-    setBranches: (next) => {
-      branches = next.map((log) => ({
-        branch: log.branch,
-        commits: log.commits.map((commit) => ({ ...commit })),
-      }));
-    },
-    sync: async () => head,
-    todoFiles: async (_projectId, commit) =>
-      commit === head ? files.map((file) => ({ ...file })) : [],
-    branches: async (_projectId, prefix) =>
-      branches
-        .filter((log) => log.branch.startsWith(prefix))
-        .map((log) => ({
-          branch: log.branch,
-          commits: log.commits.map((commit) => ({ ...commit })),
-        })),
-  };
-};
-
-const commitOf = (n: number): CommitSha =>
-  n.toString(16).padStart(40, '0') as CommitSha;
-
-/** An in-memory PR state reader: a test sets each pull request's state. */
-export interface FakePrState extends PrStatePort {
-  set(prUrl: string, state: PrState): void;
-  /** Gives the branch a pull request, as `gh pr list --head` would find it. */
-  setForBranch(branch: string, pr: PrForBranch): void;
-}
-
-export const fakePrState = (): FakePrState => {
-  const states = new Map<string, PrState>();
-  const byBranch = new Map<string, PrForBranch>();
-  return {
-    set: (prUrl, state) => {
-      states.set(prUrl, state);
-    },
-    read: async (prUrl) => {
-      const state = states.get(prUrl);
-      if (!state) throw new Error(`no fake state for ${prUrl}`);
-      return state;
-    },
-    setForBranch: (branch, pr) => {
-      byBranch.set(branch, { ...pr });
-    },
-    forBranch: async (_repoUrl, branch) => {
-      const pr = byBranch.get(branch);
-      return pr === undefined ? undefined : { ...pr };
-    },
-  };
-};
-
 /** The board statuses after which a Work order no longer holds its project's base branch (CORE §4.2). */
 const TERMINAL_STATUSES: ReadonlySet<BoardStatus> = new Set([
   'delivered',
@@ -229,8 +128,6 @@ export interface ProjectHistorySeed {
   seedOrder(projectId: ProjectId, status: BoardStatus): Promise<void>;
   /** An event whose order belongs to the project. */
   seedEvent(projectId: ProjectId): Promise<void>;
-  /** An intake row of the project. */
-  seedIntake(projectId: ProjectId): Promise<void>;
 }
 
 /** Where a fake project store reads a project's Work orders from, besides the ones seeded by hand. */
@@ -252,7 +149,6 @@ export const fakeProjectStore = (
   );
   const orders = new Map<ProjectId, BoardStatus[]>();
   const events = new Map<ProjectId, number>();
-  const intake = new Map<ProjectId, number>();
   const ordersOf = async (
     projectId: ProjectId,
   ): Promise<readonly BoardStatus[]> => [
@@ -260,9 +156,7 @@ export const fakeProjectStore = (
     ...((await source?.statusesOf(projectId)) ?? []),
   ];
   const hasHistory = async (projectId: ProjectId): Promise<boolean> =>
-    (await ordersOf(projectId)).length > 0 ||
-    (events.get(projectId) ?? 0) > 0 ||
-    (intake.get(projectId) ?? 0) > 0;
+    (await ordersOf(projectId)).length > 0 || (events.get(projectId) ?? 0) > 0;
   const holdsBase = async (projectId: ProjectId): Promise<boolean> =>
     (await ordersOf(projectId)).some(
       (status) => !TERMINAL_STATUSES.has(status),
@@ -310,6 +204,5 @@ export const fakeProjectStore = (
       orders.set(projectId, [...(orders.get(projectId) ?? []), status]);
     },
     seedEvent: async (projectId) => count(events, projectId),
-    seedIntake: async (projectId) => count(intake, projectId),
   };
 };

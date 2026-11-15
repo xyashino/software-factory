@@ -6,6 +6,8 @@ one heartbeat loop, stops its jobs when it cannot reach the Factory for 45 s, an
 Inspections, Operator stations and Deliveries.
 
 config:  ~/.config/factory-cell/config.toml (or $XDG_CONFIG_HOME/factory-cell/config.toml)
+         <repo>/.factory/cell.toml overrides it key by key when the Cell runs in that repository
+         (the repository is --repo-dir <path>, else the one the working directory is in)
            slots = 2                   concurrent Jobs (default 2)
            projects = ["my-project"]   projects this Cell may run
            runners = ["claude"]        runners it can start

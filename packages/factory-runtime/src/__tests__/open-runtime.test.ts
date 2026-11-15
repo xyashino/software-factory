@@ -94,6 +94,7 @@ describe('openRuntime', () => {
     db.close();
     expect(names).toEqual([
       '0000_baseline',
+      '0001_drop_intake',
       '0001_init.sql',
       '0002_join_token_command_id.sql',
       '0003_order_plan.sql',
@@ -116,13 +117,11 @@ describe('openRuntime', () => {
     const second = open();
     const board = await second.runtime.call('board', {});
     const leases = await second.ports.leases.forCell(CELL);
-    const prompt = job.station?.promptBlob
-      ? await second.ports.blobs.get(job.station.promptBlob)
-      : undefined;
+    const prompt = job.station?.prompt;
 
     expect(board.orders.map((order) => order.orderId)).toEqual([job.orderId]);
     expect(leases.map((lease) => lease.jobId)).toEqual([job.jobId]);
-    expect(prompt?.byteLength).toBeGreaterThan(0);
+    expect(prompt?.taskId).toBe('todo-a');
     expect((await second.ports.cells.get(CELL))?.info?.runners).toEqual([
       'claude',
       'cursor',

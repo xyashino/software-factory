@@ -1,0 +1,47 @@
+# yaml-language-server: $schema=../schemas/line.schema.json
+schemaVersion: 2
+name: fast
+description: Fast direct builder build with quality gate and direct delivery (for chores, docs, style)
+
+workspace:
+  sync:
+    timeout: 2m
+    exec:
+      - git fetch origin
+  setup:
+    timeout: 10m
+    exec:
+      - pnpm install --frozen-lockfile
+
+operators:
+  builder:
+    profile: builder
+    runner: claude
+    model: sonnet
+    timeout: 40m
+    headless: false
+    permission: write
+
+stations:
+  - id: build
+    kind: operator
+    operator: builder
+    inputs: []
+    requires: []
+
+  - id: quality-gate
+    kind: inspection
+    timeout: 15m
+    exec:
+      - pnpm check-types
+      - pnpm lint
+      - pnpm test
+    requires: []
+    onFail:
+      retry: build
+      max: 3
+
+deliver:
+  commit: build.commit
+  report: build.report
+  to: new-pr

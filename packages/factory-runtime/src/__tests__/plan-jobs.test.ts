@@ -4,7 +4,7 @@ import type { CellId, CommitSha, PlanId } from '@repo/factory-core/ids';
 import { planIdOf, planSlugSchema } from '@repo/factory-core/ids';
 import { RuntimeError } from '../errors';
 import { createPlanCommands } from '../plan-commands';
-import { PROJECT, helloCell, world, type World } from './test-kit';
+import { createPlan, PROJECT, helloCell, world, type World } from './test-kit';
 
 const CELL = '01J0000000000000000000000W' as CellId;
 const OTHER = '01J0000000000000000000000X' as CellId;
@@ -18,36 +18,11 @@ afterEach(() => {
   running = undefined;
 });
 
-/** A todo file with a plan and an optional in-plan dependency. */
-const planTodo = (name: string, deps: string[] = []) => ({
-  file: `todos/${name}.md`,
-  text: [
-    '---',
-    'status: todo',
-    'factory: v2',
-    'plan: xyz',
-    ...(deps.length === 0 ? [] : [`depends_on: [${deps.join(', ')}]`]),
-    '---',
-    '',
-    `# ${name}`,
-    '',
-    'Body.',
-    '',
-  ].join('\n'),
-});
-
-const chainTodos = () => [
-  planTodo('wo-1'),
-  planTodo('wo-2', ['wo-1']),
-  planTodo('wo-3', ['wo-2']),
-];
-
-/** A world with the three-member plan synced and one Cell with the given slots. */
+/** A world with the three-member plan created and one Cell with the given slots. */
 const planWorld = async (slots = 1) => {
   const w = world();
   running = w;
-  w.git.setTodos(chainTodos());
-  await w.runtime.sync();
+  await createPlan(w, 'xyz', ['wo-1', 'wo-2', 'wo-3']);
   await helloCell(w, CELL, slots);
   const planId = planIdOf(PROJECT, planSlugSchema.parse('xyz')) as PlanId;
   return { w, planId };
@@ -265,11 +240,15 @@ describe('the plan lifecycle to completion (CORE §12.3)', () => {
     await report(w, planId, ready, { type: 'ReportPlanReady' });
     expect((await planRow(w, planId))?.phase).toBe('ready');
 
-    // The PR is merged on GitHub: the poll completes the plan, and a second pass records nothing.
-    w.prState.set(PR_URL, 'merged');
-    expect(await w.runtime.pollPrStates()).toBe(1);
+    // The PR is merged on GitHub: the webhook completes the plan, and a redelivery records nothing.
+    const merged = {
+      deliveryId: 'delivery-plan-merged',
+      prUrl: PR_URL,
+      state: 'merged' as const,
+    };
+    expect(await w.runtime.recordPullRequest(merged)).toBe(1);
     expect((await planRow(w, planId))?.phase).toBe('completed');
-    expect(await w.runtime.pollPrStates()).toBe(0);
+    expect(await w.runtime.recordPullRequest(merged)).toBe(0);
   });
 
   it('a closed plan PR raises the plan_pr_closed Andon', async () => {
@@ -293,8 +272,11 @@ describe('the plan lifecycle to completion (CORE §12.3)', () => {
     const pr = (await claim(w)) as Job;
     await report(w, planId, pr, { type: 'ReportPlanPr', prUrl: PR_URL });
 
-    w.prState.set(PR_URL, 'closed');
-    await w.runtime.pollPrStates();
+    await w.runtime.recordPullRequest({
+      deliveryId: 'delivery-plan-closed',
+      prUrl: PR_URL,
+      state: 'closed',
+    });
 
     const row = await planRow(w, planId);
     expect(row?.prState).toBe('closed');

@@ -2,18 +2,22 @@ import { z } from 'zod';
 import {
   blobRefSchema,
   cellIdSchema,
-  commitShaSchema,
   orderIdSchema,
   planIdSchema,
+  planSlugSchema,
   projectIdSchema,
   stationIdSchema,
   todoIdSchema,
 } from '../ids';
+import { lineSnapshotSchema } from '../line/snapshot';
 import {
+  changeTypes,
+  prUrl,
   priorities,
   resumeModeSchema,
   storedEventSchema,
 } from '../order/events';
+import { commandResultSchema } from './cell';
 
 /** One row of the board: the `orders` projection as the Supervisor reads it. */
 export const boardRowSchema = z
@@ -192,59 +196,6 @@ export const streamEventsResponseSchema = z
   })
   .strict();
 
-/** A todo file sent by the Supervisor: `todos/<name>.md` and its text. */
-export const intakeFileSchema = z
-  .object({
-    file: z.string().regex(/^todos\/[^/]+\.md$/),
-    text: z.string().max(256 * 1024),
-  })
-  .strict();
-
-/**
- * Runs intake now (PROTOCOL §3.1, `/v1/supervisor/intake/sync`) for one project or every
- * registered project. Intake is idempotent, so the answer does not depend on `commandId`.
- *
- * With `files`, intake reads those todo files instead of the project's git base branch, and the
- * project is the one named (or the only one registered). With `replace`, every unfinished Work
- * order of that project whose todo is not among `files` is cancelled, claimed or not.
- */
-export const intakeSyncRequestSchema = z
-  .object({
-    commandId: z.string().min(1).max(128).optional(),
-    projectId: projectIdSchema.optional(),
-    files: z.array(intakeFileSchema).max(1000).optional(),
-    replace: z.boolean().optional(),
-  })
-  .strict();
-
-/** What one intake pass did to one project's todos (STORAGE §4, PROTOCOL §3.1). */
-export const intakeProjectReportSchema = z
-  .object({
-    projectId: projectIdSchema,
-    commit: commitShaSchema,
-    created: z.array(todoIdSchema),
-    updated: z.array(todoIdSchema),
-    cancelled: z.array(todoIdSchema),
-    specDrift: z.array(todoIdSchema),
-    diagnostics: z.array(
-      z
-        .object({
-          todoId: z.string(),
-          kind: z.string(),
-          message: z.string(),
-        })
-        .strict(),
-    ),
-  })
-  .strict();
-
-export const intakeSyncResponseSchema = z
-  .object({
-    created: z.number().int().min(0),
-    projects: z.array(intakeProjectReportSchema),
-  })
-  .strict();
-
 export const joinTokenCreateRequestSchema = z
   .object({
     commandId: z.string().min(1).max(128),
@@ -394,27 +345,106 @@ export const projectRemoveResponseSchema = z
   .object({ projectId: projectIdSchema, removed: z.literal(true) })
   .strict();
 
-/** `admin recover` (STORAGE §8): every project unless one is named. */
-export const adminRecoverRequestSchema = z
-  .object({ projectId: projectIdSchema.optional() })
-  .strict();
+/**
+ * A Work order's spec and its pinned Line, as the task API takes them (PROTOCOL §3.3, CORE §4.4). The
+ * body is the markdown spec; the server stores it as a blob and never reads a repo definition for it.
+ */
+const taskSpecFields = {
+  todoId: todoIdSchema,
+  title: z.string().min(1).max(256),
+  type: changeTypes,
+  body: z.string().min(1).max(262144),
+  line: lineSnapshotSchema,
+  priority: priorities,
+};
 
-const recoveredOrderSchema = z
+export const createOrderRequestSchema = z
   .object({
-    orderId: z.string(),
-    todoId: z.string(),
-    passedStations: z.array(z.string()),
-    checkpoint: z.string(),
-    delivered: z.boolean(),
+    commandId: z.string().min(1).max(128),
+    projectId: projectIdSchema,
+    ...taskSpecFields,
+    dependsOn: z.array(orderIdSchema).max(64).default([]),
+    plan: planSlugSchema.optional(),
+    baseBranch: z.string().min(1).max(128).optional(),
   })
   .strict();
-const skippedOrderSchema = z
-  .object({ orderId: z.string(), todoId: z.string(), reason: z.string() })
+
+export const createOrderResponseSchema = commandResultSchema
+  .extend({ orderId: orderIdSchema })
   .strict();
 
-export const adminRecoverResponseSchema = z
+/**
+ * One member of an Order Plan. Members form a linear chain in the order given: each one depends on the
+ * member before it, so a member names no dependencies of its own (CORE §12.1).
+ */
+const chainMemberSchema = z
   .object({
-    recovered: z.array(recoveredOrderSchema),
-    skipped: z.array(skippedOrderSchema),
+    todoId: todoIdSchema,
+    title: z.string().min(1).max(256),
+    type: changeTypes,
+    body: z.string().min(1).max(262144),
+    line: lineSnapshotSchema,
+    priority: priorities,
+  })
+  .strict();
+
+export const createPlanRequestSchema = z
+  .object({
+    commandId: z.string().min(1).max(128),
+    projectId: projectIdSchema,
+    slug: planSlugSchema,
+    baseBranch: z.string().min(1).max(128).optional(),
+    members: z.array(chainMemberSchema).min(1).max(64),
+  })
+  .strict()
+  .superRefine((plan, ctx) => {
+    const seen = new Set<string>();
+    plan.members.forEach((member, index) => {
+      if (seen.has(member.todoId)) {
+        ctx.addIssue({
+          code: 'custom',
+          message: `todo ${member.todoId} is listed twice`,
+          path: ['members', index, 'todoId'],
+        });
+      }
+      seen.add(member.todoId);
+    });
+  });
+
+export const createPlanResponseSchema = z
+  .object({
+    planId: planIdSchema,
+    orderIds: z.array(orderIdSchema),
+    dryRun: z.boolean(),
+    events: commandResultSchema.shape.events,
+    next: commandResultSchema.shape.next,
+  })
+  .strict();
+
+/** A Work order's pull request state, reported by the runtime (CORE §5.2, `RecordPrState`). */
+export const recordPrStateRequestSchema = z
+  .object({
+    orderId: orderIdSchema,
+    commandId: z.string().min(1).max(128),
+    prUrl,
+    state: z.enum(['open', 'merged', 'closed']),
+  })
+  .strict();
+
+/** An Order Plan's pull request state (CORE §12.3, `RecordPlanPrState`). */
+export const recordPlanPrStateRequestSchema = z
+  .object({
+    planId: planIdSchema,
+    commandId: z.string().min(1).max(128),
+    prUrl,
+    state: z.enum(['open', 'merged', 'closed']),
+  })
+  .strict();
+
+export const recordPlanPrStateResponseSchema = z
+  .object({
+    dryRun: z.boolean(),
+    events: commandResultSchema.shape.events,
+    next: commandResultSchema.shape.next,
   })
   .strict();

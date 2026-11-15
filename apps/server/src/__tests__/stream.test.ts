@@ -9,10 +9,9 @@ import {
   openRuntime,
   type OpenedRuntime,
 } from '@repo/factory-runtime/open-runtime';
-import { gitMirror } from '../adapters/git-mirror';
 import { startSocketListener, type SocketListener } from '../socket/listener';
 import { socketFactoryClient } from '../socket/client';
-import { createFixtureRepo, todoFile } from './e2e/fixture-repo';
+import { orderRequest } from '../testing/order-request';
 
 const PROJECT = 'software-factory' as ProjectId;
 
@@ -21,20 +20,17 @@ let dataDir: string;
 let opened: OpenedRuntime | undefined;
 let listener: SocketListener | undefined;
 
-beforeEach(async () => {
+beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), 'factory-stream-'));
   dataDir = join(root, 'data');
   mkdirSync(dataDir);
-  const repo = await createFixtureRepo(join(root, 'repo'), {
-    'todo-a': todoFile({ title: 'A', v2: true }),
-    'todo-b': todoFile({ title: 'B', v2: true }),
-    'todo-c': todoFile({ title: 'C', v2: true }),
+  seedProject(dataDir, {
+    projectId: PROJECT,
+    repoUrl: 'https://example.test/software-factory.git',
   });
-  seedProject(dataDir, { projectId: PROJECT, repoUrl: repo });
   opened = openRuntime({
     dataDir,
-    git: gitMirror({ mirrorsDir: join(dataDir, 'mirrors') }),
-    config: { feedPollMs: 20, intakePollMs: 0, prPollMs: 0 },
+    config: { feedPollMs: 20 },
   });
   listener = startSocketListener({
     runtime: opened.runtime,
@@ -69,7 +65,9 @@ const read = async (
 
 describe('event feed over the socket', () => {
   it('starts after the global position it is given', async () => {
-    await client().call('intakeSync', {});
+    for (const todo of ['todo-a', 'todo-b', 'todo-c']) {
+      await client().call('createOrder', orderRequest(PROJECT, todo));
+    }
 
     const seen = await read(1, (events) => events.length === 2);
 

@@ -2,7 +2,6 @@ import {
   blob,
   index,
   integer,
-  primaryKey,
   sqliteTable,
   text,
   unique,
@@ -222,19 +221,6 @@ export const supervisorTokens = sqliteTable('supervisor_tokens', {
   createdAt: integer('created_at').notNull(),
 });
 
-export const intake = sqliteTable(
-  'intake',
-  {
-    projectId: text('project_id').notNull(),
-    todoId: text('todo_id').notNull(),
-    contentHash: text('content_hash').notNull(),
-    seenCommit: text('seen_commit').notNull(),
-    /** e.g. unparseable frontmatter, reused id. */
-    diagnostic: text('diagnostic'),
-  },
-  (table) => [primaryKey({ columns: [table.projectId, table.todoId] })],
-);
-
 export type ProjectRecord = typeof projects.$inferSelect;
 export type NewProjectRecord = typeof projects.$inferInsert;
 export type EventRecord = typeof events.$inferSelect;
@@ -257,5 +243,3 @@ export type BlobRecord = typeof blobs.$inferSelect;
 export type NewBlobRecord = typeof blobs.$inferInsert;
 export type SupervisorTokenRecord = typeof supervisorTokens.$inferSelect;
 export type NewSupervisorTokenRecord = typeof supervisorTokens.$inferInsert;
-export type IntakeRecord = typeof intake.$inferSelect;
-export type NewIntakeRecord = typeof intake.$inferInsert;

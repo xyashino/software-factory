@@ -1,18 +1,18 @@
 import { createHash } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
 import {
   fakeClock,
   fakeBlobStore,
   fakeEventStore,
-  fakeGitMirror,
-  fakeIntakeStore,
   fakeLeaseStore,
-  fakePrState,
   fakeProjectStore,
 } from '@repo/factory-core/testing';
 import type { ArchivePort } from '@repo/factory-core/ports/archive';
 import type { FakeClock } from '@repo/factory-core/testing';
 import {
   orderIdOf,
+  planSlugSchema,
+  todoIdSchema,
   type BlobRef,
   type OrderId,
   type ProjectId,
@@ -38,7 +38,6 @@ import type {
   JoinTokenStore,
 } from '@repo/factory-core/ports/join-tokens';
 import type { SupervisorTokenStore } from '@repo/factory-core/ports/supervisor-tokens';
-import { DEFINITIONS_ROOT } from '../paths';
 import { createRuntime, type Runtime } from '../composition';
 import {
   DEFAULT_CONFIG,
@@ -52,12 +51,17 @@ import { ulidIds } from '../ids';
 export const PROJECT = 'software-factory' as ProjectId;
 export const REPO = 'https://example.test/software-factory.git';
 
+/** This repository's own `.factory/`: the shipped Lines a test pins into its Work orders. Tests only; the server never reads it. */
+const SHIPPED_FACTORY_ROOT = fileURLToPath(
+  new URL('../../../../.factory', import.meta.url),
+);
+
 let definitionsCache: Definitions | undefined;
 
 /** The shipped definitions, read once per test process. */
 export const shippedDefinitions = (): Definitions => {
   if (!definitionsCache) {
-    const result = loadDefinitions(DEFINITIONS_ROOT);
+    const result = loadDefinitions(SHIPPED_FACTORY_ROOT);
     if (!result.ok) throw new Error(JSON.stringify(result.error));
     definitionsCache = result.value;
   }
@@ -287,9 +291,6 @@ export interface World {
   joinTokens: ReturnType<typeof memoryJoinTokens>;
   supervisorTokens: ReturnType<typeof memorySupervisorTokens>;
   writer: ReturnType<typeof heldWriter>;
-  intake: ReturnType<typeof fakeIntakeStore>;
-  git: ReturnType<typeof fakeGitMirror>;
-  prState: ReturnType<typeof fakePrState>;
   ports: RuntimePorts;
   runtime: Runtime;
 }
@@ -324,17 +325,11 @@ export const world = (overrides: Partial<RuntimeConfig> = {}): World => {
   const joinTokens = memoryJoinTokens();
   const supervisorTokens = memorySupervisorTokens();
   const writer = heldWriter();
-  const intake = fakeIntakeStore();
-  const git = fakeGitMirror();
-  const prState = fakePrState();
   const ports: RuntimePorts = {
     supervisorTokens,
     events,
     feed: events,
     archive: unusedArchive,
-    intake,
-    git,
-    prState,
     projections: { orders: () => events.orders(), plans: () => events.plans() },
     projects,
     blobs,
@@ -346,7 +341,7 @@ export const world = (overrides: Partial<RuntimeConfig> = {}): World => {
     ids: ulidIds(clock as Clock),
     timers,
     writer,
-    definitions: shippedDefinitions(),
+    runtimePrompts: shippedDefinitions().runtimePrompts,
     config: { ...DEFAULT_CONFIG, ...overrides },
     exportArchive: async () => new TextEncoder().encode('export-bytes'),
   };
@@ -362,9 +357,6 @@ export const world = (overrides: Partial<RuntimeConfig> = {}): World => {
     cells,
     signals,
     writer,
-    intake,
-    git,
-    prState,
     ports,
     runtime: createRuntime(ports),
   };
@@ -383,8 +375,7 @@ export const createOrder = async (
     priority?: 'high' | 'medium' | 'low';
   },
 ): Promise<OrderId> => {
-  const definitions = w.ports.definitions;
-  const loaded = definitions.lines.get(options.line ?? 'feature');
+  const loaded = shippedDefinitions().lines.get(options.line ?? 'feature');
   if (!loaded) throw new Error(`no line ${options.line}`);
   const body = options.body ?? `Body of ${options.todoId}`;
   const bodyBlob = sha256Ref(body);
@@ -431,6 +422,33 @@ export const createOrder = async (
 };
 
 /** Registers a Cell that can run every shipped runner, with the given slots. */
+/**
+ * An Order Plan of the given todos in chain order (CORE §12.7), created through the task API
+ * `createPlan` on the shipped `feature` Line. Each member depends on the one before it.
+ */
+export const createPlan = async (
+  w: { runtime: Runtime },
+  slug: string,
+  todoIds: readonly string[],
+  options: { commandId?: string } = {},
+) => {
+  const loaded = shippedDefinitions().lines.get('feature');
+  if (!loaded) throw new Error('the feature Line does not load');
+  return w.runtime.call('createPlan', {
+    commandId: options.commandId ?? `plan-${slug}`,
+    projectId: PROJECT,
+    slug: planSlugSchema.parse(slug),
+    members: todoIds.map((todoId) => ({
+      todoId: todoIdSchema.parse(todoId),
+      title: `Title of ${todoId}`,
+      type: 'feat' as const,
+      body: `Body of ${todoId}`,
+      line: loaded.snapshot,
+      priority: 'medium' as const,
+    })),
+  });
+};
+
 export const helloCell = async (
   w: { runtime: Runtime },
   cellId: CellId,

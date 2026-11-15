@@ -10,6 +10,7 @@ const fixtureDir = (name: string): string =>
   fileURLToPath(new URL(`./migrations/${name}`, import.meta.url));
 
 const BASELINE = '0000_baseline';
+const DROP_INTAKE = '0001_drop_intake';
 
 const LEGACY_FILES = [
   '0001_init.sql',
@@ -22,7 +23,6 @@ const STORAGE_TABLES = [
   'cells',
   'commands',
   'events',
-  'intake',
   'join_tokens',
   'leases',
   'orders',
@@ -86,14 +86,14 @@ const workOrders = (db: Database): string =>
   JSON.stringify(db.query('SELECT * FROM orders ORDER BY order_id').all());
 
 describe('the migration runner on a fresh database', () => {
-  it('creates the twelve STORAGE tables and records the baseline', () => {
+  it('creates the eleven STORAGE tables and records the baseline', () => {
     const db = openDatabase(':memory:');
 
     const applied = migrate(db, MIGRATIONS_DIR);
 
-    expect(applied).toEqual([BASELINE]);
+    expect(applied).toEqual([BASELINE, DROP_INTAKE]);
     expect(tableNames(db)).toEqual(STORAGE_TABLES);
-    expect(appliedNames(db)).toEqual([BASELINE]);
+    expect(appliedNames(db)).toEqual([BASELINE, DROP_INTAKE]);
   });
 
   it('applies nothing on a second run', () => {
@@ -101,7 +101,7 @@ describe('the migration runner on a fresh database', () => {
     migrate(db, MIGRATIONS_DIR);
 
     expect(migrate(db, MIGRATIONS_DIR)).toEqual([]);
-    expect(appliedNames(db)).toEqual([BASELINE]);
+    expect(appliedNames(db)).toEqual([BASELINE, DROP_INTAKE]);
   });
 
   it('applies only the migrations that are new', () => {
@@ -145,14 +145,15 @@ describe('adopting the baseline on a legacy database', () => {
   it('records the baseline without running it and keeps the data', () => {
     const db = legacyDatabase(LEGACY_FILES);
     seedWorkOrder(db);
-    const before = schemaObjects(db);
     const orders = workOrders(db);
 
     const applied = migrate(db, MIGRATIONS_DIR);
 
-    expect(applied).toEqual([]);
-    expect(appliedNames(db)).toEqual([...LEGACY_FILES, BASELINE].sort());
-    expect(schemaObjects(db)).toEqual(before);
+    expect(applied).toEqual([DROP_INTAKE]);
+    expect(appliedNames(db)).toEqual(
+      [...LEGACY_FILES, BASELINE, DROP_INTAKE].sort(),
+    );
+    expect(tableNames(db)).not.toContain('intake');
     expect(workOrders(db)).toEqual(orders);
   });
 
@@ -172,8 +173,11 @@ describe('adopting the baseline on a legacy database', () => {
     expect(applied).toEqual([
       '0002_join_token_command_id.sql',
       '0003_order_plan.sql',
+      DROP_INTAKE,
     ]);
-    expect(appliedNames(db)).toEqual([...LEGACY_FILES, BASELINE].sort());
+    expect(appliedNames(db)).toEqual(
+      [...LEGACY_FILES, BASELINE, DROP_INTAKE].sort(),
+    );
     expect(
       db
         .query<{ plan: string | null; base_branch: string; title: string }, []>(

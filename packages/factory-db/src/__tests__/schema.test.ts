@@ -5,13 +5,12 @@ import { describe, expect, it } from 'vitest';
 import { LEGACY_MIGRATIONS_DIR, MIGRATIONS_DIR, migrate } from '../migrate';
 import { openDatabase } from '../sqlite-event-store';
 
-/** The twelve tables of STORAGE §4, by their SQL names. */
+/** The eleven tables of STORAGE §4, by their SQL names. */
 const STORAGE_TABLES = [
   'blobs',
   'cells',
   'commands',
   'events',
-  'intake',
   'join_tokens',
   'leases',
   'orders',
@@ -128,17 +127,21 @@ const schemaOf = (db: Database): Record<string, TableShape> =>
     tableNames(db).map((table) => [table, shapeOf(db, table)]),
   );
 
-/** A database built the way the hand-written migrations 0001-0003 built it, with no history. */
+/**
+ * A database built the way the hand-written migrations 0001-0003 built it, then the generated drop of
+ * the `intake` table, with no history.
+ */
 const legacySchema = (): Database => {
   const db = openDatabase(':memory:');
   for (const name of LEGACY_FILES) {
     db.exec(readFileSync(join(LEGACY_MIGRATIONS_DIR, name), 'utf8'));
   }
+  db.exec(readFileSync(join(MIGRATIONS_DIR, '0001_drop_intake.sql'), 'utf8'));
   return db;
 };
 
 describe('the schema.ts baseline', () => {
-  it('builds the same schema as migrations 0001-0003', () => {
+  it('builds the same schema as migrations 0001-0003 and the intake drop', () => {
     const fresh = openDatabase(':memory:');
     migrate(fresh, MIGRATIONS_DIR);
 

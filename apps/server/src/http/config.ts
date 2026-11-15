@@ -7,6 +7,11 @@ export interface RemoteConfig {
   enabled: boolean;
   hostname: string;
   port: number;
+  /**
+   * `GITHUB_WEBHOOK_SECRET`: the HMAC key of `POST /v1/webhooks/github` (PROTOCOL §3.6). Unset, the
+   * webhook answers `503 not_configured`.
+   */
+  githubWebhookSecret?: string;
 }
 
 /**
@@ -24,7 +29,13 @@ export const remoteConfigFrom = (env: NodeJS.ProcessEnv): RemoteConfig => {
   const { hostname, port } = parseBind(
     bind ?? `${DEFAULT_HOST}:${DEFAULT_PORT}`,
   );
-  return { enabled, hostname, port };
+  const secret = env.GITHUB_WEBHOOK_SECRET;
+  return {
+    enabled,
+    hostname,
+    port,
+    ...(secret ? { githubWebhookSecret: secret } : {}),
+  };
 };
 
 /** `host:port` or `[v6]:port`. Port 0 asks the system for a free port (tests). */

@@ -16,7 +16,13 @@ import {
 } from '../templates';
 
 const PACKAGE_ROOT = join(import.meta.dirname, '..', '..');
+/** The repository's own `.factory/`: the prompt and PR templates live there. */
+const FACTORY_ROOT = join(PACKAGE_ROOT, '..', '..', '.factory');
 const SHIPPED_DIRS = ['templates/prompts', 'templates/pr', 'templates/runtime'];
+
+/** Runtime prompts ship with the package; prompt and PR templates live in `.factory/`. */
+const sourceOf = (dir: string): string =>
+  dir === 'templates/runtime' ? PACKAGE_ROOT : FACTORY_ROOT;
 
 /**
  * A temp copy of every shipped template, with the given edits applied. A
@@ -26,11 +32,11 @@ const tmpTemplates = (edits: Record<string, string | null>): string => {
   const root = mkdtempSync(join(tmpdir(), 'sf-templates-'));
   for (const dir of SHIPPED_DIRS) {
     mkdirSync(join(root, dir), { recursive: true });
-    for (const name of readdirSync(join(PACKAGE_ROOT, dir))) {
+    for (const name of readdirSync(join(sourceOf(dir), dir))) {
       const file = `${dir}/${name}`;
       const edit = edits[file];
       if (edit === null) continue;
-      const text = edit ?? readFileSync(join(PACKAGE_ROOT, file), 'utf8');
+      const text = edit ?? readFileSync(join(sourceOf(dir), file), 'utf8');
       writeFileSync(join(root, file), text);
     }
   }
@@ -61,10 +67,10 @@ describe('shipped templates', () => {
   });
 
   it('ship eleven supervisor prompts and three PR templates', () => {
-    expect(loadTemplates(PACKAGE_ROOT).templates.size).toBe(11);
-    expect(loadTemplates(PACKAGE_ROOT).errors).toEqual([]);
-    expect(loadPrTemplates(PACKAGE_ROOT).templates.size).toBe(3);
-    expect(loadPrTemplates(PACKAGE_ROOT).errors).toEqual([]);
+    expect(loadTemplates(FACTORY_ROOT).templates.size).toBe(11);
+    expect(loadTemplates(FACTORY_ROOT).errors).toEqual([]);
+    expect(loadPrTemplates(FACTORY_ROOT).templates.size).toBe(3);
+    expect(loadPrTemplates(FACTORY_ROOT).errors).toEqual([]);
   });
 });
 

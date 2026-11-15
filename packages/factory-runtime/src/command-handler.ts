@@ -111,7 +111,11 @@ export const createCommandHandler = (
 ): CommandHandler => {
   const locks = orderLocks();
   const { events, blobs, leases, signals, ids, clock, writer, config } = ports;
-  const jobPorts = { blobs, definitions: ports.definitions, config };
+  const jobPorts = {
+    blobs,
+    runtimePrompts: ports.runtimePrompts,
+    config,
+  };
   const planCommands = createPlanCommands(ports, onCommit);
 
   const projectFor = async (projectId: string) => {

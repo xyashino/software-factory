@@ -12,7 +12,7 @@ import { drizzleOf, type FactoryDatabase } from './db';
 import { loadOrders } from './orders-table';
 import { loadPlans } from './plans-table';
 import type { PlanProjection } from '@repo/factory-core/plan/projection';
-import { events, intake, orders, projects } from './schema';
+import { events, orders, projects } from './schema';
 import type { StatementGate } from './sqlite-event-store';
 import type { WriterLock } from './writer-lock';
 
@@ -36,7 +36,7 @@ const rowOf = (
   orm.select().from(projects).where(eq(projects.projectId, projectId)).get();
 
 /**
- * True when the project has any Work order, event or intake row. Events belong to a project through
+ * True when the project has any Work order or event. Events belong to a project through
  * their order id, which is `<projectId>:<todoId>` (core `orderIdOf`).
  */
 const hasHistory = (orm: FactoryDatabase, projectId: string): boolean => {
@@ -58,14 +58,7 @@ const hasHistory = (orm: FactoryDatabase, projectId: string): boolean => {
       )
       .limit(1)
       .get() !== undefined;
-  const hasIntake =
-    orm
-      .select({ one: sql`1` })
-      .from(intake)
-      .where(eq(intake.projectId, projectId))
-      .limit(1)
-      .get() !== undefined;
-  return hasOrder || hasEvent || hasIntake;
+  return hasOrder || hasEvent;
 };
 
 /** True when a Work order of the project is not terminal, so it runs on the base branch now. */
