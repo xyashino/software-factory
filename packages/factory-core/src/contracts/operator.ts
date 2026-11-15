@@ -3,9 +3,9 @@ import { stationIdSchema } from '../ids';
 import { incidentChangeSchema } from '../order/events';
 
 /**
- * The Operator socket wire (PROTOCOL §3.3): one JSON object per line from `factory-operator` to the
- * Cell, one reply per line. The verb is `op`; every other field is that verb's payload. The Cell
- * checks the token first, then this schema, so an unknown verb or field is refused before any work.
+ * The Operator wire (PROTOCOL §3.3): one JSON object per `POST` from `factory-operator` to the Cell's
+ * localhost endpoint, one JSON reply. The verb is `op`; every other field is that verb's payload. The
+ * Cell checks the token first, then this schema, so an unknown verb or field is refused before any work.
  */
 const token = z.string().min(16).max(256);
 const text = z.string().min(1).max(8192);

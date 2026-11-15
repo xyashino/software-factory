@@ -33,7 +33,7 @@ software-factory/
 │   │       │   ├── run-inspection.ts
 │   │       │   └── deliver.ts
 │   │       ├── cycle/             # runtime loop: observe → core/cycle.watch → act; signals; handover on leave
-│   │       ├── operator-socket.ts # unix socket for factory-operator; Cycle tokens
+│   │       ├── operator-socket.ts # localhost HTTP endpoint for factory-operator; Cycle tokens
 │   │       ├── checkpoint.ts      # PROTOCOL §8.2: commit + trailers + dry run + push --force-with-lease
 │   │       └── adapters/          # carried over from v1: herdr, git, github, process, runners/*
 │   │
@@ -76,16 +76,16 @@ versions from the pnpm catalog.
 
 ## 2. Package responsibilities
 
-| Package               | Runtime deps                                           | Contains                                                                                                            | Must not contain                                                      |
-| :-------------------- | :----------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------ | :-------------------------------------------------------------------- |
-| `factory-core`        | `zod`                                                  | Domain, projection fold, transport-neutral contracts and port interfaces, pure Cycle policy, test fakes and harness | I/O of any kind; hashing; `bun:*`, `node:*` imports                   |
-| `factory-definitions` | `zod`, `yaml`, core                                    | Definition files and their parser; todo frontmatter parsing and `OrderId` derivation; Line snapshot + hash          | Runtime state; network                                                |
-| `factory-db`          | `drizzle-orm`, core                                    | Store implementations, migrations, export/import file format                                                        | Domain decisions (`decide`, `nextJob`, `toProjection` calls)          |
-| `factory-runtime`     | core, db, definitions                                  | Shared application use cases, orchestration, intake, prompts, event feed; run inside `factory-server`               | Transport (socket or HTTP); Cell execution                          |
-| `apps/server`         | `hono`, runtime                                        | Core process: writer lock, Unix socket listener, optional TCP HTTP listener, auth, server lifecycle, admin entrypoints | Own application decisions or a second runtime implementation          |
-| `apps/cell`         | core, socket client contracts (adapters use Bun APIs)  | Job execution, adapters, Cycle runtime, Operator socket, checkpoints; socket client to `factory-server` or remote FactoryClient | `factory-db`, `factory-definitions`, the runtime library (everything arrives in the `Job`) |
-| `apps/cli`            | `citty`, `picocolors`, core, definitions, socket client | Supervisor client selection (socket or remote), config and rendering                                                | `factory-db`, the runtime library, HTTP details, Cell code           |
-| `apps/operator-cli`   | `citty`, core (contracts only)                         | The Operator verbs                                                                                                  | Anything else; must start in < 100 ms                                 |
+| Package               | Runtime deps                                            | Contains                                                                                                                        | Must not contain                                                                           |
+| :-------------------- | :------------------------------------------------------ | :------------------------------------------------------------------------------------------------------------------------------ | :----------------------------------------------------------------------------------------- |
+| `factory-core`        | `zod`                                                   | Domain, projection fold, transport-neutral contracts and port interfaces, pure Cycle policy, test fakes and harness             | I/O of any kind; hashing; `bun:*`, `node:*` imports                                        |
+| `factory-definitions` | `zod`, `yaml`, core                                     | Definition files and their parser; todo frontmatter parsing and `OrderId` derivation; Line snapshot + hash                      | Runtime state; network                                                                     |
+| `factory-db`          | `drizzle-orm`, core                                     | Store implementations, migrations, export/import file format                                                                    | Domain decisions (`decide`, `nextJob`, `toProjection` calls)                               |
+| `factory-runtime`     | core, db, definitions                                   | Shared application use cases, orchestration, intake, prompts, event feed; run inside `factory-server`                           | Transport (socket or HTTP); Cell execution                                                 |
+| `apps/server`         | `hono`, runtime                                         | Core process: writer lock, Unix socket listener, optional TCP HTTP listener, auth, server lifecycle, admin entrypoints          | Own application decisions or a second runtime implementation                               |
+| `apps/cell`           | core, socket client contracts (adapters use Bun APIs)   | Job execution, adapters, Cycle runtime, Operator socket, checkpoints; socket client to `factory-server` or remote FactoryClient | `factory-db`, `factory-definitions`, the runtime library (everything arrives in the `Job`) |
+| `apps/cli`            | `citty`, `picocolors`, core, definitions, socket client | Supervisor client selection (socket or remote), config and rendering                                                            | `factory-db`, the runtime library, HTTP details, Cell code                                 |
+| `apps/operator-cli`   | `citty`, core (contracts only)                          | The Operator verbs                                                                                                              | Anything else; must start in < 100 ms                                                      |
 
 Hashing (blob refs, Line hash) happens only where I/O is allowed: `factory-definitions` for Line
 snapshots, the runtime and the Cell for blobs.
@@ -111,16 +111,16 @@ flowchart BT
 
 Allowed imports (row imports column):
 
-|                       |      core      | core/cycle | definitions | runtime |  db   | v1  |
-| :-------------------- | :------------: | :--------: | :---------: | :-----: | :---: | :-: |
-| `factory-core`        |       ✓        |     ✓      |      ✗      |    ✗    |   ✗   |  ✗  |
-| `factory-definitions` |       ✓        |     ✗      |      ✓      |    ✗    |   ✗   |  ✗  |
-| `factory-db`          |       ✓        |     ✗      |      ✗      |    ✗    |   ✓   |  ✗  |
-| `factory-runtime`     |       ✓        |     ✗      |      ✓      |    ✓    |   ✓   |  ✗  |
-| `apps/server`         |       ✓        |   **✗**    |      ✗      |    ✓    | **✗** |  ✗  |
-| `apps/cell`         |       ✓        |     ✓      |    **✗**    | ✗ (socket client only) | **✗** |  ✗  |
+|                       |      core      | core/cycle | definitions |        runtime         |  db   | v1  |
+| :-------------------- | :------------: | :--------: | :---------: | :--------------------: | :---: | :-: |
+| `factory-core`        |       ✓        |     ✓      |      ✗      |           ✗            |   ✗   |  ✗  |
+| `factory-definitions` |       ✓        |     ✗      |      ✓      |           ✗            |   ✗   |  ✗  |
+| `factory-db`          |       ✓        |     ✗      |      ✗      |           ✗            |   ✓   |  ✗  |
+| `factory-runtime`     |       ✓        |     ✗      |      ✓      |           ✓            |   ✓   |  ✗  |
+| `apps/server`         |       ✓        |   **✗**    |      ✗      |           ✓            | **✗** |  ✗  |
+| `apps/cell`           |       ✓        |     ✓      |    **✗**    | ✗ (socket client only) | **✗** |  ✗  |
 | `apps/cli`            |       ✓        |     ✗      |      ✓      | ✗ (socket client only) | **✗** |  ✗  |
-| `apps/operator-cli`   | contracts only |     ✗      |      ✗      |    ✗    |   ✗   |  ✗  |
+| `apps/operator-cli`   | contracts only |     ✗      |      ✗      |           ✗            |   ✗   |  ✗  |
 
 `apps/cell` and `apps/cli` reach the runtime only through the socket client over the contracts in
 `factory-core`; they import no `factory-runtime` code. `apps/server` (`factory-server`) is the only
@@ -158,7 +158,7 @@ v2 **copies** code from v1 and adapts it. It never imports v1. Paths are relativ
 | `src/engine/watch.ts`                                                                                                       | `core/cycle/watch.ts`                             | Port 1:1                                                                                             |
 | `src/engine/__tests__/scenarios.test.ts`, `harness.ts`                                                                      | `core/order/__tests__/`, `core/testing/`          | Each scenario rewritten on v2 events; the list of names is the checklist                             |
 | `src/definitions/*`                                                                                                         | `factory-definitions/src/`                        | Port; add snapshot + hash, `schemaVersion: 2`, Station `requires`                                    |
-| `roles/`                                                                                                                    | `factory-definitions/operators/`                  | Copy. `operator.md` (v1's on-call role) stays behind until M10; `cell.md` is renamed `builder.md`  |
+| `roles/`                                                                                                                    | `factory-definitions/operators/`                  | Copy. `operator.md` (v1's on-call role) stays behind until M10; `cell.md` is renamed `builder.md`    |
 | `workflows/`                                                                                                                | `factory-definitions/lines/`                      | Copy; move to schema v2                                                                              |
 | `templates/`                                                                                                                | `factory-definitions/templates/`                  | Copy; add runtime prompts (answer, nudge, reminders, Handover request)                               |
 | `src/prompts/*`                                                                                                             | `packages/factory-runtime/src/prompts/`           | Port; relative paths, blob inputs                                                                    |
@@ -171,5 +171,5 @@ v2 **copies** code from v1 and adapts it. It never imports v1. Paths are relativ
 | `src/supervisor/workspace-registry.ts`, `notify.ts`                                                                         | —                                                 | Replaced by the Cell's worktree cache; Herdr toasts are dropped (the board and `/v1/stream` notify). |
 | `src/supervisor/run.ts`, `execute.ts`, `reconcile.ts`, `observe.ts`, `operator.ts`, `lock.ts`, `wire.ts`, `task-context.ts` | —                                                 | **Not carried over.** Read them for edge cases only.                                                 |
 | `src/paint.ts`                                                                                                              | `apps/cli/src/render/paint.ts`                    | Port 1:1: the `Paint` interface, plain and coloured implementations, `NO_COLOR`                      |
-| `src/cli/board.ts`, `src/cli/log-view.ts`, `console-lines.ts`                                                                | `apps/cli/src/render/`                            | Port the board and Traveler layout and colours (v2-14); rendering only, never stored                 |
-| `src/cli/*` (the rest)                                                                                                      | —                                                 | Not carried over; the new CLIs are thin clients                                                       |
+| `src/cli/board.ts`, `src/cli/log-view.ts`, `console-lines.ts`                                                               | `apps/cli/src/render/`                            | Port the board and Traveler layout and colours (v2-14); rendering only, never stored                 |
+| `src/cli/*` (the rest)                                                                                                      | —                                                 | Not carried over; the new CLIs are thin clients                                                      |

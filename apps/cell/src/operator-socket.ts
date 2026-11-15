@@ -1,37 +1,47 @@
 import { randomBytes, timingSafeEqual } from 'node:crypto';
-import { existsSync, unlinkSync, chmodSync } from 'node:fs';
-import { createServer, type Server, type Socket } from 'node:net';
+import {
+  createServer,
+  type IncomingMessage,
+  type ServerResponse,
+} from 'node:http';
+import type { AddressInfo } from 'node:net';
 import {
   operatorRequestSchema,
   type OperatorReply,
   type OperatorRequest,
 } from '@repo/factory-core/contracts/operator';
 
-/** The file mode of the Operator socket: the operating-system account only (PROTOCOL §3.3). */
-export const OPERATOR_SOCKET_MODE = 0o600;
-
-/** A unix socket path is limited to about 108 bytes; a longer one is refused, not truncated. */
-export const MAX_SOCKET_PATH = 100;
+/** The largest request body the Operator endpoint reads; a bigger one is refused, not buffered. */
+export const MAX_BODY_BYTES = 1024 * 1024;
 
 /** The per-Cycle token: 24 random bytes, hex. Never written to a log or a blob. */
 export const newCycleToken = (): string => randomBytes(24).toString('hex');
 
-export interface OperatorSocketOptions {
-  path: string;
+type Refusal = Extract<OperatorReply, { ok: false }>;
+
+/** HTTP status of each refusal code. A dispatched refusal is a state conflict, not a server fault. */
+const STATUS: Record<Refusal['code'], number> = {
+  unauthorized: 401,
+  invalid: 400,
+  rejected: 409,
+  stale_epoch: 409,
+  not_live: 409,
+  precondition: 409,
+  internal: 500,
+};
+
+export interface OperatorServerOptions {
   token: string;
   /** Answers one verb. Every reply is produced here, once the request has passed the checks. */
   dispatch: (request: OperatorRequest) => Promise<OperatorReply>;
 }
 
-export interface OperatorSocket {
-  readonly path: string;
-  /** Closes the listener and removes the socket file. Idempotent. */
+export interface OperatorServer {
+  /** `http://127.0.0.1:<port>`: the value of `FACTORY_OPERATOR_URL`. */
+  readonly url: string;
+  /** Closes the listener and every open connection. Idempotent. */
   close(): Promise<void>;
 }
-
-const reply = (socket: Socket, body: OperatorReply): void => {
-  socket.end(`${JSON.stringify(body)}\n`);
-};
 
 /** Compares two tokens without leaking the position of a mismatch. */
 const tokenMatches = (given: unknown, expected: string): boolean => {
@@ -41,128 +51,179 @@ const tokenMatches = (given: unknown, expected: string): boolean => {
   return a.length === b.length && timingSafeEqual(a, b);
 };
 
+const bearerOf = (authorization: string | undefined): string | undefined =>
+  authorization?.startsWith('Bearer ')
+    ? authorization.slice('Bearer '.length)
+    : undefined;
+
+const refuse = (
+  code: Refusal['code'],
+  message: string,
+): Extract<OperatorReply, { ok: false }> => ({ ok: false, code, message });
+
 /**
- * Checks one request line: the token first (constant time), then the verb schema. Returns the
- * refusal to send, or the parsed request.
+ * Checks one request: the token first (constant time), then the verb schema. The token comes from
+ * the `Authorization: Bearer` header, or else from the body's `token` field. Returns the refusal to
+ * send, or the parsed request.
  */
 export const readRequest = (
-  line: string,
+  text: string,
+  authorization: string | undefined,
   token: string,
-):
-  | { ok: true; request: OperatorRequest }
-  | { ok: false; reply: Extract<OperatorReply, { ok: false }> } => {
+): { ok: true; request: OperatorRequest } | { ok: false; reply: Refusal } => {
   let body: unknown;
   try {
-    body = JSON.parse(line);
+    body = JSON.parse(text);
   } catch {
+    return { ok: false, reply: refuse('invalid', 'request is not JSON') };
+  }
+  if (typeof body !== 'object' || body === null || Array.isArray(body)) {
     return {
       ok: false,
-      reply: { ok: false, code: 'invalid', message: 'request is not JSON' },
+      reply: refuse('invalid', 'request must be a JSON object'),
     };
   }
-  const given =
-    typeof body === 'object' && body !== null && 'token' in body
-      ? (body as { token: unknown }).token
-      : undefined;
+  const bodyToken =
+    'token' in body ? (body as { token: unknown }).token : undefined;
+  const given = bearerOf(authorization) ?? bodyToken;
   if (!tokenMatches(given, token)) {
     return {
       ok: false,
-      reply: {
-        ok: false,
-        code: 'unauthorized',
-        message: 'the Cycle token is missing or wrong',
-      },
+      reply: refuse('unauthorized', 'the Cycle token is missing or wrong'),
     };
   }
-  const parsed = operatorRequestSchema.safeParse(body);
+  const parsed = operatorRequestSchema.safeParse({ ...body, token: given });
   if (!parsed.success) {
     return {
       ok: false,
-      reply: {
-        ok: false,
-        code: 'invalid',
-        message: parsed.error.issues
+      reply: refuse(
+        'invalid',
+        parsed.error.issues
           .map(
             (issue) => `${issue.path.join('.') || 'request'}: ${issue.message}`,
           )
           .join('; '),
-      },
+      ),
     };
   }
   return { ok: true, request: parsed.data };
 };
 
-/**
- * Serves the Operator verbs of one Cycle on a unix socket. One request per connection: a JSON line
- * in, one JSON line out. The socket is bound under a umask that keeps it private, then chmod'd to
- * 0600, so no other account ever sees it open (PROTOCOL §3.3, security.md).
- */
-export const startOperatorSocket = (
-  options: OperatorSocketOptions,
-): Promise<OperatorSocket> => {
-  if (options.path.length > MAX_SOCKET_PATH) {
-    return Promise.reject(
-      new Error(
-        `operator socket path is too long: ${options.path.length} bytes`,
+type Body =
+  { kind: 'ok'; text: string } | { kind: 'too_large' } | { kind: 'error' };
+
+const readBody = (req: IncomingMessage): Promise<Body> =>
+  new Promise((resolve) => {
+    const chunks: Buffer[] = [];
+    let size = 0;
+    let settled = false;
+    const settle = (body: Body): void => {
+      if (settled) return;
+      settled = true;
+      resolve(body);
+    };
+    req.on('data', (chunk: Buffer) => {
+      size += chunk.length;
+      if (size > MAX_BODY_BYTES) {
+        chunks.length = 0;
+        settle({ kind: 'too_large' });
+        req.resume();
+        return;
+      }
+      chunks.push(chunk);
+    });
+    req.on('end', () =>
+      settle({ kind: 'ok', text: Buffer.concat(chunks).toString('utf8') }),
+    );
+    req.on('error', () => settle({ kind: 'error' }));
+  });
+
+const send = (
+  res: ServerResponse,
+  status: number,
+  body: OperatorReply,
+  headers: Record<string, string> = {},
+): void => {
+  res.writeHead(status, { 'content-type': 'application/json', ...headers });
+  res.end(JSON.stringify(body));
+};
+
+/** One request in, one reply out: the checks, then the dispatcher. */
+const answer = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  options: OperatorServerOptions,
+): Promise<void> => {
+  if (req.method !== 'POST') {
+    send(res, 405, refuse('invalid', 'the Operator endpoint takes POST only'), {
+      allow: 'POST',
+    });
+    return;
+  }
+  const body = await readBody(req);
+  if (body.kind === 'too_large') {
+    send(
+      res,
+      413,
+      refuse('invalid', `request is larger than ${MAX_BODY_BYTES} bytes`),
+    );
+    return;
+  }
+  if (body.kind === 'error') {
+    send(res, 400, refuse('invalid', 'request could not be read'));
+    return;
+  }
+  const checked = readRequest(
+    body.text,
+    req.headers.authorization,
+    options.token,
+  );
+  if (!checked.ok) {
+    send(res, STATUS[checked.reply.code], checked.reply);
+    return;
+  }
+  try {
+    const reply = await options.dispatch(checked.request);
+    send(res, reply.ok ? 200 : STATUS[reply.code], reply);
+  } catch (error: unknown) {
+    send(
+      res,
+      500,
+      refuse(
+        'internal',
+        error instanceof Error ? error.message : String(error),
       ),
     );
   }
-  if (existsSync(options.path)) unlinkSync(options.path);
+};
 
-  const open = new Set<Socket>();
-  const server: Server = createServer((socket) => {
-    open.add(socket);
-    socket.once('close', () => open.delete(socket));
-    let buffer = '';
-    let handled = false;
-    socket.setEncoding('utf8');
-    socket.on('data', (chunk: string) => {
-      if (handled) return;
-      buffer += chunk;
-      const end = buffer.indexOf('\n');
-      if (end < 0) return;
-      handled = true;
-      const checked = readRequest(buffer.slice(0, end), options.token);
-      if (!checked.ok) {
-        reply(socket, checked.reply);
-        return;
-      }
-      options
-        .dispatch(checked.request)
-        .then((answer) => reply(socket, answer))
-        .catch((error: unknown) =>
-          reply(socket, {
-            ok: false,
-            code: 'internal',
-            message: error instanceof Error ? error.message : String(error),
-          }),
-        );
-    });
-    socket.on('error', () => socket.destroy());
+/**
+ * Serves the Operator verbs of one Cycle on `127.0.0.1` at an OS-assigned port. One `POST` per
+ * request, JSON in, JSON out. Only loopback is bound, so no other host reaches it; the Cycle token
+ * is the gate (PROTOCOL §3.3).
+ */
+export const startOperatorServer = (
+  options: OperatorServerOptions,
+): Promise<OperatorServer> => {
+  const server = createServer((req, res) => {
+    answer(req, res, options).catch(() => res.destroy());
   });
-
-  return new Promise<OperatorSocket>((resolve, reject) => {
-    const previousUmask = process.umask(0o777 & ~OPERATOR_SOCKET_MODE);
-    server.once('error', (error) => {
-      process.umask(previousUmask);
-      reject(error);
-    });
-    server.listen(options.path, () => {
-      process.umask(previousUmask);
-      chmodSync(options.path, OPERATOR_SOCKET_MODE);
-      let closed = false;
+  return new Promise<OperatorServer>((resolve, reject) => {
+    const onError = (error: Error): void => reject(error);
+    server.once('error', onError);
+    server.listen(0, '127.0.0.1', () => {
+      server.off('error', onError);
+      const { port } = server.address() as AddressInfo;
+      let closing: Promise<void> | undefined;
       resolve({
-        path: options.path,
-        close: () =>
-          new Promise<void>((done) => {
-            if (closed) return done();
-            closed = true;
-            for (const socket of open) socket.destroy();
-            server.close(() => {
-              if (existsSync(options.path)) unlinkSync(options.path);
-              done();
-            });
-          }),
+        url: `http://127.0.0.1:${port}`,
+        close: () => {
+          closing ??= new Promise<void>((done) => {
+            server.closeAllConnections();
+            server.close(() => done());
+          });
+          return closing;
+        },
       });
     });
   });
