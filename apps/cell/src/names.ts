@@ -32,8 +32,8 @@ export const paneName = (
 };
 
 /**
- * The directory of one Cycle's scratch files. The socket path is kept short: a unix socket path is
- * limited to about 108 bytes, so the Cycle is named by a short digest, not its full ULID.
+ * The directory of one Cycle's scratch files. The Cycle is named by a short digest, not its full
+ * ULID, so the directory name stays short and stable.
  */
 export const cycleDirName = (cycleId: string): string =>
   createHash('sha256').update(cycleId).digest('hex').slice(0, 12);

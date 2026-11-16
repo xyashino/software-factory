@@ -1,39 +1,40 @@
 import { randomBytes, timingSafeEqual } from 'node:crypto';
-import { existsSync, unlinkSync, chmodSync } from 'node:fs';
-import { createServer, type Server, type Socket } from 'node:net';
+import {
+  createServer,
+  type IncomingMessage,
+  type Server,
+  type ServerResponse,
+} from 'node:http';
+import { type AddressInfo, type Socket } from 'node:net';
 import {
   operatorRequestSchema,
   type OperatorReply,
   type OperatorRequest,
 } from '@repo/factory-core/contracts/operator';
 
-/** The file mode of the Operator socket: the operating-system account only (PROTOCOL §3.3). */
-export const OPERATOR_SOCKET_MODE = 0o600;
+/** The loopback address the Operator endpoint binds: this machine only (PROTOCOL §3.3). */
+export const OPERATOR_HOST = '127.0.0.1';
 
-/** A unix socket path is limited to about 108 bytes; a longer one is refused, not truncated. */
-export const MAX_SOCKET_PATH = 100;
+/** The largest request body the endpoint reads; a verb is a few kilobytes at most. */
+export const MAX_BODY_BYTES = 1024 * 1024;
 
 /** The per-Cycle token: 24 random bytes, hex. Never written to a log or a blob. */
 export const newCycleToken = (): string => randomBytes(24).toString('hex');
 
-export interface OperatorSocketOptions {
-  path: string;
+export interface OperatorServerOptions {
   token: string;
   /** Answers one verb. Every reply is produced here, once the request has passed the checks. */
   dispatch: (request: OperatorRequest) => Promise<OperatorReply>;
 }
 
-export interface OperatorSocket {
-  readonly path: string;
-  /** Closes the listener and removes the socket file. Idempotent. */
+export interface OperatorServer {
+  /** The base URL the Operator CLI posts to: `http://127.0.0.1:<port>`. */
+  readonly url: string;
+  /** Closes the listener and any open connection. Idempotent. */
   close(): Promise<void>;
 }
 
-const reply = (socket: Socket, body: OperatorReply): void => {
-  socket.end(`${JSON.stringify(body)}\n`);
-};
-
-/** Compares two tokens without leaking the position of a mismatch. */
+/** Compares two tokens in constant time; a length mismatch is refused without comparing bytes. */
 const tokenMatches = (given: unknown, expected: string): boolean => {
   if (typeof given !== 'string') return false;
   const a = Buffer.from(given);
@@ -41,12 +42,29 @@ const tokenMatches = (given: unknown, expected: string): boolean => {
   return a.length === b.length && timingSafeEqual(a, b);
 };
 
+/** The HTTP status a reply travels under: 200 for success, a status per refusal kind. */
+const statusOf = (reply: OperatorReply): number => {
+  if (reply.ok) return 200;
+  switch (reply.code) {
+    case 'unauthorized':
+      return 401;
+    case 'invalid':
+      return 400;
+    case 'internal':
+      return 500;
+    default:
+      return 409;
+  }
+};
+
 /**
- * Checks one request line: the token first (constant time), then the verb schema. Returns the
- * refusal to send, or the parsed request.
+ * Checks one request body: the token first (constant time), then the verb schema. The token comes
+ * from the `Authorization: Bearer` header when one is sent, else from the body's `token` field.
+ * Returns the refusal to send, or the parsed request.
  */
 export const readRequest = (
   line: string,
+  headerToken: string | undefined,
   token: string,
 ):
   | { ok: true; request: OperatorRequest }
@@ -60,10 +78,11 @@ export const readRequest = (
       reply: { ok: false, code: 'invalid', message: 'request is not JSON' },
     };
   }
-  const given =
+  const bodyToken =
     typeof body === 'object' && body !== null && 'token' in body
       ? (body as { token: unknown }).token
       : undefined;
+  const given = headerToken ?? bodyToken;
   if (!tokenMatches(given, token)) {
     return {
       ok: false,
@@ -92,76 +111,126 @@ export const readRequest = (
   return { ok: true, request: parsed.data };
 };
 
-/**
- * Serves the Operator verbs of one Cycle on a unix socket. One request per connection: a JSON line
- * in, one JSON line out. The socket is bound under a umask that keeps it private, then chmod'd to
- * 0600, so no other account ever sees it open (PROTOCOL §3.3, security.md).
- */
-export const startOperatorSocket = (
-  options: OperatorSocketOptions,
-): Promise<OperatorSocket> => {
-  if (options.path.length > MAX_SOCKET_PATH) {
-    return Promise.reject(
-      new Error(
-        `operator socket path is too long: ${options.path.length} bytes`,
-      ),
-    );
-  }
-  if (existsSync(options.path)) unlinkSync(options.path);
+/** The bearer token of an `Authorization` header, or undefined when the header is not one. */
+const bearerOf = (header: string | undefined): string | undefined => {
+  const match = /^Bearer (.+)$/.exec(header ?? '');
+  return match?.[1];
+};
 
-  const open = new Set<Socket>();
-  const server: Server = createServer((socket) => {
-    open.add(socket);
-    socket.once('close', () => open.delete(socket));
-    let buffer = '';
-    let handled = false;
-    socket.setEncoding('utf8');
-    socket.on('data', (chunk: string) => {
-      if (handled) return;
-      buffer += chunk;
-      const end = buffer.indexOf('\n');
-      if (end < 0) return;
-      handled = true;
-      const checked = readRequest(buffer.slice(0, end), options.token);
-      if (!checked.ok) {
-        reply(socket, checked.reply);
+const send = (res: ServerResponse, body: OperatorReply): void => {
+  res.writeHead(statusOf(body), { 'content-type': 'application/json' });
+  res.end(`${JSON.stringify(body)}\n`);
+};
+
+/** Reads the request body up to the cap. Resolves undefined when the body is too large. */
+const readBody = (req: IncomingMessage): Promise<string | undefined> =>
+  new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    let size = 0;
+    req.on('data', (chunk: Buffer) => {
+      size += chunk.length;
+      if (size > MAX_BODY_BYTES) {
+        resolve(undefined);
+        req.resume();
         return;
       }
-      options
-        .dispatch(checked.request)
-        .then((answer) => reply(socket, answer))
-        .catch((error: unknown) =>
-          reply(socket, {
-            ok: false,
-            code: 'internal',
-            message: error instanceof Error ? error.message : String(error),
-          }),
-        );
+      chunks.push(chunk);
     });
-    socket.on('error', () => socket.destroy());
+    req.on('end', () => {
+      if (size <= MAX_BODY_BYTES)
+        resolve(Buffer.concat(chunks).toString('utf8'));
+    });
+    req.on('error', reject);
   });
 
-  return new Promise<OperatorSocket>((resolve, reject) => {
-    const previousUmask = process.umask(0o777 & ~OPERATOR_SOCKET_MODE);
-    server.once('error', (error) => {
-      process.umask(previousUmask);
-      reject(error);
-    });
-    server.listen(options.path, () => {
-      process.umask(previousUmask);
-      chmodSync(options.path, OPERATOR_SOCKET_MODE);
+/**
+ * Serves the Operator verbs of one Cycle on an ephemeral localhost HTTP port. One `POST /` per verb:
+ * a JSON body in, one JSON reply out. The server binds 127.0.0.1 only, so it is reachable from this
+ * machine and never from the network.
+ */
+export const startOperatorServer = (
+  options: OperatorServerOptions,
+): Promise<OperatorServer> => {
+  const open = new Set<Socket>();
+  const server: Server = createServer((req, res) => {
+    if (req.url !== '/') {
+      res.writeHead(404, { 'content-type': 'application/json' });
+      res.end(
+        `${JSON.stringify({ ok: false, code: 'invalid', message: 'unknown path' })}\n`,
+      );
+      req.resume();
+      return;
+    }
+    if (req.method !== 'POST') {
+      res.writeHead(405, {
+        'content-type': 'application/json',
+        allow: 'POST',
+      });
+      res.end(
+        `${JSON.stringify({ ok: false, code: 'invalid', message: 'the Operator endpoint takes POST only' })}\n`,
+      );
+      req.resume();
+      return;
+    }
+    readBody(req)
+      .then((line) => {
+        if (line === undefined) {
+          res.writeHead(413, {
+            'content-type': 'application/json',
+            connection: 'close',
+          });
+          res.end(
+            `${JSON.stringify({ ok: false, code: 'invalid', message: 'request is too large' })}\n`,
+          );
+          return;
+        }
+        const checked = readRequest(
+          line,
+          bearerOf(req.headers.authorization),
+          options.token,
+        );
+        if (!checked.ok) {
+          send(res, checked.reply);
+          return;
+        }
+        return options
+          .dispatch(checked.request)
+          .then((answer) => send(res, answer))
+          .catch((error: unknown) =>
+            send(res, {
+              ok: false,
+              code: 'internal',
+              message: error instanceof Error ? error.message : String(error),
+            }),
+          );
+      })
+      .catch((error: unknown) =>
+        send(res, {
+          ok: false,
+          code: 'internal',
+          message: error instanceof Error ? error.message : String(error),
+        }),
+      );
+  });
+
+  server.on('connection', (socket) => {
+    open.add(socket);
+    socket.once('close', () => open.delete(socket));
+  });
+
+  return new Promise<OperatorServer>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, OPERATOR_HOST, () => {
+      const { port } = server.address() as AddressInfo;
       let closed = false;
       resolve({
-        path: options.path,
+        url: `http://${OPERATOR_HOST}:${port}`,
         close: () =>
           new Promise<void>((done) => {
             if (closed) return done();
             closed = true;
             for (const socket of open) socket.destroy();
-            server.close(() => {
-              if (existsSync(options.path)) unlinkSync(options.path);
-              done();
-            });
+            server.close(() => done());
           }),
       });
     });

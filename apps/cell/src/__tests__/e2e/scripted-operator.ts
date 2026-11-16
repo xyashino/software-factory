@@ -3,7 +3,7 @@
  * Cycle through `factory-operator context`, writes the declared outputs, then ends the Cycle with
  * the real `factory-operator` CLI, the same way an agent would. Usage: `bun scripted-operator.ts
  * <scenario> <kickoff>`. Every line the Cell types into it is logged to `typed.log` beside the
- * Cycle socket, never in the worktree.
+ * Cycle's scratch files, never in the worktree.
  */
 import { appendFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
