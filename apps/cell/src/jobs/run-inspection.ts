@@ -6,21 +6,13 @@ import type {
   InspectionResult,
   OrderEvent,
 } from '@repo/factory-core/order/events';
-import { GIT_TIMEOUT_MS } from '../workspace/repo';
+import { runGit } from '../git';
+import { snapshotRefFor } from '../names';
 import { prepareWorkspace } from '../workspace/prepare';
-import {
-  changedSince,
-  worktreeFingerprint,
-  type GitRun,
-} from '../workspace/snapshot';
-import {
-  gitCommand,
-  runShell,
-  succeeded,
-  textOf,
-  type ShellContext,
-} from '../workspace/shell';
+import { differsFromSnapshot, snapshot } from '../workspace/snapshots';
+import { runShell, type ShellContext } from '../workspace/shell';
 import { redactDetail } from './redact';
+import { todoOf } from './job-shape';
 import { putLog, submit, type JobContext } from './send';
 import { workspaceDetailOf } from './workspace-detail';
 
@@ -177,19 +169,6 @@ interface CheckInput {
   shell: ShellContext;
 }
 
-/** The worktree's fingerprint, read through the Cell's shell so the check's own git runs are logged like any command. */
-const fingerprintOf = (input: CheckInput) => {
-  const git: GitRun = async (args) => {
-    const run = await runShell(input.shell, {
-      command: gitCommand([...args]),
-      cwd: input.worktree,
-      timeoutMs: GIT_TIMEOUT_MS,
-    });
-    return succeeded(run) ? { ok: true, text: textOf(run) } : { ok: false };
-  };
-  return worktreeFingerprint(input.worktree, git);
-};
-
 const runChecks = async (
   ctx: JobContext,
   job: Job,
@@ -200,8 +179,13 @@ const runChecks = async (
   try {
     const timeoutMs =
       input.station.inspectionTimeoutMs ?? DEFAULT_INSPECTION_TIMEOUT_MS;
-    // The read-only baseline: what earlier Stations left in the tree is not this Inspection's doing.
-    const before = await fingerprintOf(input);
+    // The pre-cycle snapshot: what earlier Stations left in the tree is not this Inspection's doing.
+    const ref = snapshotRefFor(
+      todoOf(job.orderId),
+      input.station.stationId,
+      cycleId,
+    );
+    await snapshot({ git: runGit, worktree: input.worktree, ref });
     const results: InspectionResult[] = [];
     for (const command of input.station.exec ?? []) {
       const run = await runShell(input.shell, {
@@ -221,8 +205,12 @@ const runChecks = async (
     }
 
     if (signal.aborted) throw new Error('stopped before the read-only check');
-    const after = await fingerprintOf(input);
-    if (changedSince(before, after)) {
+    const changed = await differsFromSnapshot({
+      git: runGit,
+      worktree: input.worktree,
+      ref,
+    });
+    if (changed) {
       await submit(
         ctx,
         job,

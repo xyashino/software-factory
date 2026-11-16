@@ -7,8 +7,10 @@ import {
 } from '@repo/factory-core/contracts/job';
 import { WireFailure } from '@repo/factory-core/contracts/errors';
 import type { CommitSha } from '@repo/factory-core/ids';
+import { runGit } from '../git';
 import { GIT_TIMEOUT_MS } from '../workspace/repo';
 import { prepareWorkspace } from '../workspace/prepare';
+import { deleteSnapshotRefs } from '../workspace/snapshots';
 import {
   gitCommand,
   runShell,
@@ -431,6 +433,12 @@ const deliverWorktree = async (
       },
       signal,
     );
+    // The Work order is delivered: its pre-cycle snapshots have no further use. Best effort, never fails the delivery.
+    await deleteSnapshotRefs({
+      git: runGit,
+      worktree,
+      todoId: todoOf(job.orderId),
+    }).catch(() => undefined);
     void notifyQuietly(
       ctx.notify,
       ctx.cellDataDir,

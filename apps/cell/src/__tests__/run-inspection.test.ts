@@ -313,11 +313,11 @@ describe('inspection job', () => {
   });
 
   describe('on a reused worktree, holding the work of earlier Stations', () => {
-    /** The worktree as a builder left it: placed at the base, its work uncommitted. */
+    /** The worktree as a builder left it: placed at the base on the Work order branch, its work uncommitted. */
     const placeDirtyWorktree = (): void => {
       const path = join(repoRoot, '.worktrees', 'todo-1');
       mkdirSync(join(repoRoot, '.worktrees'), { recursive: true });
-      git(repoRoot, 'worktree', 'add', '--detach', path, head);
+      git(repoRoot, 'worktree', 'add', '-B', 'factory/todo-1', path, head);
       writeFileSync(join(path, 'builder.txt'), 'the builder work\n');
     };
     const reusedJob = (exec: string[]): Job =>
