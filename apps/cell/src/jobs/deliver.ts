@@ -18,6 +18,8 @@ import {
   type ShellRun,
 } from '../workspace/shell';
 import { getBlob } from './blobs';
+import { todoOf } from './job-shape';
+import { notifyQuietly } from './notify';
 import { redactDetail } from './redact';
 import { RenderFailed, renderDelivery, type RenderedDelivery } from './render';
 import { JobStopped, submit, type JobContext } from './send';
@@ -404,6 +406,15 @@ const deliverWorktree = async (
         result: { status: 'finished', prUrl, commit: commit as CommitSha },
       },
       signal,
+    );
+    void notifyQuietly(
+      ctx.notify,
+      ctx.cellDataDir,
+      `Delivered: ${todoOf(job.orderId)}`,
+      {
+        body: prUrl,
+        sound: 'done',
+      },
     );
   } finally {
     // Until the push lands, HEAD goes back to the commit the worktree started from: origin must not

@@ -177,6 +177,7 @@ export const runJob = async (
               runners: runnersFor(station, ctx.cellDataDir),
               spawn: spawnHeadless,
               ...(ctx.pane ? { pane: ctx.pane } : {}),
+              ...(ctx.notify ? { notify: ctx.notify } : {}),
               timing: {
                 tickMs: STATION_TICK_MS,
                 questionHoldMs: QUESTION_HOLD_MS,

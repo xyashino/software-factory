@@ -9,7 +9,7 @@ import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { HttpListener } from '@repo/factory-server/http/listener';
 import {
   httpClient,
@@ -46,6 +46,7 @@ import { createHeartbeat } from '../../loops/heartbeat';
 import { runGit } from '../../git';
 import type { PaneDriver, PaneReading } from '../../ports';
 import { spawnHeadless } from '../../runners/headless';
+import { todoOf } from '../../jobs/job-shape';
 import type { CommitSha } from '@repo/factory-core/ids';
 import { createSystemAdapter } from '../../adapters/system/system.adapter';
 import { prepareWorkspace } from '../../workspace/prepare';
@@ -363,6 +364,30 @@ describe('Operator station against the runtime', () => {
     const events = await eventsOf(client, job);
     expect(hasEvent(events, 'question_answered')).toBe(true);
     expect(hasEvent(events, 'cycle_completed')).toBe(true);
+  });
+
+  it('shows a toast naming the todo when the Operator asks a question', async () => {
+    const client = await serve();
+    const job = await claim(client);
+    const notify = vi.fn(async () => undefined);
+    const running = runOperatorStation(job, {
+      ...depsFor(client, job, 'ask'),
+      notify,
+    });
+
+    const questionId = await questionIdOf(client, job);
+    await waitFor(async () => notify.mock.calls.length > 0);
+    expect(notify).toHaveBeenCalledWith(
+      `Question: ${todoOf(job.orderId)}`,
+      expect.objectContaining({ sound: 'request' }),
+    );
+    await client.call('answer', {
+      orderId: job.orderId,
+      commandId: `${job.jobId}:answer`,
+      questionId,
+      text: 'postgres',
+    } as never);
+    await running;
   });
 
   it('types a nudge into the running Operator', async () => {

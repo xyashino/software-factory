@@ -66,6 +66,7 @@ import {
 } from '../workspace/snapshot';
 import { getBlob, putBlob } from './blobs';
 import { todoOf } from './job-shape';
+import { notifyQuietly, truncateBody, type NotifyFn } from './notify';
 import { logCommandOf } from './pane-commands';
 import { redactDetail } from './redact';
 import { PROMPT_CONFIG, RenderFailed, renderOperatorPrompt } from './render';
@@ -104,6 +105,8 @@ export interface StationDeps {
   runners: Readonly<Record<string, RunnerLaunch>>;
   spawn: SpawnHeadless;
   pane?: PaneDriver;
+  /** Desktop toast for an Operator's question. Unset when notifications are off. */
+  notify?: NotifyFn;
   timing: StationTiming;
   registry: StationRegistry;
   /** Optional abort signal from the Cell's shared JobRegistry (PROTOCOL §5.3–5.4). */
@@ -579,6 +582,10 @@ export const runOperatorStation = async (
       };
     }
     const questionId = String(event.questionId);
+    void notifyQuietly(deps.notify, deps.dataDir, `Question: ${todo}`, {
+      body: truncateBody(text),
+      sound: 'request',
+    });
     cycle = openHold(cycle, deps.clock.now());
     journal({ at: deps.clock.now(), kind: 'question_open', questionId });
     return new Promise<OperatorReply>((resolve) => {

@@ -13,6 +13,8 @@ import {
   type ShellContext,
   type ShellRun,
 } from '../workspace/shell';
+import { todoOf } from './job-shape';
+import { notifyQuietly } from './notify';
 import { redactDetail } from './redact';
 import { renderBlockedPr } from './render';
 import { JobStopped, submit, type JobContext } from './send';
@@ -53,14 +55,33 @@ const git = (
     timeoutMs: GIT_TIMEOUT_MS,
   });
 
-/** Sends `ReportBlockedPr` for the job. The Andon it names is left as it is. */
-const report = (
+/**
+ * Sends `ReportBlockedPr` for the job. The Andon it names is left as it is. Once the report lands, a toast
+ * names the block and, when the PR is published, its URL. A failed toast changes nothing.
+ */
+const report = async (
   ctx: JobContext,
   job: Job,
   result: BlockedPrResult,
   signal: AbortSignal,
-): Promise<unknown> =>
-  submit(ctx, job, { type: 'ReportBlockedPr', result }, signal);
+): Promise<unknown> => {
+  const answer = await submit(
+    ctx,
+    job,
+    { type: 'ReportBlockedPr', result },
+    signal,
+  );
+  const reason = job.blocked?.reason ?? 'blocked';
+  const body =
+    result.status === 'published' ? `${reason} ${result.prUrl}` : reason;
+  void notifyQuietly(
+    ctx.notify,
+    ctx.cellDataDir,
+    `Blocked: ${job.blocked?.taskId ?? todoOf(job.orderId)}`,
+    { body, sound: 'request' },
+  );
+  return answer;
+};
 
 /**
  * Runs one `publish_blocked` job (v1 `publishBlockedWork`, PROTOCOL §8.3). A supervisor-held Andon gets its

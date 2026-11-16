@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FactoryClient } from '@repo/factory-core/contracts/client';
 import { WireFailure } from '@repo/factory-core/contracts/errors';
 import { PR_ADR_TOKEN, type Job } from '@repo/factory-core/contracts/job';
@@ -15,6 +15,7 @@ import type {
 import type { GithubPort, PrRef } from '../ports/github.port';
 import { createSystemAdapter } from '../adapters/system/system.adapter';
 import { runDeliver } from '../jobs/deliver';
+import type { NotifyFn } from '../jobs/notify';
 import { JobStopped, type JobContext } from '../jobs/send';
 import { cloneRepo, commitFile, git, makeRepo } from '../testing/git-repo';
 import { factoryFiles } from '../testing/factory-fixture';
@@ -110,7 +111,11 @@ const fakeGithub = (existing?: PrRef) => {
 };
 
 /** A context whose client records every call and answers from `answer`. */
-const contextWith = (answer: Answer = accepting, github = fakeGithub()) => {
+const contextWith = (
+  answer: Answer = accepting,
+  github = fakeGithub(),
+  notify?: NotifyFn,
+) => {
   const calls: Sent[] = [];
   const client = {
     call: async (route: string, request: unknown) => {
@@ -128,6 +133,7 @@ const contextWith = (answer: Answer = accepting, github = fakeGithub()) => {
     worktreeLimit: 8,
     inUse: new Set(),
     githubFor: () => github.port,
+    ...(notify ? { notify } : {}),
   };
   return { context, calls, github };
 };
@@ -517,6 +523,37 @@ describe('deliver job (deferred commit, PROTOCOL §8.3)', () => {
 /** A job on a stacked base: the branch is `factory/todo-1`, its base the predecessor's branch. */
 const stackedJob = (predecessor: string): Job =>
   deliverJob({ branchBase: predecessor }, predecessor);
+
+describe('deliver job: the delivery toast', () => {
+  it('names the delivered todo and its PR with a done sound', async () => {
+    work('wip-1.txt', 'one\n');
+    const notify = vi.fn(async () => undefined);
+    const { context } = contextWith(accepting, fakeGithub(), notify);
+
+    await runDeliver(context, deliverJob(), signal());
+
+    expect(notify).toHaveBeenCalledTimes(1);
+    expect(notify).toHaveBeenCalledWith('Delivered: todo-1', {
+      body: PR_URL,
+      sound: 'done',
+    });
+  });
+
+  it('stays silent when the delivery fails', async () => {
+    work('wip-1.txt', 'one\n');
+    git(origin, 'rm', '-r', '-q', '.factory');
+    git(origin, 'commit', '-q', '-m', 'drop the definitions');
+    const notify = vi.fn(async () => undefined);
+    const { context, calls } = contextWith(accepting, fakeGithub(), notify);
+
+    await runDeliver(context, deliverJob(), signal());
+
+    expect(reportsOf(calls)).toEqual([
+      expect.objectContaining({ status: 'failed' }),
+    ]);
+    expect(notify).not.toHaveBeenCalled();
+  });
+});
 
 describe('deliver job on a stacked base (CORE §12.5)', () => {
   it('delivers onto factory/<predecessor>: the PR targets it and the predecessor commit is the parent', async () => {
