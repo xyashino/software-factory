@@ -138,11 +138,12 @@ change. Every `OrderEvent` is on an `OrderId` stream and every `PlanEvent` on a 
 
 **Scheduling**
 
-| Event              | Payload                                                                     | Notes                                                                     |
-| :----------------- | :-------------------------------------------------------------------------- | :------------------------------------------------------------------------ |
-| `job_claimed`      | `jobId, kind, cellId, epoch, cycleId?`                                      | `epoch = previous + 1`. `cycleId` is pre-allocated for Station jobs.      |
-| `job_lost`         | `jobId, epoch, reason: 'lease_expired' \| 'cell_left' \| 'cancelled'`       | Ends the job without a result.                                            |
-| `workspace_failed` | `jobId, stage: 'fetch' \| 'sync' \| 'worktree' \| 'setup', detail, logBlob` | The Cell could not prepare the workspace; ends the job; no Cycle started. |
+| Event              | Payload                                                                     | Notes                                                                                                 |
+| :----------------- | :-------------------------------------------------------------------------- | :---------------------------------------------------------------------------------------------------- |
+| `job_claimed`      | `jobId, kind, cellId, epoch, cycleId?`                                      | `epoch = previous + 1`. `cycleId` is pre-allocated for Station jobs.                                  |
+| `job_lost`         | `jobId, epoch, reason: 'lease_expired' \| 'cell_left' \| 'cancelled'`       | Ends the job without a result.                                                                        |
+| `workspace_failed` | `jobId, stage: 'fetch' \| 'sync' \| 'worktree' \| 'setup', detail, logBlob` | The Cell could not prepare the workspace; ends the job; no Cycle started.                             |
+| `worktree_missing` | `jobId, detail`                                                             | The Cell's job past Station 0 found no worktree; the Work order restarts at Station 0 (§4.3 rule 13). |
 
 There is **no Work-order-level setup phase**. Preparing a workspace (fetch, worktree at the base
 commit, `setup` commands) is part of every job, because the next job may run on a different Cell.
@@ -150,23 +151,23 @@ Cells cache prepared worktrees, so on the same Cell it is usually a no-op.
 
 **Cycles**
 
-| Event                 | Payload                                                                                                                                          | Notes                                                                                                                               |
-| :-------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------- | :---------------------------------------------------------------------------------------------------------------------------------- |
-| `cycle_started`       | `cycleId, jobId, stationId, n, cause: CycleCause, baseCommit, operator? { profile, runner, model }, promptBlob?`                                 | `promptBlob` is the exact prompt the Operator received (R5). The runtime fills it from the job; the Cell does not send it.          |
-| `cycle_completed`     | `cycleId, artifacts: Record<key, BlobRef>, commit`                                                                                               | A non-verdict Operator station finished.                                                                                            |
-| `verdict_recorded`    | `cycleId, pass, artifacts, feedbackBlob?, commit?`                                                                                               | A verdict Operator finished. `pass = false` requires `feedbackBlob`.                                                                |
-| `inspection_finished` | `cycleId, passed, results: InspectionResult[]`                                                                                                   | `InspectionResult = { command, exitCode \| null, timedOut, durationMs, tail, logBlob }`. `tail` ≤ 2 KiB; the full log is `logBlob`. |
-| `cycle_failed`        | `cycleId, reason: 'timed_out' \| 'crashed' \| 'stalled' \| 'start_failed' \| 'lost', detail, wipCommit?`                                         | Infrastructure outcome, not a judgement on the work. `wipCommit` is kept for the Supervisor only.                                   |
-| `cycle_blocked`       | `cycleId, source: 'operator' \| 'runtime', reason: 'operator_reported' \| 'runner_prompt' \| 'question_timeout', detail, handoverBlob?, commit?` | Leads to an Andon. `source = 'operator'` requires `handoverBlob`. `commit` is the WIP checkpoint a resume continues from.           |
-| `cycle_handed_over`   | `cycleId, handoverBlob, commit?`                                                                                                                 | The Cell is leaving and the Operator wrote a Handover. No Andon: another Cell continues (§5.3).                                     |
-| `usage_recorded`      | `cycleId, model, inputTokens, outputTokens, costUsd?`                                                                                            | Accepted after the Cycle ended (§4.3 rule 1).                                                                                       |
+| Event                 | Payload                                                                                                                                          | Notes                                                                                                                                                                  |
+| :-------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `cycle_started`       | `cycleId, jobId, stationId, n, cause: CycleCause, baseCommit, operator? { profile, runner, model }, promptBlob?`                                 | `promptBlob` is the exact prompt the Operator received (R5). The runtime fills it from the job; the Cell does not send it.                                             |
+| `cycle_completed`     | `cycleId, artifacts: Record<key, BlobRef>, commit`                                                                                               | A non-verdict Operator station finished.                                                                                                                               |
+| `verdict_recorded`    | `cycleId, pass, artifacts, feedbackBlob?, commit?`                                                                                               | A verdict Operator finished. `pass = false` requires `feedbackBlob`.                                                                                                   |
+| `inspection_finished` | `cycleId, passed, results: InspectionResult[]`                                                                                                   | `InspectionResult = { command, exitCode \| null, timedOut, durationMs, tail, logBlob }`. `tail` ≤ 2 KiB; the full log is `logBlob`.                                    |
+| `cycle_failed`        | `cycleId, reason: 'timed_out' \| 'crashed' \| 'stalled' \| 'start_failed' \| 'lost', detail, wipCommit?`                                         | Infrastructure outcome, not a judgement on the work. `wipCommit` is kept for the Supervisor only.                                                                      |
+| `cycle_blocked`       | `cycleId, source: 'operator' \| 'runtime', reason: 'operator_reported' \| 'runner_prompt' \| 'question_timeout', detail, handoverBlob?, commit?` | Leads to an Andon. `source = 'operator'` requires `handoverBlob`. `commit` is the worktree HEAD the Cycle started from (PROTOCOL §8.2), which a resume continues from. |
+| `cycle_handed_over`   | `cycleId, handoverBlob, commit?`                                                                                                                 | The Cell is leaving and the Operator wrote a Handover. No Andon: another Cell continues (§5.3).                                                                        |
+| `usage_recorded`      | `cycleId, model, inputTokens, outputTokens, costUsd?`                                                                                            | Accepted after the Cycle ended (§4.3 rule 1).                                                                                                                          |
 
 ```ts
 type CycleCause =
   | { kind: 'first' }
   | { kind: 'retry'; feedbackFrom: CycleId } // a verdict or Inspection failed; consumes budget
   | { kind: 'restart'; of: CycleId } // infrastructure failure; clean base
-  | { kind: 'handover'; of: CycleId } // the previous Cell left with a Handover; WIP base
+  | { kind: 'handover'; of: CycleId } // the previous Cell left with a Handover; the base of its worktree
   | { kind: 'resume'; of?: CycleId; resumeId: ResumeId }; // a Supervisor resumed or reopened; `of` absent when moved to another Station
 ```
 
@@ -427,6 +428,15 @@ afterStation: <the Station before s, or null> }`; sets `pendingResume = { forSta
     Station's artifacts are not in the state, so `context` gives the next Station no inputs from it
     (§7); that is the recovery limit of STORAGE §8.
 
+13. **Missing worktree** (`worktree_missing { jobId, detail }`, from `ReportWorktreeMissing`). A job past
+    Station 0 (`phase` a Station with index > 0, or `delivering`) needs the worktree its earlier Stations
+    left, and the Cell holding the job does not have it. The Work order restarts at Station 0: `phase =
+stations/0`, `checkpoint`, `lastPassed`, `pendingFeedback`, `pendingResume`, `workspaceFailures`,
+    `restartsUsed` and `lostRestartsUsed` cleared, `activeJob` cleared, `worktreeResets` incremented. The
+    lifetime `retriesUsed` stays. A Station 0 job creates its own worktree, so it is never reported missing.
+    `nextJob` row 4b raises the `workspace_failed` Andon once `worktreeResets` reaches `MAX_WORKTREE_RESETS`
+    (2) without a delivery. `delivery_finished` and a Supervisor `resumed` or `reopened` reset the counter.
+
 ### 4.4 Pinned Line
 
 `order_created.line.snapshotBlob` holds the parsed, normalised Line (JSON); `line.hash` is its hash,
@@ -462,6 +472,7 @@ before calling it.
 | `ClaimJob`              | factory (claim endpoint)                     | holder `queue`; `nextJob` is `job`                                                                                                                                                 | `job_claimed{epoch+1}`                                                   |
 | `StartCycle`            | cell                                         | `epoch == activeJob.epoch`; job is a Station job; its Cycle not started                                                                                                            | `cycle_started`                                                          |
 | `ReportWorkspaceFailed` | cell                                         | epoch matches; Cycle not started                                                                                                                                                   | `workspace_failed`                                                       |
+| `ReportWorktreeMissing` | cell                                         | epoch matches; Cycle not started; phase past Station 0 (a Station with index > 0, or `delivering`)                                                                                 | `worktree_missing` (§4.3 rule 13)                                        |
 | `CompleteCycle`         | operator                                     | epoch matches; Cycle live; not a verdict Operator; every declared artifact present, existing and non-empty                                                                         | `cycle_completed`                                                        |
 | `SubmitVerdict`         | operator                                     | epoch matches; Cycle live; a verdict Operator; `!pass ⇒ feedbackBlob`                                                                                                              | `verdict_recorded`                                                       |
 | `ReportInspection`      | cell                                         | epoch matches; Cycle live; Station is an Inspection                                                                                                                                | `inspection_finished`                                                    |

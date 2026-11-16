@@ -1,6 +1,6 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { FactoryClient } from '@repo/factory-core/contracts/client';
 import { WireFailure } from '@repo/factory-core/contracts/errors';
@@ -23,6 +23,7 @@ const CELL = '01J0000000000000000000000W' as CellId;
 const JOB = '01J0000000000000000000000J' as JobId;
 const ORDER = 'software-factory:todo-1' as OrderId;
 const BRANCH = 'factory/todo-1';
+const WORKTREE_DIR = 'todo-1';
 const BODY = 'The body the factory rendered.';
 const BODY_REF = `sha256:${'a'.repeat(64)}` as BlobRef;
 const COMMIT_REF = `sha256:${'c'.repeat(64)}` as BlobRef;
@@ -51,6 +52,8 @@ let origin: string;
 /** The Cell's repo: a clone of origin, whose remote branches the prepare fetches. */
 let repoRoot: string;
 let baseHead: string;
+/** The job's worktree under the repo, where the Operators left their uncommitted work. */
+let worktree: string;
 
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), 'factory-cell-deliver-'));
@@ -58,6 +61,7 @@ beforeEach(() => {
   // The repo carries its own `.factory/`: the Cell renders the PR body from it on this worktree.
   baseHead = makeRepo(origin, { 'README.md': '# repo\n', ...factoryFiles() });
   repoRoot = cloneRepo(origin, join(root, 'repo'));
+  worktree = join(repoRoot, '.worktrees', WORKTREE_DIR);
 });
 
 afterEach(() => {
@@ -128,17 +132,29 @@ const contextWith = (answer: Answer = accepting, github = fakeGithub()) => {
   return { context, calls, github };
 };
 
-/** A deliver job on the origin repo, based on `base` (a branch name or a commit). */
-const deliverJob = (base: Job['base'] = { branchBase: 'main' }): Job =>
+/**
+ * A deliver job on the origin repo, based on `base` (a branch name or a commit). The worktree is reused:
+ * the uncommitted work of the Stations is in it (PROTOCOL §9).
+ */
+const deliverJob = (
+  base: Job['base'] = { branchBase: 'main' },
+  baseBranch = 'main',
+): Job =>
   ({
     jobId: JOB,
     orderId: ORDER,
     projectId: 'software-factory',
     epoch: 3,
     kind: 'deliver',
-    repo: { url: origin, baseBranch: 'main', branch: BRANCH },
+    repo: { url: origin, baseBranch, branch: BRANCH },
     base,
-    workspace: { dir: 'todo-1', sync: [], setup: [], timeoutMs: 60_000 },
+    workspace: {
+      dir: WORKTREE_DIR,
+      sync: [],
+      setup: [],
+      timeoutMs: 60_000,
+      mode: 'reuse',
+    },
     deliver: {
       taskId: 'todo-1',
       type: 'feat',
@@ -154,18 +170,27 @@ const deliverJob = (base: Job['base'] = { branchBase: 'main' }): Job =>
 
 const signal = (): AbortSignal => new AbortController().signal;
 
-/** Commits one file on the work branch, made from main the first time. Returns the commit sha. */
-const commitOnBranch = (name: string, text: string): string => {
-  const existing = git(origin, 'branch', '--list', BRANCH);
-  git(
-    origin,
-    'checkout',
-    '-q',
-    ...(existing === '' ? ['-b', BRANCH, 'main'] : [BRANCH]),
-  );
-  const sha = commitFile(origin, name, text);
-  git(origin, 'checkout', '-q', 'main');
-  return sha;
+/**
+ * Creates the job's worktree on `commit` (detached), as Station 0 would have, unless it exists already.
+ * Returns the worktree path.
+ */
+const placeWorktree = (commit: string = baseHead): string => {
+  if (git(repoRoot, 'worktree', 'list', '--porcelain').includes(worktree)) {
+    return worktree;
+  }
+  // The commit may exist only on origin (a predecessor's branch): the Cell's repo fetches before it is placed.
+  git(repoRoot, 'fetch', '--quiet', 'origin');
+  mkdirSync(dirname(worktree), { recursive: true });
+  git(repoRoot, 'worktree', 'add', '--detach', worktree, commit);
+  return worktree;
+};
+
+/** Writes a file into the worktree, uncommitted: the way an Operator leaves its work. */
+const work = (name: string, text: string): void => {
+  placeWorktree();
+  const path = join(worktree, name);
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, text);
 };
 
 /** The sha the work branch points at on the origin, or the empty string when it does not exist. */
@@ -189,10 +214,25 @@ const reportsOf = (calls: Sent[]) =>
     )
     .map((call) => call.request.command?.result);
 
-describe('deliver job', () => {
-  it('delivers the work branch as one commit on the base, with the rendered message and PR', async () => {
-    commitOnBranch('wip-1.txt', 'one\n');
-    const tipBefore = commitOnBranch('wip-2.txt', 'two\n');
+/** Makes or moves `name` on origin to `from` plus one commit per file. Returns the new tip. */
+const branchOnOrigin = (
+  name: string,
+  from: string,
+  files: Record<string, string>,
+): string => {
+  git(origin, 'checkout', '-q', '-B', name, from);
+  for (const [file, text] of Object.entries(files)) {
+    commitFile(origin, file, text);
+  }
+  const tip = git(origin, 'rev-parse', 'HEAD');
+  git(origin, 'checkout', '-q', 'main');
+  return tip;
+};
+
+describe('deliver job (deferred commit, PROTOCOL §8.3)', () => {
+  it('delivers the uncommitted work of the worktree as one commit on the base, with the rendered message and PR', async () => {
+    work('wip-1.txt', 'one\n');
+    work('wip-2.txt', 'two\n');
     const { context, calls, github } = contextWith();
 
     await runDeliver(context, deliverJob(), signal());
@@ -204,7 +244,6 @@ describe('deliver job', () => {
     expect(filesOf(tip)).toEqual(
       expect.arrayContaining(['wip-1.txt', 'wip-2.txt']),
     );
-    expect(tip).not.toBe(tipBefore);
     expect(github.created).toEqual([
       expect.objectContaining({
         branch: BRANCH,
@@ -220,9 +259,19 @@ describe('deliver job', () => {
     ]);
   });
 
+  it('leaves the worktree on the delivered commit, and the remote holds no WIP commit', async () => {
+    work('wip-1.txt', 'one\n');
+    const { context } = contextWith();
+
+    await runDeliver(context, deliverJob(), signal());
+
+    expect(git(worktree, 'rev-parse', 'HEAD')).toBe(branchTip());
+    expect(git(origin, 'log', '--format=%s', BRANCH)).not.toContain('wip(');
+  });
+
   it('falls back to a generated commit when the builder wrote no usable one', async () => {
-    commitOnBranch('wip-1.txt', 'one\n');
-    const noCommit = { ...deliverJob() } as Job;
+    work('wip-1.txt', 'one\n');
+    const noCommit = deliverJob();
     const job = {
       ...noCommit,
       deliver: { ...noCommit.deliver, commitBlob: undefined },
@@ -238,8 +287,8 @@ describe('deliver job', () => {
     expect(github.created[0]?.title).toBe('feat(factory): Add the feature');
   });
 
-  it('rebases the branch onto a moved base before it squashes', async () => {
-    commitOnBranch('feature.txt', 'feature\n');
+  it('rebases the staged work onto a moved base before it squashes', async () => {
+    work('feature.txt', 'feature\n');
     const movedBase = commitFile(origin, 'other.txt', 'moved\n');
     const { context } = contextWith();
 
@@ -253,30 +302,32 @@ describe('deliver job', () => {
     );
   });
 
-  it('reports a rebase conflict as failed and pushes nothing', async () => {
-    const tipBefore = commitOnBranch('shared.txt', 'branch side\n');
+  it('reports a rebase conflict as failed, pushes nothing, and keeps the work in the worktree', async () => {
+    work('shared.txt', 'branch side\n');
     commitFile(origin, 'shared.txt', 'main side\n');
     const { context, calls, github } = contextWith();
 
     await runDeliver(context, deliverJob(), signal());
 
-    expect(branchTip()).toBe(tipBefore);
+    expect(branchTip()).toBe('');
     expect(github.created).toEqual([]);
     const [report] = reportsOf(calls);
     expect(report).toMatchObject({ status: 'failed' });
     expect(String(report?.detail)).toMatch(/^rebase conflict/);
+    // HEAD is back on the commit the worktree started from, and the work is still there.
+    expect(git(worktree, 'rev-parse', 'HEAD')).toBe(baseHead);
+    expect(git(worktree, 'status', '--porcelain')).toContain('shared.txt');
   });
 
   it('reports a failed delivery and pushes nothing when the repo has no .factory/', async () => {
-    const tipBefore = commitOnBranch('wip-1.txt', 'one\n');
-    git(origin, 'checkout', '-q', 'main');
+    work('wip-1.txt', 'one\n');
     git(origin, 'rm', '-r', '-q', '.factory');
     git(origin, 'commit', '-q', '-m', 'drop the definitions');
     const { context, calls, github } = contextWith();
 
     await runDeliver(context, deliverJob(), signal());
 
-    expect(branchTip()).toBe(tipBefore);
+    expect(branchTip()).toBe('');
     expect(github.created).toEqual([]);
     const [report] = reportsOf(calls);
     expect(report).toMatchObject({ status: 'failed' });
@@ -284,7 +335,7 @@ describe('deliver job', () => {
   });
 
   it('reuses the open PR of the branch and creates none', async () => {
-    commitOnBranch('wip-1.txt', 'one\n');
+    work('wip-1.txt', 'one\n');
     const existing: PrRef = {
       url: 'https://example.test/pull/3',
       state: 'open',
@@ -302,7 +353,7 @@ describe('deliver job', () => {
   });
 
   it('renders the PR body from the todo body and the repo template, not from the title', async () => {
-    commitOnBranch('wip-1.txt', 'one\n');
+    work('wip-1.txt', 'one\n');
     const { context, github } = contextWith();
 
     await runDeliver(context, deliverJob(), signal());
@@ -312,8 +363,8 @@ describe('deliver job', () => {
   });
 
   it('fills the PR ADR section with the decisions/ entry the commit adds', async () => {
-    commitOnBranch('decisions/20261115-120000-factory-add-thing.md', '---\n');
-    commitOnBranch('wip-1.txt', 'one\n');
+    work('decisions/20261115-120000-factory-add-thing.md', '---\n');
+    work('wip-1.txt', 'one\n');
     const { context, github } = contextWith();
 
     await runDeliver(context, deliverJob(), signal());
@@ -325,7 +376,7 @@ describe('deliver job', () => {
   });
 
   it('says so in the PR when the commit adds no decisions/ entry', async () => {
-    commitOnBranch('wip-1.txt', 'one\n');
+    work('wip-1.txt', 'one\n');
     const { context, github } = contextWith();
 
     await runDeliver(context, deliverJob(), signal());
@@ -337,8 +388,8 @@ describe('deliver job', () => {
   });
 
   it('removes the todo file of its task in the same commit', async () => {
-    commitOnBranch('todos/todo-1.md', '---\nstatus: todo\n---\n');
-    commitOnBranch('wip-1.txt', 'one\n');
+    work('todos/todo-1.md', '---\nstatus: todo\n---\n');
+    work('wip-1.txt', 'one\n');
     const { context } = contextWith();
 
     await runDeliver(context, deliverJob(), signal());
@@ -349,7 +400,7 @@ describe('deliver job', () => {
   });
 
   it('delivers an API-created order whose repo holds no todo file, and removes nothing', async () => {
-    commitOnBranch('wip-1.txt', 'one\n');
+    work('wip-1.txt', 'one\n');
     const { context, calls } = contextWith();
 
     await runDeliver(context, deliverJob(), signal());
@@ -361,11 +412,11 @@ describe('deliver job', () => {
   });
 
   it('delivers again onto the same branch and PR after a reopen', async () => {
-    commitOnBranch('wip-1.txt', 'one\n');
+    work('wip-1.txt', 'one\n');
     const first = contextWith();
     await runDeliver(first.context, deliverJob(), signal());
     const delivered = branchTip();
-    commitOnBranch('rework.txt', 'rework\n');
+    work('rework.txt', 'rework\n');
     const second = contextWith(accepting, first.github);
 
     await runDeliver(
@@ -385,7 +436,7 @@ describe('deliver job', () => {
   });
 
   it('stops before any push when the dry run finds a stale epoch', async () => {
-    const tipBefore = commitOnBranch('wip-1.txt', 'one\n');
+    work('wip-1.txt', 'one\n');
     const staleOnDryRun: Answer = (sent) => {
       if (sent.request.dryRun === true) {
         throw new WireFailure({ code: 'stale_epoch', current: 4 });
@@ -398,20 +449,23 @@ describe('deliver job', () => {
       JobStopped,
     );
 
-    expect(branchTip()).toBe(tipBefore);
+    expect(branchTip()).toBe('');
     expect(github.created).toEqual([]);
     expect(reportsOf(calls)).toEqual([]);
+    expect(git(worktree, 'rev-parse', 'HEAD')).toBe(baseHead);
   });
 
   it('reports a failed push and overwrites nothing when the remote moved', async () => {
-    commitOnBranch('wip-1.txt', 'one\n');
+    work('wip-1.txt', 'one\n');
     let moved = '';
     const movedOnDryRun: Answer = (sent) => {
       if (
         sent.request.command?.type === 'ReportDelivery' &&
         sent.request.dryRun === true
       ) {
-        moved = commitOnBranch('pushed-by-someone-else.txt', 'theirs\n');
+        moved = branchOnOrigin(BRANCH, baseHead, {
+          'pushed-by-someone-else.txt': 'theirs\n',
+        });
       }
       return accepting(sent);
     };
@@ -428,35 +482,17 @@ describe('deliver job', () => {
 });
 
 /** A job on a stacked base: the branch is `factory/todo-1`, its base the predecessor's branch. */
-const stackedJob = (predecessor: string): Job => {
-  const job = deliverJob({ branchBase: predecessor });
-  return { ...job, repo: { ...job.repo, baseBranch: predecessor } } as Job;
-};
-
-/** Makes or moves `name` on origin to `from` plus one commit per file. Returns the new tip. */
-const branchOnOrigin = (
-  name: string,
-  from: string,
-  files: Record<string, string>,
-): string => {
-  git(origin, 'checkout', '-q', '-B', name, from);
-  for (const [file, text] of Object.entries(files)) {
-    commitFile(origin, file, text);
-  }
-  const tip = git(origin, 'rev-parse', 'HEAD');
-  git(origin, 'checkout', '-q', 'main');
-  return tip;
-};
+const stackedJob = (predecessor: string): Job =>
+  deliverJob({ branchBase: predecessor }, predecessor);
 
 describe('deliver job on a stacked base (CORE §12.5)', () => {
-  it('delivers onto factory/<predecessor>: the PR targets it and the predecessor commit is an ancestor', async () => {
+  it('delivers onto factory/<predecessor>: the PR targets it and the predecessor commit is the parent', async () => {
     const predTip = branchOnOrigin('factory/todo-0', baseHead, {
       'pred.txt': 'pred\n',
     });
-    branchOnOrigin(BRANCH, predTip, {
-      'todos/todo-1.md': '# todo\n',
-      'wip.txt': 'wip\n',
-    });
+    placeWorktree(predTip);
+    work('todos/todo-1.md', '# todo\n');
+    work('wip.txt', 'wip\n');
     const { context, calls, github } = contextWith();
 
     await runDeliver(context, stackedJob('factory/todo-0'), signal());
@@ -482,7 +518,8 @@ describe('deliver job on a stacked base (CORE §12.5)', () => {
     const planTip = branchOnOrigin('feat/xyz', baseHead, {
       'plan.txt': 'plan\n',
     });
-    branchOnOrigin(BRANCH, planTip, { 'wip.txt': 'wip\n' });
+    placeWorktree(planTip);
+    work('wip.txt', 'wip\n');
     const { context, github } = contextWith();
 
     await runDeliver(context, stackedJob('feat/xyz'), signal());
@@ -495,32 +532,31 @@ describe('deliver job on a stacked base (CORE §12.5)', () => {
   });
 
   it('reports delivery_failed and pushes nothing when the base branch is missing', async () => {
-    const tipBefore = branchOnOrigin(BRANCH, baseHead, { 'wip.txt': 'wip\n' });
+    work('wip.txt', 'wip\n');
     const { context, calls, github } = contextWith();
 
     await runDeliver(context, stackedJob('factory/todo-gone'), signal());
 
-    expect(branchTip()).toBe(tipBefore);
+    expect(branchTip()).toBe('');
     expect(github.created).toEqual([]);
     const [report] = reportsOf(calls);
     expect(report).toMatchObject({ status: 'failed' });
     expect(String(report?.detail)).toMatch(/factory\/todo-gone/);
   });
 
-  it('reports delivery_failed and pushes nothing when the predecessor was rewritten under the branch', async () => {
+  it('reports delivery_failed and pushes nothing when the predecessor was rewritten under the work', async () => {
     const first = branchOnOrigin('factory/todo-0', baseHead, {
       'shared.txt': 'pred one\n',
     });
-    const tipBefore = branchOnOrigin(BRANCH, first, {
-      'shared.txt': 'work side\n',
-    });
-    // The predecessor is reopened and rewritten: the work commit no longer rebases cleanly.
+    placeWorktree(first);
+    work('shared.txt', 'work side\n');
+    // The predecessor is reopened and rewritten: the work no longer rebases cleanly.
     branchOnOrigin('factory/todo-0', baseHead, { 'shared.txt': 'pred two\n' });
     const { context, calls, github } = contextWith();
 
     await runDeliver(context, stackedJob('factory/todo-0'), signal());
 
-    expect(branchTip()).toBe(tipBefore);
+    expect(branchTip()).toBe('');
     expect(github.created).toEqual([]);
     const [report] = reportsOf(calls);
     expect(report).toMatchObject({ status: 'failed' });

@@ -171,6 +171,8 @@ export interface WorkOrderState {
   activeJob?: ActiveJob | undefined;
   epoch: number; // the last issued epoch, 0 before any claim
   workspaceFailures: WorkspaceFailure[]; // consecutive; see CORE §4.3 rule 10
+  /** Missing-worktree resets to Station 0 since the last delivery or Supervisor resume (CORE §4.3 rule 13). Absent is 0. */
+  worktreeResets?: number;
   deliveryFailed?: { jobId: JobId; detail: string } | undefined;
   delivery?:
     | { prUrl: string; commit: CommitSha; state: 'open' | 'merged' | 'closed' }

@@ -9,6 +9,11 @@ import type {
 import { GIT_TIMEOUT_MS } from '../workspace/repo';
 import { prepareWorkspace } from '../workspace/prepare';
 import {
+  changedSince,
+  worktreeFingerprint,
+  type GitRun,
+} from '../workspace/snapshot';
+import {
   gitCommand,
   runShell,
   succeeded,
@@ -69,6 +74,15 @@ export const runInspection = async (
     job,
   );
   if (!prepared.ok) {
+    if (prepared.missing) {
+      await submit(
+        ctx,
+        job,
+        { type: 'ReportWorktreeMissing', detail: prepared.detail },
+        signal,
+      );
+      return;
+    }
     const logBlob = await putLog(ctx, prepared.log, signal);
     await submit(
       ctx,
@@ -85,7 +99,12 @@ export const runInspection = async (
   }
 
   try {
-    if (typeof job.base === 'string' && job.base !== prepared.head) {
+    // A fresh worktree sits at the job's base; a reused one keeps the work of earlier Stations on top of it.
+    if (
+      job.workspace?.mode !== 'reuse' &&
+      typeof job.base === 'string' &&
+      job.base !== prepared.head
+    ) {
       const logBlob = await putLog(
         ctx,
         new TextEncoder().encode(`worktree is at ${prepared.head}`),
@@ -158,6 +177,19 @@ interface CheckInput {
   shell: ShellContext;
 }
 
+/** The worktree's fingerprint, read through the Cell's shell so the check's own git runs are logged like any command. */
+const fingerprintOf = (input: CheckInput) => {
+  const git: GitRun = async (args) => {
+    const run = await runShell(input.shell, {
+      command: gitCommand([...args]),
+      cwd: input.worktree,
+      timeoutMs: GIT_TIMEOUT_MS,
+    });
+    return succeeded(run) ? { ok: true, text: textOf(run) } : { ok: false };
+  };
+  return worktreeFingerprint(input.worktree, git);
+};
+
 const runChecks = async (
   ctx: JobContext,
   job: Job,
@@ -168,6 +200,8 @@ const runChecks = async (
   try {
     const timeoutMs =
       input.station.inspectionTimeoutMs ?? DEFAULT_INSPECTION_TIMEOUT_MS;
+    // The read-only baseline: what earlier Stations left in the tree is not this Inspection's doing.
+    const before = await fingerprintOf(input);
     const results: InspectionResult[] = [];
     for (const command of input.station.exec ?? []) {
       const run = await runShell(input.shell, {
@@ -187,15 +221,8 @@ const runChecks = async (
     }
 
     if (signal.aborted) throw new Error('stopped before the read-only check');
-    const status = await runShell(input.shell, {
-      command: gitCommand(['status', '--porcelain']),
-      cwd: input.worktree,
-      timeoutMs: GIT_TIMEOUT_MS,
-    });
-    if (!succeeded(status)) {
-      throw new Error('git status failed after the checks');
-    }
-    if (textOf(status).trim() !== '') {
+    const after = await fingerprintOf(input);
+    if (changedSince(before, after)) {
       await submit(
         ctx,
         job,

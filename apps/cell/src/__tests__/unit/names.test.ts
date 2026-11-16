@@ -1,10 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { branchFor, cycleDirName, paneName, wipRefFor } from '../../names';
+import { branchFor, cycleDirName, paneName } from '../../names';
 
 describe('names', () => {
-  it('names the Work order branch and the WIP ref of a failed Cycle', () => {
+  it('names the Work order branch', () => {
     expect(branchFor('add-login')).toBe('factory/add-login');
-    expect(wipRefFor('add-login', '01JX')).toBe('factory-wip/add-login/01JX');
   });
 
   it('gives a pane a name Herdr accepts: lowercase, with a digest, at most 32 characters', () => {

@@ -85,17 +85,18 @@ describe('an Operator blocked on Cell A', () => {
       .at(-1);
     expect(blocked?.commit).toBeDefined();
     expect(resumedBuild?.baseCommit).toBe(blocked?.commit);
-    // The checkpoint is a real commit on the remote, marked as the blocked Cycle's WIP.
-    const trailer = Bun.spawnSync([
+    // The checkpoint is the worktree's HEAD the blocked Cycle started from: the block made no WIP commit
+    // and pushed nothing (PROTOCOL §8.2). The work it left stays in Cell A's worktree.
+    const subject = Bun.spawnSync([
       'git',
       '-C',
       w.repo,
       'log',
       '-1',
-      '--format=%B',
+      '--format=%s',
       blocked?.commit ?? 'HEAD',
     ]).stdout.toString();
-    expect(trailer).toContain('Factory-Outcome: blocked');
+    expect(subject).not.toContain('wip(');
 
     // The resume reached B, and Cell A never ran the resumed Station.
     const resumedOn = ofType(events, 'job_claimed').at(-1);

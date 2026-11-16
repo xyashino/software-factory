@@ -7,6 +7,7 @@ import {
   reportDelivery,
   recordPrState,
   reportWorkspaceFailed,
+  reportWorktreeMissing,
   cancel,
   claimJob,
   reprioritise,
@@ -61,6 +62,8 @@ export const decide = (
       return startCycle(state, command, ctx);
     case 'ReportWorkspaceFailed':
       return reportWorkspaceFailed(state, command, ctx);
+    case 'ReportWorktreeMissing':
+      return reportWorktreeMissing(state, command, ctx);
     case 'CompleteCycle':
       return completeCycle(state, command, ctx);
     case 'SubmitVerdict':

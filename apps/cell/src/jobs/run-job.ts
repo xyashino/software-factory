@@ -156,6 +156,7 @@ export const runJob = async (
                   ok: false,
                   stage: prepared.stage,
                   detail: prepared.detail,
+                  ...(prepared.missing ? { missing: true } : {}),
                 };
               }
               releaseWorktree = prepared.release;

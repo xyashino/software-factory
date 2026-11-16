@@ -84,6 +84,12 @@ const reportWorkspaceFailedSchema = z
     logBlob: blobRefSchema,
   })
   .strict();
+const reportWorktreeMissingSchema = z
+  .object({
+    type: z.literal('ReportWorktreeMissing'),
+    detail: freeText,
+  })
+  .strict();
 const completeCycleSchema = z
   .object({
     type: z.literal('CompleteCycle'),
@@ -260,6 +266,7 @@ export const orderCommandSchema = z.discriminatedUnion('type', [
   claimJobSchema,
   startCycleSchema,
   reportWorkspaceFailedSchema,
+  reportWorktreeMissingSchema,
   completeCycleSchema,
   submitVerdictSchema,
   reportInspectionSchema,

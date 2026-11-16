@@ -6,6 +6,7 @@ import {
   readFileSync,
   readlinkSync,
   rmSync,
+  writeFileSync,
 } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
@@ -31,7 +32,7 @@ import { runJob } from '../jobs/run-job';
 import type { JobContext } from '../jobs/send';
 import { createHeartbeat } from '../loops/heartbeat';
 import { factoryFiles } from '../testing/factory-fixture';
-import { cloneRepo, commitFile, git, makeRepo } from '../testing/git-repo';
+import { cloneRepo, git, makeRepo } from '../testing/git-repo';
 import type { GithubPort } from '../ports/github.port';
 import { joinCell } from './helpers/join';
 import { splitClient } from './helpers/split-client';
@@ -465,15 +466,17 @@ describe('Cell over HTTP', () => {
     expect(inspection.kind).toBe('run_inspection');
     await playStation(client, inspection, mainSha, mainSha);
 
-    // The build's checkpoint lands on the work branch; the scripted station claims the build and
-    // completes it on that commit. The Factory then queues the delivery.
-    git(origin, 'checkout', '-q', '-b', 'factory/todo-1', 'main');
-    const workCommit = commitFile(origin, 'feature.txt', 'built\n');
-    git(origin, 'checkout', '-q', 'main');
+    // The build leaves its work uncommitted in the Cell's worktree (PROTOCOL §8.3): the worktree is the
+    // one Station 0 placed, and the scripted station's checkpoint names its HEAD, the base. Nothing is pushed.
+    const worktree = join(repoRoot, '.worktrees', 'todo-1');
+    git(repoRoot, 'fetch', '--quiet', 'origin');
+    mkdirSync(join(repoRoot, '.worktrees'), { recursive: true });
+    git(repoRoot, 'worktree', 'add', '--detach', worktree, mainSha);
+    writeFileSync(join(worktree, 'feature.txt'), 'built\n');
     const build = (await client.call('claim', { cellId: CELL, waitMs: 0 }))
       .job as Job;
     expect(build.kind).toBe('run_operator_station');
-    await playStation(client, build, mainSha, workCommit);
+    await playStation(client, build, mainSha, mainSha);
 
     // The Cell starts its own claim loop: it claims the queued delivery and runs it for real.
     const running: RunningCell = await startCell({

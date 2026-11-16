@@ -175,6 +175,38 @@ export const reportWorkspaceFailed = (
   ]);
 };
 
+/**
+ * The Cell's job needs a worktree this Cell does not hold (CORE §4.3 rule 13). Only a Work order past
+ * its first Station can lack one: a Station 0 job creates its worktree from the base, so nothing is reset.
+ */
+export const reportWorktreeMissing = (
+  state: WorkOrderState,
+  command: CommandOf<'ReportWorktreeMissing'>,
+  ctx: DecideContext,
+): Decision => {
+  const denied = requireActor(ctx, ['cell']);
+  if (denied) return err(denied);
+  const fence = fenced(state, ctx);
+  if (!fence.ok) return fence;
+  const job = fence.value;
+  if (hasStarted(state, job)) {
+    return err(precondition('the Cycle has already started'));
+  }
+  const progressed =
+    state.phase.kind === 'delivering' ||
+    (state.phase.kind === 'stations' && state.phase.index > 0);
+  if (!progressed) {
+    return err(
+      precondition(
+        'a missing worktree resets only a Work order past Station 0',
+      ),
+    );
+  }
+  return ok([
+    { type: 'worktree_missing', jobId: job.jobId, detail: command.detail },
+  ]);
+};
+
 /** The reaper found the lease expired: the job is lost (CORE §5.2). */
 export const expireLease = (
   state: WorkOrderState,

@@ -175,6 +175,15 @@ export const workspaceFailed = (
   ...over,
 });
 
+export const worktreeMissing = (
+  over: Partial<Fields<'worktree_missing'>> = {},
+): Ev<'worktree_missing'> => ({
+  type: 'worktree_missing',
+  jobId: jobIdOf(1),
+  detail: 'worktree is not on this cell',
+  ...over,
+});
+
 export const cycleStarted = (
   over: Partial<Fields<'cycle_started'>> = {},
 ): Ev<'cycle_started'> => ({
@@ -477,6 +486,7 @@ export const samples: { [T in OrderEvent['type']]: Ev<T> } = {
   job_claimed: jobClaimed(),
   job_lost: jobLost(),
   workspace_failed: workspaceFailed(),
+  worktree_missing: worktreeMissing(),
   cycle_started: cycleStarted(),
   cycle_completed: cycleCompleted(),
   verdict_recorded: verdictRecorded(),

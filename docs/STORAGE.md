@@ -158,7 +158,7 @@ outsiders:
 - Inside `transaction(fn)`, `fn` MUST await nothing but `tx` methods. Rendering a prompt, reading a
   blob or any other work is done before the transaction or through `tx`.
 - The statements inside the transaction are Drizzle builder calls on the same connection. `BEGIN
-  IMMEDIATE`, `COMMIT`, `ROLLBACK` and savepoints stay raw on the `Database`. `orm.transaction` is never
+IMMEDIATE`, `COMMIT`, `ROLLBACK` and savepoints stay raw on the `Database`. `orm.transaction` is never
   used: it would issue a plain `BEGIN`, which does not take the write lock up front.
 
 **Reads never queue behind the writer (perf-04).** A file database has a second, read-only connection
@@ -430,6 +430,11 @@ leases) and the artifacts of the passed Stations are not recovered. `order_recov
 stays in the event vocabulary for the histories that carry it; no path appends it now.
 
 Keep a `backup` or `export` on a schedule, so the case of a lost database with no copy does not arise.
+
+Until delivery, git holds no trace of a Work order's stations: no per-Station commit, no trailers and no
+`factory-wip/*` ref (PROTOCOL §8). The Work order's progress is the Traveler (events) and the blobs; the
+uncommitted work between Stations lives only in the worktree of the Cell that ran them. A Cell that does
+not hold it reports `worktree_missing`, and the Work order restarts at Station 0 (CORE §4.3 rule 13).
 
 ## 9. Migrations
 

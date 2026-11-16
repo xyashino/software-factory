@@ -94,6 +94,29 @@ const failWorkspace = (
   };
 };
 
+/**
+ * CORE §4.3 rule 13: the Cell lacked the worktree, so the Work order starts again from Station 0. The
+ * checkpoint, the passed Stations and the per-Station budgets of the attempt go; the lifetime retry
+ * budget stays. The reset counter is what bounds the loop.
+ */
+const missingWorktree = (
+  state: WorkOrderState,
+  ev: Extract<OrderEvent, { type: 'worktree_missing' }>,
+): WorkOrderState =>
+  whenJobActive(state, ev.jobId, (active) => ({
+    ...active,
+    activeJob: undefined,
+    phase: { kind: 'stations', index: 0 },
+    checkpoint: undefined,
+    lastPassed: {},
+    pendingFeedback: undefined,
+    pendingResume: undefined,
+    workspaceFailures: [],
+    restartsUsed: zeroCounters(active.line),
+    lostRestartsUsed: zeroCounters(active.line),
+    worktreeResets: (active.worktreeResets ?? 0) + 1,
+  }));
+
 const finishDelivery = (
   state: WorkOrderState,
   ev: Extract<OrderEvent, { type: 'delivery_finished' }>,
@@ -104,6 +127,7 @@ const finishDelivery = (
     phase: { kind: 'delivered' },
     delivery: { prUrl: ev.prUrl, commit: ev.commit, state: 'open' },
     workspaceFailures: [],
+    worktreeResets: 0,
   }));
 
 const failDelivery = (
@@ -168,6 +192,8 @@ export const evolve = (
       }));
     case 'workspace_failed':
       return failWorkspace(state, ev, stored.at);
+    case 'worktree_missing':
+      return missingWorktree(state, ev);
     case 'delivery_finished':
       return finishDelivery(state, ev);
     case 'delivery_failed':

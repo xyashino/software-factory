@@ -18,7 +18,7 @@ const TYPES = Object.keys(samples) as (keyof typeof samples)[];
 
 describe('event catalogue', () => {
   it('has every event type of CORE §3.3', () => {
-    expect(orderEventSchema.options).toHaveLength(28);
+    expect(orderEventSchema.options).toHaveLength(29);
   });
 
   it.each(TYPES)('accepts a valid %s event', (type) => {
