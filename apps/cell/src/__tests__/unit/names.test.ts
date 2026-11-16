@@ -1,9 +1,28 @@
 import { describe, expect, it } from 'vitest';
-import { branchFor, cycleDirName, paneName } from '../../names';
+import {
+  branchFor,
+  cycleDirName,
+  paneName,
+  snapshotNamespaceOf,
+  snapshotRefFor,
+} from '../../names';
 
 describe('names', () => {
   it('names the Work order branch', () => {
     expect(branchFor('add-login')).toBe('factory/add-login');
+  });
+
+  it('names a Cycle snapshot under its Work order, station and Cycle', () => {
+    expect(
+      snapshotRefFor('add-login', 'build', '01J0000000000000000000000C'),
+    ).toBe('refs/software-factory/add-login/build/01J0000000000000000000000C');
+    expect(
+      snapshotRefFor(
+        'add-login',
+        'build',
+        '01J0000000000000000000000C',
+      ).startsWith(snapshotNamespaceOf('add-login')),
+    ).toBe(true);
   });
 
   it('gives a pane a name Herdr accepts: lowercase, with a digest, at most 32 characters', () => {

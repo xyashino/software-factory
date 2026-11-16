@@ -137,3 +137,28 @@ export const formatPrBody = (
   });
   return `${body.trimEnd()}\n`;
 };
+
+/** What a blocked Work order publishes: the `[BLOCKED] <taskId> <reason>` title and the `blocked` template body. */
+export interface BlockedPrInput {
+  taskId: string;
+  reason: string;
+  detail: string;
+  logCommand: string;
+}
+
+/** The `[BLOCKED]` draft PR of a Work order that stopped on an Andon (v1 `publishBlockedWork`). */
+export const formatBlockedPr = (
+  input: BlockedPrInput,
+  templates: ReadonlyMap<string, Template>,
+): { title: string; body: string } => {
+  const body = renderTemplate(templateBody(templates, 'blocked'), {
+    taskId: input.taskId,
+    reason: input.reason,
+    detail: input.detail,
+    logCommand: input.logCommand,
+  });
+  return {
+    title: `[BLOCKED] ${input.taskId} ${input.reason}`,
+    body: `${body.trimEnd()}\n`,
+  };
+};

@@ -88,7 +88,7 @@ describe('operator workspace', () => {
     if (second.ok) second.release();
   });
 
-  it('creates a detached worktree at the base commit under the repo', async () => {
+  it('creates a worktree on the named Work order branch at the base commit', async () => {
     const result = await prepareWorkspace(contextFor(), jobFor());
 
     expect(result).toMatchObject({ ok: true, head: base });
@@ -97,7 +97,7 @@ describe('operator workspace', () => {
     expect(await must(result.worktree, ['rev-parse', 'HEAD'])).toBe(base);
     expect(
       await must(result.worktree, ['rev-parse', '--abbrev-ref', 'HEAD']),
-    ).toBe('HEAD');
+    ).toBe('factory/add-login');
     expect(existsSync(join(result.worktree, '.cell'))).toBe(true);
     result.release();
   });

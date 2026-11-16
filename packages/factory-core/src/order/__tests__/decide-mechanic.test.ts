@@ -45,9 +45,10 @@ describe('the Mechanic job and the Andon', () => {
       ...result.value,
     ]);
     expect(after.activeJob).toBeUndefined();
+    // The Andon stays open with its triage done: the Supervisor's Andon gets its one blocked publish first.
     expect(nextJob(after)).toEqual({
-      kind: 'await_supervisor',
-      cause: 'andon',
+      kind: 'job',
+      job: { kind: 'publish_blocked', andonAt: after.andon?.at ?? -1 },
     });
   });
 

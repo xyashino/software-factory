@@ -21,7 +21,8 @@ export type JobSpec =
       base: CommitSha | 'branch_base';
     }
   | { kind: 'deliver'; base: CommitSha }
-  | { kind: 'mechanic'; andonAt: number; n: number }; // no workspace; the Mechanic triages the Andon (CORE §14.4)
+  | { kind: 'mechanic'; andonAt: number; n: number } // no workspace; the Mechanic triages the Andon (CORE §14.4)
+  | { kind: 'publish_blocked'; andonAt: number }; // the Cell publishes a draft `[BLOCKED]` PR for the Andon (v1 publishBlockedWork)
 
 export type Next =
   | { kind: 'done' }

@@ -121,17 +121,26 @@ export const claimJob = (
   const denied = requireActor(ctx, ['factory']);
   if (denied) return err(denied);
   const holder = holderOf(state);
-  if (holder.kind !== 'queue' && holder.kind !== 'mechanic') {
+  const next = nextJob(state);
+  // A blocked publish runs while the supervisor holds the Andon: it publishes, and the Andon stays theirs.
+  const publishing =
+    holder.kind === 'supervisor' &&
+    next.kind === 'job' &&
+    next.job.kind === 'publish_blocked';
+  if (holder.kind !== 'queue' && holder.kind !== 'mechanic' && !publishing) {
     return err(precondition(`the Work order is held by ${holder.kind}`));
   }
-  const next = nextJob(state);
   if (next.kind !== 'job') {
     return err(precondition(`nextJob is ${next.kind}, not a job`));
   }
   const jobId = jobIdSchema.parse(ctx.ids.next());
   const epoch = state.epoch + 1;
   const { kind } = next.job;
-  if (next.job.kind === 'deliver' || next.job.kind === 'mechanic') {
+  if (
+    next.job.kind === 'deliver' ||
+    next.job.kind === 'mechanic' ||
+    publishing
+  ) {
     return ok([
       { type: 'job_claimed', jobId, kind, cellId: command.cellId, epoch },
     ]);
@@ -257,6 +266,35 @@ export const reportDelivery = (
   }
   return ok([
     { type: 'delivery_failed', jobId: job.jobId, detail: result.detail },
+  ]);
+};
+
+/**
+ * The `publish_blocked` job reports what it did for the open Andon (v1 `publishBlockedWork`). The Andon keeps
+ * its holder and its phase: the report only records the published PR, an empty worktree, or a failure.
+ */
+export const reportBlockedPr = (
+  state: WorkOrderState,
+  command: CommandOf<'ReportBlockedPr'>,
+  ctx: DecideContext,
+): Decision => {
+  const denied = requireActor(ctx, ['cell']);
+  if (denied) return err(denied);
+  const fence = fenced(state, ctx);
+  if (!fence.ok) return fence;
+  const job = fence.value;
+  if (job.kind !== 'publish_blocked') {
+    return err(precondition('the job is not a blocked publish'));
+  }
+  const andon = state.andon;
+  if (!andon) return err(precondition('no Andon is raised'));
+  return ok([
+    {
+      type: 'blocked_pr_reported',
+      jobId: job.jobId,
+      andonAt: andon.at,
+      result: command.result,
+    },
   ]);
 };
 

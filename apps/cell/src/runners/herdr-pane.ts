@@ -1,5 +1,10 @@
 import { execFile } from 'node:child_process';
-import type { LaunchSpec, PaneDriver, PaneReading } from '../ports';
+import type {
+  LaunchSpec,
+  PaneDriver,
+  PaneLocation,
+  PaneReading,
+} from '../ports';
 import { acceptClaudeTrust, claudeConfigPathOf } from './claude-trust';
 
 /** How long the agent takes to leave its startup screen after Enter, as v1 waited. */
@@ -133,7 +138,7 @@ export const createHerdrPane = (
   return {
     open: async (
       spec: LaunchSpec & { name: string; task: string; logCommand?: string },
-    ) => {
+    ): Promise<PaneLocation> => {
       // Claude Code shows its trust dialog for every new folder; its flag is set before the start.
       if (spec.command[0] === 'claude') {
         acceptClaudeTrust(
@@ -189,6 +194,10 @@ export const createHerdrPane = (
         if (!startupBlock || !(await confirmTrustOf(spec.name))) throw error;
         await new Promise((resolve) => setTimeout(resolve, STARTUP_WAIT_MS));
       }
+      return { tabId };
+    },
+    adopt: (name, location) => {
+      tabs.set(name, location.tabId);
     },
     type: async (name, text) => {
       // Waits until the agent starts working, or stops on a prompt, so the text is not lost while the TUI

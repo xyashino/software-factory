@@ -2,7 +2,12 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { parseConfig, readConfig, repoCellDataDir } from '../config';
+import {
+  notificationsEnabled,
+  parseConfig,
+  readConfig,
+  repoCellDataDir,
+} from '../config';
 
 let dir: string;
 
@@ -12,6 +17,33 @@ beforeEach(() => {
 
 afterEach(() => {
   rmSync(dir, { recursive: true, force: true });
+});
+
+describe('notifications config', () => {
+  it('is on by default', () => {
+    expect(parseConfig('').notifications).toBe(true);
+  });
+
+  it('is turned off by the notifications key', () => {
+    expect(parseConfig('notifications = false').notifications).toBe(false);
+  });
+
+  it('refuses a notifications value that is not a boolean', () => {
+    expect(() => parseConfig('notifications = "yes"')).toThrow(/notifications/);
+  });
+
+  it('is enabled only for an interactive Cell that is not turned off', () => {
+    const interactive = parseConfig('');
+    const headless = parseConfig('headless_operators = true');
+    const off = parseConfig('notifications = false');
+
+    expect(notificationsEnabled(interactive, {})).toBe(true);
+    expect(notificationsEnabled(interactive, { FACTORY_NOTIFY: '0' })).toBe(
+      false,
+    );
+    expect(notificationsEnabled(headless, {})).toBe(false);
+    expect(notificationsEnabled(off, {})).toBe(false);
+  });
 });
 
 describe('repoCellDataDir', () => {

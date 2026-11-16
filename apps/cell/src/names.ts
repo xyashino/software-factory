@@ -3,6 +3,26 @@ import { createHash } from 'node:crypto';
 /** The branch of a Work order: one per order, created from the base branch (PROTOCOL §8.1). */
 export const branchFor = (todoId: string): string => `factory/${todoId}`;
 
+/** The namespace of every snapshot ref of a Work order (v1: `refs/software-factory/<taskId>/`). */
+export const snapshotNamespaceOf = (todoId: string): string =>
+  `refs/software-factory/${todoId}/`;
+
+/**
+ * The ref of one Cycle's pre-cycle snapshot: `refs/software-factory/<todoId>/<stationId>/<cycleId>`. The
+ * Cycle id is a ULID, so the refs of one station sort oldest first.
+ */
+export const snapshotRefFor = (
+  todoId: string,
+  stationId: string,
+  cycleId: string,
+): string => `${snapshotNamespaceOf(todoId)}${stationId}/${cycleId}`;
+
+/** The namespace of one station's snapshot refs within a Work order. */
+export const stationSnapshotNamespaceOf = (
+  todoId: string,
+  stationId: string,
+): string => `${snapshotNamespaceOf(todoId)}${stationId}/`;
+
 /**
  * The Herdr agent name of a Cycle: `<station>_<hash>_<n>`, where the hash is a digest of the Cycle (or
  * Mechanic job) id. The hash is always present, so two Cells running the same station with the same

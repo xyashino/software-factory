@@ -43,6 +43,41 @@ const post = async (
   };
 };
 
+describe('operator endpoint port', () => {
+  it('binds the port it is given after an earlier endpoint closed, and accepts the same token', async () => {
+    const first = await start();
+    const port = Number(new URL(first.url).port);
+    await first.close();
+
+    const adopted = await startOperatorServer({
+      token: TOKEN,
+      port,
+      dispatch: async () => ({ ok: true }),
+    });
+    servers.push(adopted);
+
+    expect(adopted.url).toBe(`http://127.0.0.1:${port}`);
+    const answer = await post(
+      adopted.url,
+      JSON.stringify({ token: TOKEN, op: 'done' }),
+    );
+    expect(answer.status).toBe(200);
+  });
+
+  it('refuses to start on a port another endpoint holds', async () => {
+    const holder = await start();
+    const port = Number(new URL(holder.url).port);
+
+    await expect(
+      startOperatorServer({
+        token: TOKEN,
+        port,
+        dispatch: async () => ({ ok: true }),
+      }),
+    ).rejects.toThrow(/in use|EADDRINUSE/);
+  });
+});
+
 describe('operator request checks', () => {
   it('accepts a verb carrying the right token', () => {
     const checked = readRequest(

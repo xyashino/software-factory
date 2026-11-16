@@ -180,6 +180,51 @@ export const reportInspection = (
   return ok(events);
 };
 
+/**
+ * One check of a running Inspection started or finished. The Cycle stays running: the event only feeds
+ * the live view, so it changes no status, count or retry.
+ */
+export const reportInspectionProgress = (
+  state: WorkOrderState,
+  command: CommandOf<'ReportInspectionProgress'>,
+  ctx: DecideContext,
+): Decision => {
+  const denied = requireActor(ctx, ['cell']);
+  if (denied) return err(denied);
+  const fence = fenced(state, ctx);
+  if (!fence.ok) return fence;
+  const dead = requireLive(state, command.cycleId);
+  if (dead) return err(dead);
+  const station = stationOfCycle(state, command.cycleId);
+  if (station.kind !== 'inspection') {
+    return err(precondition(`${station.id} is not an inspection Station`));
+  }
+  const problem = invalidIf([
+    ...(command.index > command.total ? ['index is past total'] : []),
+    ...(command.phase === 'finished' &&
+    (command.exitCode === undefined ||
+      command.timedOut === undefined ||
+      command.durationMs === undefined)
+      ? ['a finished check needs exitCode, timedOut and durationMs']
+      : []),
+  ]);
+  if (problem) return err(problem);
+  const events: OrderEvent[] = [
+    {
+      type: 'inspection_progress',
+      cycleId: command.cycleId,
+      phase: command.phase,
+      index: command.index,
+      total: command.total,
+      command: command.command,
+      exitCode: command.exitCode,
+      timedOut: command.timedOut,
+      durationMs: command.durationMs,
+    },
+  ];
+  return ok(events);
+};
+
 export const failCycle = (
   state: WorkOrderState,
   command: CommandOf<'FailCycle'>,

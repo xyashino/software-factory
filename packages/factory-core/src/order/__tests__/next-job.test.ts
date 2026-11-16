@@ -3,6 +3,7 @@ import type { Station } from '../../line/snapshot';
 import { makeLine, pinnedLineOf } from './builders';
 import {
   andonRaised,
+  blockedPrReported,
   incidentRecorded,
   jobLost,
   blobOf,
@@ -71,12 +72,41 @@ describe('nextJob rows 1-3: terminal, busy, andon', () => {
     });
   });
 
-  it('row 3: an escalated Andon waits for the Supervisor', () => {
+  it('row 3: an escalated Andon gets one blocked publish, then waits for the Supervisor', () => {
+    const escalated = [
+      created(),
+      andonRaised(),
+      incidentRecorded({ andonAt: 2000, action: { kind: 'escalate' } }),
+    ];
+    expect(next(escalated)).toEqual({
+      kind: 'job',
+      job: { kind: 'publish_blocked', andonAt: 2000 },
+    });
+    expect(
+      next([
+        ...escalated,
+        claim(2, 'publish_blocked'),
+        blockedPrReported({
+          jobId: jobIdOf(2),
+          andonAt: 2000,
+          result: { status: 'no_changes' },
+        }),
+      ]),
+    ).toEqual({ kind: 'await_supervisor', cause: 'andon' });
+  });
+
+  it('row 3: a failed blocked publish does not loop the Andon', () => {
     expect(
       next([
         created(),
         andonRaised(),
         incidentRecorded({ andonAt: 2000, action: { kind: 'escalate' } }),
+        claim(2, 'publish_blocked'),
+        blockedPrReported({
+          jobId: jobIdOf(2),
+          andonAt: 2000,
+          result: { status: 'failed', detail: 'push refused' },
+        }),
       ]),
     ).toEqual({ kind: 'await_supervisor', cause: 'andon' });
   });

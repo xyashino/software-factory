@@ -13,6 +13,7 @@ import type { GithubPort } from '../ports/github.port';
 import type { SystemPort } from '../ports/system.port';
 import { commandIdOf } from '../factory-client';
 import { orderIdOf } from './job-shape';
+import type { NotifyFn } from './notify';
 import { redactTail } from './redact';
 
 /** What a job needs from the Cell: the client, the identity, the system, and the local directories. */
@@ -33,6 +34,8 @@ export interface JobContext {
   takeSignals?: (jobId: JobId) => Signal[];
   /** Optional Herdr pane driver for non-headless Operator stations. */
   pane?: PaneDriver;
+  /** Desktop toast for questions, blocks and deliveries. Unset when notifications are off (see `notifyQuietly`). */
+  notify?: NotifyFn;
   /** Runs every Operator station headless, whatever its Line says (config `headless_operators`). */
   headlessOperators?: boolean;
   /**

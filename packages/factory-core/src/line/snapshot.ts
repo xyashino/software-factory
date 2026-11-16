@@ -107,7 +107,11 @@ export const lineSnapshotSchema = z
       .strict()
       .optional(),
     deliver: z
-      .object({ commit: machineText(128), report: machineText(128) })
+      .object({
+        commit: machineText(128),
+        report: machineText(128),
+        requireAdr: z.boolean().optional(),
+      })
       .strict()
       .optional(),
   })

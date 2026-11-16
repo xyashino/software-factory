@@ -12,12 +12,15 @@ import {
 } from '@repo/factory-core/ids';
 import type { CellConfig } from './config';
 import { createRegistry } from './cycle/registry';
+import { reconcileSessions } from './cycle/reconcile';
+import type { AdoptedStation } from './jobs/run-operator-station';
 import type { GithubPort } from './ports/github.port';
 import type { SystemPort } from './ports/system.port';
 import type { ClockPort } from './ports/clock.port';
 import { createGithubAdapter } from './adapters/github/github.adapter';
 import { createJobRegistry } from './jobs/registry';
 import { runJob } from './jobs/run-job';
+import type { NotifyFn } from './jobs/notify';
 import type { JobContext } from './jobs/send';
 import { leaveCell } from './leave';
 import { createHeartbeat } from './loops/heartbeat';
@@ -45,6 +48,8 @@ export interface CellOptions {
   version: string;
   /** Optional Herdr pane driver for non-headless Operator stations. */
   pane?: PaneDriver;
+  /** Optional desktop toast (Herdr notification) for questions, blocks and deliveries. Unset when off. */
+  notify?: NotifyFn;
   timing?: CellTiming;
   sleep?: (ms: number) => Promise<void>;
   onError?: (error: unknown, context: string) => void;
@@ -133,6 +138,7 @@ export const startCell = async (options: CellOptions): Promise<RunningCell> => {
     stations,
     takeSignals: (jobId) => registry.takeSignals(jobId),
     ...(options.pane ? { pane: options.pane } : {}),
+    ...(options.notify ? { notify: options.notify } : {}),
     headlessOperators: config.headlessOperators,
     githubFor: options.githubFor ?? ((cwd) => createGithubAdapter(cwd)),
   };
@@ -153,10 +159,14 @@ export const startCell = async (options: CellOptions): Promise<RunningCell> => {
 
   // The plan jobs running here, so a leaving Cell can let them finish or release them (PROTOCOL §9).
   const heldPlans = new Map<JobId, Job>();
-  const runHeld = (job: Job, signal: AbortSignal): Promise<Job | null> => {
-    if (!isPlanId(job.orderId)) return runJob(jobContext, job, signal);
+  const runHeld = (
+    job: Job,
+    signal: AbortSignal,
+    adopted?: AdoptedStation,
+  ): Promise<Job | null> => {
+    if (!isPlanId(job.orderId)) return runJob(jobContext, job, signal, adopted);
     heldPlans.set(job.jobId, job);
-    return runJob(jobContext, job, signal).finally(() => {
+    return runJob(jobContext, job, signal, adopted).finally(() => {
       heldPlans.delete(job.jobId);
     });
   };
@@ -174,6 +184,18 @@ export const startCell = async (options: CellOptions): Promise<RunningCell> => {
       options.onError?.(error, `release plan job ${job.jobId}`);
     }
   };
+
+  // Panes a previous Cell left running are re-attached before the first claim and the first beat, so their
+  // leases are extended from the start. Never throws: a session that cannot be re-attached is reported and skipped.
+  await reconcileSessions({
+    client,
+    cellId,
+    cellDataDir: options.cellDataDir,
+    registry,
+    ...(options.pane ? { pane: options.pane } : {}),
+    run: runHeld,
+    ...(options.onError ? { onError: options.onError } : {}),
+  });
 
   const loop = runClaimLoop({
     client,
