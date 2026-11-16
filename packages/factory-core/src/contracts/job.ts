@@ -175,6 +175,7 @@ const deliverSchema = z
     reportBlob: blobRefSchema.optional(),
     logCommand: z.string().min(1).max(256),
     verification: z.array(verificationSchema).max(64),
+    requireAdr: z.boolean().optional(),
   })
   .strict();
 
