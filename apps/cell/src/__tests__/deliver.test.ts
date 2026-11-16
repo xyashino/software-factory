@@ -16,7 +16,7 @@ import type { GithubPort, PrRef } from '../ports/github.port';
 import { createSystemAdapter } from '../adapters/system/system.adapter';
 import { runDeliver } from '../jobs/deliver';
 import { JobStopped, type JobContext } from '../jobs/send';
-import { commitFile, git, makeRepo } from '../testing/git-repo';
+import { cloneRepo, commitFile, git, makeRepo } from '../testing/git-repo';
 import { factoryFiles } from '../testing/factory-fixture';
 
 const CELL = '01J0000000000000000000000W' as CellId;
@@ -48,6 +48,8 @@ type Answer = (sent: Sent) => unknown;
 
 let root: string;
 let origin: string;
+/** The Cell's repo: a clone of origin, whose remote branches the prepare fetches. */
+let repoRoot: string;
 let baseHead: string;
 
 beforeEach(() => {
@@ -55,6 +57,7 @@ beforeEach(() => {
   origin = join(root, 'origin');
   // The repo carries its own `.factory/`: the Cell renders the PR body from it on this worktree.
   baseHead = makeRepo(origin, { 'README.md': '# repo\n', ...factoryFiles() });
+  repoRoot = cloneRepo(origin, join(root, 'repo'));
 });
 
 afterEach(() => {
@@ -116,6 +119,7 @@ const contextWith = (answer: Answer = accepting, github = fakeGithub()) => {
     client,
     cellId: CELL,
     system: createSystemAdapter(),
+    repoRoot,
     cellDataDir: join(root, 'cell'),
     worktreeLimit: 8,
     inUse: new Set(),

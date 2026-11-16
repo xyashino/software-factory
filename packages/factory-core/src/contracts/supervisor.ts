@@ -346,6 +346,22 @@ export const projectRemoveResponseSchema = z
   .strict();
 
 /**
+ * A Cell ensures its repository's project exists (PROTOCOL §3.1). Only the id and the repo url: an
+ * existing project keeps its base branch, max running and dependency policy.
+ */
+export const cellProjectEnsureRequestSchema = z
+  .object({
+    projectId: projectIdSchema,
+    repoUrl: z.string().min(1).max(2048),
+  })
+  .strict();
+
+/** `created` is false when the project was already registered; the record is as stored either way. */
+export const cellProjectEnsureResponseSchema = z
+  .object({ project: projectRecordSchema, created: z.boolean() })
+  .strict();
+
+/**
  * A Work order's spec and its pinned Line, as the task API takes them (PROTOCOL §3.3, CORE §4.4). The
  * body is the markdown spec; the server stores it as a blob and never reads a repo definition for it.
  */

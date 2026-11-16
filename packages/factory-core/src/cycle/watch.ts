@@ -10,6 +10,8 @@ export interface RuntimeCycle {
   pausedMs: number;
   pausedSince?: number;
   reminders: { idle: number; silent: number };
+  /** When the last idle reminder was sent, so the cooldown can be measured from it. */
+  lastIdleReminderAt?: number;
 }
 
 export interface WatchPolicy {
@@ -17,6 +19,8 @@ export interface WatchPolicy {
   timeoutMs: number;
   /** Reminders sent for an idle Operator before the Cycle stalls. */
   idleReminders: number;
+  /** Minimum gap, in ms, between idle reminders and after the last one before a stall. */
+  idleCooldownMs: number;
   /** Silence, in ms, before a working Operator is reminded. */
   silentMs: number;
   /** Reminders sent for a silent Operator before the Cycle stalls. */
@@ -39,8 +43,8 @@ const activeMs = (cycle: RuntimeCycle, now: number): number => {
 /**
  * Decides what to do with a running Cycle. Time spent on an open question does not count towards
  * the timeout. Checks run in this order and the first that applies wins: timeout, gone pane,
- * held question (no reminders), blocked prompt, idle without completion, then silence while
- * working.
+ * held question (no reminders), blocked prompt, idle without completion (spaced by the idle
+ * cooldown, stalled only after the last reminder's cooldown), then silence while working.
  */
 export const watch = (
   cycle: RuntimeCycle,
@@ -59,6 +63,10 @@ export const watch = (
     return { type: 'block', reason: 'runner_prompt' };
   }
   if (observation.operator === 'idle') {
+    const cooling =
+      cycle.lastIdleReminderAt !== undefined &&
+      now - cycle.lastIdleReminderAt < policy.idleCooldownMs;
+    if (cooling) return { type: 'none' };
     if (cycle.reminders.idle < policy.idleReminders) {
       return { type: 'remind', kind: 'idle' };
     }

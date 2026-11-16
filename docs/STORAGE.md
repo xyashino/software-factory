@@ -51,6 +51,14 @@ separate sources of truth; switching modes does not copy or synchronize queue st
 database inside a repository. The local data directory and config are user-owned and MUST NOT be
 world-readable; use restrictive platform permissions for database files and credentials.
 
+A Cell's own state (cycles, its credential, `cell.lock`, logs and runtime journals) is not a database. It lives in
+`<repo>/.factory-local/cell` (gitignored) unless `cell_data_dir` names another directory, so it is grouped with the
+repository it serves (PROTOCOL §9). The Cell's git work (worktrees under `<repo>/.worktrees/`, the repo lock under
+`<repo>/.factory-local/locks/`) lives in the repository itself, not in the data directory. A Cell from before this
+change may leave `mirrors/`, `repos/` and `worktrees/` under its data directory; the Cell neither reads nor deletes
+them, so remove them by hand. The project registry rows that a Cell ensures (PROTOCOL §3.1) are in the
+Factory's database, not in the repository.
+
 ## 2. Ports
 
 ```ts

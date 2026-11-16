@@ -24,19 +24,23 @@ export const listWorktreeUse = (root: string): WorktreeUse[] => {
 };
 
 /**
- * Picks the worktrees to evict so that at most `limit` remain: the least recently used first, never one
- * in `keep` (a worktree a job is using now). Returns the paths to remove; the caller removes them.
+ * What eviction may do under `root`: `excess` worktrees must go to get down to `limit`, and `candidates` are
+ * the ones it may remove, least recently used first. A worktree in `keep` (a job of this Cell is using it)
+ * is never a candidate. The caller removes candidates until `excess` are gone, skipping any that another
+ * Cell instance holds.
  */
-export const pickEvictions = (input: {
+export const evictionPlan = (input: {
   root: string;
   limit: number;
   keep: ReadonlySet<string>;
-}): string[] => {
+}): { excess: number; candidates: string[] } => {
   const worktrees = listWorktreeUse(input.root);
   const excess = worktrees.length - input.limit;
-  if (excess <= 0) return [];
-  return worktrees
-    .filter((worktree) => !input.keep.has(worktree.path))
-    .slice(0, excess)
-    .map((worktree) => worktree.path);
+  if (excess <= 0) return { excess: 0, candidates: [] };
+  return {
+    excess,
+    candidates: worktrees
+      .filter((worktree) => !input.keep.has(worktree.path))
+      .map((worktree) => worktree.path),
+  };
 };

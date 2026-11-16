@@ -61,7 +61,10 @@ const firstCycleInput = async (
     ),
     blobTexts: blobs,
     budget: { retry: 0, max: 0 },
-    declared: { rules: profile.rules, skills: profile.skills },
+    declared: {
+      rules: profile.rules.map((id) => ({ id })),
+      skills: profile.skills.map((id) => ({ id })),
+    },
     operatorCommands: ['factory-operator done'],
   };
 };
@@ -84,6 +87,45 @@ describe('prompt snapshots per Line Station', () => {
 });
 
 describe('prompt rules', () => {
+  it('names each declared rule and skill with its repo-relative path', async () => {
+    const input = await firstCycleInput('feature', 'plan');
+
+    const text = buildPrompt({
+      ...input,
+      declared: {
+        rules: [
+          { id: 'rich-commit', path: '.agents/rules/rich-commit.md' },
+          { id: 'testing', path: '.agents/rules/testing.md' },
+        ],
+        skills: [{ id: 'evidence', path: '.agents/skills/evidence/SKILL.md' }],
+      },
+    });
+
+    expect(text).toContain(
+      '## Input: declared.rules\n\nrich-commit: .agents/rules/rich-commit.md\ntesting: .agents/rules/testing.md',
+    );
+    expect(text).toContain(
+      '## Input: declared.skills\n\nevidence: .agents/skills/evidence/SKILL.md',
+    );
+    expect(text).not.toMatch(ABSOLUTE_PATH);
+  });
+
+  it('falls back to the bare id for a declared unit without a path', async () => {
+    const input = await firstCycleInput('feature', 'plan');
+
+    const text = buildPrompt({
+      ...input,
+      declared: {
+        rules: [{ id: 'rich-commit' }],
+        skills: [{ id: 'evidence' }],
+      },
+    });
+
+    expect(text).toContain('## Input: declared.rules\n\nrich-commit\n');
+    expect(text).toContain('## Input: declared.skills\n\nevidence');
+    expect(text).not.toContain('rich-commit:');
+  });
+
   it('refuses to render a placeholder that has no value', () => {
     expect(() => renderTemplate('needs {{taskId}}', {})).toThrow(
       MissingVariableError,

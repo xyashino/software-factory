@@ -32,6 +32,15 @@ export const makeRepo = (
   return git(dir, 'rev-parse', 'HEAD');
 };
 
+/**
+ * Clones `from` into `to` with its `origin` remote, as the Cell's repo is: a checkout whose remote
+ * branches live under refs/remotes/origin/*. Returns `to`.
+ */
+export const cloneRepo = (from: string, to: string): string => {
+  execFileSync('git', ['clone', '--quiet', from, to], { encoding: 'utf8' });
+  return to;
+};
+
 /** Commits one more file on `main` of `dir`. Returns the new commit sha. */
 export const commitFile = (dir: string, name: string, text: string): string => {
   writeIn(dir, name, text);

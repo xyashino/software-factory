@@ -10,8 +10,7 @@ import { createSystemAdapter } from '../adapters/system/system.adapter';
 import { runPlanJob } from '../jobs/plan';
 import { JobStopped, type JobContext } from '../jobs/send';
 import { fakeGithub, type FakeGithub } from '../testing/fake-github';
-import { commitFile, git, makeRepo } from '../testing/git-repo';
-import { mirrorPathOf } from '../workspace/mirror';
+import { cloneRepo, commitFile, git, makeRepo } from '../testing/git-repo';
 
 const CELL = '01J0000000000000000000000W' as CellId;
 const JOB = '01J0000000000000000000000J' as JobId;
@@ -24,12 +23,15 @@ const PR_URL = 'https://example.test/software-factory/pull/21';
 
 let root: string;
 let origin: string;
+/** The Cell's repo: a clone of origin. Plan jobs fetch it and read its remote-tracking branches. */
+let repoRoot: string;
 let baseHead: string;
 
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), 'factory-cell-plan-'));
   origin = join(root, 'origin');
   baseHead = makeRepo(origin);
+  repoRoot = cloneRepo(origin, join(root, 'repo'));
 });
 
 afterEach(() => {
@@ -77,6 +79,7 @@ const contextWith = (
     client,
     cellId: CELL,
     system: createSystemAdapter(),
+    repoRoot,
     cellDataDir: join(root, 'cell'),
     worktreeLimit: 8,
     inUse: new Set(),
@@ -275,14 +278,9 @@ describe('plan_branch (PROTOCOL §4, CORE §12.5)', () => {
 
   it('a fetch failure reports ReportPlanJobFailed with the fetch stage', async () => {
     const { context, calls } = contextWith();
-    const broken = {
-      ...planJob('plan_branch'),
-      repo: {
-        url: join(root, 'missing.git'),
-        baseBranch: 'main',
-        branch: BRANCH,
-      },
-    } as Job;
+    // The Cell fetches the repo's origin: an origin that is gone is a fetch failure.
+    git(repoRoot, 'remote', 'set-url', 'origin', join(root, 'missing.git'));
+    const broken = planJob('plan_branch');
 
     await runPlanJob(context, broken, signal());
 
@@ -412,6 +410,10 @@ describe('plan jobs never make a worktree (PROTOCOL §4)', () => {
     );
 
     expect(existsSync(join(root, 'cell', 'worktrees'))).toBe(false);
-    expect(existsSync(mirrorPathOf(join(root, 'cell'), origin))).toBe(true);
+    expect(existsSync(join(root, 'cell', 'mirrors'))).toBe(false);
+    expect(git(repoRoot, 'rev-parse', '--abbrev-ref', 'HEAD')).toBe('main');
+    expect(git(repoRoot, 'rev-parse', 'refs/remotes/origin/main')).toBe(
+      baseHead,
+    );
   });
 });

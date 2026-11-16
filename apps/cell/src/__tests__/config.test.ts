@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { parseConfig, readConfig } from '../config';
+import { parseConfig, readConfig, repoCellDataDir } from '../config';
 
 let dir: string;
 
@@ -12,6 +12,12 @@ beforeEach(() => {
 
 afterEach(() => {
   rmSync(dir, { recursive: true, force: true });
+});
+
+describe('repoCellDataDir', () => {
+  it('keeps the Cell state under the repository in .factory-local/cell', () => {
+    expect(repoCellDataDir('/work/app')).toBe('/work/app/.factory-local/cell');
+  });
 });
 
 describe('cell config', () => {

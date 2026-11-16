@@ -12,11 +12,12 @@ export const configPath = (env: NodeJS.ProcessEnv): string =>
     'config.toml',
   );
 
-/** The Cell's own data directory: mirrors, worktrees and the identity file (`~/.local/share/factory-cell`). */
-export const cellDataDirOf = (env: NodeJS.ProcessEnv): string =>
-  env.XDG_DATA_HOME
-    ? join(env.XDG_DATA_HOME, 'factory-cell')
-    : join(homedir(), '.local', 'share', 'factory-cell');
+/**
+ * The Cell's own data directory when `cell_data_dir` is unset: `<repo>/.factory-local/cell`, with the
+ * cycles, identity, logs and `cell.lock` of each instance (`cell-2`, ... beside it).
+ */
+export const repoCellDataDir = (repoRoot: string): string =>
+  join(repoRoot, '.factory-local', 'cell');
 
 /** The key cell-single-order removed: one Cell runs one Work order, so the setting has no meaning now. */
 const REMOVED_SLOTS_MESSAGE =
@@ -36,7 +37,7 @@ const partialConfigSchema = z
     capabilities: z.array(z.string().min(1).max(64)).max(32).optional(),
     /** The data directory of the local `factory-server`, which holds its `server.json` discovery file. */
     factory_data_dir: z.string().min(1).optional(),
-    /** Where the Cell keeps its mirrors, worktrees and identity. */
+    /** Where the Cell keeps its identity, logs and cycles (default `<repo>/.factory-local/cell`). Worktrees stay in the repo. */
     cell_data_dir: z.string().min(1).optional(),
     /** Worktrees kept on disk before the least recently used are evicted. */
     worktree_limit: z.number().int().min(1).max(256).optional(),

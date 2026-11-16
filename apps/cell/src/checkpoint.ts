@@ -113,7 +113,7 @@ export const validateOutputs = async (
   return issues;
 };
 
-/** Stages every change and commits it, even when empty. `.cell/` never shows: the mirror excludes it. */
+/** Stages every change and commits it, even when empty. `.cell/` never shows: the repo's info/exclude excludes it. */
 const commitAll = async (
   input: CheckpointInput,
 ): Promise<{ ok: true; commit: CommitSha } | { ok: false; detail: string }> => {

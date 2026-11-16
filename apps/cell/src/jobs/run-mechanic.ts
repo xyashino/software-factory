@@ -9,7 +9,7 @@ import type {
   OperatorReply,
   OperatorRequest,
 } from '@repo/factory-core/contracts/operator';
-import type { CellId, CommitSha } from '@repo/factory-core/ids';
+import type { BlobRef, CellId, CommitSha } from '@repo/factory-core/ids';
 import type { OrderCommand } from '@repo/factory-core/order/commands';
 import { getRunner } from '../adapters/runners/registry';
 import { CELL_DIR } from '../checkpoint';
@@ -17,7 +17,7 @@ import { paneName } from '../names';
 import { newCycleToken, startOperatorServer } from '../operator-socket';
 import type { PaneDriver } from '../ports';
 import type { SystemPort } from '../ports/system.port';
-import { GIT_TIMEOUT_MS } from '../workspace/mirror';
+import { GIT_TIMEOUT_MS } from '../workspace/repo';
 import { prepareWorkspace } from '../workspace/prepare';
 import {
   describeFailure,
@@ -27,13 +27,31 @@ import {
   textOf,
   type ShellContext,
 } from '../workspace/shell';
+import { getBlob } from './blobs';
 import { orderIdOf, todoOf } from './job-shape';
 import { logCommandOf } from './pane-commands';
 import { renderIncidentPrompt } from './render';
+import { tailOf } from './send';
 
 /** What the Mechanic is told to do when its incident says `nudge` (CORE §14.3). */
 export const MECHANIC_NUDGE =
   'Continue the task and finish with the factory-operator command it names.';
+
+/**
+ * The bounded tail of a workspace failure's log, read from its blob when the prompt is rendered (CORE
+ * §4.3 rule 10). The log never enters events or the Andon. A log that cannot be read is left out, and
+ * the prompt says so, rather than failing the Mechanic job.
+ */
+const logTailOf = async (
+  client: FactoryClient,
+  ref: BlobRef,
+): Promise<string | undefined> => {
+  try {
+    return tailOf(Buffer.from(await getBlob(client, ref)).toString('utf8'));
+  } catch {
+    return undefined;
+  }
+};
 
 const COMMIT_RE = /^[0-9a-f]{40}$/;
 const GIT_IDENTITY = [
@@ -46,7 +64,10 @@ const GIT_IDENTITY = [
 export interface MechanicDeps {
   client: FactoryClient;
   cellId: CellId;
+  /** The Cell's instance data directory: logs, the repair directory. */
   dataDir: string;
+  /** The repo the Cell works in: the Work order worktree is made under its `.worktrees/`. */
+  repoRoot: string;
   /** Optional system port + worktree tracking; when present with `job.workspace`, runs in the Work order worktree. */
   system?: SystemPort;
   worktreeLimit?: number;
@@ -131,7 +152,7 @@ const commitAndPushRepair = async (input: {
     };
   }
   if (textOf(status).trim() !== '') {
-    // `.cell/` is excluded via the mirror's `info/exclude` written by `ensureMirror`.
+    // `.cell/` is excluded via the repo's common `info/exclude` written by the workspace prepare.
     const added = await git(['add', '-A', '--', '.']);
     if (!succeeded(added)) {
       return {
@@ -168,16 +189,18 @@ const commitAndPushRepair = async (input: {
     return { ok: true, changedFiles: [] };
   }
 
+  // The tip the lease expects is the remote's branch as the prepare's fetch saw it; the push names refs/heads/*.
+  const remoteRef = `refs/remotes/origin/${input.branch}`;
   const branchRef = `refs/heads/${input.branch}`;
   const tipRun = await git([
     'rev-parse',
     '--verify',
     '--quiet',
-    `${branchRef}^{commit}`,
+    `${remoteRef}^{commit}`,
   ]);
   const remoteTip = succeeded(tipRun) ? textOf(tipRun).trim() : '';
   const lease = `${branchRef}:${remoteTip}`;
-  // Push directly to repoUrl (not `origin`): the mirror is a `--mirror` clone that rejects explicit refspecs.
+  // Push to repoUrl, the URL `origin` names (the checkpoint pushes there too).
   const pushed = await git([
     'push',
     '--quiet',
@@ -232,9 +255,22 @@ export const runMechanic = async (
 
   const repairDir = repairDirOf(deps.dataDir, job.jobId);
   mkdirSync(repairDir, { recursive: true });
-  const promptPath = join(repairDir, 'prompt.md');
-  // The Cell renders the incident prompt from the Andon the job carries (CORE §14.4).
-  let promptText = renderIncidentPrompt(mechanic.incident);
+  // The Cell renders the incident prompt from the Andon the job carries (CORE §14.4). A workspace
+  // failure adds its stage, detail and the bounded tail of its log.
+  const { incident } = mechanic;
+  const failure = incident.workspaceFailure;
+  const logTail =
+    failure === undefined
+      ? undefined
+      : await logTailOf(deps.client, failure.logBlob);
+  let promptText = renderIncidentPrompt({
+    reason: incident.reason,
+    detail: incident.detail,
+    ...(failure === undefined
+      ? {}
+      : { workspace: { stage: failure.stage, detail: failure.detail } }),
+    ...(logTail === undefined ? {} : { logTail }),
+  });
 
   const inUse = deps.inUse ?? new Set<string>();
   const shell: ShellContext | undefined =
@@ -248,11 +284,12 @@ export const runMechanic = async (
 
   let worktree: string | undefined;
   let startHead: string | undefined;
+  let releaseWorktree: (() => void) | undefined;
   if (job.workspace !== undefined && shell !== undefined) {
     const prepared = await prepareWorkspace(
       {
         shell,
-        cellDataDir: deps.dataDir,
+        repoRoot: deps.repoRoot,
         worktreeLimit: deps.worktreeLimit ?? 8,
         inUse,
       },
@@ -261,10 +298,18 @@ export const runMechanic = async (
     if (prepared.ok) {
       worktree = prepared.worktree;
       startHead = prepared.head;
+      releaseWorktree = prepared.release;
     } else {
       promptText += `\n### Workspace prepare note\n\nPreparing the Work order worktree failed at \`${prepared.stage}\`: ${prepared.detail}\nYou are running in the repair directory instead.\n`;
     }
   }
+  // With a prepared worktree the prompt sits in its git-excluded `.cell/`; otherwise it stays in the repair dir.
+  const promptDir =
+    worktree !== undefined
+      ? join(worktree, CELL_DIR, 'repair', job.jobId)
+      : repairDir;
+  const promptPath = join(promptDir, 'prompt.md');
+  mkdirSync(promptDir, { recursive: true });
   writeFileSync(promptPath, promptText);
   const token = newCycleToken();
   const name = paneName('mechanic', mechanic.n, job.jobId);
@@ -470,9 +515,10 @@ export const runMechanic = async (
       await deps.sleep(deps.tickMs);
     }
   } finally {
-    if (worktree !== undefined) inUse.delete(worktree);
+    releaseWorktree?.();
     await deps.pane.close(name).catch(() => undefined);
     await server?.close();
+    rmSync(promptDir, { recursive: true, force: true });
     rmSync(repairDir, { recursive: true, force: true });
   }
   return ending?.next ?? null;

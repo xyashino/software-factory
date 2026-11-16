@@ -1,18 +1,7 @@
 import { existsSync, mkdirSync, rmSync } from 'node:fs';
-import { basename, dirname, join, resolve, sep } from 'node:path';
-import {
-  gitCommand,
-  runShell,
-  succeeded,
-  type ShellContext,
-  type ShellRun,
-} from './shell';
-
-/** The worktrees of one mirror live under one directory, so eviction can work per repo. */
-export const worktreeRootOf = (
-  cellDataDir: string,
-  mirrorPath: string,
-): string => join(cellDataDir, 'worktrees', basename(mirrorPath, '.git'));
+import { dirname, join, resolve, sep } from 'node:path';
+import { gitIn, GIT_TIMEOUT_MS } from './repo';
+import { succeeded, type ShellContext, type ShellRun } from './shell';
 
 /**
  * The directory of a job's worktree: `workspace.dir` resolved under the root. A path that climbs out
@@ -26,49 +15,56 @@ export const worktreePathOf = (root: string, dir: string): string => {
   return path;
 };
 
+/** Removes a worktree: git's record and its directory. A directory git no longer knows is removed too. */
+export const removeWorktree = async (
+  ctx: ShellContext,
+  input: { repoRoot: string; path: string; timeoutMs?: number },
+): Promise<ShellRun> => {
+  const timeoutMs = input.timeoutMs ?? GIT_TIMEOUT_MS;
+  const removed = await gitIn(
+    ctx,
+    input.repoRoot,
+    ['worktree', 'remove', '--force', input.path],
+    timeoutMs,
+  );
+  rmSync(input.path, { recursive: true, force: true });
+  await gitIn(ctx, input.repoRoot, ['worktree', 'prune'], timeoutMs);
+  return removed;
+};
+
 /**
- * Puts the worktree at `commit`, detached. A worktree that exists is reset to the commit and has its
- * untracked files removed; `node_modules` and the `.cell/` marker are gitignored, so they survive.
- * Returns the run that failed, or null.
+ * Puts the worktree at `commit`, detached, under the repo lock. A worktree git still knows is reset to the
+ * commit with its untracked files removed; `node_modules` and the `.cell/` marker are gitignored, so they
+ * survive. A worktree that cannot be reset is removed and created again. Returns the run that failed, or null.
  */
 export const ensureWorktree = async (
   ctx: ShellContext,
-  input: { mirror: string; path: string; commit: string; timeoutMs: number },
+  input: { repoRoot: string; path: string; commit: string; timeoutMs: number },
 ): Promise<ShellRun | null> => {
-  const { mirror, path, commit, timeoutMs } = input;
-  const steps: string[][] = existsSync(join(path, '.git'))
-    ? [
-        ['-C', path, 'checkout', '--force', '--detach', commit],
-        ['-C', path, 'clean', '-fd'],
-      ]
-    : [
-        ['-C', mirror, 'worktree', 'prune'],
-        ['-C', mirror, 'worktree', 'add', '--detach', path, commit],
-      ];
-  if (!existsSync(join(path, '.git'))) {
-    rmSync(path, { recursive: true, force: true });
-    mkdirSync(dirname(path), { recursive: true });
-  }
-  for (const args of steps) {
-    const run = await runShell(ctx, {
-      command: gitCommand(args),
-      cwd: mirror,
+  const { repoRoot, path, commit, timeoutMs } = input;
+  if (existsSync(join(path, '.git'))) {
+    const checkedOut = await gitIn(
+      ctx,
+      path,
+      ['checkout', '--force', '--detach', commit],
       timeoutMs,
-    });
-    if (!succeeded(run)) return run;
+    );
+    if (succeeded(checkedOut)) {
+      const cleaned = await gitIn(ctx, path, ['clean', '-fd'], timeoutMs);
+      if (succeeded(cleaned)) return null;
+    }
+    await removeWorktree(ctx, { repoRoot, path, timeoutMs });
   }
-  return null;
-};
 
-/** Removes a worktree's directory and drops its git record from the mirror. */
-export const removeWorktree = async (
-  ctx: ShellContext,
-  input: { mirror: string; path: string; timeoutMs: number },
-): Promise<void> => {
-  rmSync(input.path, { recursive: true, force: true });
-  await runShell(ctx, {
-    command: gitCommand(['-C', input.mirror, 'worktree', 'prune']),
-    cwd: input.mirror,
-    timeoutMs: input.timeoutMs,
-  });
+  // A directory git does not know (a half-made worktree) is cleared before `worktree add` takes its place.
+  rmSync(path, { recursive: true, force: true });
+  mkdirSync(dirname(path), { recursive: true });
+  await gitIn(ctx, repoRoot, ['worktree', 'prune'], timeoutMs);
+  const added = await gitIn(
+    ctx,
+    repoRoot,
+    ['worktree', 'add', '--detach', path, commit],
+    timeoutMs,
+  );
+  return succeeded(added) ? null : added;
 };

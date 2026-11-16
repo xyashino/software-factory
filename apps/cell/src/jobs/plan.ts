@@ -4,14 +4,10 @@ import { WireFailure } from '@repo/factory-core/contracts/errors';
 import type { BlobRef, CommitSha, PlanId } from '@repo/factory-core/ids';
 import type { PlanCommand } from '@repo/factory-core/plan/commands';
 import type { GithubPort } from '../ports/github.port';
+import { GIT_TIMEOUT_MS, gitIn } from '../workspace/repo';
+import { withRepoLock } from '../workspace/repo-lock';
 import {
-  ensureMirror,
-  GIT_TIMEOUT_MS,
-  mirrorPathOf,
-} from '../workspace/mirror';
-import {
-  gitCommand,
-  runShell,
+  describeFailure,
   succeeded,
   textOf,
   type ShellContext,
@@ -92,25 +88,40 @@ const blobText = async (ctx: JobContext, ref: BlobRef): Promise<string> => {
   return Buffer.from(answer.base64, 'base64').toString('utf8');
 };
 
-/** Runs one git command in the bare mirror. Plan jobs never make a worktree (PROTOCOL §4). */
+/** Runs one git command in the Cell's repo. Plan jobs never make a worktree (PROTOCOL §4). */
 const git = (
   shell: ShellContext,
-  mirror: string,
+  repoRoot: string,
   args: readonly string[],
-): Promise<ShellRun> =>
-  runShell(shell, {
-    command: gitCommand(args),
-    cwd: mirror,
-    timeoutMs: GIT_TIMEOUT_MS,
+): Promise<ShellRun> => gitIn(shell, repoRoot, args);
+
+/**
+ * Fetches the repo's `origin` under the repo lock, so the remote's branches (the refs plan steps read) are
+ * current. Returns the failure detail when the fetch fails.
+ */
+const fetchOrigin = (
+  shell: ShellContext,
+  repoRoot: string,
+): Promise<{ ok: true } | { ok: false; detail: string }> =>
+  withRepoLock(repoRoot, async () => {
+    const run = await git(shell, repoRoot, [
+      'fetch',
+      '--quiet',
+      '--prune',
+      'origin',
+    ]);
+    return succeeded(run)
+      ? { ok: true }
+      : { ok: false, detail: describeFailure(run, GIT_TIMEOUT_MS) };
   });
 
-/** The sha a ref names in the mirror, or undefined when the ref is absent. */
+/** The sha a ref names in the repo, or undefined when the ref is absent. */
 const shaOf = async (
   shell: ShellContext,
-  mirror: string,
+  repoRoot: string,
   ref: string,
 ): Promise<string | undefined> => {
-  const run = await git(shell, mirror, [
+  const run = await git(shell, repoRoot, [
     'rev-parse',
     '--verify',
     '--quiet',
@@ -130,11 +141,12 @@ const runPlanBranch = async (
   ctx: JobContext,
   job: Job,
   shell: ShellContext,
-  mirror: string,
+  repoRoot: string,
   signal: AbortSignal,
 ): Promise<void> => {
-  const branchRef = `refs/heads/${job.repo.branch}`;
-  const existing = await shaOf(shell, mirror, branchRef);
+  // The remote's branches, as the last fetch saw them. The local branches of the repo are never read.
+  const remoteRef = `refs/remotes/origin/${job.repo.branch}`;
+  const existing = await shaOf(shell, repoRoot, remoteRef);
   if (existing !== undefined) {
     await submitPlan(
       ctx,
@@ -145,12 +157,16 @@ const runPlanBranch = async (
     return;
   }
 
-  const base = await shaOf(shell, mirror, `refs/heads/${job.repo.baseBranch}`);
+  const base = await shaOf(
+    shell,
+    repoRoot,
+    `refs/remotes/origin/${job.repo.baseBranch}`,
+  );
   if (base === undefined) {
     await reportFailed(
       ctx,
       job,
-      `branch ${job.repo.baseBranch} is not in the mirror`,
+      `branch ${job.repo.baseBranch} is missing on origin`,
       signal,
     );
     return;
@@ -166,25 +182,22 @@ const runPlanBranch = async (
   );
 
   if (signal.aborted) throw new JobStopped(String(signal.reason));
-  const pushed = await git(shell, mirror, [
+  const pushed = await git(shell, repoRoot, [
     'push',
     job.repo.url,
-    `${base}:${branchRef}`,
+    `${base}:refs/heads/${job.repo.branch}`,
   ]);
   if (!succeeded(pushed)) {
     // The push refused: another run may have made the branch since. Re-read the remote and accept it
     // when it stands at the base or above it; anything else is a failure.
-    const refetched = await ensureMirror(shell, {
-      cellDataDir: ctx.cellDataDir,
-      url: job.repo.url,
-    });
+    const refetched = await fetchOrigin(shell, repoRoot);
     const tip = refetched.ok
-      ? await shaOf(shell, mirror, branchRef)
+      ? await shaOf(shell, repoRoot, remoteRef)
       : undefined;
     const descends =
       tip !== undefined &&
       succeeded(
-        await git(shell, mirror, ['merge-base', '--is-ancestor', base, tip]),
+        await git(shell, repoRoot, ['merge-base', '--is-ancestor', base, tip]),
       );
     if (tip === undefined || !descends) {
       await reportFailed(
@@ -279,10 +292,10 @@ const runPlanPrReady = async (
 };
 
 /**
- * Runs one plan job (CORE §12.3, PROTOCOL §4). The mirror is fetched first; a failed fetch reports
- * `ReportPlanJobFailed`. The step runs; a stopped job, a refused wire call or an abort sends nothing more
- * and rethrows. Any other failure reports `ReportPlanJobFailed` best-effort, then rethrows, as a Work
- * order's deliver job does. No worktree is made.
+ * Runs one plan job (CORE §12.3, PROTOCOL §4). The repo's `origin` is fetched first, under the repo lock;
+ * a failed fetch reports `ReportPlanJobFailed`. The step runs against `<repoRoot>`; a stopped job, a refused
+ * wire call or an abort sends nothing more and rethrows. Any other failure reports `ReportPlanJobFailed`
+ * best-effort, then rethrows, as a Work order's deliver job does. No worktree is made.
  */
 export const runPlanJob = async (
   ctx: JobContext,
@@ -296,26 +309,23 @@ export const runPlanJob = async (
     signal,
   };
 
-  const mirror = await ensureMirror(shell, {
-    cellDataDir: ctx.cellDataDir,
-    url: job.repo.url,
-  });
-  if (!mirror.ok) {
-    await reportFailed(ctx, job, `fetch: ${mirror.detail}`, signal);
+  const fetched = await fetchOrigin(shell, ctx.repoRoot);
+  if (!fetched.ok) {
+    await reportFailed(ctx, job, `fetch: ${fetched.detail}`, signal);
     return;
   }
 
-  const path = mirrorPathOf(ctx.cellDataDir, job.repo.url);
+  const repoRoot = ctx.repoRoot;
   try {
     switch (job.kind) {
       case 'plan_branch':
-        await runPlanBranch(ctx, job, shell, path, signal);
+        await runPlanBranch(ctx, job, shell, repoRoot, signal);
         return;
       case 'plan_pr':
-        await runPlanPr(ctx, job, ctx.githubFor(path), signal);
+        await runPlanPr(ctx, job, ctx.githubFor(repoRoot), signal);
         return;
       case 'plan_pr_ready':
-        await runPlanPrReady(ctx, job, ctx.githubFor(path), signal);
+        await runPlanPrReady(ctx, job, ctx.githubFor(repoRoot), signal);
         return;
       default:
         throw new Error(`${job.kind} is not a plan job`);

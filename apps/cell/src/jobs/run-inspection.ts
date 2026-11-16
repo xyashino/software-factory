@@ -6,7 +6,7 @@ import type {
   InspectionResult,
   OrderEvent,
 } from '@repo/factory-core/order/events';
-import { GIT_TIMEOUT_MS } from '../workspace/mirror';
+import { GIT_TIMEOUT_MS } from '../workspace/repo';
 import { prepareWorkspace } from '../workspace/prepare';
 import {
   gitCommand,
@@ -62,7 +62,7 @@ export const runInspection = async (
   const prepared = await prepareWorkspace(
     {
       shell,
-      cellDataDir: ctx.cellDataDir,
+      repoRoot: ctx.repoRoot,
       worktreeLimit: ctx.worktreeLimit,
       inUse: ctx.inUse,
     },
@@ -125,7 +125,7 @@ export const runInspection = async (
       signal,
     );
   } finally {
-    ctx.inUse.delete(prepared.worktree);
+    prepared.release();
   }
 };
 

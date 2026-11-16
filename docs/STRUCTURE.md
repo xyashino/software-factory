@@ -27,7 +27,7 @@ software-factory/
 │   │   └── src/
 │   │       ├── main.ts            # config, select local/remote client, claim/heartbeat loop, leave
 │   │       ├── factory-client.ts  # socket client to factory-server + remote HTTP adapter, retries, idempotency ids
-│   │       ├── workspace/         # mirror, worktree, sync/setup cache, LRU eviction
+│   │       ├── workspace/         # repo lock, worktree under <repo>/.worktrees, sync/setup cache, LRU eviction
 │   │       ├── jobs/
 │   │       │   ├── run-operator-station.ts
 │   │       │   ├── run-inspection.ts

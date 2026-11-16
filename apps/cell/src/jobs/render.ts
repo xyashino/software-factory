@@ -14,8 +14,14 @@ import {
   usableCommitMessage,
   verificationLinesOf,
 } from '@repo/factory-runtime/pr-body';
-import { buildIncidentPrompt } from '@repo/factory-runtime/prompts/incident-prompt';
-import { buildPrompt } from '@repo/factory-runtime/prompts/build-prompt';
+import {
+  buildIncidentPrompt,
+  type IncidentPromptInput,
+} from '@repo/factory-runtime/prompts/incident-prompt';
+import {
+  buildPrompt,
+  type DeclaredUnit,
+} from '@repo/factory-runtime/prompts/build-prompt';
 
 /**
  * Prompt and PR rendering on the Cell (PROTOCOL §4, §9). The server sends structured inputs and blob refs; the
@@ -66,6 +72,16 @@ const repoDefinitions = async (worktree: string): Promise<Definitions> => {
 };
 
 const textOf = (bytes: Uint8Array): string => decoder.decode(bytes);
+
+/** Declared ids with their repo-relative paths where the repo's `.nitpick/` catalog resolves them. */
+const declaredUnits = (
+  ids: string[],
+  paths: ReadonlyMap<string, string>,
+): DeclaredUnit[] =>
+  ids.map((id) => {
+    const path = paths.get(id);
+    return path === undefined ? { id } : { id, path };
+  });
 
 /** Every blob the prompt of a Cycle names: the spec body, the inputs, the verdict and the inspection logs. */
 const promptBlobsOf = (todoBody: BlobRef, context: CycleContext): BlobRef[] => {
@@ -124,7 +140,10 @@ export const renderOperatorPrompt = async (input: {
       blobSizes: sizes,
       blobTexts: texts,
       budget: prompt.budget,
-      declared: { rules: profile.rules, skills: profile.skills },
+      declared: {
+        rules: declaredUnits(profile.rules, definitions.rulePaths),
+        skills: declaredUnits(profile.skills, definitions.skillPaths),
+      },
       operatorCommands: input.config.operatorCommands,
     });
   } catch (error) {
@@ -135,10 +154,8 @@ export const renderOperatorPrompt = async (input: {
 };
 
 /** The Mechanic's prompt for the Andon it triages (CORE §14.4). The incident template ships with the Cell. */
-export const renderIncidentPrompt = (incident: {
-  reason: string;
-  detail: string;
-}): string => buildIncidentPrompt(incident);
+export const renderIncidentPrompt = (incident: IncidentPromptInput): string =>
+  buildIncidentPrompt(incident);
 
 /**
  * A delivery's commit message, PR title and PR body (v1 PR format). The commit is the builder's own commit artifact

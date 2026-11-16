@@ -3,6 +3,7 @@ import {
   mkdirSync,
   readFileSync,
   realpathSync,
+  rmSync,
   writeFileSync,
 } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative } from 'node:path';
@@ -56,7 +57,7 @@ import type {
   RunGit,
   SpawnHeadless,
 } from '../ports';
-import type { WorkspaceResult } from '../workspace';
+import type { WorkspaceStage } from '../workspace/prepare';
 import { getBlob, putBlob } from './blobs';
 import { todoOf } from './job-shape';
 import { logCommandOf } from './pane-commands';
@@ -108,7 +109,11 @@ export interface StationDeps {
   takeSignals?: () => Signal[];
 }
 
-type Stage = 'fetch' | 'sync' | 'worktree' | 'setup';
+type Stage = WorkspaceStage;
+/** The station's worktree and the base commit its Cycle starts from, or the stage that failed. */
+export type WorkspaceResult =
+  | { ok: true; worktree: string; base: CommitSha }
+  | { ok: false; stage: Stage; detail: string };
 type FailReason = 'timed_out' | 'crashed' | 'stalled' | 'start_failed' | 'lost';
 type Blobs = Record<string, BlobRef | undefined>;
 
@@ -289,7 +294,10 @@ export const runOperatorStation = async (
 
   const cycleDir = join(deps.dataDir, 'cycles', cycleDirName(cycleId));
   mkdirSync(cycleDir, { recursive: true });
-  const promptPath = join(cycleDir, 'prompt.md');
+  // The prompt lives in the worktree's git-excluded `.cell/`, so the Operator reads it from its working directory.
+  const promptDir = join(worktree, CELL_DIR, 'cycles', cycleDirName(cycleId));
+  mkdirSync(promptDir, { recursive: true });
+  const promptPath = join(promptDir, 'prompt.md');
   writeFileSync(promptPath, promptText);
   for (const output of outputs)
     mkdirSync(dirname(join(worktree, output.path)), { recursive: true });
@@ -704,6 +712,7 @@ export const runOperatorStation = async (
             ...cycle.reminders,
             [decision.kind]: sent,
           },
+          ...(decision.kind === 'idle' ? { lastIdleReminderAt: now } : {}),
         };
         typeText(
           decision.kind === 'idle'
@@ -848,6 +857,7 @@ export const runOperatorStation = async (
     }
     waiters.clear();
     await server?.close();
+    rmSync(promptDir, { recursive: true, force: true });
     // The usage arrives after the Cycle may have ended: no epoch, no liveness check (PROTOCOL §9 step 7).
     if (!deps.signal?.aborted) {
       const usage = readUsage(deps.runners[operator.runner], stdoutPath);

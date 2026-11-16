@@ -14,6 +14,7 @@ import {
   type OpenedRuntime,
 } from '@repo/factory-runtime/open-runtime';
 import { inheritedEnv } from '../distributed/harness/process';
+import { cellRepo } from '../helpers/cell-repo';
 
 const CELL_MAIN = fileURLToPath(new URL('../../main.ts', import.meta.url));
 const START_LINE = /factory-cell: running as (\S+)/;
@@ -115,7 +116,8 @@ describe('launching multiple factory-cell processes with the same config', () =>
       XDG_DATA_HOME: dataHome,
     };
 
-    const first = Bun.spawn(['bun', CELL_MAIN], {
+    const repo = await cellRepo(join(root, 'repo'));
+    const first = Bun.spawn(['bun', CELL_MAIN, '--repo-dir', repo], {
       env,
       stdin: 'ignore',
       stdout: 'pipe',
@@ -124,7 +126,7 @@ describe('launching multiple factory-cell processes with the same config', () =>
     children.push(first);
     const id1 = await readUntilCellId(first.stdout);
 
-    const second = Bun.spawn(['bun', CELL_MAIN], {
+    const second = Bun.spawn(['bun', CELL_MAIN, '--repo-dir', repo], {
       env,
       stdin: 'ignore',
       stdout: 'pipe',

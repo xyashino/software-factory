@@ -268,7 +268,37 @@ describe('evolve: workspace_failed', () => {
     );
     expect(state.activeJob).toBeUndefined();
     expect(state.workspaceFailures).toEqual([
-      { cellId: cellIdOf(1), jobId: jobIdOf(1), at: 3000 },
+      {
+        cellId: cellIdOf(1),
+        jobId: jobIdOf(1),
+        at: 3000,
+        stage: 'worktree',
+        detail: 'worktree could not be created',
+        logBlob: blobOf(7),
+      },
+    ]);
+  });
+
+  it('records the stage, detail and log of each workspace failure', () => {
+    const state = foldEvents(
+      created(),
+      claim(1),
+      workspaceFailed({
+        jobId: jobIdOf(1),
+        stage: 'sync',
+        detail: 'fetch of the mirror failed',
+        logBlob: blobOf(9),
+      }),
+    );
+    expect(state.workspaceFailures).toEqual([
+      {
+        cellId: cellIdOf(1),
+        jobId: jobIdOf(1),
+        at: 3000,
+        stage: 'sync',
+        detail: 'fetch of the mirror failed',
+        logBlob: blobOf(9),
+      },
     ]);
   });
 

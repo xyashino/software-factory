@@ -21,8 +21,34 @@ const fakeCatalog = (): NitpickCatalog => {
   mkdirSync(join(skillsDir, 'evidence'), { recursive: true });
   writeFileSync(join(skillsDir, 'evidence', 'SKILL.md'), '# evidence');
   mkdirSync(join(skillsDir, 'empty'));
-  return { ruleIds: new Set(['testing', 'rich-commit']), skillsDir };
+  return {
+    ruleIds: new Set(['testing', 'rich-commit']),
+    skillsDir,
+    rulePaths: new Map(),
+    skillPaths: new Map(),
+  };
 };
+
+/** A repo root with a self-contained `.nitpick/config.ts` (no package imports), written by the test. */
+const repoWithConfig = (config: string, skills: string[] = []): string => {
+  const root = mkdtempSync(join(tmpdir(), 'sf-nitpick-repo-'));
+  mkdirSync(join(root, '.nitpick'), { recursive: true });
+  writeFileSync(join(root, '.nitpick', 'config.ts'), config);
+  for (const id of skills) {
+    mkdirSync(join(root, '.nitpick', 'skills', id), { recursive: true });
+    writeFileSync(join(root, '.nitpick', 'skills', id, 'SKILL.md'), '# skill');
+  }
+  return root;
+};
+
+const CONFIG = `export default {
+  output: [{ path: 'docs/ai' }, { path: 'other' }],
+  rules: {
+    git: { 'rich-commit': { doc: { title: 'Rich commit' } }, 'git-short': { doc: 'short' } },
+    testing: { 'testing-unit': { doc: 'unit' } },
+  },
+  skills: { evidence: { source: './skills/evidence' } },
+};`;
 
 const profile = (rules: string[], skills: string[]): OperatorProfile => {
   const parsed = parseOperatorProfile(
@@ -67,6 +93,82 @@ describe('nitpickCatalog', () => {
     expect(catalog.ruleIds.has('rich-commit')).toBe(true);
     expect(catalog.ruleIds.has('testing')).toBe(true);
     expect(catalog.skillsDir).toBe(join(REPO_ROOT, '.nitpick', 'skills'));
+  });
+
+  it('resolves this repo rules and skills to their .agents files', async () => {
+    const catalog = await nitpickCatalog(REPO_ROOT);
+    expect(catalog.rulePaths.get('rich-commit')).toBe(
+      '.agents/rules/rich-commit.md',
+    );
+    expect(catalog.rulePaths.get('decision-log')).toBe(
+      '.agents/rules/decision-log.md',
+    );
+    expect(catalog.rulePaths.get('testing')).toBe('.agents/rules/testing.md');
+    expect(catalog.skillPaths.get('evidence')).toBe(
+      '.agents/skills/evidence/SKILL.md',
+    );
+  });
+
+  it('maps a standalone rule to its own file and a group rule to the group file', async () => {
+    const root = repoWithConfig(CONFIG);
+    const catalog = await nitpickCatalog(root);
+    expect(catalog.rulePaths.get('rich-commit')).toBe(
+      'docs/ai/rules/rich-commit.md',
+    );
+    expect(catalog.rulePaths.get('git-short')).toBe('docs/ai/rules/git.md');
+    expect(catalog.rulePaths.get('git')).toBe('docs/ai/rules/git.md');
+    expect(catalog.rulePaths.get('testing-unit')).toBe(
+      'docs/ai/rules/testing.md',
+    );
+  });
+
+  it('uses the first output path only', async () => {
+    const root = repoWithConfig(CONFIG);
+    const catalog = await nitpickCatalog(root);
+    expect(
+      [...catalog.rulePaths.values()].some((p) => p.startsWith('other/')),
+    ).toBe(false);
+  });
+
+  it('points a synced skill at the output and an unsynced one at .nitpick', async () => {
+    const root = repoWithConfig(
+      `export default { output: [{ path: 'docs/ai' }], rules: {}, skills: { evidence: { source: './x' } } };`,
+      ['evidence', 'local-only'],
+    );
+    mkdirSync(join(root, 'docs', 'ai', 'skills', 'evidence'), {
+      recursive: true,
+    });
+    writeFileSync(
+      join(root, 'docs', 'ai', 'skills', 'evidence', 'SKILL.md'),
+      '# evidence',
+    );
+    const catalog = await nitpickCatalog(root);
+    expect(catalog.skillPaths.get('evidence')).toBe(
+      'docs/ai/skills/evidence/SKILL.md',
+    );
+    expect(catalog.skillPaths.get('local-only')).toBe(
+      '.nitpick/skills/local-only/SKILL.md',
+    );
+  });
+
+  it('defaults the output to .agents when the config names none', async () => {
+    const root = repoWithConfig(
+      `export default { rules: { testing: { 'testing-unit': { doc: 'unit' } } } };`,
+    );
+    const catalog = await nitpickCatalog(root);
+    expect(catalog.rulePaths.get('testing-unit')).toBe(
+      '.agents/rules/testing.md',
+    );
+  });
+
+  it('publishes no paths for an output outside the repo', async () => {
+    const root = repoWithConfig(
+      `export default { output: [{ path: '../elsewhere' }], rules: { testing: { 'testing-unit': { doc: 'unit' } } } };`,
+    );
+    const catalog = await nitpickCatalog(root);
+    expect(catalog.rulePaths.size).toBe(0);
+    expect(catalog.skillPaths.size).toBe(0);
+    expect(catalog.ruleIds.has('testing')).toBe(true);
   });
 });
 

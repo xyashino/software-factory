@@ -82,7 +82,14 @@ const failWorkspace = (
     activeJob: undefined,
     workspaceFailures: [
       ...state.workspaceFailures,
-      { cellId: job.cellId, jobId: ev.jobId, at },
+      {
+        cellId: job.cellId,
+        jobId: ev.jobId,
+        at,
+        stage: ev.stage,
+        detail: ev.detail,
+        logBlob: ev.logBlob,
+      },
     ],
   };
 };

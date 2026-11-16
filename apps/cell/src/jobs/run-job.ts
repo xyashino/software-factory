@@ -5,14 +5,14 @@ import {
   HANDOVER_GRACE_MS,
   QUESTION_HOLD_MS,
 } from '@repo/factory-core/cycle/policy';
-import type { CycleId } from '@repo/factory-core/ids';
+import type { CommitSha, CycleId } from '@repo/factory-core/ids';
 import { RUNNER_NAMES, getRunner } from '../adapters/runners/registry';
 import type { RunnerAdapter } from '../adapters/runners/runner';
 import { createRegistry } from '../cycle/registry';
 import { runGit } from '../git';
 import { cycleDirName } from '../names';
 import { spawnHeadless } from '../runners/headless';
-import { prepareWorkspace } from '../workspace';
+import { prepareWorkspace, type PrepareContext } from '../workspace/prepare';
 import { runDeliver } from './deliver';
 import { runPlanJob } from './plan';
 import { runInspection } from './run-inspection';
@@ -74,6 +74,22 @@ const launcherFor = (
   };
 };
 
+/** What a Work order job's workspace prepare runs with: its shell (logs under the job), the repo, and the worktree limit. */
+const prepareContextOf = (
+  ctx: JobContext,
+  job: Job,
+  signal: AbortSignal,
+): PrepareContext => ({
+  shell: {
+    system: ctx.system,
+    logDir: join(ctx.cellDataDir, 'logs', job.jobId),
+    signal,
+  },
+  repoRoot: ctx.repoRoot,
+  worktreeLimit: ctx.worktreeLimit,
+  inUse: ctx.inUse,
+});
+
 const runnersFor = (
   job: Job,
   cellDataDir: string,
@@ -120,27 +136,50 @@ export const runJob = async (
         return continuation;
       case 'run_operator_station': {
         const station = ctx.headlessOperators ? asHeadless(job) : job;
-        return await runOperatorStation(station, {
-          client: ctx.client,
-          cellId: ctx.cellId,
-          dataDir: ctx.cellDataDir,
-          clock: { now: () => Date.now() },
-          sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
-          git: runGit,
-          workspace: (current) =>
-            prepareWorkspace({ job: current, dataDir: ctx.cellDataDir }),
-          runners: runnersFor(station, ctx.cellDataDir),
-          spawn: spawnHeadless,
-          ...(ctx.pane ? { pane: ctx.pane } : {}),
-          timing: {
-            tickMs: STATION_TICK_MS,
-            questionHoldMs: QUESTION_HOLD_MS,
-            handoverGraceMs: HANDOVER_GRACE_MS,
-          },
-          registry: ctx.stations ?? createRegistry(),
-          signal,
-          takeSignals: () => ctx.takeSignals?.(job.jobId) ?? [],
-        });
+        // The station's worktree stays leased for the whole station, and is released when it ends.
+        let releaseWorktree: (() => void) | undefined;
+        try {
+          return await runOperatorStation(station, {
+            client: ctx.client,
+            cellId: ctx.cellId,
+            dataDir: ctx.cellDataDir,
+            clock: { now: () => Date.now() },
+            sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+            git: runGit,
+            workspace: async (current) => {
+              const prepared = await prepareWorkspace(
+                prepareContextOf(ctx, current, signal),
+                current,
+              );
+              if (!prepared.ok) {
+                return {
+                  ok: false,
+                  stage: prepared.stage,
+                  detail: prepared.detail,
+                };
+              }
+              releaseWorktree = prepared.release;
+              return {
+                ok: true,
+                worktree: prepared.worktree,
+                base: prepared.head as CommitSha,
+              };
+            },
+            runners: runnersFor(station, ctx.cellDataDir),
+            spawn: spawnHeadless,
+            ...(ctx.pane ? { pane: ctx.pane } : {}),
+            timing: {
+              tickMs: STATION_TICK_MS,
+              questionHoldMs: QUESTION_HOLD_MS,
+              handoverGraceMs: HANDOVER_GRACE_MS,
+            },
+            registry: ctx.stations ?? createRegistry(),
+            signal,
+            takeSignals: () => ctx.takeSignals?.(job.jobId) ?? [],
+          });
+        } finally {
+          releaseWorktree?.();
+        }
       }
       case 'mechanic': {
         // A Mechanic job runs in a Herdr pane, never headless.
@@ -151,6 +190,7 @@ export const runJob = async (
           client: ctx.client,
           cellId: ctx.cellId,
           dataDir: ctx.cellDataDir,
+          repoRoot: ctx.repoRoot,
           system: ctx.system,
           worktreeLimit: ctx.worktreeLimit,
           inUse: ctx.inUse,

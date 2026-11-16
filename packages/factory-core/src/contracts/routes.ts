@@ -29,6 +29,8 @@ import {
   nudgeRequestSchema,
   orderDetailRequestSchema,
   orderDetailResponseSchema,
+  cellProjectEnsureRequestSchema,
+  cellProjectEnsureResponseSchema,
   projectAddRequestSchema,
   projectListResponseSchema,
   projectRemoveRequestSchema,
@@ -205,6 +207,11 @@ export const ROUTES = {
     path: 'supervisor/projects/set',
     request: projectSetRequestSchema,
     response: projectResponseSchema,
+  },
+  cellProjectEnsure: {
+    path: 'cell/projects/ensure',
+    request: cellProjectEnsureRequestSchema,
+    response: cellProjectEnsureResponseSchema,
   },
   projectRemove: {
     path: 'supervisor/projects/remove',

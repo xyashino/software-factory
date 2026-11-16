@@ -127,14 +127,19 @@ same body as its HTTP route, with `projectId` in the body on `set` and `remove`.
 - Set: at least one of `baseBranch`, `maxRunning`, `depPolicy`. A `baseBranch` change is refused as
   `precondition` while the project has a Work order that is not `delivered`, `merged` or `cancelled`
   (running orders must not switch base; v2-21 pins the base per Work order). Setting the same base
-  branch is a no-op. `repoUrl` is not accepted (the body is strict): mirrors and Cell checkouts would go
-  stale, so remove and re-add the project.
+  branch is a no-op. `repoUrl` is not accepted (the body is strict): the Cell works in the repo's `origin`,
+  so a stored second url would go stale; remove and re-add the project.
 - Remove: refused as `precondition` while the project has any Work order or event. A project
   with history is never deleted, so projections stay rebuildable (STORAGE §4).
 - An unknown `projectId` on set or remove answers `not_found`.
-- A newly added project is served only by Cells whose config lists it (`projects` in the Cell's
-  `config.toml`, §9). The Factory does not push projects to Cells: a Cell's `hello` lists its projects,
-  and the queue offers it only Work orders of those projects.
+- Ensure (Cell route `cell/projects/ensure`, HTTP `POST /v1/cell/projects/ensure`, credential `cell`):
+  `projectId` and `repoUrl`. A missing project is added with the add defaults and `created: true`; an
+  existing one is answered as stored with `created: false` and never changed (its base branch, max running,
+  dependency policy and repo url stay). Two Cells that ensure the same id both succeed. A Cell runs it at
+  start, before `hello` (§9).
+- A project is served only by Cells whose `hello` lists it. The Factory does not push projects to Cells: a
+  Cell lists its projects at `hello`, and the queue offers it only Work orders of those projects. A Cell
+  lists the project of its repository (§9) and the projects its config names.
 
 ### 3.2 Cell operations (Cell → runtime)
 
@@ -235,7 +240,7 @@ interface Job {
     sync: string[];
     setup: string[];
     timeoutMs: number;
-  }; // dir = <todoId>, relative to the Cell's worktrees/; absent on plan jobs (no worktree)
+  }; // dir = <todoId>, relative to <repo>/.worktrees/; absent on plan jobs (no worktree)
   station?: {
     stationId;
     cycleId;
@@ -303,7 +308,7 @@ interface Job {
 **Plan jobs.** `plan_branch`, `plan_pr` and `plan_pr_ready` belong to an Order Plan (CORE §12). They
 are claimed, leased, heartbeated and fenced like any other job (§5): `job_claimed` with a new epoch on
 the plan stream, a lease row, the reaper, `stale_epoch` on a late write. They have no Station, no
-Cycle, no worktree and no `workspace` block: the Cell only fetches its mirror and talks to `git` and
+Cycle, no worktree and no `workspace` block: the Cell only fetches the repo's `origin` and talks to `git` and
 the GitHub adapter. A job that cannot finish reports `ReportPlanJobFailed`; two in a row raise the
 plan's Andon. All three are **idempotent**, so a retry or a takeover never creates a second branch or
 PR.
@@ -480,7 +485,7 @@ reported as `stale` in the heartbeat response, which is the Cell's cue to stop i
 - WIP of failed Cycles, for the Supervisor only: `factory-wip/<todoId>/<cycleId>`. (A separate
   namespace: git cannot hold `factory/<todoId>` and `factory/<todoId>/…` at the same time.)
 - The Cell's scratch directory `.cell/` in the worktree (inputs, outputs) is excluded through the
-  mirror's `info/exclude`, so the target repository needs no `.gitignore` entry.
+  repo's common `info/exclude` (`<repo>/.git/info/exclude`), so the target repository needs no `.gitignore` entry.
 
 ### 8.2 The checkpoint procedure
 
@@ -547,21 +552,35 @@ The trailers make a Work order's progress recoverable from git alone until deliv
 ```text
 ~/.config/factory-cell/
 └── config.toml                    # Factory URL, join token, projects, runners, capabilities
-~/.local/state/factory-cell/
-└── credential                     # the Cell credential from `join` (mode 0600)
-~/.local/share/factory-cell/       # everything here is a cache: deleting it loses nothing
-├── repos/<projectId>.git          # bare mirror, fetched before every job
-├── worktrees/<todoId>/            # one per Work order held recently; LRU-evicted
-│   └── .cell/                     # inputs, outputs, Cycle scratch (excluded from git)
+<repo>/.factory-local/cell/        # the Cell's state for its repository (gitignored); cell-2, ... per extra instance
+├── credential                     # the Cell credential from `join` (mode 0600)
+├── cell.lock                      # the instance's writer lock
 └── runtime/<cycleId>.jsonl        # runtime journal (CORE §9.3)
+
+<repo>/                            # the repository the Cell works in: its checkout and its origin remote
+├── .git/info/exclude              # `.cell/`, `.worktrees/` and `.factory-local/`, added once by the Cell
+├── .worktrees/<todoId>/           # one detached worktree per Work order held recently; LRU-evicted
+│   └── .cell/                     # inputs, outputs, Cycle scratch (excluded from git)
+└── .factory-local/locks/          # the repo lock (git.lock) and one in-use lease per worktree
 ```
+
+The worktrees are made directly from the repo's `.git`, so `git worktree list` in the repo shows them. The
+Cell never creates a bare mirror or a `repos/` directory, and it never moves the repo's checked-out branch.
 
 Deleting the credential makes the Cell join again as a new Cell; nothing else is lost.
 
+The data directory is `cell_data_dir` when the config sets it, else `<repo>/.factory-local/cell` (repo-scoped,
+ADR `factory-add-repo-scoped-cell`). A Cell starts only inside a repository (`--repo-dir <path>` or the working
+directory), at startup it ensures the repository's project (§3.1) from its `origin` remote, and it refuses a
+repository with no origin. The project is `projects[0]` of the config when set, else the repository directory
+name normalized to a project id.
+
 Executing `run_operator_station`:
 
-1. Fetch the mirror; create or reset the worktree at `base`; run `sync` + `setup` unless the worktree
-   is already prepared at that commit. On failure → `ReportWorkspaceFailed`.
+1. Under the repo lock, fetch `origin`; create or reset the detached worktree at `base` under
+   `<repo>/.worktrees/`; lease it; evict the least recently used worktrees beyond the limit that no job
+   holds. Then run `sync`, and `setup` unless the worktree is already prepared at that commit. On failure →
+   `ReportWorkspaceFailed`.
 2. `StartCycle`.
 3. Download and write `inputs` blobs to their paths; create the Cycle token; start the Cycle's
    localhost Operator endpoint (§3.3).
@@ -579,7 +598,7 @@ a cleaned 2 KiB tail (ANSI stripped, v1 logic), `ReportInspection`.
 
 `deliver`: §8.3 delivery.
 
-`plan_branch`, `plan_pr`, `plan_pr_ready`: fetch the mirror, then §4 (Plan jobs). A leaving Cell
+`plan_branch`, `plan_pr`, `plan_pr_ready`: fetch `origin` under the repo lock, then §4 (Plan jobs). A leaving Cell
 lets such a job finish if it ends within 5 min, else `ReleaseJob`, like delivery.
 
 **Leaving** (`SIGTERM`, or the device going away on purpose): stop claiming, then for each job:
@@ -611,7 +630,7 @@ The Cell exits when every job is released. A Cell that simply vanishes is handle
 | `factory cells [rm <id>]`                                                                                        | List or revoke Cells                                                                            |
 | `factory cells token create [--ttl <d>] \| ls \| rm <id>`                                                        | Manage join tokens                                                                              |
 | `factory project ls`                                                                                             | List the registered projects                                                                    |
-| `factory project add <id> --repo <url> [--base-branch <b>] [--dep-policy delivered\|merged] [--max-running <n>]` | Register a project (§3.1). A Cell serves it only if its config lists it                         |
+| `factory project add <id> --repo <url> [--base-branch <b>] [--dep-policy delivered\|merged] [--max-running <n>]` | Register a project (§3.1). A Cell serves it when it runs in a repository with this origin or its config lists it |
 | `factory project set <id> [--base-branch <b>] [--dep-policy delivered\|merged] [--max-running <n>]`              | Change a project (§3.1); `--base-branch` is refused while it has an open Work order             |
 | `factory project rm <id>`                                                                                        | Remove a project with no history (§3.1)                                                         |
 | `factory check [--dir <repoRoot>]`                                                                               | Offline: validate `<repo>/.factory/` (Operator profiles, Lines, prompt and PR templates) and cross-check `.nitpick/` when present (no Factory needed) |
@@ -619,7 +638,7 @@ The Cell exits when every job is released. A Cell that simply vanishes is handle
 | `factory order create --project <id> --todo-id <slug> --title <text> --type <t> --line <name> [--repo-dir <path>] [--priority ...] [--plan <slug>] [--depends-on <id,…>] [--base-branch <b>] (--file <path> \| --body <text> \| --file -)` | Create a Work order (§3.3). The Line is read and validated from `<repoDir>/.factory/lines/<name>.yml` and pinned as its snapshot |
 | `factory order pr-state <orderId> <open\|merged\|closed> --pr-url <url>`                                        | Set a Work order's PR state by hand: the fallback when no webhook is configured (§3.6). The order must already have a PR |
 | `factory plan create --project <id> --slug <slug> [--repo-dir <path>] [--base-branch <b>] --members <files…>`   | Create an Order Plan (§3.3): the members, each a todo file, in chain order; each Line is read from `<repoDir>/.factory/lines/` |
-| `factory todos migrate [--dir <todos>] [--repo-dir <path>] --project <id> [--dry-run] [--all] [--remove]`        | One-time import of a `todos/` folder: plans via `createPlan`, standalone todos via `createOrder`, in dependency order. Idempotent; `--remove` deletes files only after the server confirmed them |
+| `factory todos migrate [--dir <todos>] [--repo-dir <path>] --project <id> [--dry-run] [--all] [--remove] [--register]` | One-time import of a `todos/` folder: plans via `createPlan`, standalone todos via `createOrder`, in dependency order. Idempotent; `--remove` deletes files only after the server confirmed them. `--register` adds an unregistered project from the repo's origin (`projectAdd`, the add defaults) |
 | `factory admin export <file>`                                                                                    | STORAGE §7                                                                                      |
 
 `factory-server` is the core process: `factory run` is its local start command. It owns the database
@@ -696,5 +715,5 @@ branches it skipped. Like `admin backup`, the offline form needs the writer lock
 | Line YAML edited during a Work order                         | No effect: the Work order uses its pinned snapshot                                                                                | Nothing                                     |
 | Base branch moves during a Work order                        | Stations keep their base; delivery rebases; a conflict raises an Andon `delivery_failed`                                          | Nothing                                     |
 | PR closed or changes requested after delivery                | `factory reopen` sends the Work order back to a Station on top of the delivered commit                                            | Nothing                                     |
-| Cell cache wiped                                             | Mirrors and worktrees are rebuilt on the next job                                                                                 | Nothing                                     |
+| Cell cache wiped                                             | Worktrees are rebuilt on the next job, from a fresh fetch of `origin`                                                             | Nothing                                     |
 | Blob upload interrupted                                      | Hash mismatch → rejected; command referencing a missing blob → `invalid`                                                          | Nothing                                     |

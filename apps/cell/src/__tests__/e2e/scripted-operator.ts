@@ -13,11 +13,9 @@ import { fileURLToPath } from 'node:url';
 const CLI = fileURLToPath(
   new URL('../../../../operator-cli/src/cli.ts', import.meta.url),
 );
-const [scenario = 'done', kickoff = ''] = process.argv.slice(2);
-// The kickoff names the prompt file, which sits in the Cycle directory: that is where logs go.
-const cycleDir = dirname(
-  kickoff.replace(/^Read /, '').split(' and follow')[0] ?? '.',
-);
+const [scenario = 'done'] = process.argv.slice(2);
+// The prompt sits in the worktree's `.cell/`, while the `bin` shim on PATH sits in the Cycle directory: that is where logs go.
+const cycleDir = dirname((process.env.PATH ?? '').split(':')[0] || '.');
 const typedLog = join(cycleDir, 'typed.log');
 
 const operator = async (

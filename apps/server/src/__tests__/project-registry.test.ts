@@ -221,3 +221,67 @@ describe('project registry over the three transports', () => {
     });
   }, 60_000);
 });
+
+describe('cell project ensure (PROTOCOL §3.1)', () => {
+  it('adds a missing project with the defaults and keeps an existing one as it is', async () => {
+    const opened = openFresh(freshDataDir('cell-ensure'));
+    await opened.runtime.start();
+    const listener: HttpListener = listenLocal(opened.runtime);
+    const supervisor = httpClient(listener.url, LOCAL_TEST_TOKEN);
+    try {
+      const { token: joinToken } = await supervisor.call('joinTokenCreate', {
+        commandId: 'cmd-join-cell-ensure',
+        name: 'pool',
+      });
+      const joined = await fetch(`${listener.url}/v1/cell/join`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ joinToken, name: 'cell-ensure' }),
+      });
+      expect(joined.status).toBe(200);
+      const { credential } = (await joined.json()) as { credential: string };
+      const cell = httpClient(listener.url, credential);
+
+      const first = await cell.call('cellProjectEnsure', {
+        projectId: 'demo',
+        repoUrl: repo,
+      });
+      await supervisor.call('projectSet', {
+        projectId: 'demo',
+        maxRunning: 3,
+      });
+      const second = await cell.call('cellProjectEnsure', {
+        projectId: 'demo',
+        repoUrl: 'https://example.test/other.git',
+      });
+      const list = await supervisor.call('projectList', {});
+
+      expect(first).toEqual({
+        project: {
+          projectId: 'demo',
+          repoUrl: repo,
+          baseBranch: 'main',
+          maxRunning: 2,
+          depPolicy: 'delivered',
+        },
+        created: true,
+      });
+      expect(second).toEqual({
+        project: {
+          projectId: 'demo',
+          repoUrl: repo,
+          baseBranch: 'main',
+          maxRunning: 3,
+          depPolicy: 'delivered',
+        },
+        created: false,
+      });
+      expect(list).toMatchObject({
+        projects: [{ projectId: 'demo', maxRunning: 3 }],
+      });
+    } finally {
+      await listener.stop();
+      opened.close();
+    }
+  }, 60_000);
+});

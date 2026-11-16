@@ -529,5 +529,6 @@ export type JobKind = z.infer<typeof jobKindSchema>;
 export type InspectionResult = z.infer<typeof inspectionResultSchema>;
 export type Spec = z.infer<typeof specSchema>;
 export type OrderEvent = z.infer<typeof orderEventSchema>;
+export type WorkspaceStage = z.infer<typeof workspaceStageSchema>;
 export type OrderEventType = OrderEvent['type'];
 export type StoredEvent = z.infer<typeof storedEventSchema>;

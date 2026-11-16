@@ -11,7 +11,11 @@ import {
   projectIdSchema,
   stationIdSchema,
 } from '../ids';
-import { cycleCauseSchema, jobKindSchema } from '../order/events';
+import {
+  cycleCauseSchema,
+  jobKindSchema,
+  workspaceStageSchema,
+} from '../order/events';
 import { cycleContextSchema } from '../order/context-schema';
 import { planJobKindSchema } from '../plan/events';
 
@@ -192,6 +196,15 @@ const mechanicSchema = z
       .object({
         reason: z.string().min(1).max(64),
         detail: z.string().max(65536),
+        /** The latest `workspace_failed` behind a workspace Andon; its log is read by the Cell, not inlined. */
+        workspaceFailure: z
+          .object({
+            stage: workspaceStageSchema,
+            detail: z.string().max(65536),
+            logBlob: blobRefSchema,
+          })
+          .strict()
+          .optional(),
       })
       .strict(),
     /** The runner the Mechanic runs with: the Line's first Operator pool (CORE §14.4). */
@@ -209,7 +222,7 @@ const PLAN_KINDS = new Set(['plan_branch', 'plan_pr', 'plan_pr_ready']);
 /**
  * A job a Cell runs: PROTOCOL §4, the shape the claim and the continuation return. A Work order job
  * names an OrderId and carries its `workspace`; a plan job names a PlanId, carries a `plan` block and
- * no workspace (plan jobs work on the bare mirror only).
+ * no workspace (plan jobs work on the repo's refs only).
  */
 export const jobSchema = z
   .object({

@@ -2,7 +2,7 @@ import type { Job } from '@repo/factory-core/contracts/job';
 import { isPlanId, type OrderId } from '@repo/factory-core/ids';
 
 /**
- * The workspace of a Work order job. A plan job has none (PROTOCOL §4: plan jobs work on the bare mirror),
+ * The workspace of a Work order job. A plan job has none (PROTOCOL §4: plan jobs work on the repo's refs),
  * so reaching this with one is a bug in the dispatch, not a refusal.
  */
 export const workspaceOf = (job: Job): NonNullable<Job['workspace']> => {
