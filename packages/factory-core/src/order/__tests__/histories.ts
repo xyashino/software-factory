@@ -34,7 +34,9 @@ export const claim = (
     kind,
     epoch: n,
     cycleId:
-      kind === 'deliver' || kind === 'mechanic' ? undefined : cycleIdOf(n),
+      kind === 'deliver' || kind === 'mechanic' || kind === 'publish_blocked'
+        ? undefined
+        : cycleIdOf(n),
   });
 
 /** The Cycle of job `n` starts on `station`. */

@@ -377,18 +377,24 @@ const deliverWorktree = async (
 
     const github = ctx.githubFor(worktree);
     const open = await github.findPr(branch);
-    const prUrl =
-      open?.state === 'open'
-        ? open.url
-        : (
-            await github.createPr({
-              branch,
-              base: job.repo.baseBranch,
-              title: rendered.title,
-              body,
-              draft: false,
-            })
-          ).url;
+    let prUrl: string;
+    if (open?.state === 'open') {
+      // The PR of an earlier publish (a `[BLOCKED]` draft, or the branch's own PR) takes this delivery's title
+      // and body, and is marked ready for review (v1: a delivered blocked task's PR is ready, not a draft).
+      prUrl = open.url;
+      await github.updateBody(open.url, body, rendered.title);
+      await github.markReady(open.url);
+    } else {
+      prUrl = (
+        await github.createPr({
+          branch,
+          base: job.repo.baseBranch,
+          title: rendered.title,
+          body,
+          draft: false,
+        })
+      ).url;
+    }
 
     await submit(
       ctx,

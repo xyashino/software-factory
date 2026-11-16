@@ -116,6 +116,7 @@ export const jobKindSchema = z.enum([
   'run_inspection',
   'deliver',
   'mechanic',
+  'publish_blocked',
 ]);
 export const workspaceStageSchema = z.enum([
   'fetch',
@@ -453,6 +454,32 @@ const deliveryFailedSchema = z
     detail: freeText,
   })
   .strict();
+/**
+ * What a `publish_blocked` job reports (v1 `publishBlockedWork`): a draft `[BLOCKED]` PR published on the
+ * branch, nothing to publish because the worktree has no change against its base, or a best-effort failure
+ * that never touches the Andon.
+ */
+export const blockedPrResultSchema = z.discriminatedUnion('status', [
+  z
+    .object({
+      status: z.literal('published'),
+      prUrl,
+      commit: commitShaSchema,
+    })
+    .strict(),
+  z.object({ status: z.literal('no_changes') }).strict(),
+  z.object({ status: z.literal('failed'), detail: freeText }).strict(),
+]);
+export type BlockedPrResult = z.infer<typeof blockedPrResultSchema>;
+
+const blockedPrReportedSchema = z
+  .object({
+    type: z.literal('blocked_pr_reported'),
+    jobId: jobIdSchema,
+    andonAt: nonNegativeInt,
+    result: blockedPrResultSchema,
+  })
+  .strict();
 const prStateChangedSchema = z
   .object({
     type: z.literal('pr_state_changed'),
@@ -512,6 +539,7 @@ export const orderEventSchema = z.discriminatedUnion('type', [
   incidentRecordedSchema,
   deliveryFinishedSchema,
   deliveryFailedSchema,
+  blockedPrReportedSchema,
   prStateChangedSchema,
   orderRecoveredSchema,
 ]);

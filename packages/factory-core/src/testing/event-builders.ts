@@ -382,6 +382,16 @@ export const deliveryFailed = (
   ...over,
 });
 
+export const blockedPrReported = (
+  over: Partial<Fields<'blocked_pr_reported'>> = {},
+): Ev<'blocked_pr_reported'> => ({
+  type: 'blocked_pr_reported',
+  jobId: jobIdOf(1),
+  andonAt: 10,
+  result: { status: 'published', prUrl: PR_URL, commit: commitOf(6) },
+  ...over,
+});
+
 export const prStateChanged = (
   over: Partial<Fields<'pr_state_changed'>> = {},
 ): Ev<'pr_state_changed'> => ({
@@ -506,6 +516,7 @@ export const samples: { [T in OrderEvent['type']]: Ev<T> } = {
   incident_recorded: incidentRecorded(),
   delivery_finished: deliveryFinished(),
   delivery_failed: deliveryFailed(),
+  blocked_pr_reported: blockedPrReported(),
   pr_state_changed: prStateChanged(),
   order_recovered: orderRecovered(),
 };

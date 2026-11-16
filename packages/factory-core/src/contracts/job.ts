@@ -220,10 +220,24 @@ const mechanicSchema = z
   })
   .strict();
 
+/**
+ * A blocked publish (v1 `publishBlockedWork`): the Andon it publishes for, as the `[BLOCKED]` PR template names it.
+ * The Cell renders the title and body from `.factory/templates/pr/blocked.md`.
+ */
+const blockedSchema = z
+  .object({
+    taskId: z.string().min(1).max(128),
+    reason: z.string().min(1).max(64),
+    detail: z.string().max(65536),
+    logCommand: z.string().min(1).max(256),
+  })
+  .strict();
+
 const WORK_KINDS = new Set([
   'run_operator_station',
   'run_inspection',
   'deliver',
+  'publish_blocked',
 ]);
 const PLAN_KINDS = new Set(['plan_branch', 'plan_pr', 'plan_pr_ready']);
 
@@ -249,6 +263,7 @@ export const jobSchema = z
     deliver: deliverSchema.optional(),
     plan: planBlockSchema.optional(),
     mechanic: mechanicSchema.optional(),
+    blocked: blockedSchema.optional(),
   })
   .strict()
   .superRefine((job, ctx) => {
@@ -263,6 +278,19 @@ export const jobSchema = z
       return;
     }
     if (job.mechanic !== undefined) issue(`${job.kind} has no mechanic block`);
+    if (job.kind === 'publish_blocked') {
+      if (isPlanId(job.orderId)) issue('publish_blocked needs an OrderId');
+      if (job.blocked === undefined)
+        issue('publish_blocked needs a blocked block');
+      if (job.workspace === undefined)
+        issue('publish_blocked needs a workspace');
+      if (job.plan !== undefined) issue('publish_blocked has no plan block');
+      if (job.station !== undefined) issue('publish_blocked has no station');
+      if (job.deliver !== undefined)
+        issue('publish_blocked has no deliver block');
+      return;
+    }
+    if (job.blocked !== undefined) issue(`${job.kind} has no blocked block`);
     if (PLAN_KINDS.has(job.kind)) {
       if (!isPlanId(job.orderId)) issue(`${job.kind} needs a PlanId`);
       if (job.plan === undefined) issue(`${job.kind} needs a plan block`);

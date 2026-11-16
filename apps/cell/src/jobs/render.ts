@@ -9,7 +9,9 @@ import {
 import { richCommitOf } from '@repo/factory-runtime/job-builder';
 import { DEFAULT_CONFIG } from '@repo/factory-runtime/ports';
 import {
+  type BlockedPrInput,
   commitTitle,
+  formatBlockedPr,
   formatPrBody,
   usableCommitMessage,
   verificationLinesOf,
@@ -156,6 +158,24 @@ export const renderOperatorPrompt = async (input: {
 /** The Mechanic's prompt for the Andon it triages (CORE §14.4). The incident template ships with the Cell. */
 export const renderIncidentPrompt = (incident: IncidentPromptInput): string =>
   buildIncidentPrompt(incident);
+
+/**
+ * The `[BLOCKED]` draft PR of an Andon, from the repo's `.factory/templates/pr/blocked.md` (v1 `publishBlockedWork`).
+ * A repo whose templates cannot render it throws `RenderFailed`, so the publish reports why and changes nothing.
+ */
+export const renderBlockedPr = async (input: {
+  blocked: BlockedPrInput;
+  worktree: string;
+}): Promise<{ title: string; body: string }> => {
+  const definitions = await repoDefinitions(input.worktree);
+  try {
+    return formatBlockedPr(input.blocked, definitions.prTemplates);
+  } catch (error) {
+    throw new RenderFailed(
+      `the blocked PR cannot be built from ${input.worktree}/.factory/templates/pr: ${(error as Error).message}`,
+    );
+  }
+};
 
 /**
  * A delivery's commit message, PR title and PR body (v1 PR format). The commit is the builder's own commit artifact

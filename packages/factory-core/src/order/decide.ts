@@ -5,6 +5,7 @@ import {
   expireLease,
   releaseJob,
   reportDelivery,
+  reportBlockedPr,
   recordPrState,
   reportWorkspaceFailed,
   reportWorktreeMissing,
@@ -96,6 +97,8 @@ export const decide = (
       return reopen(state, command, ctx);
     case 'ReportDelivery':
       return reportDelivery(state, command, ctx);
+    case 'ReportBlockedPr':
+      return reportBlockedPr(state, command, ctx);
     case 'RecordPrState':
       return recordPrState(state, command, ctx);
     case 'RecoverOrder':

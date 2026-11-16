@@ -15,6 +15,7 @@ import {
 } from '../ids';
 import {
   artifactsSchema,
+  blockedPrResultSchema,
   cycleFailureSchema,
   freeText,
   incidentActionSchema,
@@ -211,6 +212,13 @@ const reportDeliverySchema = z
     ]),
   })
   .strict();
+/** The Cell's report of a `publish_blocked` job (v1 `publishBlockedWork`); it never changes the Andon. */
+const reportBlockedPrSchema = z
+  .object({
+    type: z.literal('ReportBlockedPr'),
+    result: blockedPrResultSchema,
+  })
+  .strict();
 const recordPrStateSchema = z
   .object({
     type: z.literal('RecordPrState'),
@@ -283,6 +291,7 @@ export const orderCommandSchema = z.discriminatedUnion('type', [
   resumeSchema,
   reopenSchema,
   reportDeliverySchema,
+  reportBlockedPrSchema,
   recordPrStateSchema,
   recoverOrderSchema,
   recordIncidentSchema,

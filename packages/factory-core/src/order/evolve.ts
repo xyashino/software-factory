@@ -3,6 +3,7 @@ import type { LineSnapshot } from '../line/snapshot';
 import type { OrderEvent, StoredEvent } from './events';
 import {
   applyAndonRaised,
+  applyBlockedPrReported,
   applyIncidentRecorded,
   applyReopened,
   applyResumed,
@@ -210,6 +211,8 @@ export const evolve = (
       return applyReopened(state, ev);
     case 'incident_recorded':
       return applyIncidentRecorded(state, ev, stored.at);
+    case 'blocked_pr_reported':
+      return applyBlockedPrReported(state, ev, stored.at);
     case 'cycle_started':
     case 'cycle_completed':
     case 'verdict_recorded':

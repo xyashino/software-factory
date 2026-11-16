@@ -100,10 +100,17 @@ export const createGithubAdapter = (
       requireOk('gh pr ready', ready);
     },
 
-    async updateBody(prUrl, body) {
+    async updateBody(prUrl, body, title) {
       // The body goes on stdin, so no text is ever part of a command line.
       const result = await run(
-        ['pr', 'edit', prUrl, '--body-file', '-'],
+        [
+          'pr',
+          'edit',
+          prUrl,
+          ...(title === undefined ? [] : ['--title', title]),
+          '--body-file',
+          '-',
+        ],
         cwd,
         body,
       );

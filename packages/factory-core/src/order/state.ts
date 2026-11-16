@@ -16,6 +16,7 @@ import type {
 } from '../ids';
 import type {
   AndonReason,
+  BlockedPrResult,
   CycleCause,
   IncidentAction,
   IncidentChange,
@@ -174,6 +175,17 @@ export interface WorkOrderState {
   /** Missing-worktree resets to Station 0 since the last delivery or Supervisor resume (CORE §4.3 rule 13). Absent is 0. */
   worktreeResets?: number;
   deliveryFailed?: { jobId: JobId; detail: string } | undefined;
+  /**
+   * The last `publish_blocked` report for an Andon (v1 `publishBlockedWork`). `andonAt` names the Andon it
+   * was for: one attempt per Andon, so a failed or empty publish never loops. The Andon itself is untouched.
+   */
+  blockedPr?:
+    | {
+        andonAt: number;
+        at: number;
+        result: BlockedPrResult;
+      }
+    | undefined;
   delivery?:
     | { prUrl: string; commit: CommitSha; state: 'open' | 'merged' | 'closed' }
     | undefined;

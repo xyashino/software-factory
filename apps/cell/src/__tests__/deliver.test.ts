@@ -352,6 +352,39 @@ describe('deliver job (deferred commit, PROTOCOL §8.3)', () => {
     ]);
   });
 
+  it('takes over a [BLOCKED] draft: it gets the delivery title and body, and is marked ready', async () => {
+    work('wip-1.txt', 'one\n');
+    const draft: PrRef = {
+      url: 'https://example.test/pull/4',
+      state: 'open',
+      draft: true,
+    };
+    const github = fakeGithub(draft);
+    const updates: Array<{ url: string; body: string; title?: string }> = [];
+    const readied: string[] = [];
+    const port: GithubPort = {
+      ...github.port,
+      updateBody: async (url, body, title) => {
+        updates.push({ url, body, title });
+      },
+      markReady: async (url) => {
+        readied.push(url);
+      },
+    };
+    const { context, calls } = contextWith(accepting, { ...github, port });
+
+    await runDeliver(context, deliverJob(), signal());
+
+    expect(github.created).toEqual([]);
+    expect(updates).toHaveLength(1);
+    expect(updates[0]).toMatchObject({ url: draft.url, title: PR_TITLE });
+    expect(updates[0]?.body).not.toContain('[BLOCKED]');
+    expect(readied).toEqual([draft.url]);
+    expect(reportsOf(calls)).toEqual([
+      { status: 'finished', prUrl: draft.url, commit: branchTip() },
+    ]);
+  });
+
   it('renders the PR body from the todo body and the repo template, not from the title', async () => {
     work('wip-1.txt', 'one\n');
     const { context, github } = contextWith();

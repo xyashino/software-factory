@@ -273,13 +273,17 @@ describe('I6 progress is kept', () => {
 });
 
 describe('I7 Andons hold no Cell', () => {
-  it('has no active job whenever an Andon is raised', () => {
+  // The Mechanic triages an Andon in a job, and a blocked publish reports on it (CORE §14.4, v1 publishBlockedWork).
+  // Any other job must not hold a raised Andon.
+  it('has no active job whenever an Andon is raised, except its triage or blocked publish', () => {
     fc.assert(
       fc.property(arbLine, arbIntents(), (line, intents) => {
         const { events } = runSequence(line, intents);
         for (const state of foldEach(events)) {
-          if (state.andon) {
-            expect(state.activeJob).toBeUndefined();
+          if (state.andon && state.activeJob) {
+            expect(['mechanic', 'publish_blocked']).toContain(
+              state.activeJob.kind,
+            );
           }
         }
       }),
