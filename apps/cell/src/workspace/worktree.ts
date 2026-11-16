@@ -15,6 +15,13 @@ export const worktreePathOf = (root: string, dir: string): string => {
   return path;
 };
 
+/**
+ * Whether a worktree is on this Cell: its directory holds git's link file. A `reuse` job checks this and
+ * nothing more; a directory without the link is not a worktree, so it counts as missing.
+ */
+export const worktreePresent = (path: string): boolean =>
+  existsSync(join(path, '.git'));
+
 /** Removes a worktree: git's record and its directory. A directory git no longer knows is removed too. */
 export const removeWorktree = async (
   ctx: ShellContext,

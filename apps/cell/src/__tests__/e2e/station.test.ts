@@ -41,7 +41,7 @@ import type { CommitSha } from '@repo/factory-core/ids';
 import { createSystemAdapter } from '../../adapters/system/system.adapter';
 import { prepareWorkspace } from '../../workspace/prepare';
 import { cloneRepo } from '../../testing/git-repo';
-import { commitOf, must } from '../helpers/git';
+import { must } from '../helpers/git';
 import { commitFactoryTo } from '../../testing/factory-fixture';
 
 type Client = FactoryClient;
@@ -247,8 +247,13 @@ const remoteBranchSha = async (): Promise<string> =>
     () => '',
   );
 
+/** Nothing reaches origin before `deliver` (PROTOCOL §8.3): a Station's Cycle leaves the branch unpushed. */
+const expectNothingPushed = async (): Promise<void> => {
+  expect(await remoteBranchSha()).toBe('');
+};
+
 describe('Operator station against the runtime', () => {
-  it('runs a station to done: the Cycle completes and the commit carries the passed trailer', async () => {
+  it('runs a station to done: the Cycle completes, makes no commit and pushes nothing', async () => {
     const client = await serve();
     const job = await claim(client);
 
@@ -256,12 +261,7 @@ describe('Operator station against the runtime', () => {
 
     const events = await eventsOf(client, job);
     expect(hasEvent(events, 'cycle_completed')).toBe(true);
-    const onBranch = await commitOf(repo, `refs/heads/${BRANCH}`);
-    expect(onBranch.subject).toBe(
-      `wip(${job.station?.stationId}): cycle ${job.station?.n}`,
-    );
-    expect(onBranch.body).toContain('Factory-Outcome: passed');
-    expect(onBranch.body).toContain(`Factory-Order: ${job.orderId}`);
+    await expectNothingPushed();
     expect(next?.orderId ?? job.orderId).toBe(job.orderId);
   });
 
@@ -306,9 +306,7 @@ describe('Operator station against the runtime', () => {
 
     const events = await eventsOf(client, review);
     expect(hasEvent(events, 'verdict_recorded')).toBe(true);
-    expect((await commitOf(repo, `refs/heads/${BRANCH}`)).body).toContain(
-      'Factory-Outcome: failed',
-    );
+    await expectNothingPushed();
   });
 
   it('records a passing verdict and the passed outcome on the commit', async () => {
@@ -324,9 +322,7 @@ describe('Operator station against the runtime', () => {
     expect(hasEvent(await eventsOf(client, review), 'verdict_recorded')).toBe(
       true,
     );
-    expect((await commitOf(repo, `refs/heads/${BRANCH}`)).body).toContain(
-      'Factory-Outcome: passed',
-    );
+    await expectNothingPushed();
   });
 
   it('blocks the Cycle with its Handover when the Operator reports a block', async () => {
@@ -336,9 +332,7 @@ describe('Operator station against the runtime', () => {
     await runOperatorStation(job, depsFor(client, job, 'block'));
 
     expect(hasEvent(await eventsOf(client, job), 'cycle_blocked')).toBe(true);
-    expect((await commitOf(repo, `refs/heads/${BRANCH}`)).body).toContain(
-      'Factory-Outcome: blocked',
-    );
+    await expectNothingPushed();
   });
 
   it('answers a question: the Supervisor answer returns to the ask, and the Cycle carries on', async () => {
@@ -410,10 +404,8 @@ describe('Operator station against the runtime', () => {
         reason: 'question_timeout',
       },
     );
-    // The runtime block is a terminal outcome: it is checkpointed like any other (PROTOCOL §8.2).
-    expect((await commitOf(repo, `refs/heads/${BRANCH}`)).body).toContain(
-      'Factory-Outcome: blocked',
-    );
+    // The runtime block is a terminal outcome: it is checkpointed like any other (PROTOCOL §8.2), unpushed.
+    await expectNothingPushed();
   });
 
   it('observes a pane station through its driver: a pane that reads blocked is blocked by the runtime', async () => {
@@ -446,9 +438,7 @@ describe('Operator station against the runtime', () => {
     expect(eventOf(await eventsOf(client, job), 'cycle_blocked')).toMatchObject(
       { source: 'runtime', reason: 'runner_prompt' },
     );
-    expect((await commitOf(repo, `refs/heads/${BRANCH}`)).body).toContain(
-      'Factory-Outcome: blocked',
-    );
+    await expectNothingPushed();
   });
 
   it('records the usage the runner reports after the Cycle ends', async () => {
@@ -497,9 +487,7 @@ describe('Operator station against the runtime', () => {
     expect(hasEvent(await eventsOf(client, job), 'cycle_handed_over')).toBe(
       true,
     );
-    expect((await commitOf(repo, `refs/heads/${BRANCH}`)).body).toContain(
-      'Factory-Outcome: handed_over',
-    );
+    await expectNothingPushed();
   });
 
   it('releases the job when a leaving Operator does not hand over in time', async () => {

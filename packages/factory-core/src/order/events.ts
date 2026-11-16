@@ -259,6 +259,17 @@ const workspaceFailedSchema = z
     logBlob: blobRefSchema,
   })
   .strict();
+/**
+ * The Cell's job is past the first Station, but the worktree it needs is not on that Cell (CORE §4.3 rule 13).
+ * The Work order restarts from Station 0, so the next job creates the worktree from the base again.
+ */
+const worktreeMissingSchema = z
+  .object({
+    type: z.literal('worktree_missing'),
+    jobId: jobIdSchema,
+    detail: freeText,
+  })
+  .strict();
 
 const cycleStartedSchema = z
   .object({
@@ -481,6 +492,7 @@ export const orderEventSchema = z.discriminatedUnion('type', [
   jobClaimedSchema,
   jobLostSchema,
   workspaceFailedSchema,
+  worktreeMissingSchema,
   cycleStartedSchema,
   cycleCompletedSchema,
   verdictRecordedSchema,

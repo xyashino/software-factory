@@ -1366,9 +1366,11 @@ describe('evolve rule 9: reopened', () => {
       commit: commitOf(9),
       afterStation: 'plan',
     });
+    // The first job starts from the delivered commit, in fresh mode (CORE §4.3 rule 9).
     expect(state.pendingResume).toEqual({
       resumeId: resumeIdOf(2),
       forStation: stationOf('build'),
+      baseCommit: commitOf(9),
     });
     expect(state.lastPassed).toEqual({ plan: cycleIdOf(1) });
   });

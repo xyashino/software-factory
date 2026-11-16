@@ -31,7 +31,6 @@ import type { OrderCommand } from '@repo/factory-core/order/commands';
 import {
   CELL_DIR,
   checkpoint,
-  pushWip,
   type Outcome,
   type OutputSpec,
   type SendOutcome,
@@ -58,6 +57,11 @@ import type {
   SpawnHeadless,
 } from '../ports';
 import type { WorkspaceStage } from '../workspace/prepare';
+import {
+  changedSince,
+  worktreeFingerprint,
+  type GitRun,
+} from '../workspace/snapshot';
 import { getBlob, putBlob } from './blobs';
 import { todoOf } from './job-shape';
 import { logCommandOf } from './pane-commands';
@@ -113,11 +117,19 @@ type Stage = WorkspaceStage;
 /** The station's worktree and the base commit its Cycle starts from, or the stage that failed. */
 export type WorkspaceResult =
   | { ok: true; worktree: string; base: CommitSha }
-  | { ok: false; stage: Stage; detail: string };
+  | { ok: false; stage: Stage; detail: string; missing?: boolean };
 type FailReason = 'timed_out' | 'crashed' | 'stalled' | 'start_failed' | 'lost';
 type Blobs = Record<string, BlobRef | undefined>;
 
 const encode = (text: string): Uint8Array => new TextEncoder().encode(text);
+
+/** The Cell's git through its `RunGit` port, in one worktree, as the fingerprint reads it. */
+const gitRunIn =
+  (git: RunGit, cwd: string): GitRun =>
+  async (args) => {
+    const run = await git(cwd, [...args]);
+    return run.code === 0 ? { ok: true, text: run.stdout } : { ok: false };
+  };
 
 /** What the idle reminder asks for: the Operator's own instructions name the artifacts. */
 const MISSING_ARTIFACTS =
@@ -235,6 +247,14 @@ export const runOperatorStation = async (
   const ws = await deps.workspace(job);
   if (!ws.ok) {
     if (deps.signal?.aborted) return null;
+    if (ws.missing) {
+      // The job needs a worktree this Cell does not hold: the Work order restarts from Station 0 (CORE §4.3 rule 13).
+      const reset = await submit('workspace', {
+        type: 'ReportWorktreeMissing',
+        detail: ws.detail,
+      });
+      return reset.ok ? reset.result.next : null;
+    }
     const logBlob = await putBlob(deps.client, encode(ws.detail), 'text/plain');
     const stage: Stage = ws.stage;
     const reported = await submit('workspace', {
@@ -291,6 +311,11 @@ export const runOperatorStation = async (
   for (const input of station.inputs ?? []) {
     writeInside(worktree, input.path, await getBlob(deps.client, input.blob));
   }
+  // A read-only station is judged by what it changes: the tree as it stands once its inputs are in place.
+  const readOnlyBaseline =
+    operator.permission === 'read'
+      ? await worktreeFingerprint(worktree, gitRunIn(deps.git, worktree))
+      : undefined;
 
   const cycleDir = join(deps.dataDir, 'cycles', cycleDirName(cycleId));
   mkdirSync(cycleDir, { recursive: true });
@@ -334,26 +359,19 @@ export const runOperatorStation = async (
       void deps.pane?.type(pane, text).catch(() => undefined);
   };
 
+  /**
+   * A failed Cycle is not pushed (PROTOCOL §8.3): its work stays in the worktree with the rest of the
+   * Work order's uncommitted state, and nothing reaches origin before `deliver`.
+   */
   const failCycle = async (
     reason: FailReason,
     detail: string,
   ): Promise<void> => {
-    const wipCommit = await pushWip({
-      worktree,
-      git: deps.git,
-      todoId: todo,
-      orderId: job.orderId,
-      stationId: station.stationId,
-      n: station.n,
-      cycleId,
-      epoch: job.epoch,
-    });
     const failed = await submit('fail', {
       type: 'FailCycle',
       cycleId,
       reason,
       detail,
-      ...(wipCommit === undefined ? {} : { wipCommit }),
     });
     finish(failed.ok ? failed.result.next : null);
   };
@@ -372,12 +390,6 @@ export const runOperatorStation = async (
       const result = await checkpoint({
         worktree,
         git: deps.git,
-        todoId: todo,
-        orderId: job.orderId,
-        stationId: station.stationId,
-        n: station.n,
-        cycleId,
-        epoch: job.epoch,
         outcome,
         outputs,
         upload: async () => {
@@ -416,14 +428,11 @@ export const runOperatorStation = async (
     upload: () => Promise<Blobs>,
     command: (commit: CommitSha, blobs: Blobs) => OrderCommand,
   ): Promise<OperatorReply> => {
-    const status = await deps.git(worktree, [
-      'status',
-      '--porcelain',
-      '--',
-      '.',
-      `:(exclude)${CELL_DIR}`,
-    ]);
-    if (status.code !== 0 || status.stdout.trim() !== '') {
+    const after = await worktreeFingerprint(
+      worktree,
+      gitRunIn(deps.git, worktree),
+    );
+    if (changedSince(readOnlyBaseline, after)) {
       await failCycle('crashed', 'read-only station changed files');
       return {
         ok: false,

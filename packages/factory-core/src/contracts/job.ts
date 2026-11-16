@@ -43,12 +43,20 @@ const repoSchema = z
   })
   .strict();
 
+/**
+ * How the Cell gets the worktree (PROTOCOL §9): `fresh` places it at the job's base, discarding what was there;
+ * `reuse` keeps the uncommitted work of earlier Stations, and a worktree the Cell does not hold is reported
+ * missing. Absent means `fresh`, which is how jobs before the mode was carried are read.
+ */
+export const worktreeModeSchema = z.enum(['fresh', 'reuse']);
+
 const workspaceSchema = z
   .object({
     dir: relativePath,
     sync: z.array(z.string().min(1).max(512)).max(32),
     setup: z.array(z.string().min(1).max(512)).max(32),
     timeoutMs,
+    mode: worktreeModeSchema.optional(),
   })
   .strict();
 

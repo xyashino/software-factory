@@ -51,7 +51,8 @@ flowchart TB
   Next -->|Station passed; advance on Line| Queue
   Next -->|verdict or Inspection failed; retry budget remains| Queue
   Next -->|infrastructure failure; restart budget remains| Queue
-  Next -->|Cell leaves with Handover; continue from WIP| Queue
+  Next -->|Cell leaves with Handover; the next Cell continues in its worktree| Queue
+  Next -->|worktree missing on the Cell that claimed; Work order restarts at Station 0| Queue
   Next -->|blocked or retry/restart budget exhausted| Andon
 
   Andon -->|awaits action| Supervisor

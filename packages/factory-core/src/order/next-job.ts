@@ -22,6 +22,12 @@ const requireStation = (state: WorkOrderState, id: StationId): Station => {
   return station;
 };
 
+/**
+ * Missing-worktree resets to Station 0 allowed before the Work order raises an Andon instead of looping
+ * (CORE §4.3 rule 13). The counter resets on a delivery or a Supervisor resume.
+ */
+export const MAX_WORKTREE_RESETS = 2;
+
 /** The longest workspace Andon detail, in characters: the latest stage and detail, kept concise. */
 const WORKSPACE_DETAIL_CHARS = 512;
 
@@ -204,6 +210,13 @@ export const nextJob = (state: WorkOrderState): Next => {
   if (state.andon) return andonRow(state, state.andon);
   // 4
   if (state.workspaceFailures.length >= 2) return workspaceAndon(state);
+  // 4b: the worktree keeps going missing on the Cells that pick the Work order up (CORE §4.3 rule 13)
+  if ((state.worktreeResets ?? 0) >= MAX_WORKTREE_RESETS) {
+    return andon(
+      'workspace_failed',
+      `worktree missing on ${state.worktreeResets} job(s) past Station 0 without a delivery`,
+    );
+  }
   // 5
   const resume = resumeRow(state);
   if (resume) return resume;

@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -10,7 +10,7 @@ import type { CellId, CycleId, JobId, OrderId } from '@repo/factory-core/ids';
 import { createSystemAdapter } from '../adapters/system/system.adapter';
 import { runInspection } from '../jobs/run-inspection';
 import type { JobContext } from '../jobs/send';
-import { cloneRepo, makeRepo } from '../testing/git-repo';
+import { cloneRepo, git, makeRepo } from '../testing/git-repo';
 
 const CELL = '01J0000000000000000000000W' as CellId;
 const JOB = '01J0000000000000000000000J' as JobId;
@@ -310,6 +310,67 @@ describe('inspection job', () => {
         detail: 'read-only station changed files',
       },
     ]);
+  });
+
+  describe('on a reused worktree, holding the work of earlier Stations', () => {
+    /** The worktree as a builder left it: placed at the base, its work uncommitted. */
+    const placeDirtyWorktree = (): void => {
+      const path = join(repoRoot, '.worktrees', 'todo-1');
+      mkdirSync(join(repoRoot, '.worktrees'), { recursive: true });
+      git(repoRoot, 'worktree', 'add', '--detach', path, head);
+      writeFileSync(join(path, 'builder.txt'), 'the builder work\n');
+    };
+    const reusedJob = (exec: string[]): Job =>
+      ({
+        ...inspectionJob(exec),
+        workspace: {
+          dir: 'todo-1',
+          sync: [],
+          setup: [],
+          timeoutMs: 60_000,
+          mode: 'reuse',
+        },
+      }) as unknown as Job;
+
+    it('passes when its checks leave the earlier work of the worktree as it was', async () => {
+      placeDirtyWorktree();
+      const { context, calls } = contextWith();
+
+      await runInspection(context, reusedJob(['true']), signal());
+
+      expect(commandsOf(calls, 'FailCycle')).toEqual([]);
+      expect(commandsOf(calls, 'ReportInspection')).toHaveLength(1);
+    });
+
+    it('fails as crashed when one of its checks changes a file it did not write', async () => {
+      placeDirtyWorktree();
+      const { context, calls } = contextWith();
+
+      await runInspection(
+        context,
+        reusedJob(['echo change >> builder.txt']),
+        signal(),
+      );
+
+      expect(commandsOf(calls, 'ReportInspection')).toHaveLength(0);
+      expect(commandsOf(calls, 'FailCycle')).toEqual([
+        {
+          type: 'FailCycle',
+          cycleId: CYCLE,
+          reason: 'crashed',
+          detail: 'read-only station changed files',
+        },
+      ]);
+    });
+
+    it('reports the worktree missing, without a Cycle, when it is not on this Cell', async () => {
+      const { context, calls } = contextWith();
+
+      await runInspection(context, reusedJob(['true']), signal());
+
+      expect(commandsOf(calls, 'StartCycle')).toEqual([]);
+      expect(commandsOf(calls, 'ReportWorktreeMissing')).toHaveLength(1);
+    });
   });
 
   it('reports a workspace that fails to prepare without starting a Cycle', async () => {

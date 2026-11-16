@@ -18,7 +18,12 @@ import {
   type ShellContext,
   type ShellRun,
 } from './shell';
-import { ensureWorktree, removeWorktree, worktreePathOf } from './worktree';
+import {
+  ensureWorktree,
+  removeWorktree,
+  worktreePathOf,
+  worktreePresent,
+} from './worktree';
 
 /** The steps of a workspace prepare, in the order `ReportWorkspaceFailed` names them (STORAGE, PROTOCOL §9). */
 export type WorkspaceStage = 'fetch' | 'sync' | 'worktree' | 'setup';
@@ -41,7 +46,17 @@ export type PrepareResult =
       /** Ends the job's use of the worktree: it may be evicted again. Call once, when the job ends. */
       release: () => void;
     }
-  | { ok: false; stage: WorkspaceStage; detail: string; log: Uint8Array };
+  | {
+      ok: false;
+      stage: WorkspaceStage;
+      detail: string;
+      log: Uint8Array;
+      /**
+       * A `reuse` job found no worktree on this Cell (PROTOCOL §9): the Cell reports `worktree_missing`
+       * instead of a workspace failure, and nothing was created or set up.
+       */
+      missing?: boolean;
+    };
 
 const COMMIT = /^[0-9a-f]{40}$/;
 const encoder = new TextEncoder();
@@ -59,7 +74,7 @@ const concatBytes = (parts: readonly Uint8Array[]): Uint8Array => {
 
 type Placed =
   | { ok: true; worktree: string; head: string; lease: Lease }
-  | { ok: false; stage: WorkspaceStage; detail: string };
+  | { ok: false; stage: WorkspaceStage; detail: string; missing?: boolean };
 
 /**
  * Removes the least recently used worktrees over the limit. A worktree this Cell is using is kept, and so
@@ -90,9 +105,37 @@ const evictLeastRecentlyUsed = async (ctx: PrepareContext): Promise<void> => {
   }
 };
 
+type Base = { ok: true; commit: string } | { ok: false; detail: string };
+
+/** The commit a `fresh` worktree is placed at: the job's commit, or the tip of the base branch on origin. */
+const resolveBase = async (
+  ctx: PrepareContext,
+  job: Job,
+  note: (run: ShellRun) => void,
+): Promise<Base> => {
+  if (typeof job.base === 'string') return { ok: true, commit: job.base };
+  // The remote's branches live under refs/remotes/origin/*: the repo's own branches are never read here.
+  const resolved = await gitIn(ctx.shell, ctx.repoRoot, [
+    'rev-parse',
+    '--verify',
+    '--quiet',
+    `refs/remotes/origin/${job.base.branchBase}^{commit}`,
+  ]);
+  note(resolved);
+  const commit = textOf(resolved).trim();
+  if (!succeeded(resolved) || !COMMIT.test(commit)) {
+    return {
+      ok: false,
+      detail: `branch ${job.base.branchBase} is missing on origin`,
+    };
+  }
+  return { ok: true, commit };
+};
+
 /**
- * The git steps that write to the repo, run under the repo lock: fetch `origin`, resolve the base,
- * lease and place the worktree, then evict. The worktree is leased on success; the caller releases it.
+ * The git steps that write to the repo, run under the repo lock: fetch `origin`, then place the worktree
+ * (`fresh`: at its base, discarding what was there; `reuse`: as it is, or missing), then evict. The worktree
+ * is leased on success; the caller releases it.
  */
 const placeWorktree = async (
   ctx: PrepareContext,
@@ -101,10 +144,16 @@ const placeWorktree = async (
 ): Promise<Placed> => {
   const { repoRoot } = ctx;
   const workspace = workspaceOf(job);
-  const fail = (stage: WorkspaceStage, detail: string): Placed => ({
+  const mode = workspace.mode ?? 'fresh';
+  const fail = (
+    stage: WorkspaceStage,
+    detail: string,
+    missing = false,
+  ): Placed => ({
     ok: false,
     stage,
     detail,
+    ...(missing ? { missing: true } : {}),
   });
 
   const excluded = await ensureCellExcluded(ctx.shell, repoRoot);
@@ -124,25 +173,11 @@ const placeWorktree = async (
     return fail('fetch', describeFailure(fetched, GIT_TIMEOUT_MS));
   }
 
-  let commit: string;
-  if (typeof job.base === 'string') {
-    commit = job.base;
-  } else {
-    // The remote's branches live under refs/remotes/origin/*: the repo's own branches are never read here.
-    const resolved = await gitIn(ctx.shell, repoRoot, [
-      'rev-parse',
-      '--verify',
-      '--quiet',
-      `refs/remotes/origin/${job.base.branchBase}^{commit}`,
-    ]);
-    note(resolved);
-    commit = textOf(resolved).trim();
-    if (!succeeded(resolved) || !COMMIT.test(commit)) {
-      return fail(
-        'worktree',
-        `branch ${job.base.branchBase} is missing on origin`,
-      );
-    }
+  let commit = '';
+  if (mode === 'fresh') {
+    const base = await resolveBase(ctx, job, note);
+    if (!base.ok) return fail('worktree', base.detail);
+    commit = base.commit;
   }
 
   const root = worktreesRootOf(repoRoot);
@@ -165,16 +200,29 @@ const placeWorktree = async (
     );
   }
 
-  const placed = await ensureWorktree(ctx.shell, {
-    repoRoot,
-    path: worktree,
-    commit,
-    timeoutMs: GIT_TIMEOUT_MS,
-  });
-  if (placed) {
-    note(placed);
-    lease.release();
-    return fail('worktree', describeFailure(placed, GIT_TIMEOUT_MS));
+  if (mode === 'reuse') {
+    // The uncommitted work of earlier Stations lives in this worktree: it is never reset, and a missing one
+    // is not created here (the Work order restarts from Station 0 instead, CORE §4.3 rule 13).
+    if (!worktreePresent(worktree)) {
+      lease.release();
+      return fail(
+        'worktree',
+        `worktree ${workspace.dir} is not on this cell`,
+        true,
+      );
+    }
+  } else {
+    const placed = await ensureWorktree(ctx.shell, {
+      repoRoot,
+      path: worktree,
+      commit,
+      timeoutMs: GIT_TIMEOUT_MS,
+    });
+    if (placed) {
+      note(placed);
+      lease.release();
+      return fail('worktree', describeFailure(placed, GIT_TIMEOUT_MS));
+    }
   }
 
   const head = await gitIn(ctx.shell, worktree, ['rev-parse', 'HEAD']);
@@ -187,6 +235,13 @@ const placeWorktree = async (
 
   try {
     mkdirSync(join(worktree, '.cell'), { recursive: true });
+    if (mode === 'fresh') {
+      // The metadata marker of a fresh placement: which Work order and base commit the worktree belongs to.
+      writeFileSync(
+        join(worktree, '.cell', 'worktree.json'),
+        JSON.stringify({ orderId: job.orderId, baseCommit: commit }),
+      );
+    }
     writeFileSync(join(worktree, USED_MARKER), '');
     ctx.inUse.add(worktree);
   } catch (error) {
@@ -199,8 +254,10 @@ const placeWorktree = async (
 };
 
 /**
- * Prepares a job's workspace (PROTOCOL §9 step 1). The repo's `origin` is fetched, the job's worktree is
- * put at its base under `<repoRoot>/.worktrees/`, `sync` and `setup` run (setup once per commit), and the
+ * Prepares a job's workspace (PROTOCOL §9 step 1). The repo's `origin` is fetched, then the job's worktree
+ * under `<repoRoot>/.worktrees/` is placed by its mode: `fresh` at its base (`checkout --force`, `clean`,
+ * with the `.cell/worktree.json` marker), `reuse` as it is, never reset, and missing when it is not on this
+ * Cell. `sync` runs for a fresh placement only (it may touch the tree); `setup` runs once per commit. The
  * least recently used worktrees beyond the limit are evicted. The repo's own checkout is never touched.
  * A failure names its stage and carries the transcript of every command run, for the log blob. The head
  * commit of the worktree is the commit the Cycle starts from. The worktree stays leased until `release`.
@@ -213,18 +270,24 @@ export const prepareWorkspace = async (
   const note = (run: ShellRun): void => {
     transcript.push(encoder.encode(`$ ${run.command}\n`), run.output);
   };
-  const fail = (stage: WorkspaceStage, detail: string): PrepareResult => ({
+  const fail = (
+    stage: WorkspaceStage,
+    detail: string,
+    missing = false,
+  ): PrepareResult => ({
     ok: false,
     stage,
     detail,
     log: concatBytes(transcript),
+    ...(missing ? { missing: true } : {}),
   });
   const workspace = workspaceOf(job);
+  const mode = workspace.mode ?? 'fresh';
 
   const placed = await withRepoLock(ctx.repoRoot, () =>
     placeWorktree(ctx, job, note),
   );
-  if (!placed.ok) return fail(placed.stage, placed.detail);
+  if (!placed.ok) return fail(placed.stage, placed.detail, placed.missing);
 
   const { worktree, head, lease } = placed;
   const release = (): void => {
@@ -235,7 +298,8 @@ export const prepareWorkspace = async (
     const prepared = await syncAndSetup(ctx.shell, {
       worktree,
       commit: head,
-      sync: workspace.sync,
+      // A reused worktree holds uncommitted work: its `sync` commands may rewrite the tree, so they do not run.
+      sync: mode === 'fresh' ? workspace.sync : [],
       setup: workspace.setup,
       timeoutMs: workspace.timeoutMs,
       record: note,

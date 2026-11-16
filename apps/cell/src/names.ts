@@ -3,10 +3,6 @@ import { createHash } from 'node:crypto';
 /** The branch of a Work order: one per order, created from the base branch (PROTOCOL §8.1). */
 export const branchFor = (todoId: string): string => `factory/${todoId}`;
 
-/** The WIP ref of a failed Cycle, for the Supervisor only (PROTOCOL §8.1). */
-export const wipRefFor = (todoId: string, cycleId: string): string =>
-  `factory-wip/${todoId}/${cycleId}`;
-
 /**
  * The Herdr agent name of a Cycle: `<station>_<hash>_<n>`, where the hash is a digest of the Cycle (or
  * Mechanic job) id. The hash is always present, so two Cells running the same station with the same

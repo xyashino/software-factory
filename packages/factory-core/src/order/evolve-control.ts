@@ -76,6 +76,7 @@ const retryStation = (
     ...state,
     andon: undefined,
     workspaceFailures: [],
+    worktreeResets: 0,
     resumedWaiting: true,
   };
   const granted =
@@ -135,6 +136,7 @@ const restartFrom = (
     ...state,
     andon: undefined,
     workspaceFailures: [],
+    worktreeResets: 0,
     deliveryFailed: undefined,
     pendingFeedback: undefined,
     phase: { kind: 'stations', index },
@@ -177,9 +179,11 @@ export const applyReopened = (
       afterStation: state.line.stations[index - 1]?.id ?? null,
     },
     workspaceFailures: [],
+    worktreeResets: 0,
     resumedWaiting: true,
   };
-  return pendingFor(reopened, ev, ev.stationId);
+  // The delivered commit is the base of the first job: it starts from that commit, not from the worktree.
+  return pendingFor(reopened, ev, ev.stationId, undefined, commit);
 };
 
 export const applyAndonRaised = (

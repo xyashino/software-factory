@@ -137,6 +137,34 @@ const verificationOf = (line: LineSnapshot) =>
   );
 
 /**
+ * How the Cell gets the job's worktree (PROTOCOL §9, CORE §4.3 rule 13). A job that starts a Work order run
+ * from its base, or resumes from a commit the Supervisor or a reopen named, places the worktree fresh. Every
+ * other Station job, a delivery and a Mechanic job keep the uncommitted work already in it (`reuse`). A
+ * Mechanic that repairs a workspace failure places it fresh, since that failure is the worktree itself.
+ */
+const worktreeModeOf = (
+  state: WorkOrderState,
+  spec: JobSpec,
+  line: LineSnapshot,
+): 'fresh' | 'reuse' => {
+  if (spec.kind === 'deliver') return 'reuse';
+  if (spec.kind === 'mechanic') {
+    return state.andon?.reason === 'workspace_failed' ? 'fresh' : 'reuse';
+  }
+  if (spec.base === 'branch_base') return 'fresh';
+  if (spec.cause.kind === 'resume' && state.pendingResume?.baseCommit) {
+    return 'fresh';
+  }
+  if (
+    spec.cause.kind === 'restart' &&
+    line.stations[0]?.id === spec.stationId
+  ) {
+    return 'fresh';
+  }
+  return 'reuse';
+};
+
+/**
  * The Job a claimed job becomes (PROTOCOL §4). `spec` is the job `nextJob` named before the claim, `state` the
  * state after it. Every path is relative; every text is a blob ref, so the Cell reads the spec, the artifacts and
  * the logs itself. Pure apart from the one prompt-independent read of the delivery artifacts.
@@ -165,7 +193,11 @@ export const buildJob = async (
       baseBranch: branchBase,
       branch: `factory/${state.todoId}`,
     },
-    workspace: { dir: state.todoId, ...workspaceOf(line) },
+    workspace: {
+      dir: state.todoId,
+      ...workspaceOf(line),
+      mode: worktreeModeOf(state, next.job, line),
+    },
   };
 
   if (next.job.kind === 'deliver') {

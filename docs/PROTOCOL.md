@@ -7,12 +7,12 @@ of a payload anywhere. Every client, local or remote, sends the same contracts o
 
 ## 1. Actors and credentials
 
-| Actor                           | Credential                                                                                  | Reaches                                                 | Scope                                                                           |
-| :------------------------------ | :------------------------------------------------------------------------------------------ | :------------------------------------------------------ | :------------------------------------------------------------------------------ |
-| Supervisor via `factory`        | Local: the local token in the discovery file (§2); remote: supervisor token (`FACTORY_TOKEN`) | `factory-server` over HTTP, or its supervisor API       | everything a Supervisor may do                                                  |
-| Cell, enrolling                 | join token (`FACTORY_JOIN_TOKEN`), created by `factory cells token create`                  | Remote `POST /v1/cell/join`                             | obtaining a Cell credential                                                     |
-| Cell, enrolled                  | Cell credential, returned once by `join`                                                    | `factory-server` over HTTP (local or remote)            | writes only to Work orders for which it holds the current epoch; reads any blob |
-| Operator via `factory-operator` | per-Cycle local token (`FACTORY_CYCLE_TOKEN`), random, created by the Cell                  | its Cell's localhost endpoint only                             | only its own Cycle                                                              |
+| Actor                           | Credential                                                                                    | Reaches                                           | Scope                                                                           |
+| :------------------------------ | :-------------------------------------------------------------------------------------------- | :------------------------------------------------ | :------------------------------------------------------------------------------ |
+| Supervisor via `factory`        | Local: the local token in the discovery file (§2); remote: supervisor token (`FACTORY_TOKEN`) | `factory-server` over HTTP, or its supervisor API | everything a Supervisor may do                                                  |
+| Cell, enrolling                 | join token (`FACTORY_JOIN_TOKEN`), created by `factory cells token create`                    | Remote `POST /v1/cell/join`                       | obtaining a Cell credential                                                     |
+| Cell, enrolled                  | Cell credential, returned once by `join`                                                      | `factory-server` over HTTP (local or remote)      | writes only to Work orders for which it holds the current epoch; reads any blob |
+| Operator via `factory-operator` | per-Cycle local token (`FACTORY_CYCLE_TOKEN`), random, created by the Cell                    | its Cell's localhost endpoint only                | only its own Cycle                                                              |
 
 Tokens are opaque random strings. The runtime stores only their hashes.
 
@@ -78,34 +78,34 @@ heartbeat, submit command, and read/write blobs.
 These operations are available through `FactoryClient` in both modes. Both modes map them to the HTTP
 routes below; local mode sends them to the loopback address in the discovery file.
 
-| Method                    | Path                           | Purpose                                                                                                                                                     |
-| :------------------------ | :----------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET`                     | `/v1/board`                    | Queue projection: every open Work order, plus terminal ones updated in the last 7 days (`?all=1` for everything), with status, holder, Station, age         |
-| `GET`                     | `/v1/orders/:id`               | Work order detail: state summary, Cycles, open question, Andon, checkpoint                                                                                  |
-| `GET`                     | `/v1/orders/:id/events?after=` | The Work order's Traveler                                                                                                                                   |
-| `GET`                     | `/v1/plans`                    | Order Plans of every project: slug, project, phase, member count, plan PR state, Andon (CORE §12). Route name `supervisor/plans`                           |
-| `GET`                     | `/v1/plans/:slug?project=`     | One plan: members in chain order, each with board status, base branch, PR link and blocker, plus the plan PR and Andon. Route name `supervisor/plans/show` |
-| `GET`                     | `/v1/blobs/:ref`               | A blob (prompt, artifact, log, Handover)                                                                                                                    |
-| `POST`                    | `/v1/orders/:id/answer`        | `Answer`                                                                                                                                                    |
-| `POST`                    | `/v1/orders/:id/resume`        | `Resume` (`--note`, `--from <station>`, `--grant <n>`)                                                                                                      |
-| `POST`                    | `/v1/orders/:id/reopen`        | `Reopen` (`--from <station>`, `--note`)                                                                                                                     |
-| `POST`                    | `/v1/orders/:id/nudge`         | `Nudge`                                                                                                                                                     |
-| `POST`                    | `/v1/orders/:id/cancel`        | `Cancel`                                                                                                                                                    |
-| `POST`                    | `/v1/orders/:id/priority`      | `Reprioritise`                                                                                                                                              |
+| Method                    | Path                           | Purpose                                                                                                                                                                                                                                                                              |
+| :------------------------ | :----------------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET`                     | `/v1/board`                    | Queue projection: every open Work order, plus terminal ones updated in the last 7 days (`?all=1` for everything), with status, holder, Station, age                                                                                                                                  |
+| `GET`                     | `/v1/orders/:id`               | Work order detail: state summary, Cycles, open question, Andon, checkpoint                                                                                                                                                                                                           |
+| `GET`                     | `/v1/orders/:id/events?after=` | The Work order's Traveler                                                                                                                                                                                                                                                            |
+| `GET`                     | `/v1/plans`                    | Order Plans of every project: slug, project, phase, member count, plan PR state, Andon (CORE §12). Route name `supervisor/plans`                                                                                                                                                     |
+| `GET`                     | `/v1/plans/:slug?project=`     | One plan: members in chain order, each with board status, base branch, PR link and blocker, plus the plan PR and Andon. Route name `supervisor/plans/show`                                                                                                                           |
+| `GET`                     | `/v1/blobs/:ref`               | A blob (prompt, artifact, log, Handover)                                                                                                                                                                                                                                             |
+| `POST`                    | `/v1/orders/:id/answer`        | `Answer`                                                                                                                                                                                                                                                                             |
+| `POST`                    | `/v1/orders/:id/resume`        | `Resume` (`--note`, `--from <station>`, `--grant <n>`)                                                                                                                                                                                                                               |
+| `POST`                    | `/v1/orders/:id/reopen`        | `Reopen` (`--from <station>`, `--note`)                                                                                                                                                                                                                                              |
+| `POST`                    | `/v1/orders/:id/nudge`         | `Nudge`                                                                                                                                                                                                                                                                              |
+| `POST`                    | `/v1/orders/:id/cancel`        | `Cancel`                                                                                                                                                                                                                                                                             |
+| `POST`                    | `/v1/orders/:id/priority`      | `Reprioritise`                                                                                                                                                                                                                                                                       |
 | `POST`                    | `/v1/orders`                   | `createOrder`: a Work order from `projectId`, `todoId`, `title`, `type`, `body` (markdown spec), `line` (a `LineSnapshot`, pinned as sent, hash verified), `priority`, `dependsOn`, optional `plan`, `baseBranch`. Idempotent by `commandId`. Socket path `supervisor/orders/create` |
-| `POST`                    | `/v1/plans`                    | `createPlan`: `projectId`, `slug`, optional `baseBranch`, `members[]` (`todoId`, `title`, `type`, `body`, `line`, `priority`) in chain order. Creates the plan, each member's Work order and the chain. Idempotent by `commandId`. Socket path `supervisor/plans/create` |
-| `POST`                    | `/v1/orders/:id/pr-state`      | `recordPrState`: `prUrl`, `state` (`open \| merged \| closed`). Refused as `precondition` while the Work order has no PR. Route name `supervisor/orders/pr-state` |
-| `POST`                    | `/v1/plans/:id/pr-state`       | `recordPlanPrState`: `prUrl`, `state`. Refused as `precondition` while the plan has no PR. Route name `supervisor/plans/pr-state` |
-| `POST`                    | `/v1/webhooks/github`          | GitHub `pull_request` webhook (§3.6): records a PR's state on the Work order or plan holding its URL. Outside bearer auth                                  |
-| `GET`                     | `/v1/cells`                    | Cells, their last heartbeat, busy state, current job                                                                                                        |
-| `DELETE`                  | `/v1/cells/:id`                | Revoke a Cell                                                                                                                                               |
-| `POST` / `GET` / `DELETE` | `/v1/join-tokens`              | Create (returns the token once) / list / revoke join tokens                                                                                                 |
-| `GET`                     | `/v1/projects`                 | Project registry: every registered project, with its base branch, max running and dependency policy                                                         |
-| `POST`                    | `/v1/projects`                 | Register a project: `projectId`, `repoUrl`, `baseBranch`, `maxRunning`, `depPolicy`. Refused as `precondition` when the id exists                           |
-| `POST`                    | `/v1/projects/:id`             | Change `baseBranch`, `maxRunning` or `depPolicy` (at least one). `repoUrl` cannot change (remove and re-add). Rules below                                   |
-| `DELETE`                  | `/v1/projects/:id`             | Remove a project. Refused as `precondition` while it has any Work order or event                                                                            |
-| `GET`                     | `/v1/stream`                   | Server-sent events: every stored event from `Last-Event-ID` (= `globalSeq`)                                                                                 |
-| `GET`                     | `/v1/admin/export`             | Remote export endpoint. Import is a local runtime admin operation, never an HTTP route.                                                                     |
+| `POST`                    | `/v1/plans`                    | `createPlan`: `projectId`, `slug`, optional `baseBranch`, `members[]` (`todoId`, `title`, `type`, `body`, `line`, `priority`) in chain order. Creates the plan, each member's Work order and the chain. Idempotent by `commandId`. Socket path `supervisor/plans/create`             |
+| `POST`                    | `/v1/orders/:id/pr-state`      | `recordPrState`: `prUrl`, `state` (`open \| merged \| closed`). Refused as `precondition` while the Work order has no PR. Route name `supervisor/orders/pr-state`                                                                                                                    |
+| `POST`                    | `/v1/plans/:id/pr-state`       | `recordPlanPrState`: `prUrl`, `state`. Refused as `precondition` while the plan has no PR. Route name `supervisor/plans/pr-state`                                                                                                                                                    |
+| `POST`                    | `/v1/webhooks/github`          | GitHub `pull_request` webhook (§3.6): records a PR's state on the Work order or plan holding its URL. Outside bearer auth                                                                                                                                                            |
+| `GET`                     | `/v1/cells`                    | Cells, their last heartbeat, busy state, current job                                                                                                                                                                                                                                 |
+| `DELETE`                  | `/v1/cells/:id`                | Revoke a Cell                                                                                                                                                                                                                                                                        |
+| `POST` / `GET` / `DELETE` | `/v1/join-tokens`              | Create (returns the token once) / list / revoke join tokens                                                                                                                                                                                                                          |
+| `GET`                     | `/v1/projects`                 | Project registry: every registered project, with its base branch, max running and dependency policy                                                                                                                                                                                  |
+| `POST`                    | `/v1/projects`                 | Register a project: `projectId`, `repoUrl`, `baseBranch`, `maxRunning`, `depPolicy`. Refused as `precondition` when the id exists                                                                                                                                                    |
+| `POST`                    | `/v1/projects/:id`             | Change `baseBranch`, `maxRunning` or `depPolicy` (at least one). `repoUrl` cannot change (remove and re-add). Rules below                                                                                                                                                            |
+| `DELETE`                  | `/v1/projects/:id`             | Remove a project. Refused as `precondition` while it has any Work order or event                                                                                                                                                                                                     |
+| `GET`                     | `/v1/stream`                   | Server-sent events: every stored event from `Last-Event-ID` (= `globalSeq`)                                                                                                                                                                                                          |
+| `GET`                     | `/v1/admin/export`             | Remote export endpoint. Import is a local runtime admin operation, never an HTTP route.                                                                                                                                                                                              |
 
 Every `POST` carries a `commandId` generated by the CLI (a ULID per invocation, reused on its own
 retries).
@@ -149,7 +149,7 @@ only in remote mode.
 | Method | Path                            | Purpose                                                                                                                                                                                                                                             |
 | :----- | :------------------------------ | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `POST` | `/v1/cell/join`                 | `{ joinToken, name }` → `{ cellId, credential }`. The only call authenticated by a join token.                                                                                                                                                      |
-| `POST` | `/v1/cell/hello`                | Announce version, projects, runners, capabilities. Returns runtime config (TTL, intervals).                                                                                                                                                  |
+| `POST` | `/v1/cell/hello`                | Announce version, projects, runners, capabilities. Returns runtime config (TTL, intervals).                                                                                                                                                         |
 | `POST` | `/v1/cell/claim`                | Long-poll (≤ 25 s) for one job. Returns `Job` or `204`.                                                                                                                                                                                             |
 | `POST` | `/v1/cell/heartbeat`            | Extend the leases of all held jobs at once. Returns per-job `ok \| stale` and pending **signals**.                                                                                                                                                  |
 | `GET`  | `/v1/blobs/:ref`                | Download a blob named in a `Job` (prompt, inputs).                                                                                                                                                                                                  |
@@ -482,10 +482,14 @@ reported as `stale` in the heartbeat response, which is the Cell's cue to stop i
 - One branch per Order Plan: `feat/<slug>`, created by the `plan_branch` job from
   `origin/<baseBranch>` (§4). The Factory never force-pushes it and never deletes it; the Work order
   PRs merge into it (CORE §12.9). A Work order whose todo contains no `plan` never touches `feat/*`.
-- WIP of failed Cycles, for the Supervisor only: `factory-wip/<todoId>/<cycleId>`. (A separate
-  namespace: git cannot hold `factory/<todoId>` and `factory/<todoId>/…` at the same time.)
-- The Cell's scratch directory `.cell/` in the worktree (inputs, outputs) is excluded through the
-  repo's common `info/exclude` (`<repo>/.git/info/exclude`), so the target repository needs no `.gitignore` entry.
+- The Cell's scratch directory `.cell/` in the worktree (inputs, outputs, prompts, logs) is excluded
+  through the repo's common `info/exclude` (`<repo>/.git/info/exclude`), so the target repository
+  needs no `.gitignore` entry. It is never part of a commit, a fingerprint or a delivery.
+- Between Stations the work of a Work order is uncommitted, in its worktree `.worktrees/<todoId>/`
+  under the Cell's repo. Its progress lives in the Factory (events and blobs, STORAGE §8), not in git.
+
+Nothing under `factory/*` is pushed before `deliver`: no per-station branch, no WIP commit and no
+`factory-wip/*` ref. (The Factory's earlier per-station `wip(<stationId>)` commits are retired.)
 
 ### 8.2 The checkpoint procedure
 
@@ -493,59 +497,55 @@ Used whenever a Cycle ends with work to keep (`done`, `verdict`, `block`, handov
 
 1. **Validate** locally: declared outputs exist, are non-empty and are inside the worktree.
 2. **Upload** output blobs (and the Handover or feedback).
-3. **Commit** everything in the worktree except `.cell/`. Message `wip(<stationId>): cycle <n>`,
-   trailers:
+3. **Read** the worktree's HEAD. It is the commit the Cycle started from: no commit is made, so the
+   commit a command names is still the base, and the uncommitted work stays in the worktree for the
+   next Station.
+4. **Dry-run** the command (`dryRun: true`) with that commit. `stale_epoch` → stop. `precondition` /
+   `invalid` → report to the Operator and continue the Cycle.
+5. **Send** the command for real. Only now does the Cycle count.
 
-   ```text
-   Factory-Order: software-factory:add-webhooks
-   Factory-Station: build
-   Factory-Cycle: 01JD3...
-   Factory-Epoch: 7
-   Factory-Outcome: passed
-   ```
-
-   `Factory-Outcome` is `passed`, `failed` (a failed verdict), `blocked` or `handed_over`.
-
-   `Factory-Outcome: passed` is load-bearing for recovery (STORAGE §8): `admin recover` finds the
-   checkpoint of a lost database by that trailer, so a passed Cycle's commit must carry it and be
-   pushed before its command is sent.
-
-4. **Dry-run** the command (`dryRun: true`) with the commit sha. `stale_epoch` → stop, no push.
-   `precondition` / `invalid` → report to the Operator, drop the local commit (`git reset --soft`),
-   continue the Cycle.
-5. **Push**: fetch the branch, then `git push --force-with-lease=<branch>:<tip just fetched>` (an
-   empty expectation when the branch does not exist yet). If the push is rejected because the tip
-   moved, repeat from step 4, at most 3 times, then `FailCycle{crashed}`.
-6. **Send** the command for real. Only now does the commit count.
-
-Step 4 before step 5 is what keeps a fenced-off Cell from pushing; the lease in step 5 only makes
-sure nothing is overwritten that was pushed between the fetch and the push without a fresh epoch
-check.
+Step 4 before step 5 is what keeps a fenced-off Cell from acting on the Work order. Nothing in the
+checkpoint touches origin.
 
 ### 8.3 Per job kind
 
+- **Worktree modes**: every station job carries `workspace.mode` (`fresh` or `reuse`). `fresh` places
+  the worktree at the job's base, discarding what was there, and writes `.cell/worktree.json`
+  (`orderId`, `baseCommit`). It is used for Station 0 and for a job that resumes from a commit the
+  Supervisor or a reopen named. `reuse` keeps the worktree as it is: it fetches `origin`, runs no
+  `sync` and never checks out or cleans, and it is used for every other Station job, retries,
+  restarts and deliveries. The Mechanic repairing a workspace failure is `fresh`; any other Mechanic is
+  `reuse`.
+- **A worktree the job needs is not on this Cell** (a `reuse` job, the only kind that needs one from an
+  earlier Station): the Cell sends `ReportWorktreeMissing{detail}` with no Cycle and no `setup`. The
+  Work order returns to Station 0 (`phase: stations/0`), its checkpoint and per-Station budgets
+  cleared, its lifetime retry budget kept, and its worktree reset counter raised. After
+  `MAX_WORKTREE_RESETS` (2) resets without a delivery, the Work order raises the `workspace_failed`
+  Andon instead of looping. A delivery or a Supervisor resume clears the counter. Station 0 jobs
+  create their worktree and never report it missing.
 - **Operator station with write permission**: the checkpoint procedure when the Operator finishes.
-- **Operator station with read permission and Inspections**: must leave the tree clean. A dirty tree
-  after them is `cycle_failed{crashed, detail: "read-only station changed files"}`. They upload
-  blobs and send their command without a commit.
-- **Failure** (timed out, stalled): the Cell MAY push the WIP to `factory-wip/<todoId>/<cycleId>`.
-  The restart never builds on it.
-- **Delivery**: squash the branch into one commit on top of the current `origin/<baseBranch>`
-  (`git rebase` then `reset --soft`), message from the Line's `deliver.commit` artifact, remove the
-  todo file in the same commit if it is still there, then dry-run `ReportDelivery`, push as in
-  §8.2 step 5, open the PR (or find the existing open one), `ReportDelivery`. A rebase conflict is
-  `delivery_failed`. For a plan member `<baseBranch>` is the job's `repo.baseBranch` (§4): the PR is
-  opened against `feat/<slug>` or `factory/<predecessorTodoId>`, and the todo is removed on that line
-  of history, so it leaves the plan branch with the sub-PR and leaves the project's base branch with
-  the final plan PR.
+- **Operator station with read permission and Inspections**: the Cell fingerprints the worktree
+  (`.cell/` excluded: porcelain status, the diff against HEAD, and the content of every untracked file)
+  after the station's inputs are in place and again when it finishes. A station that changed the
+  fingerprint fails as `cycle_failed{crashed, detail: "read-only station changed files"}`. A dirty tree
+  from earlier Stations is not a change. They send their command without a commit.
+- **Failure** (timed out, stalled, crashed, failed verdict): nothing is pushed. The work stays in the
+  worktree; a restart runs in `reuse` mode unless it restarts Station 0.
+- **Delivery** (`reuse`): stage every change (`git add -A`, `.cell/` excluded) and remove the todo file
+  if it is still there; commit the staging on top of the worktree's HEAD; rebase it on
+  `origin/<baseBranch>` (a conflict aborts the rebase and is `delivery_failed`); render the message
+  from the Line's `deliver.commit` artifact; `reset --soft` to the base and commit once. Then dry-run
+  `ReportDelivery`, push `factory/<todoId>` with `--force-with-lease` on the tip the Cell read from
+  origin, open the PR (or find the existing open one), and `ReportDelivery`. Until the push lands, HEAD
+  is put back on the commit the worktree started from, so origin never needs a commit only the Cell
+  holds. For a plan member `<baseBranch>` is the job's `repo.baseBranch` (§4): the PR is opened against
+  `feat/<slug>` or `factory/<predecessorTodoId>`, and the todo is removed on that line of history, so it
+  leaves the plan branch with the sub-PR and leaves the project's base branch with the final plan PR.
 - **Plan jobs** (`plan_branch`, `plan_pr`, `plan_pr_ready`): §4. They touch only `feat/<slug>` and the
   plan PR, never a `factory/*` branch, and need no worktree.
 
-After delivery the pre-squash checkpoint commits are no longer reachable from the branch. Their shas
-stay in the Traveler as history; a reopened Work order builds on the delivery commit (CORE §4.3
-rule 9).
-
-The trailers make a Work order's progress recoverable from git alone until delivery (STORAGE §8).
+After delivery the squashed commit is the Work order's `delivery.commit`. A reopened Work order builds
+on that commit (CORE §4.3 rule 9): its first job places the worktree fresh at it.
 
 ## 9. Cell internals
 
@@ -603,43 +603,43 @@ lets such a job finish if it ends within 5 min, else `ReleaseJob`, like delivery
 
 **Leaving** (`SIGTERM`, or the device going away on purpose): stop claiming, then for each job:
 
-| Job state                            | Action                                                                                                                                                  | Result                                                                       |
-| :----------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------ | :--------------------------------------------------------------------------- |
-| An Operator Cycle is running         | Type `handoverRequest`; wait up to 5 min for the Operator to write its Handover; checkpoint (§8.2 with `Factory-Outcome: handed_over`); `HandOverCycle` | Another Cell continues from the WIP with the Handover. No Supervisor needed. |
-| The Operator does not comply in time | `ReleaseJob`                                                                                                                                            | `cycle_failed{lost}` + `job_lost{cell_left}`; restart from the clean base.   |
-| An Inspection or delivery is running | Let it finish if it ends within 5 min, else `ReleaseJob`                                                                                                |                                                                              |
-| No Cycle started yet                 | `ReleaseJob`                                                                                                                                            | `job_lost{cell_left}`; back to the queue.                                    |
+| Job state                            | Action                                                                                                                                     | Result                                                                                                                                                      |
+| :----------------------------------- | :----------------------------------------------------------------------------------------------------------------------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| An Operator Cycle is running         | Type `handoverRequest`; wait up to 5 min for the Operator to write its Handover; checkpoint (§8.2, outcome `handed_over`); `HandOverCycle` | The next Cell continues in its worktree with the Handover, or the Work order restarts at Station 0 when it does not hold that worktree (CORE §4.3 rule 13). |
+| The Operator does not comply in time | `ReleaseJob`                                                                                                                               | `cycle_failed{lost}` + `job_lost{cell_left}`; restart from the clean base.                                                                                  |
+| An Inspection or delivery is running | Let it finish if it ends within 5 min, else `ReleaseJob`                                                                                   |                                                                                                                                                             |
+| No Cycle started yet                 | `ReleaseJob`                                                                                                                               | `job_lost{cell_left}`; back to the queue.                                                                                                                   |
 
 The Cell exits when every job is released. A Cell that simply vanishes is handled by the reaper.
 
 ## 10. Supervisor CLI (`factory`)
 
-| Command                                                                                                          | Purpose                                                                                         |
-| :--------------------------------------------------------------------------------------------------------------- | :---------------------------------------------------------------------------------------------- |
-| `factory run`                                                                                                    | Start the server (core): owns the database, serves the task API and state, serves HTTP on its listener |
-| `factory status [--watch] [--all]`                                                                               | The board; `--watch` follows the runtime event feed locally or `/v1/stream` remotely            |
-| `factory show <order>`                                                                                           | Work order detail, Cycles, Andon, Handover                                                      |
-| `factory log <order> [-f]`                                                                                       | The Traveler, optionally followed                                                               |
-| `factory answer <order> "<text>"`                                                                                | Answer the open (or abandoned, unanswered) question                                             |
-| `factory resume <order> [--note "..."] [--from <station>] [--grant <n>]`                                         | Resume an Andon                                                                                 |
-| `factory reopen <order> --from <station> [--note "..."]`                                                         | Send a delivered, unmerged Work order back for rework                                           |
-| `factory nudge <order> "<text>"`                                                                                 | Type into a live Operator's pane                                                                |
-| `factory cancel <order>` / `factory prio <order> <level>`                                                        |                                                                                                 |
-| `factory plan ls`                                                                                                | List Order Plans: slug, project, member count, plan PR state (CORE §12)                         |
-| `factory plan status <slug> [--project <id>]`                                                                    | The chain in order: board status, base branch, PR link and blocker per member, plus the plan PR |
-| `factory cells [rm <id>]`                                                                                        | List or revoke Cells                                                                            |
-| `factory cells token create [--ttl <d>] \| ls \| rm <id>`                                                        | Manage join tokens                                                                              |
-| `factory project ls`                                                                                             | List the registered projects                                                                    |
-| `factory project add <id> --repo <url> [--base-branch <b>] [--dep-policy delivered\|merged] [--max-running <n>]` | Register a project (§3.1). A Cell serves it when it runs in a repository with this origin or its config lists it |
-| `factory project set <id> [--base-branch <b>] [--dep-policy delivered\|merged] [--max-running <n>]`              | Change a project (§3.1); `--base-branch` is refused while it has an open Work order             |
-| `factory project rm <id>`                                                                                        | Remove a project with no history (§3.1)                                                         |
-| `factory check [--dir <repoRoot>]`                                                                               | Offline: validate `<repo>/.factory/` (Operator profiles, Lines, prompt and PR templates) and cross-check `.nitpick/` when present (no Factory needed) |
-| `factory init [--dir <repoRoot>] [--force]`                                                                      | Scaffold `<repo>/.factory/` (`lines/`, `operators/`, `templates/`) from the starter; refuses an existing one unless `--force` |
-| `factory order create --project <id> --todo-id <slug> --title <text> --type <t> --line <name> [--repo-dir <path>] [--priority ...] [--plan <slug>] [--depends-on <id,…>] [--base-branch <b>] (--file <path> \| --body <text> \| --file -)` | Create a Work order (§3.3). The Line is read and validated from `<repoDir>/.factory/lines/<name>.yml` and pinned as its snapshot |
-| `factory order pr-state <orderId> <open\|merged\|closed> --pr-url <url>`                                        | Set a Work order's PR state by hand: the fallback when no webhook is configured (§3.6). The order must already have a PR |
-| `factory plan create --project <id> --slug <slug> [--repo-dir <path>] [--base-branch <b>] --members <files…>`   | Create an Order Plan (§3.3): the members, each a todo file, in chain order; each Line is read from `<repoDir>/.factory/lines/` |
-| `factory todos migrate [--dir <todos>] [--repo-dir <path>] --project <id> [--dry-run] [--all] [--remove] [--register]` | One-time import of a `todos/` folder: plans via `createPlan`, standalone todos via `createOrder`, in dependency order. Idempotent; `--remove` deletes files only after the server confirmed them. `--register` adds an unregistered project from the repo's origin (`projectAdd`, the add defaults) |
-| `factory admin export <file>`                                                                                    | STORAGE §7                                                                                      |
+| Command                                                                                                                                                                                                                                    | Purpose                                                                                                                                                                                                                                                                                             |
+| :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `factory run`                                                                                                                                                                                                                              | Start the server (core): owns the database, serves the task API and state, serves HTTP on its listener                                                                                                                                                                                              |
+| `factory status [--watch] [--all]`                                                                                                                                                                                                         | The board; `--watch` follows the runtime event feed locally or `/v1/stream` remotely                                                                                                                                                                                                                |
+| `factory show <order>`                                                                                                                                                                                                                     | Work order detail, Cycles, Andon, Handover                                                                                                                                                                                                                                                          |
+| `factory log <order> [-f]`                                                                                                                                                                                                                 | The Traveler, optionally followed                                                                                                                                                                                                                                                                   |
+| `factory answer <order> "<text>"`                                                                                                                                                                                                          | Answer the open (or abandoned, unanswered) question                                                                                                                                                                                                                                                 |
+| `factory resume <order> [--note "..."] [--from <station>] [--grant <n>]`                                                                                                                                                                   | Resume an Andon                                                                                                                                                                                                                                                                                     |
+| `factory reopen <order> --from <station> [--note "..."]`                                                                                                                                                                                   | Send a delivered, unmerged Work order back for rework                                                                                                                                                                                                                                               |
+| `factory nudge <order> "<text>"`                                                                                                                                                                                                           | Type into a live Operator's pane                                                                                                                                                                                                                                                                    |
+| `factory cancel <order>` / `factory prio <order> <level>`                                                                                                                                                                                  |                                                                                                                                                                                                                                                                                                     |
+| `factory plan ls`                                                                                                                                                                                                                          | List Order Plans: slug, project, member count, plan PR state (CORE §12)                                                                                                                                                                                                                             |
+| `factory plan status <slug> [--project <id>]`                                                                                                                                                                                              | The chain in order: board status, base branch, PR link and blocker per member, plus the plan PR                                                                                                                                                                                                     |
+| `factory cells [rm <id>]`                                                                                                                                                                                                                  | List or revoke Cells                                                                                                                                                                                                                                                                                |
+| `factory cells token create [--ttl <d>] \| ls \| rm <id>`                                                                                                                                                                                  | Manage join tokens                                                                                                                                                                                                                                                                                  |
+| `factory project ls`                                                                                                                                                                                                                       | List the registered projects                                                                                                                                                                                                                                                                        |
+| `factory project add <id> --repo <url> [--base-branch <b>] [--dep-policy delivered\|merged] [--max-running <n>]`                                                                                                                           | Register a project (§3.1). A Cell serves it when it runs in a repository with this origin or its config lists it                                                                                                                                                                                    |
+| `factory project set <id> [--base-branch <b>] [--dep-policy delivered\|merged] [--max-running <n>]`                                                                                                                                        | Change a project (§3.1); `--base-branch` is refused while it has an open Work order                                                                                                                                                                                                                 |
+| `factory project rm <id>`                                                                                                                                                                                                                  | Remove a project with no history (§3.1)                                                                                                                                                                                                                                                             |
+| `factory check [--dir <repoRoot>]`                                                                                                                                                                                                         | Offline: validate `<repo>/.factory/` (Operator profiles, Lines, prompt and PR templates) and cross-check `.nitpick/` when present (no Factory needed)                                                                                                                                               |
+| `factory init [--dir <repoRoot>] [--force]`                                                                                                                                                                                                | Scaffold `<repo>/.factory/` (`lines/`, `operators/`, `templates/`) from the starter; refuses an existing one unless `--force`                                                                                                                                                                       |
+| `factory order create --project <id> --todo-id <slug> --title <text> --type <t> --line <name> [--repo-dir <path>] [--priority ...] [--plan <slug>] [--depends-on <id,…>] [--base-branch <b>] (--file <path> \| --body <text> \| --file -)` | Create a Work order (§3.3). The Line is read and validated from `<repoDir>/.factory/lines/<name>.yml` and pinned as its snapshot                                                                                                                                                                    |
+| `factory order pr-state <orderId> <open\|merged\|closed> --pr-url <url>`                                                                                                                                                                   | Set a Work order's PR state by hand: the fallback when no webhook is configured (§3.6). The order must already have a PR                                                                                                                                                                            |
+| `factory plan create --project <id> --slug <slug> [--repo-dir <path>] [--base-branch <b>] --members <files…>`                                                                                                                              | Create an Order Plan (§3.3): the members, each a todo file, in chain order; each Line is read from `<repoDir>/.factory/lines/`                                                                                                                                                                      |
+| `factory todos migrate [--dir <todos>] [--repo-dir <path>] --project <id> [--dry-run] [--all] [--remove] [--register]`                                                                                                                     | One-time import of a `todos/` folder: plans via `createPlan`, standalone todos via `createOrder`, in dependency order. Idempotent; `--remove` deletes files only after the server confirmed them. `--register` adds an unregistered project from the repo's origin (`projectAdd`, the add defaults) |
+| `factory admin export <file>`                                                                                                                                                                                                              | STORAGE §7                                                                                                                                                                                                                                                                                          |
 
 `factory-server` is the core process: `factory run` is its local start command. It owns the database
 through the writer lock, holds tasks and state only (no intake, no git, no gh, no timer), reaps expired
@@ -701,19 +701,19 @@ branches it skipped. Like `admin backup`, the offline form needs the writer lock
 
 ## 11. Failure matrix
 
-| Failure                                                      | What happens                                                                                                                      | Lost                                        |
-| :----------------------------------------------------------- | :-------------------------------------------------------------------------------------------------------------------------------- | :------------------------------------------ |
-| Cell process crashes mid-Cycle                               | Lease expires (≤ 65 s); `cycle_failed{lost}`; restart on any Cell from the Cycle's base                                           | The in-flight Cycle                         |
-| Remote Cell partitioned from the runtime, still running      | Self-fences at 45 s; runtime expires at 60 s; late reports get `stale_epoch`; no push without a dry run                           | The in-flight Cycle                         |
-| Cell leaves on purpose                                       | Handover, then another Cell continues from the WIP (§9)                                                                           | Nothing, if the Operator hands over in time |
-| Remote runtime restarts within the self-fence window         | Leases persist; boot grace extends them; Cells retry commands idempotently                                                        | Nothing                                     |
+| Failure                                                      | What happens                                                                                                                                                    | Lost                                        |
+| :----------------------------------------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------- | :------------------------------------------ |
+| Cell process crashes mid-Cycle                               | Lease expires (≤ 65 s); `cycle_failed{lost}`; restart on any Cell from the Cycle's base                                                                         | The in-flight Cycle                         |
+| Remote Cell partitioned from the runtime, still running      | Self-fences at 45 s; runtime expires at 60 s; late reports get `stale_epoch`; no push without a dry run                                                         | The in-flight Cycle                         |
+| Cell leaves on purpose                                       | Handover, then another Cell continues in its worktree (§9), or the Work order restarts at Station 0                                                             | Nothing, if the Operator hands over in time |
+| Remote runtime restarts within the self-fence window         | Leases persist; boot grace extends them; Cells retry commands idempotently                                                                                      | Nothing                                     |
 | Remote runtime unreachable longer than the self-fence window | Every Cell stops its jobs at 45 s; after boot grace, the next claim, heartbeat or board read marks them `lost`; Stations restart, each using one `lost` restart | Every in-flight Cycle                       |
-| A response is lost, the Cell retries                         | Same `commandId` returns the stored response, including a continuation job                                                        | Nothing                                     |
-| Two Cells claim at the same instant                          | One transaction wins; the other gets the next candidate                                                                           | Nothing                                     |
-| Operator reports after its Cycle timed out                   | Cell rejects locally; if it reached the Factory, `not_live`                                                                       | Nothing                                     |
-| Todo edited after the first job was claimed                  | `spec_updated` rejected; board shows _spec drift_; the Supervisor may cancel and add a todo under a new name                      | Nothing                                     |
-| Line YAML edited during a Work order                         | No effect: the Work order uses its pinned snapshot                                                                                | Nothing                                     |
-| Base branch moves during a Work order                        | Stations keep their base; delivery rebases; a conflict raises an Andon `delivery_failed`                                          | Nothing                                     |
-| PR closed or changes requested after delivery                | `factory reopen` sends the Work order back to a Station on top of the delivered commit                                            | Nothing                                     |
-| Cell cache wiped                                             | Worktrees are rebuilt on the next job, from a fresh fetch of `origin`                                                             | Nothing                                     |
-| Blob upload interrupted                                      | Hash mismatch → rejected; command referencing a missing blob → `invalid`                                                          | Nothing                                     |
+| A response is lost, the Cell retries                         | Same `commandId` returns the stored response, including a continuation job                                                                                      | Nothing                                     |
+| Two Cells claim at the same instant                          | One transaction wins; the other gets the next candidate                                                                                                         | Nothing                                     |
+| Operator reports after its Cycle timed out                   | Cell rejects locally; if it reached the Factory, `not_live`                                                                                                     | Nothing                                     |
+| Todo edited after the first job was claimed                  | `spec_updated` rejected; board shows _spec drift_; the Supervisor may cancel and add a todo under a new name                                                    | Nothing                                     |
+| Line YAML edited during a Work order                         | No effect: the Work order uses its pinned snapshot                                                                                                              | Nothing                                     |
+| Base branch moves during a Work order                        | Stations keep their base; delivery rebases; a conflict raises an Andon `delivery_failed`                                                                        | Nothing                                     |
+| PR closed or changes requested after delivery                | `factory reopen` sends the Work order back to a Station on top of the delivered commit                                                                          | Nothing                                     |
+| Cell cache wiped                                             | Worktrees are rebuilt on the next job, from a fresh fetch of `origin`                                                                                           | Nothing                                     |
+| Blob upload interrupted                                      | Hash mismatch → rejected; command referencing a missing blob → `invalid`                                                                                        | Nothing                                     |
