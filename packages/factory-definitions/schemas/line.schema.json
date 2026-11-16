@@ -196,7 +196,11 @@
       "properties": {
         "commit": { "$ref": "#/definitions/artifactRef" },
         "report": { "$ref": "#/definitions/artifactRef" },
-        "to": { "const": "new-pr" }
+        "to": { "const": "new-pr" },
+        "requireAdr": {
+          "type": "boolean",
+          "description": "Refuse delivery unless the squashed diff adds exactly one decisions/*.md entry"
+        }
       }
     }
   }

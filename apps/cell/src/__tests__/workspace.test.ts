@@ -71,7 +71,7 @@ const sleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
 describe('workspace worktrees', () => {
-  it('creates a detached worktree under the repo and lists it in git worktree list', async () => {
+  it('creates a worktree on the Work order branch and lists it in git worktree list', async () => {
     const head = git(origin, 'rev-parse', 'HEAD');
 
     const prepared = await prepareWorkspace(contextWith(), jobWith('todo-1'));
@@ -82,7 +82,7 @@ describe('workspace worktrees', () => {
     expect(prepared.head).toBe(head);
     expect(git(prepared.worktree, 'rev-parse', 'HEAD')).toBe(head);
     expect(git(prepared.worktree, 'rev-parse', '--abbrev-ref', 'HEAD')).toBe(
-      'HEAD',
+      'factory/todo-1',
     );
     expect(git(repoRoot, 'worktree', 'list', '--porcelain')).toContain(
       `worktree ${prepared.worktree}`,

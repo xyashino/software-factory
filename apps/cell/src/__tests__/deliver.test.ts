@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FactoryClient } from '@repo/factory-core/contracts/client';
 import { WireFailure } from '@repo/factory-core/contracts/errors';
 import { PR_ADR_TOKEN, type Job } from '@repo/factory-core/contracts/job';
@@ -15,6 +15,7 @@ import type {
 import type { GithubPort, PrRef } from '../ports/github.port';
 import { createSystemAdapter } from '../adapters/system/system.adapter';
 import { runDeliver } from '../jobs/deliver';
+import type { NotifyFn } from '../jobs/notify';
 import { JobStopped, type JobContext } from '../jobs/send';
 import { cloneRepo, commitFile, git, makeRepo } from '../testing/git-repo';
 import { factoryFiles } from '../testing/factory-fixture';
@@ -110,7 +111,11 @@ const fakeGithub = (existing?: PrRef) => {
 };
 
 /** A context whose client records every call and answers from `answer`. */
-const contextWith = (answer: Answer = accepting, github = fakeGithub()) => {
+const contextWith = (
+  answer: Answer = accepting,
+  github = fakeGithub(),
+  notify?: NotifyFn,
+) => {
   const calls: Sent[] = [];
   const client = {
     call: async (route: string, request: unknown) => {
@@ -128,6 +133,7 @@ const contextWith = (answer: Answer = accepting, github = fakeGithub()) => {
     worktreeLimit: 8,
     inUse: new Set(),
     githubFor: () => github.port,
+    ...(notify ? { notify } : {}),
   };
   return { context, calls, github };
 };
@@ -171,8 +177,8 @@ const deliverJob = (
 const signal = (): AbortSignal => new AbortController().signal;
 
 /**
- * Creates the job's worktree on `commit` (detached), as Station 0 would have, unless it exists already.
- * Returns the worktree path.
+ * Creates the job's worktree on `commit`, on the Work order branch, as Station 0 would have, unless it exists
+ * already. Returns the worktree path.
  */
 const placeWorktree = (commit: string = baseHead): string => {
   if (git(repoRoot, 'worktree', 'list', '--porcelain').includes(worktree)) {
@@ -181,7 +187,7 @@ const placeWorktree = (commit: string = baseHead): string => {
   // The commit may exist only on origin (a predecessor's branch): the Cell's repo fetches before it is placed.
   git(repoRoot, 'fetch', '--quiet', 'origin');
   mkdirSync(dirname(worktree), { recursive: true });
-  git(repoRoot, 'worktree', 'add', '--detach', worktree, commit);
+  git(repoRoot, 'worktree', 'add', '-B', BRANCH, worktree, commit);
   return worktree;
 };
 
@@ -518,6 +524,37 @@ describe('deliver job (deferred commit, PROTOCOL §8.3)', () => {
 const stackedJob = (predecessor: string): Job =>
   deliverJob({ branchBase: predecessor }, predecessor);
 
+describe('deliver job: the delivery toast', () => {
+  it('names the delivered todo and its PR with a done sound', async () => {
+    work('wip-1.txt', 'one\n');
+    const notify = vi.fn(async () => undefined);
+    const { context } = contextWith(accepting, fakeGithub(), notify);
+
+    await runDeliver(context, deliverJob(), signal());
+
+    expect(notify).toHaveBeenCalledTimes(1);
+    expect(notify).toHaveBeenCalledWith('Delivered: todo-1', {
+      body: PR_URL,
+      sound: 'done',
+    });
+  });
+
+  it('stays silent when the delivery fails', async () => {
+    work('wip-1.txt', 'one\n');
+    git(origin, 'rm', '-r', '-q', '.factory');
+    git(origin, 'commit', '-q', '-m', 'drop the definitions');
+    const notify = vi.fn(async () => undefined);
+    const { context, calls } = contextWith(accepting, fakeGithub(), notify);
+
+    await runDeliver(context, deliverJob(), signal());
+
+    expect(reportsOf(calls)).toEqual([
+      expect.objectContaining({ status: 'failed' }),
+    ]);
+    expect(notify).not.toHaveBeenCalled();
+  });
+});
+
 describe('deliver job on a stacked base (CORE §12.5)', () => {
   it('delivers onto factory/<predecessor>: the PR targets it and the predecessor commit is the parent', async () => {
     const predTip = branchOnOrigin('factory/todo-0', baseHead, {
@@ -594,5 +631,106 @@ describe('deliver job on a stacked base (CORE §12.5)', () => {
     const [report] = reportsOf(calls);
     expect(report).toMatchObject({ status: 'failed' });
     expect(String(report?.detail)).toMatch(/^rebase conflict/);
+  });
+});
+
+/** The deliver job with `deliver.requireAdr` set as the Line sets it (`undefined` leaves it unset). */
+const gatedJob = (requireAdr: boolean | undefined): Job => {
+  const job = deliverJob();
+  return { ...job, deliver: { ...job.deliver, requireAdr } } as Job;
+};
+
+/**
+ * Installs a post-commit hook in the Cell's repo (the worktrees share its hooks). It runs after every commit
+ * the worktree makes, the staging one included, so the script skips the staging commit by its subject.
+ */
+const postCommitHook = (script: string): void => {
+  writeFileSync(
+    join(repoRoot, '.git', 'hooks', 'post-commit'),
+    `#!/bin/sh\n[ "$(git log -1 --format=%s)" = "staging delivery" ] || ${script}\n`,
+    { mode: 0o755 },
+  );
+};
+
+describe('deliver job: the pre-push gate', () => {
+  it('refuses to push when a file is left uncommitted after the delivery commit', async () => {
+    postCommitHook('echo left > stray.txt');
+    work('wip-1.txt', 'one\n');
+    const { context, calls, github } = contextWith();
+
+    await runDeliver(context, deliverJob(), signal());
+
+    expect(branchTip()).toBe('');
+    expect(github.created).toEqual([]);
+    const [report] = reportsOf(calls);
+    expect(report).toMatchObject({ status: 'failed' });
+    expect(String(report?.detail)).toMatch(
+      /^delivery refused: uncommitted files remain.*stray\.txt/,
+    );
+  });
+
+  it('ignores files under .cell/ when it checks the worktree is clean', async () => {
+    postCommitHook('mkdir -p .cell && echo state > .cell/state.json');
+    work('wip-1.txt', 'one\n');
+    const { context, calls } = contextWith();
+
+    await runDeliver(context, deliverJob(), signal());
+
+    expect(reportsOf(calls)).toEqual([
+      expect.objectContaining({ status: 'finished', commit: branchTip() }),
+    ]);
+  });
+
+  it('refuses to push with requireAdr when the commit adds no decisions/ entry', async () => {
+    work('wip-1.txt', 'one\n');
+    const { context, calls, github } = contextWith();
+
+    await runDeliver(context, gatedJob(true), signal());
+
+    expect(branchTip()).toBe('');
+    expect(github.created).toEqual([]);
+    const [report] = reportsOf(calls);
+    expect(report).toMatchObject({ status: 'failed' });
+    expect(String(report?.detail)).toMatch(
+      /^delivery refused: expected exactly one new decisions\/ entry, found 0$/,
+    );
+  });
+
+  it('delivers with requireAdr when the commit adds exactly one decisions/ entry', async () => {
+    work('decisions/20261115-120000-factory-add-thing.md', '---\n');
+    work('wip-1.txt', 'one\n');
+    const { context, calls } = contextWith();
+
+    await runDeliver(context, gatedJob(true), signal());
+
+    expect(reportsOf(calls)).toEqual([
+      expect.objectContaining({ status: 'finished', commit: branchTip() }),
+    ]);
+  });
+
+  it('refuses to push with requireAdr when the commit adds two decisions/ entries', async () => {
+    work('decisions/20261115-120000-factory-add-thing.md', '---\n');
+    work('decisions/20261115-120100-factory-add-other.md', '---\n');
+    const { context, calls, github } = contextWith();
+
+    await runDeliver(context, gatedJob(true), signal());
+
+    expect(branchTip()).toBe('');
+    expect(github.created).toEqual([]);
+    const [report] = reportsOf(calls);
+    expect(String(report?.detail)).toMatch(
+      /expected exactly one new decisions\/ entry, found 2$/,
+    );
+  });
+
+  it('delivers without a decisions/ entry when requireAdr is false', async () => {
+    work('wip-1.txt', 'one\n');
+    const { context, calls } = contextWith();
+
+    await runDeliver(context, gatedJob(false), signal());
+
+    expect(reportsOf(calls)).toEqual([
+      expect.objectContaining({ status: 'finished', commit: branchTip() }),
+    ]);
   });
 });

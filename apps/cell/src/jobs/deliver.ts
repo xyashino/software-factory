@@ -7,8 +7,10 @@ import {
 } from '@repo/factory-core/contracts/job';
 import { WireFailure } from '@repo/factory-core/contracts/errors';
 import type { CommitSha } from '@repo/factory-core/ids';
+import { runGit } from '../git';
 import { GIT_TIMEOUT_MS } from '../workspace/repo';
 import { prepareWorkspace } from '../workspace/prepare';
+import { deleteSnapshotRefs } from '../workspace/snapshots';
 import {
   gitCommand,
   runShell,
@@ -18,6 +20,8 @@ import {
   type ShellRun,
 } from '../workspace/shell';
 import { getBlob } from './blobs';
+import { todoOf } from './job-shape';
+import { notifyQuietly } from './notify';
 import { redactDetail } from './redact';
 import { RenderFailed, renderDelivery, type RenderedDelivery } from './render';
 import { JobStopped, submit, type JobContext } from './send';
@@ -296,6 +300,25 @@ const deliverWorktree = async (
       throw new DeliveryFailed('the delivery commit has no sha');
     }
 
+    // Nothing the delivery did not commit may stay behind: a dirty worktree after the commit means the
+    // pushed branch does not match what the Stations left. `.cell/` is the Cell's own state, not work.
+    const dirty = await git(shell, worktree, [
+      'status',
+      '--porcelain',
+      '--',
+      '.',
+      ':(exclude).cell',
+    ]);
+    if (!succeeded(dirty)) {
+      throw new DeliveryFailed(`status failed: ${tailOfRun(dirty)}`);
+    }
+    const uncommitted = textOf(dirty).trim();
+    if (uncommitted !== '') {
+      throw new DeliveryFailed(
+        `delivery refused: uncommitted files remain after the delivery commit: ${uncommitted}`,
+      );
+    }
+
     const lease = `${branchRef}:${remoteTip}`;
     // The ADR section is the Cell's to fill (v1 PR format): the `decisions/` entries this commit adds.
     const added = await git(shell, worktree, [
@@ -313,6 +336,11 @@ const deliverWorktree = async (
           .map((path) => path.trim())
           .filter((path) => /^decisions\/.+\.md$/.test(path))
       : [];
+    if (deliver.requireAdr === true && decisions.length !== 1) {
+      throw new DeliveryFailed(
+        `delivery refused: expected exactly one new decisions/ entry, found ${decisions.length}`,
+      );
+    }
     const body = rendered.body
       .split(PR_ADR_TOKEN)
       .join(adrSectionOf(decisions));
@@ -404,6 +432,21 @@ const deliverWorktree = async (
         result: { status: 'finished', prUrl, commit: commit as CommitSha },
       },
       signal,
+    );
+    // The Work order is delivered: its pre-cycle snapshots have no further use. Best effort, never fails the delivery.
+    await deleteSnapshotRefs({
+      git: runGit,
+      worktree,
+      todoId: todoOf(job.orderId),
+    }).catch(() => undefined);
+    void notifyQuietly(
+      ctx.notify,
+      ctx.cellDataDir,
+      `Delivered: ${todoOf(job.orderId)}`,
+      {
+        body: prUrl,
+        sound: 'done',
+      },
     );
   } finally {
     // Until the push lands, HEAD goes back to the commit the worktree started from: origin must not

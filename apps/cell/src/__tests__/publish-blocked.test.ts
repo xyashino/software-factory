@@ -7,13 +7,14 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FactoryClient } from '@repo/factory-core/contracts/client';
 import type { Job } from '@repo/factory-core/contracts/job';
 import type { CellId, JobId, OrderId } from '@repo/factory-core/ids';
 import type { GithubPort } from '../ports/github.port';
 import { createSystemAdapter } from '../adapters/system/system.adapter';
 import { runPublishBlocked } from '../jobs/publish-blocked';
+import type { NotifyFn } from '../jobs/notify';
 import type { JobContext } from '../jobs/send';
 import { fakeGithub } from '../testing/fake-github';
 import { factoryFiles } from '../testing/factory-fixture';
@@ -54,7 +55,7 @@ afterEach(() => {
 });
 
 /** A context whose client records every call and accepts every command (dry runs included). */
-const contextWith = (github: GithubPort) => {
+const contextWith = (github: GithubPort, notify?: NotifyFn) => {
   const calls: Sent[] = [];
   const client = {
     call: async (route: string, request: unknown) => {
@@ -72,6 +73,7 @@ const contextWith = (github: GithubPort) => {
     worktreeLimit: 8,
     inUse: new Set(),
     githubFor: () => github,
+    ...(notify ? { notify } : {}),
   };
   return { context, calls };
 };
@@ -107,7 +109,7 @@ const signal = (): AbortSignal => new AbortController().signal;
 const placeWorktree = (): void => {
   git(repoRoot, 'fetch', '--quiet', 'origin');
   mkdirSync(dirname(worktree), { recursive: true });
-  git(repoRoot, 'worktree', 'add', '--detach', worktree, 'origin/main');
+  git(repoRoot, 'worktree', 'add', '-B', BRANCH, worktree, 'origin/main');
 };
 
 /** Writes a file into the worktree, uncommitted: the way an Operator leaves its work. */
@@ -254,5 +256,42 @@ describe('publish_blocked: failures never fail the Andon', () => {
 
     expect(reportsOf(calls)).toEqual([]);
     expect(github.created).toEqual([]);
+  });
+});
+
+describe('publish_blocked: the Andon toast', () => {
+  it('names the block and the published PR URL with a request sound', async () => {
+    work('feature.txt', 'half-done\n');
+    const github = fakeGithub();
+    const notify = vi.fn(async () => undefined);
+    const { context } = contextWith(github, notify);
+
+    await runPublishBlocked(context, publishJob(), signal());
+
+    expect(notify).toHaveBeenCalledTimes(1);
+    expect(notify).toHaveBeenCalledWith('Blocked: todo-1', {
+      body: `cycle_blocked ${github.prs[0]?.url}`,
+      sound: 'request',
+    });
+  });
+
+  it('still reports the Andon when the toast is refused', async () => {
+    work('feature.txt', 'half-done\n');
+    const github = fakeGithub();
+    const notify = vi.fn(async () => {
+      throw new Error('herdr is not running');
+    });
+    const { context, calls } = contextWith(github, notify);
+
+    await runPublishBlocked(context, publishJob(), signal());
+
+    expect(notify).toHaveBeenCalledTimes(1);
+    expect(reportsOf(calls)).toEqual([
+      {
+        status: 'published',
+        prUrl: github.prs[0]?.url,
+        commit: expect.any(String),
+      },
+    ]);
   });
 });

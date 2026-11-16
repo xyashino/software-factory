@@ -2,25 +2,18 @@ import { join } from 'node:path';
 import type { Job } from '@repo/factory-core/contracts/job';
 import { WireFailure } from '@repo/factory-core/contracts/errors';
 import type { BlobRef, CommitSha, CycleId } from '@repo/factory-core/ids';
+import type { OrderCommand } from '@repo/factory-core/order/commands';
 import type {
   InspectionResult,
   OrderEvent,
 } from '@repo/factory-core/order/events';
-import { GIT_TIMEOUT_MS } from '../workspace/repo';
+import { runGit } from '../git';
+import { snapshotRefFor } from '../names';
 import { prepareWorkspace } from '../workspace/prepare';
-import {
-  changedSince,
-  worktreeFingerprint,
-  type GitRun,
-} from '../workspace/snapshot';
-import {
-  gitCommand,
-  runShell,
-  succeeded,
-  textOf,
-  type ShellContext,
-} from '../workspace/shell';
+import { differsFromSnapshot, snapshot } from '../workspace/snapshots';
+import { runShell, type ShellContext } from '../workspace/shell';
 import { redactDetail } from './redact';
+import { todoOf } from './job-shape';
 import { putLog, submit, type JobContext } from './send';
 import { workspaceDetailOf } from './workspace-detail';
 
@@ -42,7 +35,8 @@ const errorText = (error: unknown): string =>
  *    no Cycle, so no `StartCycle` is sent before it.
  * 2. `StartCycle` from the worktree's HEAD. Every later command needs the live Cycle it opens.
  * 3. run every command of the station, each with its full log as a blob and a status tail
- *    (`passed`, `timed out`, or `failed (exit N)`). No command output reaches the event store.
+ *    (`passed`, `timed out`, or `failed (exit N)`). No command output reaches the event store. Before and
+ *    after each command a `ReportInspectionProgress` shows it in the live `logs` view.
  * 4. read-only check: a tree that changed during the run is `FailCycle{crashed}`, no report.
  * 5. `ReportInspection`, passed when every command exited 0 and none timed out.
  *
@@ -171,24 +165,32 @@ const cycleStartedId = (events: readonly OrderEvent[]): CycleId => {
   return started.cycleId;
 };
 
+/**
+ * Sends one progress command for the live `logs` view. Only a stale epoch or a stopped signal ends the
+ * Inspection: the progress is informational, so any other refusal or transport failure is dropped and
+ * the checks keep running.
+ */
+const reportProgress = async (
+  ctx: JobContext,
+  job: Job,
+  command: Extract<OrderCommand, { type: 'ReportInspectionProgress' }>,
+  signal: AbortSignal,
+): Promise<void> => {
+  try {
+    await submit(ctx, job, command, signal);
+  } catch (error) {
+    if (signal.aborted) throw error;
+    if (error instanceof WireFailure && error.error.code === 'stale_epoch') {
+      throw error;
+    }
+  }
+};
+
 interface CheckInput {
   station: NonNullable<Job['station']>;
   worktree: string;
   shell: ShellContext;
 }
-
-/** The worktree's fingerprint, read through the Cell's shell so the check's own git runs are logged like any command. */
-const fingerprintOf = (input: CheckInput) => {
-  const git: GitRun = async (args) => {
-    const run = await runShell(input.shell, {
-      command: gitCommand([...args]),
-      cwd: input.worktree,
-      timeoutMs: GIT_TIMEOUT_MS,
-    });
-    return succeeded(run) ? { ok: true, text: textOf(run) } : { ok: false };
-  };
-  return worktreeFingerprint(input.worktree, git);
-};
 
 const runChecks = async (
   ctx: JobContext,
@@ -200,16 +202,52 @@ const runChecks = async (
   try {
     const timeoutMs =
       input.station.inspectionTimeoutMs ?? DEFAULT_INSPECTION_TIMEOUT_MS;
-    // The read-only baseline: what earlier Stations left in the tree is not this Inspection's doing.
-    const before = await fingerprintOf(input);
+    // The pre-cycle snapshot: what earlier Stations left in the tree is not this Inspection's doing.
+    const ref = snapshotRefFor(
+      todoOf(job.orderId),
+      input.station.stationId,
+      cycleId,
+    );
+    await snapshot({ git: runGit, worktree: input.worktree, ref });
     const results: InspectionResult[] = [];
-    for (const command of input.station.exec ?? []) {
+    const commands = input.station.exec ?? [];
+    for (const [offset, command] of commands.entries()) {
+      const index = offset + 1;
+      await reportProgress(
+        ctx,
+        job,
+        {
+          type: 'ReportInspectionProgress',
+          cycleId,
+          phase: 'started',
+          index,
+          total: commands.length,
+          command,
+        },
+        signal,
+      );
       const run = await runShell(input.shell, {
         command,
         cwd: input.worktree,
         timeoutMs,
       });
       const logBlob: BlobRef = await putLog(ctx, run.output, signal);
+      await reportProgress(
+        ctx,
+        job,
+        {
+          type: 'ReportInspectionProgress',
+          cycleId,
+          phase: 'finished',
+          index,
+          total: commands.length,
+          command,
+          exitCode: run.exitCode,
+          timedOut: run.timedOut,
+          durationMs: run.durationMs,
+        },
+        signal,
+      );
       results.push({
         command,
         exitCode: run.exitCode,
@@ -221,8 +259,12 @@ const runChecks = async (
     }
 
     if (signal.aborted) throw new Error('stopped before the read-only check');
-    const after = await fingerprintOf(input);
-    if (changedSince(before, after)) {
+    const changed = await differsFromSnapshot({
+      git: runGit,
+      worktree: input.worktree,
+      ref,
+    });
+    if (changed) {
       await submit(
         ctx,
         job,

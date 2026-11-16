@@ -471,7 +471,7 @@ describe('Cell over HTTP', () => {
     const worktree = join(repoRoot, '.worktrees', 'todo-1');
     git(repoRoot, 'fetch', '--quiet', 'origin');
     mkdirSync(join(repoRoot, '.worktrees'), { recursive: true });
-    git(repoRoot, 'worktree', 'add', '--detach', worktree, mainSha);
+    git(repoRoot, 'worktree', 'add', '-B', 'factory/todo-1', worktree, mainSha);
     writeFileSync(join(worktree, 'feature.txt'), 'built\n');
     const build = (await client.call('claim', { cellId: CELL, waitMs: 0 }))
       .job as Job;

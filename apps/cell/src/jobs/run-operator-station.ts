@@ -47,7 +47,7 @@ import {
 import type { StationRegistry, RunHandle } from '../cycle/registry';
 import { deleteSession, writeSession } from '../cycle/session';
 import { fillPrompt, typedFor, type RuntimePromptSet } from '../cycle/signals';
-import { cycleDirName, paneName } from '../names';
+import { cycleDirName, paneName, snapshotRefFor } from '../names';
 import { newCycleToken, startOperatorServer } from '../operator-socket';
 import type {
   Clock,
@@ -60,12 +60,13 @@ import type {
 } from '../ports';
 import type { WorkspaceStage } from '../workspace/prepare';
 import {
-  changedSince,
-  worktreeFingerprint,
-  type GitRun,
-} from '../workspace/snapshot';
+  differsFromSnapshot,
+  restoreStationSnapshot,
+  snapshot,
+} from '../workspace/snapshots';
 import { getBlob, putBlob } from './blobs';
 import { todoOf } from './job-shape';
+import { notifyQuietly, truncateBody, type NotifyFn } from './notify';
 import { logCommandOf } from './pane-commands';
 import { redactDetail } from './redact';
 import { PROMPT_CONFIG, RenderFailed, renderOperatorPrompt } from './render';
@@ -104,6 +105,8 @@ export interface StationDeps {
   runners: Readonly<Record<string, RunnerLaunch>>;
   spawn: SpawnHeadless;
   pane?: PaneDriver;
+  /** Desktop toast for an Operator's question. Unset when notifications are off. */
+  notify?: NotifyFn;
   timing: StationTiming;
   registry: StationRegistry;
   /** Optional abort signal from the Cell's shared JobRegistry (PROTOCOL §5.3–5.4). */
@@ -143,14 +146,6 @@ type Submitter = (
 ) => Promise<SendOutcome>;
 
 const encode = (text: string): Uint8Array => new TextEncoder().encode(text);
-
-/** The Cell's git through its `RunGit` port, in one worktree, as the fingerprint reads it. */
-const gitRunIn =
-  (git: RunGit, cwd: string): GitRun =>
-  async (args) => {
-    const run = await git(cwd, [...args]);
-    return run.code === 0 ? { ok: true, text: run.stdout } : { ok: false };
-  };
 
 /** What the idle reminder asks for: the Operator's own instructions name the artifacts. */
 const MISSING_ARTIFACTS =
@@ -327,15 +322,32 @@ const startFresh = async (
   });
   if (!started.ok) return { ok: false, next: null };
 
+  const todo = todoOf(job.orderId);
+  if (station.cycleId === undefined) {
+    throw new Error(`job ${job.jobId} names no cycle`);
+  }
+  // A write Cycle that crashed or timed out is rolled back before it reruns on the reused worktree (CORE §4.3).
+  if (operator.permission !== 'read' && job.workspace?.mode === 'reuse') {
+    await restoreStationSnapshot({
+      git: deps.git,
+      worktree,
+      todoId: todo,
+      stationId: station.stationId,
+    });
+  }
   for (const input of station.inputs ?? []) {
     writeInside(worktree, input.path, await getBlob(deps.client, input.blob));
   }
-  // A read-only station is judged by what it changes: the tree as it stands once its inputs are in place.
-  const readOnlyBaseline =
-    operator.permission === 'read'
-      ? await worktreeFingerprint(worktree, gitRunIn(deps.git, worktree))
-      : undefined;
-  return { ok: true, worktree, promptText, readOnlyBaseline };
+  // The pre-cycle snapshot, taken once the inputs are in place. A read-only station is judged against it; a write
+  // Cycle keeps it so a restart can roll back to it.
+  const ref = snapshotRefFor(todo, station.stationId, station.cycleId);
+  await snapshot({ git: deps.git, worktree, ref });
+  return {
+    ok: true,
+    worktree,
+    promptText,
+    readOnlyBaseline: operator.permission === 'read' ? ref : undefined,
+  };
 };
 
 /**
@@ -525,11 +537,15 @@ export const runOperatorStation = async (
     upload: () => Promise<Blobs>,
     command: (commit: CommitSha, blobs: Blobs) => OrderCommand,
   ): Promise<OperatorReply> => {
-    const after = await worktreeFingerprint(
-      worktree,
-      gitRunIn(deps.git, worktree),
-    );
-    if (changedSince(readOnlyBaseline, after)) {
+    // Exact tree equality against the pre-cycle snapshot; without one, the station cannot be shown unchanged.
+    const changed =
+      readOnlyBaseline === undefined ||
+      (await differsFromSnapshot({
+        git: deps.git,
+        worktree,
+        ref: readOnlyBaseline,
+      }));
+    if (changed) {
       await failCycle('crashed', 'read-only station changed files');
       return {
         ok: false,
@@ -579,6 +595,10 @@ export const runOperatorStation = async (
       };
     }
     const questionId = String(event.questionId);
+    void notifyQuietly(deps.notify, deps.dataDir, `Question: ${todo}`, {
+      body: truncateBody(text),
+      sound: 'request',
+    });
     cycle = openHold(cycle, deps.clock.now());
     journal({ at: deps.clock.now(), kind: 'question_open', questionId });
     return new Promise<OperatorReply>((resolve) => {

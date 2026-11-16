@@ -64,3 +64,4 @@ deliver:
   commit: build.commit
   report: build.report
   to: new-pr
+  requireAdr: true
