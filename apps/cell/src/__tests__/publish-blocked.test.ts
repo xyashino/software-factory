@@ -109,7 +109,7 @@ const signal = (): AbortSignal => new AbortController().signal;
 const placeWorktree = (): void => {
   git(repoRoot, 'fetch', '--quiet', 'origin');
   mkdirSync(dirname(worktree), { recursive: true });
-  git(repoRoot, 'worktree', 'add', '--detach', worktree, 'origin/main');
+  git(repoRoot, 'worktree', 'add', '-B', BRANCH, worktree, 'origin/main');
 };
 
 /** Writes a file into the worktree, uncommitted: the way an Operator leaves its work. */

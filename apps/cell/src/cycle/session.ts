@@ -38,7 +38,7 @@ export const sessionSchema = z.object({
     }),
     lastIdleReminderAt: z.number().optional(),
   }),
-  /** The fingerprint a read-only station is judged against; absent for a station that may write. */
+  /** The snapshot ref (`refs/software-factory/...`) a read-only station is judged against; absent for a station that may write. */
   readOnlyBaseline: z.string().optional(),
   /** The Job the station runs, as the claim handed it to this Cell. */
   job: jobSchema,

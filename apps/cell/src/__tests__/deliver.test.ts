@@ -177,8 +177,8 @@ const deliverJob = (
 const signal = (): AbortSignal => new AbortController().signal;
 
 /**
- * Creates the job's worktree on `commit` (detached), as Station 0 would have, unless it exists already.
- * Returns the worktree path.
+ * Creates the job's worktree on `commit`, on the Work order branch, as Station 0 would have, unless it exists
+ * already. Returns the worktree path.
  */
 const placeWorktree = (commit: string = baseHead): string => {
   if (git(repoRoot, 'worktree', 'list', '--porcelain').includes(worktree)) {
@@ -187,7 +187,7 @@ const placeWorktree = (commit: string = baseHead): string => {
   // The commit may exist only on origin (a predecessor's branch): the Cell's repo fetches before it is placed.
   git(repoRoot, 'fetch', '--quiet', 'origin');
   mkdirSync(dirname(worktree), { recursive: true });
-  git(repoRoot, 'worktree', 'add', '--detach', worktree, commit);
+  git(repoRoot, 'worktree', 'add', '-B', BRANCH, worktree, commit);
   return worktree;
 };
 
