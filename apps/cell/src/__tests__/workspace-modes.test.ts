@@ -134,6 +134,48 @@ describe('fresh placement (station 0, or after a reset)', () => {
   });
 });
 
+describe('named Work order branch', () => {
+  it('places a fresh worktree on the Work order branch, not detached', async () => {
+    const prepared = await prepareWorkspace(contextWith(), jobWith('fresh'));
+
+    expect(prepared.ok).toBe(true);
+    if (!prepared.ok) return;
+    prepared.release();
+    expect(git(worktreeOf(), 'symbolic-ref', '--short', 'HEAD')).toBe(
+      'factory/todo-1',
+    );
+  });
+
+  it('places a fresh worktree over a branch an evicted worktree left behind', async () => {
+    const first = await prepareWorkspace(contextWith(), jobWith('fresh'));
+    if (!first.ok) throw new Error('the first placement must succeed');
+    first.release();
+    git(repoRoot, 'worktree', 'remove', '--force', worktreeOf());
+    expect(git(repoRoot, 'branch', '--list', 'factory/todo-1')).toContain(
+      'factory/todo-1',
+    );
+
+    const again = await prepareWorkspace(contextWith(), jobWith('fresh'));
+
+    expect(again.ok).toBe(true);
+    if (again.ok) again.release();
+    expect(git(worktreeOf(), 'symbolic-ref', '--short', 'HEAD')).toBe(
+      'factory/todo-1',
+    );
+  });
+
+  it('refuses to reuse a worktree that is detached rather than on the Work order branch', async () => {
+    const first = await prepareWorkspace(contextWith(), jobWith('fresh'));
+    if (!first.ok) throw new Error('the first placement must succeed');
+    first.release();
+    git(worktreeOf(), 'checkout', '--detach');
+
+    const reused = await prepareWorkspace(contextWith(), jobWith('reuse'));
+
+    expect(reused).toMatchObject({ ok: false, stage: 'worktree' });
+  });
+});
+
 describe('reuse placement (a later Station, a retry, a delivery)', () => {
   it('keeps the uncommitted work of the worktree, tracked and untracked, intact', async () => {
     const first = await prepareWorkspace(contextWith(), jobWith('fresh'));

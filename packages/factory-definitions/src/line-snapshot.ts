@@ -109,6 +109,9 @@ export const toLineSnapshot = (
     deliver: {
       commit: `${line.deliver.commit.stationId}.${line.deliver.commit.artifactKey}`,
       report: `${line.deliver.report.stationId}.${line.deliver.report.artifactKey}`,
+      ...(line.deliver.requireAdr === undefined
+        ? {}
+        : { requireAdr: line.deliver.requireAdr }),
     },
   };
   const check = lineSnapshotSchema.safeParse({ ...body, hash: EMPTY_HASH });

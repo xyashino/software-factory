@@ -20,6 +20,7 @@ import type { ClockPort } from './ports/clock.port';
 import { createGithubAdapter } from './adapters/github/github.adapter';
 import { createJobRegistry } from './jobs/registry';
 import { runJob } from './jobs/run-job';
+import type { NotifyFn } from './jobs/notify';
 import type { JobContext } from './jobs/send';
 import { leaveCell } from './leave';
 import { createHeartbeat } from './loops/heartbeat';
@@ -47,6 +48,8 @@ export interface CellOptions {
   version: string;
   /** Optional Herdr pane driver for non-headless Operator stations. */
   pane?: PaneDriver;
+  /** Optional desktop toast (Herdr notification) for questions, blocks and deliveries. Unset when off. */
+  notify?: NotifyFn;
   timing?: CellTiming;
   sleep?: (ms: number) => Promise<void>;
   onError?: (error: unknown, context: string) => void;
@@ -135,6 +138,7 @@ export const startCell = async (options: CellOptions): Promise<RunningCell> => {
     stations,
     takeSignals: (jobId) => registry.takeSignals(jobId),
     ...(options.pane ? { pane: options.pane } : {}),
+    ...(options.notify ? { notify: options.notify } : {}),
     headlessOperators: config.headlessOperators,
     githubFor: options.githubFor ?? ((cwd) => createGithubAdapter(cwd)),
   };

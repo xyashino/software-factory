@@ -147,7 +147,8 @@ const worktreeModeOf = (
   spec: JobSpec,
   line: LineSnapshot,
 ): 'fresh' | 'reuse' => {
-  if (spec.kind === 'deliver') return 'reuse';
+  if (spec.kind === 'deliver' || spec.kind === 'publish_blocked')
+    return 'reuse';
   if (spec.kind === 'mechanic') {
     return state.andon?.reason === 'workspace_failed' ? 'fresh' : 'reuse';
   }
@@ -217,6 +218,9 @@ export const buildJob = async (
         ...(reportBlob === undefined ? {} : { reportBlob }),
         logCommand: `factory log ${state.orderId}`,
         verification: verificationOf(line),
+        ...(line.deliver?.requireAdr === undefined
+          ? {}
+          : { requireAdr: line.deliver.requireAdr }),
       },
     });
   }
@@ -267,6 +271,28 @@ export const buildJob = async (
         },
         // A Mechanic always runs in a Herdr pane (PROTOCOL §9) with write permission to edit the worktree, whatever the pool says.
         operator: { ...station.operator, permission: 'write', headless: false },
+      },
+    });
+  }
+
+  if (next.job.kind === 'publish_blocked') {
+    const andon = state.andon;
+    if (!andon || andon.at !== next.job.andonAt) {
+      throw refusal({
+        code: 'precondition',
+        detail: 'the blocked publish names no open Andon',
+      });
+    }
+    // v1 `publishBlockedWork`: the Andon's reason and detail, for the `[BLOCKED]` PR the Cell renders.
+    return jobSchema.parse({
+      ...common,
+      kind: 'publish_blocked',
+      base: state.checkpoint?.commit ?? { branchBase },
+      blocked: {
+        taskId: state.todoId,
+        reason: andon.reason,
+        detail: andon.detail,
+        logCommand: `factory log ${state.orderId}`,
       },
     });
   }

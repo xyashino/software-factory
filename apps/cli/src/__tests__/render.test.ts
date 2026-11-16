@@ -173,7 +173,13 @@ describe('Traveler', () => {
     const text = renderTraveler(
       [
         stored(1, { type: 'order_created' }),
-        stored(2, { type: 'job_claimed' }),
+        stored(2, {
+          type: 'job_claimed',
+          jobId: '01M7CX0FY9EC8TJ78WPDB8XSSD',
+          kind: 'run_operator_station',
+          cellId: 'cell-a',
+          epoch: 1,
+        }),
       ],
       plainPaint,
     );

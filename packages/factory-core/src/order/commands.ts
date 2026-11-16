@@ -15,10 +15,12 @@ import {
 } from '../ids';
 import {
   artifactsSchema,
+  blockedPrResultSchema,
   cycleFailureSchema,
   freeText,
   incidentActionSchema,
   incidentChangeSchema,
+  inspectionProgressFields,
   inspectionResultSchema,
   operatorSchema,
   pinnedLineSchema,
@@ -116,6 +118,12 @@ const reportInspectionSchema = z
     results: z.array(inspectionResultSchema).max(64),
   })
   .strict();
+const reportInspectionProgressSchema = z
+  .object({
+    type: z.literal('ReportInspectionProgress'),
+    ...inspectionProgressFields,
+  })
+  .strict();
 const failCycleSchema = z
   .object({
     type: z.literal('FailCycle'),
@@ -211,6 +219,13 @@ const reportDeliverySchema = z
     ]),
   })
   .strict();
+/** The Cell's report of a `publish_blocked` job (v1 `publishBlockedWork`); it never changes the Andon. */
+const reportBlockedPrSchema = z
+  .object({
+    type: z.literal('ReportBlockedPr'),
+    result: blockedPrResultSchema,
+  })
+  .strict();
 const recordPrStateSchema = z
   .object({
     type: z.literal('RecordPrState'),
@@ -269,6 +284,7 @@ export const orderCommandSchema = z.discriminatedUnion('type', [
   reportWorktreeMissingSchema,
   completeCycleSchema,
   submitVerdictSchema,
+  reportInspectionProgressSchema,
   reportInspectionSchema,
   failCycleSchema,
   blockCycleSchema,
@@ -283,6 +299,7 @@ export const orderCommandSchema = z.discriminatedUnion('type', [
   resumeSchema,
   reopenSchema,
   reportDeliverySchema,
+  reportBlockedPrSchema,
   recordPrStateSchema,
   recoverOrderSchema,
   recordIncidentSchema,

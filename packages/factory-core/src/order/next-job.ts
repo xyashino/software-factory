@@ -78,6 +78,24 @@ const stationJob = (
 };
 
 /**
+ * An Andon the Supervisor holds gets one `publish_blocked` job for it (v1 `publishBlockedWork`), so the
+ * branch and a draft `[BLOCKED]` PR are there for inspection. The job runs once per Andon, whatever it
+ * finds (no changes, a failure), so the Supervisor is never looped. Then the Supervisor decides.
+ */
+const supervisorRow = (
+  state: WorkOrderState,
+  open: NonNullable<WorkOrderState['andon']>,
+): Next => {
+  if (state.blockedPr?.andonAt === open.at) {
+    return { kind: 'await_supervisor', cause: 'andon' };
+  }
+  return {
+    kind: 'job',
+    job: { kind: 'publish_blocked', andonAt: open.at },
+  };
+};
+
+/**
  * Row 3: an open Andon. The Mechanic triages it while it has budget and no incident yet; an
  * escalated Andon, or one whose Mechanic already recorded an incident, waits for the Supervisor.
  */
@@ -86,10 +104,10 @@ const andonRow = (
   open: NonNullable<WorkOrderState['andon']>,
 ): Next => {
   if (open.triage === 'supervisor') {
-    return { kind: 'await_supervisor', cause: 'andon' };
+    return supervisorRow(state, open);
   }
   if (state.incidents.some((incident) => incident.andonAt === open.at)) {
-    return { kind: 'await_supervisor', cause: 'andon' };
+    return supervisorRow(state, open);
   }
   if (state.mechanicRuns >= MECHANIC_BUDGET) return { kind: 'escalate_andon' };
   return {
