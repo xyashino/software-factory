@@ -9,6 +9,7 @@ import {
 const policy: WatchPolicy = {
   timeoutMs: 60_000,
   idleReminders: 2,
+  idleCooldownMs: 45_000,
   silentMs: 10_000,
   silentNudges: 1,
 };
@@ -79,6 +80,75 @@ describe('watch', () => {
         policy,
       ),
     ).toEqual({ type: 'fail', reason: 'stalled' });
+  });
+
+  it('holds off idle reminders during the cooldown after the last one', () => {
+    const reminded = cycle({
+      reminders: { idle: 1, silent: 0 },
+      lastIdleReminderAt: 0,
+    });
+    expect(watch(reminded, seen('idle'), 1_000, policy)).toEqual({
+      type: 'none',
+    });
+    expect(watch(reminded, seen('idle'), 44_999, policy)).toEqual({
+      type: 'none',
+    });
+    expect(watch(reminded, seen('idle'), 45_000, policy)).toEqual({
+      type: 'remind',
+      kind: 'idle',
+    });
+  });
+
+  it('does not fail as stalled before the cooldown after the final idle reminder', () => {
+    const final = cycle({
+      reminders: { idle: 2, silent: 0 },
+      lastIdleReminderAt: 0,
+    });
+    expect(watch(final, seen('idle'), 1_000, policy)).toEqual({ type: 'none' });
+    expect(watch(final, seen('idle'), 44_000, policy)).toEqual({
+      type: 'none',
+    });
+    expect(watch(final, seen('idle'), 45_000, policy)).toEqual({
+      type: 'fail',
+      reason: 'stalled',
+    });
+  });
+
+  it('spaces idle reminders by the cooldown over consecutive 1-second ticks, then stalls', () => {
+    const longRun: WatchPolicy = { ...policy, timeoutMs: 300_000 };
+    let state = cycle();
+    const decisions: { at: number; type: string }[] = [];
+    for (let now = 0; now <= 90_000; now += 1_000) {
+      const decision = watch(state, seen('idle'), now, longRun);
+      decisions.push({ at: now, type: decision.type });
+      if (decision.type === 'remind') {
+        state = {
+          ...state,
+          reminders: { ...state.reminders, idle: state.reminders.idle + 1 },
+          lastIdleReminderAt: now,
+        };
+      }
+      if (decision.type === 'fail') {
+        expect(decision.reason).toBe('stalled');
+        expect(now).toBe(90_000);
+        break;
+      }
+    }
+    const reminders = decisions.filter((d) => d.type === 'remind');
+    expect(reminders.map((d) => d.at)).toEqual([0, 45_000]);
+    expect(decisions.at(-1)).toEqual({ at: 90_000, type: 'fail' });
+    expect(decisions.filter((d) => d.type === 'fail')).toHaveLength(1);
+  });
+
+  it('does not let the cooldown hide a timeout', () => {
+    const cooling = cycle({
+      reminders: { idle: 1, silent: 0 },
+      lastIdleReminderAt: 50_000,
+    });
+    expect(watch(cooling, seen('idle'), 60_000, policy)).toEqual({
+      type: 'fail',
+      reason: 'timed_out',
+    });
   });
 
   it('reminds a silent working Operator once its silence reaches the threshold', () => {

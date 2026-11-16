@@ -15,6 +15,7 @@ describe('cycle policy', () => {
   it('uses the v1 reminder timing by default', () => {
     expect(DEFAULT_WATCH_TIMING).toEqual({
       idleReminders: 2,
+      idleCooldownMs: 45_000,
       silentMs: 300_000,
       silentNudges: 1,
     });

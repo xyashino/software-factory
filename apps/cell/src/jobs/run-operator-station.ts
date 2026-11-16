@@ -709,6 +709,7 @@ export const runOperatorStation = async (
             ...cycle.reminders,
             [decision.kind]: sent,
           },
+          ...(decision.kind === 'idle' ? { lastIdleReminderAt: now } : {}),
         };
         typeText(
           decision.kind === 'idle'
