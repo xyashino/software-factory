@@ -22,13 +22,6 @@ operators:
     timeout: 20m
     headless: false
     permission: write
-  plan-reviewer:
-    profile: plan-reviewer
-    runner: cursor
-    model: cursor-grok-4.5-medium
-    timeout: 10m
-    headless: false
-    permission: write
   builder:
     profile: builder
     runner: claude
@@ -49,15 +42,6 @@ stations:
     kind: operator
     operator: planner
     inputs: []
-
-  - id: plan-review
-    kind: operator
-    operator: plan-reviewer
-    inputs:
-      - plan.plan
-    onFail:
-      retry: plan
-      max: 2
 
   - id: build
     kind: operator
