@@ -10,9 +10,13 @@ import {
   type OpenedRuntime,
 } from '@repo/factory-runtime/open-runtime';
 import { runAdminCommand } from '../admin-command';
-import { startSocketListener, type SocketListener } from '../socket/listener';
-import { socketFactoryClient } from '../socket/client';
+import type { HttpListener } from '../http/listener';
 import { orderRequest } from '../testing/order-request';
+import {
+  httpClient,
+  listenLocal,
+  LOCAL_TEST_TOKEN,
+} from '../testing/local-http';
 
 const PROJECT = 'software-factory' as ProjectId;
 const CELL = '01J0000000000000000000000W' as CellId;
@@ -20,7 +24,7 @@ const REPO = 'https://example.test/software-factory.git';
 
 let root: string;
 let opened: OpenedRuntime[] = [];
-let listener: SocketListener | undefined;
+let listener: HttpListener | undefined;
 
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), 'factory-admin-'));
@@ -136,13 +140,12 @@ describe('factory-server admin', () => {
     expect(row?.holder).not.toBe('cell');
   });
 
-  it('backs up a running server through its socket route', async () => {
+  it('backs up a running server through the local route', async () => {
     const dataDir = dataDirWithProject('served');
     const runtime = open(dataDir);
     await runtime.runtime.start();
-    const socketPath = join(dataDir, 'factory.sock');
-    listener = startSocketListener({ runtime: runtime.runtime, socketPath });
-    const client = socketFactoryClient({ socketPath });
+    listener = listenLocal(runtime.runtime);
+    const client = httpClient(listener.url, LOCAL_TEST_TOKEN);
     const file = join(root, 'served-backup.db');
 
     const response = await client.call('adminBackup', { file });
@@ -151,5 +154,18 @@ describe('factory-server admin', () => {
       file,
       counts: { globalSeq: 0, projects: 1, events: 0, blobs: 0 },
     });
+  });
+
+  it('refuses the backup route to a remote supervisor token', async () => {
+    const dataDir = dataDirWithProject('remote-token');
+    const runtime = open(dataDir);
+    await runtime.runtime.start();
+    const { token } = await runtime.runtime.remote.createSupervisorToken('ops');
+    listener = listenLocal(runtime.runtime);
+    const client = httpClient(listener.url, token);
+
+    await expect(
+      client.call('adminBackup', { file: join(root, 'remote.db') }),
+    ).rejects.toMatchObject({ error: { code: 'unauthorized' } });
   });
 });

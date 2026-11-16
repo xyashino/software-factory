@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { WireFailure } from '@repo/factory-core/contracts/errors';
 import type { CellId, JobId, OrderId } from '@repo/factory-core/ids';
 import { fixtureEvents, SCENARIO_FIXTURES } from '@repo/factory-core/testing';
-import { remoteFactoryClient } from '../client/remote';
+import { remoteFactoryClient, ServerUnreachable } from '../client/remote';
 
 /** A throwaway HTTP server on a free port, answering with the handler the test gives. */
 let stop: (() => void) | undefined;
@@ -123,14 +123,28 @@ describe('remote FactoryClient', () => {
     expect(page.nextSeq).toBe(expected.at(-1)?.globalSeq);
   });
 
-  it('refuses the host-only backup over the network with a pointer to the host', async () => {
+  it('sends the backup to the local route, where a remote token is refused', async () => {
+    let seen = '';
+    const baseUrl = serve((request) => {
+      seen = `${request.method} ${new URL(request.url).pathname}`;
+      return json(401, { code: 'unauthorized' });
+    });
+    const client = remoteFactoryClient({ baseUrl, token: 'tok' });
+
+    await expect(
+      client.call('adminBackup', { file: '/tmp/x.db' }),
+    ).rejects.toMatchObject({ error: { code: 'unauthorized' } });
+    expect(seen).toBe('POST /v1/admin/backup');
+  });
+
+  it('reports a server that cannot be reached as ServerUnreachable', async () => {
     const client = remoteFactoryClient({
       baseUrl: 'http://127.0.0.1:1',
       token: 'tok',
     });
 
-    await expect(
-      client.call('adminBackup', { file: '/tmp/x.db' }),
-    ).rejects.toThrow(/runs on the Factory host/);
+    await expect(client.call('board', {} as never)).rejects.toBeInstanceOf(
+      ServerUnreachable,
+    );
   });
 });

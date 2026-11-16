@@ -7,8 +7,8 @@ import { isRuntimeError } from '@repo/factory-runtime/errors';
 
 /**
  * The answers both transports share (PROTOCOL §3.5): a JSON body with a status, and the mapping of a
- * failure to its wire error. The Unix socket and the TCP listener call these, so an error reads the
- * same whichever transport carried it.
+ * failure to its wire error. The HTTP listener calls these for every route, so an error reads the same
+ * whichever client carried it.
  */
 
 export const jsonResponse = (status: number, body: unknown): Response =>

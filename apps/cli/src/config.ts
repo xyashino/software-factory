@@ -90,7 +90,7 @@ export interface SettingsInput {
 /**
  * The settings in force, by precedence (PROTOCOL §10): a flag, then the environment, then the config
  * file, then the default. Remote mode is on when `FACTORY_URL` or `remoteUrl` names a server; the
- * default is local, the socket of the data directory. Colour is off with `--no-color`, with `NO_COLOR` set to a non-empty value,
+ * default is local: the running server the data directory's discovery file names. Colour is off with `--no-color`, with `NO_COLOR` set to a non-empty value,
  * or with `"color": false` in the config file.
  */
 export const resolveSettings = (input: SettingsInput): Settings => {

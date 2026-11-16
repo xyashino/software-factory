@@ -25,10 +25,7 @@ afterEach(async () => {
 
 describe('a Cell cut off from the Factory', () => {
   it('fences itself, lets another Cell take over, and is refused with stale_epoch on return', async () => {
-    world = await createWorld(
-      { 'add-login': todo('Add login') },
-      { remote: true },
-    );
+    world = await createWorld({ 'add-login': todo('Add login') });
     const w = world;
     const order = orderOf('add-login');
     const remoteUrl = w.factory.remoteUrl;

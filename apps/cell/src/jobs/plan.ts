@@ -86,7 +86,7 @@ const reportFailed = async (
   );
 };
 
-/** Reads a blob as UTF-8 text through the socket. */
+/** Reads a blob as UTF-8 text through the Factory's HTTP API. */
 const blobText = async (ctx: JobContext, ref: BlobRef): Promise<string> => {
   const answer = await ctx.client.call('blobGet', { ref });
   return Buffer.from(answer.base64, 'base64').toString('utf8');

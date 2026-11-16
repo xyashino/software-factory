@@ -6,23 +6,14 @@ import { WireFailure } from '@repo/factory-core/contracts/errors';
 import { readConfig, cellDataDirOf } from './config';
 import { loadCellConfig } from './repo-config';
 import { startCell, type RunningCell } from './cell';
-import {
-  factoryDataDirOf,
-  socketFactoryClient,
-  socketPathIn,
-} from './factory-client';
-import {
-  deleteIdentity,
-  ensureCredential,
-  loadOrCreateIdentity,
-} from './identity';
+import { discoveryIn, factoryDataDirOf } from './factory-client';
+import { deleteIdentity, ensureCredential } from './identity';
 import { claimInstanceDir } from './instance-lock';
 import {
   isUnauthorized,
   joinRemote,
   remoteFactoryClient,
 } from './remote-client';
-import { newCellId } from './ids';
 import { createSystemAdapter } from './adapters/system/system.adapter';
 import { systemClock } from './clock/system-clock';
 import { createHerdrPane } from './runners/herdr-pane';
@@ -54,9 +45,11 @@ const flagValue = (
 };
 
 /**
- * The Cell's identity and client. Local mode (the default) keeps the socket and the local id. Remote mode
- * (`factory_url` in the config) joins the Factory once with `FACTORY_JOIN_TOKEN`, keeps the credential it
- * is given, and talks HTTP with it. The join token is read from the environment and never written down.
+ * The Cell's identity and client (PROTOCOL §2). Every Cell talks HTTP with a credential the Factory issued
+ * on its join. The join token comes from `FACTORY_JOIN_TOKEN`, or, for a local Cell (no `factory_url`),
+ * from the discovery file of the running `factory-server`. The address is `factory_url`, or the discovery
+ * file's. A stored credential is reused, so a restart does not join again. Nothing is written down but the
+ * credential itself.
  */
 const connect = async (
   config: ReturnType<typeof readConfig>,
@@ -68,23 +61,20 @@ const connect = async (
   client: FactoryClient;
   target: string;
 }> => {
-  const baseUrl = config.factoryUrl;
+  const dataDir = config.factoryDataDir ?? factoryDataDirOf(env);
+  const discovery =
+    config.factoryUrl === undefined ? discoveryIn(dataDir) : undefined;
+  const baseUrl = config.factoryUrl ?? discovery?.url;
   if (baseUrl === undefined) {
-    const identity = loadOrCreateIdentity(cellDataDir, () => newCellId());
-    const socketPath = socketPathIn(
-      config.factoryDataDir ?? factoryDataDirOf(env),
+    throw new Error(
+      `no factory-server is running in ${dataDir}: start factory-server, or set factory_url`,
     );
-    return {
-      identity,
-      client: socketFactoryClient({ socketPath }),
-      target: socketPath,
-    };
   }
   const joinName = instance === 1 ? hostname() : `${hostname()}-${instance}`;
   const { cellId, credential } = await ensureCredential(
     cellDataDir,
     async () => {
-      const joinToken = env.FACTORY_JOIN_TOKEN;
+      const joinToken = env.FACTORY_JOIN_TOKEN ?? discovery?.joinToken;
       if (!joinToken) {
         throw new Error(
           `this Cell has no credential for ${baseUrl}: set FACTORY_JOIN_TOKEN to join it`,
@@ -101,11 +91,10 @@ const connect = async (
 };
 
 /**
- * `factory-cell`: a client of the running `factory-server`, over `factory.sock` (PROTOCOL §2) or, in
- * remote mode, over HTTP. It reads
- * its config, claims an exclusive instance directory, keeps its identity, says hello, and runs one claim
- * loop with one heartbeat loop. SIGINT stops claims and aborts running jobs immediately; SIGTERM
- * initiates a graceful leave, asking live Operator stations to hand over before stopping.
+ * `factory-cell`: a client of the running `factory-server` over HTTP (PROTOCOL §2). It reads its config,
+ * claims an exclusive instance directory, keeps its credential, says hello, and runs one claim loop with
+ * one heartbeat loop. SIGINT stops claims and aborts running jobs immediately; SIGTERM initiates a
+ * graceful leave, asking live Operator stations to hand over before stopping.
  */
 const main = async (): Promise<void> => {
   if (process.argv.includes('--help')) {
@@ -128,7 +117,6 @@ const main = async (): Promise<void> => {
   const baseCellDataDir = config.cellDataDir ?? cellDataDirOf(env);
   const instanceClaim = claimInstanceDir(baseCellDataDir);
   const cellDataDir = instanceClaim.cellDataDir;
-  const remote = config.factoryUrl !== undefined;
 
   let current: RunningCell | undefined;
   let joining = false;
@@ -169,7 +157,7 @@ const main = async (): Promise<void> => {
   };
 
   /**
-   * The Factory refused the credential (401) in remote mode: the Cell has stopped its jobs; the stored
+   * The Factory refused the credential (401): the Cell has stopped its jobs; the stored
    * credential is removed and the Cell joins again with `FACTORY_JOIN_TOKEN`, as a new Cell (PROTOCOL §1).
    */
   const rejoin = async (): Promise<void> => {
@@ -193,7 +181,7 @@ const main = async (): Promise<void> => {
   try {
     await start();
   } catch (error) {
-    if (!remote || !isUnauthorized(error)) {
+    if (!isUnauthorized(error)) {
       instanceClaim.release();
       throw error;
     }

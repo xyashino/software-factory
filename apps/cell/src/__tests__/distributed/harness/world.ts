@@ -236,12 +236,11 @@ export const startPrReporter = (w: {
 
 /**
  * A fresh suite world: a temp root, the fixture repository with the given todo files, the project seeded
- * on it, and one Factory process (remote or local) that holds the Work orders those todos name.
+ * on it, and one Factory process, listening on HTTP, that holds the Work orders those todos name.
  */
 export const createWorld = async (
   todos: Record<string, string>,
   options: {
-    remote?: boolean;
     /** The Factory and Cells use a bare clone of the fixture, a remote that takes pushes to any branch. */
     bare?: boolean;
     /** Extra environment for every process of the world (a test's own knobs). */
@@ -278,11 +277,7 @@ export const createWorld = async (
 
   const env = { ...suiteEnv(ghDir), ...(options.env ?? {}) };
   const start = async (): Promise<RunningFactory> => {
-    const factory = await startFactory({
-      dataDir,
-      env,
-      ...(options.remote === true ? { remote: true } : {}),
-    });
+    const factory = await startFactory({ dataDir, env });
     return factory;
   };
   let factory = await start();

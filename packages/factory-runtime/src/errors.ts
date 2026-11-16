@@ -50,7 +50,7 @@ const isIssueError = (
 
 /**
  * The RuntimeError a thrown error stands for. A schema failure becomes `invalid` (422) with its
- * issues, as the socket answers it; anything else is not a refusal and is rethrown.
+ * issues, as the HTTP listener answers it; anything else is not a refusal and is rethrown.
  */
 export const asRuntimeError = (error: unknown): RuntimeError => {
   if (error instanceof RuntimeError) return error;

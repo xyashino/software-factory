@@ -2,7 +2,7 @@ import type { CellId } from '@repo/factory-core/ids';
 
 /**
  * A credential the runtime revoked, after the revoke committed. Listeners drop what they cached about
- * it (the server's auth cache, perf-04). Every revoke comes through the runtime, from the socket or HTTP.
+ * it (the server's auth cache, perf-04). Every revoke comes through the runtime, from any HTTP caller.
  */
 export type Revocation =
   { kind: 'cell'; cellId: CellId } | { kind: 'joinToken'; joinTokenId: string };

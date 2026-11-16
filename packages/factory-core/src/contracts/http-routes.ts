@@ -1,18 +1,20 @@
 import type { RouteName } from './routes';
 
 /**
- * The remote HTTP surface (PROTOCOL §3.1, §3.2). `ROUTES` keeps the socket paths; this table is the
+ * The HTTP surface (PROTOCOL §3.1, §3.2), the one transport of the Factory. `ROUTES` keeps the route names; this table is the
  * one place that maps each route to its HTTP method, path and credential. The server registers its
  * Hono routes from it, and the remote clients build their URLs from it, so every path is written once.
  */
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE';
 
 /**
- * Who may call a route (PROTOCOL §1): a supervisor token, a Cell credential, or either; `join` takes the
- * join token in its body; `webhook` takes no bearer token, its credential is the HMAC of the body (§3.6).
+ * Who may call a route (PROTOCOL §1): a supervisor token, a Cell credential, or either; `local` is the
+ * server's own local supervisor token only (it writes to the server's filesystem, so no remote token may
+ * call it); `join` takes the join token in its body; `webhook` takes no bearer token, its credential is
+ * the HMAC of the body (§3.6).
  */
 export type HttpAuth =
-  'supervisor' | 'cell' | 'supervisor_or_cell' | 'join' | 'webhook';
+  'supervisor' | 'local' | 'cell' | 'supervisor_or_cell' | 'join' | 'webhook';
 
 export interface HttpRoute {
   readonly method: HttpMethod;
@@ -38,21 +40,19 @@ export const HTTP_EXTRA_ROUTES = {
 } as const satisfies Record<string, HttpRoute>;
 
 /**
- * Socket routes with no HTTP route, and why. A route listed here answers 404 over HTTP: the test
- * for this table fails if a `ROUTES` key is neither mapped nor listed.
+ * Routes with no HTTP route, and why. A route listed here answers 404 over HTTP: the test for this
+ * table fails if a `ROUTES` key is neither mapped nor listed.
  */
 export const HTTP_UNMAPPED = {
   supervisorEvents:
     'replaced by GET /v1/stream (server-sent events, Last-Event-ID = globalSeq)',
-  adminBackup:
-    'host-side only: it writes to the server filesystem; run `factory-server admin backup` on the host',
 } as const satisfies Partial<Record<RouteName, string>>;
 
 export type UnmappedRoute = keyof typeof HTTP_UNMAPPED;
 export type MappedRoute = Exclude<RouteName, UnmappedRoute>;
 export type HttpRouteName = MappedRoute | keyof typeof HTTP_EXTRA_ROUTES;
 
-/** The HTTP route of every mapped socket route, and the extra ones (PROTOCOL §3.1, §3.2). */
+/** The HTTP route of every mapped route, and the extra ones (PROTOCOL §3.1, §3.2). */
 export const HTTP_ROUTES = {
   board: { method: 'GET', path: '/v1/board', auth: 'supervisor' },
   plans: { method: 'GET', path: '/v1/plans', auth: 'supervisor' },
@@ -159,6 +159,12 @@ export const HTTP_ROUTES = {
     method: 'GET',
     path: '/v1/admin/export',
     auth: 'supervisor',
+  },
+  // Writes the archive to the server's filesystem, so only the local supervisor (`factory admin backup`) may call it.
+  adminBackup: {
+    method: 'POST',
+    path: '/v1/admin/backup',
+    auth: 'local',
   },
   adminRebuildProjections: {
     method: 'POST',

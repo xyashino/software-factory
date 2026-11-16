@@ -3,12 +3,15 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { socketFactoryClient } from '@repo/factory-server/socket/client';
+import type { HttpListener } from '@repo/factory-server/http/listener';
 import {
-  startSocketListener,
-  type SocketListener,
-} from '@repo/factory-server/socket/listener';
+  httpClient,
+  listenLocal,
+  LOCAL_TEST_TOKEN,
+} from '@repo/factory-server/testing/local-http';
 import { createFixtureRepo, todoFile } from '../fixture-repo';
+import { joinCell } from '../helpers/join';
+import { splitClient } from '../helpers/split-client';
 import type { FactoryClient } from '@repo/factory-core/contracts/client';
 import type { Job } from '@repo/factory-core/contracts/job';
 import type { CellId, ProjectId, TodoId } from '@repo/factory-core/ids';
@@ -40,7 +43,8 @@ import { commitFactoryTo } from '../../testing/factory-fixture';
 type Client = FactoryClient;
 
 const PROJECT = 'software-factory' as ProjectId;
-const CELL = '01J0000000000000000000000W' as CellId;
+/** The Cell's id, named by the Factory when the Cell joins (set by `serve`). */
+let CELL: CellId;
 const SCRIPT = fileURLToPath(
   new URL('./scripted-operator.ts', import.meta.url),
 );
@@ -58,7 +62,7 @@ let dataDir: string;
 let cellDir: string;
 let repo: string;
 let opened: OpenedRuntime | undefined;
-let listener: SocketListener | undefined;
+let listener: HttpListener | undefined;
 
 beforeEach(async () => {
   root = mkdtempSync(join(tmpdir(), 'cell-e2e-'));
@@ -82,15 +86,17 @@ afterEach(async () => {
   rmSync(root, { recursive: true, force: true });
 });
 
-/** Opens the runtime's data directory and serves it on its socket, the way factory-server does. */
+/**
+ * Opens the runtime's data directory and serves it over HTTP on a loopback port, the way factory-server
+ * does. The Cell joins with a join token, so the Cell routes run with the Cell's own credential.
+ */
 const serve = async (): Promise<Client> => {
   opened = openRuntime({ dataDir });
   await opened.runtime.start();
-  const socketPath = join(dataDir, 'factory.sock');
-  listener = startSocketListener({ runtime: opened.runtime, socketPath });
-  const client = socketFactoryClient({ socketPath });
+  listener = listenLocal(opened.runtime);
+  const supervisor = httpClient(listener.url, LOCAL_TEST_TOKEN);
   // The Work order the todo file names, created through the task API on the shipped `feature` Line.
-  await client.call('createOrder', {
+  await supervisor.call('createOrder', {
     commandId: `create-${TODO}`,
     projectId: PROJECT,
     todoId: TODO as TodoId,
@@ -102,6 +108,14 @@ const serve = async (): Promise<Client> => {
     dependsOn: [],
     baseBranch: 'main',
   });
+  const joined = await supervisor.call('joinTokenCreate', {
+    commandId: `join-${TODO}`,
+    name: 'station',
+    ttlSeconds: 600,
+  });
+  const cell = await joinCell(listener.url, joined.token);
+  CELL = cell.cellId;
+  const client = splitClient(supervisor, cell.client);
   await client.call('hello', {
     cellId: CELL,
     version: '0.1.0',

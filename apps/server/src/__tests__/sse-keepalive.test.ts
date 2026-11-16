@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Runtime } from '@repo/factory-runtime/composition';
-import { SSE_KEEPALIVE, streamResponse } from '../socket/serve';
+import { SSE_KEEPALIVE, streamResponse } from '../http/stream';
 
 /**
  * The SSE keepalive (PROTOCOL §3.1): a quiet feed still sends a comment line, so the TCP listener's idle

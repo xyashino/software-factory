@@ -3,10 +3,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { writeDiscovery } from '@repo/factory-server/http/discovery';
+import type { HttpListener } from '@repo/factory-server/http/listener';
 import {
-  startSocketListener,
-  type SocketListener,
-} from '@repo/factory-server/socket/listener';
+  listenLocal,
+  LOCAL_TEST_TOKEN,
+} from '@repo/factory-server/testing/local-http';
 import {
   openRuntime,
   type OpenedRuntime,
@@ -18,7 +20,7 @@ const START_LINE = /factory-cell: running as (\S+)/;
 
 let root: string;
 let opened: OpenedRuntime | undefined;
-let listener: SocketListener | undefined;
+let listener: HttpListener | undefined;
 let children: Bun.Subprocess<'ignore', 'pipe', 'pipe'>[] = [];
 
 const readUntilCellId = async (
@@ -84,9 +86,17 @@ describe('launching multiple factory-cell processes with the same config', () =>
 
     opened = openRuntime({ dataDir: factoryDataDir });
     await opened.runtime.start();
-    listener = startSocketListener({
-      runtime: opened.runtime,
-      socketPath: join(factoryDataDir, 'factory.sock'),
+    // The server writes the discovery file the local Cells read: its address, its token and a join token.
+    listener = listenLocal(opened.runtime);
+    const joined = await opened.runtime.call('joinTokenCreate', {
+      commandId: 'join-multi-instance',
+      name: 'local-cells',
+      ttlSeconds: 600,
+    });
+    writeDiscovery(factoryDataDir, {
+      url: listener.url,
+      token: LOCAL_TEST_TOKEN,
+      joinToken: joined.token,
     });
 
     writeFileSync(

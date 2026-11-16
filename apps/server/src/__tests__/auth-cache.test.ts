@@ -177,11 +177,11 @@ describe('HTTP auth cache', () => {
     expect((await claimAs(cell.credential)).status).toBe(401);
   });
 
-  it('refuses a cached Cell credential at once after a revoke over the socket path', async () => {
+  it('refuses a cached Cell credential at once after a revoke through the runtime', async () => {
     const cell = await joinCell();
     expect((await claimAs(cell.credential)).status).not.toBe(401);
 
-    // The socket and in-process callers revoke through the runtime, not through this app.
+    // Every caller, local or remote, revokes through the runtime, not through this app.
     await opened.runtime.call('cellRevoke', { cellId: cell.cellId });
 
     expect((await claimAs(cell.credential)).status).toBe(401);

@@ -1,59 +1,14 @@
-import { invalidWire } from '@repo/factory-core/contracts/errors';
-import { ROUTES, routeByPath } from '@repo/factory-core/contracts/routes';
 import type { StoredEvent } from '@repo/factory-core/order/events';
+import { invalidWire } from '@repo/factory-core/contracts/errors';
 import type { Runtime } from '@repo/factory-runtime/composition';
-import { failureResponse, jsonResponse, refusedResponse } from '../wire';
-
-/** The path prefix of every route (PROTOCOL §3): `POST /v1/<route path>` with a JSON body. */
-export const API_PREFIX = '/v1/';
+import { refusedResponse } from '../wire';
 
 /** The event feed's path (PROTOCOL §3.1): `GET /v1/stream?after=<globalSeq>`, server-sent events. */
-export const STREAM_PATH = `${API_PREFIX}stream`;
-
-/**
- * Answers one request on the socket (PROTOCOL §2). The route comes from the shared table; the body is
- * parsed by the route's request schema (422 `invalid` when it fails); the runtime answers, and the
- * answer is parsed by the response schema. A refusal keeps its status and its wire body. A failure
- * that is not a refusal answers 503 `unavailable`, so the client may retry with the same commandId.
- */
-export const serveRequest = async (
-  runtime: Runtime,
-  request: Request,
-): Promise<Response> => {
-  const path = new URL(request.url).pathname;
-  if (request.method === 'GET' && path === STREAM_PATH) {
-    return streamResponse(runtime, request);
-  }
-  const route =
-    request.method === 'POST' && path.startsWith(API_PREFIX)
-      ? routeByPath(path.slice(API_PREFIX.length))
-      : undefined;
-  if (!route) return refusedResponse({ code: 'not_found' });
-
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return refusedResponse(
-      invalidWire([{ path: [], message: 'the body is not JSON' }]),
-    );
-  }
-  const parsed = ROUTES[route].request.safeParse(body);
-  if (!parsed.success) return refusedResponse(invalidWire(parsed.error.issues));
-
-  try {
-    const response = await runtime.call(route, parsed.data as never, {
-      signal: request.signal,
-    });
-    return jsonResponse(200, ROUTES[route].response.parse(response));
-  } catch (error) {
-    return failureResponse(error, route);
-  }
-};
+export const STREAM_PATH = '/v1/stream';
 
 /**
  * How long the feed may stay quiet before the stream sends a keepalive comment. It must be well under
- * the TCP listener's idle timeout (`IDLE_TIMEOUT_S`), so a quiet but live stream is never dropped.
+ * the listener's idle timeout (`IDLE_TIMEOUT_S`), so a quiet but live stream is never dropped.
  */
 export const SSE_KEEPALIVE_MS = 15_000;
 
@@ -63,8 +18,8 @@ export const SSE_KEEPALIVE = ': keepalive\n\n';
 /**
  * The event feed as server-sent events (PROTOCOL §3.1): one `id` (the globalSeq) and one JSON `data`
  * line per stored event, from `after` or `Last-Event-ID`. While the feed is quiet, a keepalive comment
- * goes out every `keepaliveMs`. The stream ends when the client aborts. The TCP listener serves the same
- * function, so both transports stream the same bytes.
+ * goes out every `keepaliveMs`. The stream ends when the client aborts. The caller checks the
+ * credential first; this function only serves the feed.
  */
 export const streamResponse = (
   runtime: Runtime,

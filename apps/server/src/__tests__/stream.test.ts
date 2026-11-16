@@ -9,16 +9,21 @@ import {
   openRuntime,
   type OpenedRuntime,
 } from '@repo/factory-runtime/open-runtime';
-import { startSocketListener, type SocketListener } from '../socket/listener';
-import { socketFactoryClient } from '../socket/client';
+import type { HttpListener } from '../http/listener';
 import { orderRequest } from '../testing/order-request';
+import {
+  feedOf,
+  httpClient,
+  listenLocal,
+  LOCAL_TEST_TOKEN,
+} from '../testing/local-http';
 
 const PROJECT = 'software-factory' as ProjectId;
 
 let root: string;
 let dataDir: string;
 let opened: OpenedRuntime | undefined;
-let listener: SocketListener | undefined;
+let listener: HttpListener | undefined;
 
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), 'factory-stream-'));
@@ -32,10 +37,7 @@ beforeEach(() => {
     dataDir,
     config: { feedPollMs: 20 },
   });
-  listener = startSocketListener({
-    runtime: opened.runtime,
-    socketPath: join(dataDir, 'factory.sock'),
-  });
+  listener = listenLocal(opened.runtime);
 });
 
 afterEach(async () => {
@@ -46,8 +48,8 @@ afterEach(async () => {
   rmSync(root, { recursive: true, force: true });
 });
 
-const client = () =>
-  socketFactoryClient({ socketPath: join(dataDir, 'factory.sock') });
+const url = (): string => listener!.url;
+const client = () => httpClient(url(), LOCAL_TEST_TOKEN);
 
 /** Reads the feed until `done` says stop, then aborts it. */
 const read = async (
@@ -56,14 +58,14 @@ const read = async (
 ): Promise<StoredEvent[]> => {
   const abort = new AbortController();
   const seen: StoredEvent[] = [];
-  for await (const stored of client().stream(after, abort.signal)) {
+  for await (const stored of feedOf(url(), after, abort.signal)) {
     seen.push(stored);
     if (done(seen)) abort.abort();
   }
   return seen;
 };
 
-describe('event feed over the socket', () => {
+describe('event feed over HTTP', () => {
   it('starts after the global position it is given', async () => {
     for (const todo of ['todo-a', 'todo-b', 'todo-c']) {
       await client().call('createOrder', orderRequest(PROJECT, todo));
@@ -79,7 +81,7 @@ describe('event feed over the socket', () => {
     abort.abort();
 
     const seen: StoredEvent[] = [];
-    for await (const stored of client().stream(0, abort.signal)) {
+    for await (const stored of feedOf(url(), 0, abort.signal)) {
       seen.push(stored);
     }
 
@@ -87,9 +89,9 @@ describe('event feed over the socket', () => {
   });
 
   it('refuses a feed position that is not a whole number', async () => {
-    const response = await fetch('http://factory/v1/stream?after=nope', {
-      unix: join(dataDir, 'factory.sock'),
-    } as RequestInit);
+    const response = await fetch(`${url()}/v1/stream?after=nope`, {
+      headers: { authorization: `Bearer ${LOCAL_TEST_TOKEN}` },
+    });
 
     expect(response.status).toBe(422);
   });

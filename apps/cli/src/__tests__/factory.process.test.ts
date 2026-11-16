@@ -5,13 +5,14 @@ import {
   readFileSync,
   readlinkSync,
   rmSync,
+  writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-/** The Supervisor CLI entry point, run as a real process (its own data directory, its own socket). */
+/** The Supervisor CLI entry point, run as a real process (its own data directory, its own server). */
 const CLI = fileURLToPath(new URL('../cli.ts', import.meta.url));
 /** The server entry point, run directly for the listener checks. */
 const SERVER = fileURLToPath(
@@ -43,7 +44,10 @@ const env = (dataDir: string): Record<string, string> => {
     if (value !== undefined) base[key] = value;
   }
   base.FACTORY_CONFIG = noConfig(dataDir);
+  // Any server a test starts takes a free loopback port, so parallel test files never collide.
+  base.FACTORY_BIND = '127.0.0.1:0';
   delete base.FACTORY_DATA_DIR;
+  delete base.FACTORY_TOKEN;
   return base;
 };
 
@@ -75,13 +79,13 @@ const waitFor = async (condition: () => boolean, ms: number): Promise<void> => {
   throw new Error('the condition did not come true in time');
 };
 
-/** Starts `factory run` (the real server, as the CLI starts it) and waits until its socket answers. */
+/** Starts `factory run` (the real server, as the CLI starts it) and waits until its discovery file is written. */
 const startRun = async (dataDir: string): Promise<Bun.Subprocess> => {
   const child = Bun.spawn(
     [process.execPath, CLI, 'run', '--data-dir', dataDir, '--no-color'],
     { stdout: 'pipe', stderr: 'pipe', env: env(dataDir) },
   );
-  await waitFor(() => existsSync(join(dataDir, 'factory.sock')), 10_000);
+  await waitFor(() => existsSync(join(dataDir, 'server.json')), 10_000);
   return child;
 };
 
@@ -398,12 +402,29 @@ describe('factory with no server running', () => {
     rmSync(dataDir, { recursive: true, force: true });
   });
 
-  it('a read runs one command under the lock, and leaves no socket behind', async () => {
+  it('a stale discovery file names no server, so a read falls back to a one-shot run', async () => {
+    writeFileSync(
+      join(dataDir, 'server.json'),
+      JSON.stringify({
+        url: 'http://127.0.0.1:1',
+        token: 'stale',
+        joinToken: 'stale',
+      }),
+    );
+
     const result = await factory(dataDir, ['status']);
 
     expect(result.code).toBe(0);
     expect(result.stdout).toContain(ANSWERABLE);
-    expect(existsSync(join(dataDir, 'factory.sock'))).toBe(false);
+    rmSync(join(dataDir, 'server.json'), { force: true });
+  });
+
+  it('a read runs one command under the lock, and leaves no discovery file behind', async () => {
+    const result = await factory(dataDir, ['status']);
+
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain(ANSWERABLE);
+    expect(existsSync(join(dataDir, 'server.json'))).toBe(false);
   });
 
   it('a write runs one command as a subprocess that exits, and the lock is free after it', async () => {
@@ -417,7 +438,7 @@ describe('factory with no server running', () => {
     expect(write.stdout).toContain('priority high');
     expect(board.stdout).toContain('high');
     expect(elapsed).toBeLessThan(10_000);
-    expect(existsSync(join(dataDir, 'factory.sock'))).toBe(false);
+    expect(existsSync(join(dataDir, 'server.json'))).toBe(false);
   });
 
   it('log -f with no server keeps following without holding the lock, so a write still runs', async () => {
@@ -511,8 +532,8 @@ const listeningTcpInodes = (): Set<string> => {
   return inodes;
 };
 
-describe('no network listener', () => {
-  it('the server holds a Unix socket and no TCP listening socket, while commands run', async () => {
+describe('loopback listener', () => {
+  it('the server listens on loopback TCP while commands run, with no Unix socket', async () => {
     const dataDir = scratch();
     await seed(dataDir, true);
     const server = Bun.spawn(
@@ -520,15 +541,15 @@ describe('no network listener', () => {
       { stdout: 'pipe', stderr: 'pipe', env: env(dataDir) },
     );
     try {
-      await waitFor(() => existsSync(join(dataDir, 'factory.sock')), 10_000);
+      await waitFor(() => existsSync(join(dataDir, 'server.json')), 10_000);
       await factory(dataDir, ['status']);
       await factory(dataDir, ['prio', ANSWERABLE, 'low']);
 
       const listening = listeningTcpInodes();
       const owned = [...socketInodes(server.pid)];
 
-      expect(owned.some((inode) => listening.has(inode))).toBe(false);
-      expect(owned.length).toBeGreaterThan(0);
+      expect(owned.some((inode) => listening.has(inode))).toBe(true);
+      expect(existsSync(join(dataDir, 'factory.sock'))).toBe(false);
     } finally {
       await stop(server);
       rmSync(dataDir, { recursive: true, force: true });

@@ -42,7 +42,7 @@ describe('factory-cli boundaries', () => {
 
   it('rejects an import of factory-server', async () => {
     const rules = await reportedRules(
-      `import { serveRequest } from '@repo/factory-server/socket/serve';`,
+      `import { createHttpApp } from '@repo/factory-server/http/app';`,
     );
     expect(rules).toContain('no-restricted-imports');
   });
