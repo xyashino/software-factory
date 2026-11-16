@@ -156,7 +156,7 @@ describe('a trust screen that stops the agent start', () => {
       'Do you trust the contents of this project?\n> Yes, I trust this folder\n  No, exit',
     );
     const pane = createHerdrPane({ exec, claudeConfigPath: config });
-    await expect(pane.open(launch)).resolves.toBeUndefined();
+    await expect(pane.open(launch)).resolves.toEqual({ tabId: 't1' });
     expect(calls.at(-1)).toEqual(['agent', 'send-keys', 'audit_1', 'Enter']);
   });
 

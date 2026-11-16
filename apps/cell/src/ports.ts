@@ -60,6 +60,11 @@ export interface PaneReading {
   operator: 'working' | 'idle' | 'blocked' | 'gone' | 'unknown';
 }
 
+/** Where a pane's tab lives in Herdr: what a later Cell needs to close the tab it did not open. */
+export interface PaneLocation {
+  tabId: string;
+}
+
 /** A Herdr pane the Cell drives: open, type, read, close (PROTOCOL §9, v1 Herdr adapter). */
 export interface PaneDriver {
   /** `task` is the Work order's todo: one Herdr workspace per task, as in v1, holds its Operator tabs. */
@@ -70,7 +75,9 @@ export interface PaneDriver {
       /** Run in the task's `logs` tab when the workspace is created (v1 streamed the task log there). */
       logCommand?: string;
     },
-  ): Promise<void>;
+  ): Promise<PaneLocation>;
+  /** Re-learns a pane an earlier Cell opened, from its session file, so `close` reaches its tab. */
+  adopt(name: string, location: PaneLocation): void;
   type(name: string, text: string): Promise<void>;
   read(name: string): Promise<PaneReading>;
   /** The sanitized last lines of the pane, for a stall alert. */

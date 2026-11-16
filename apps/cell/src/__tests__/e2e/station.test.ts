@@ -1,6 +1,13 @@
-import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
+import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { HttpListener } from '@repo/factory-server/http/listener';
@@ -23,6 +30,8 @@ import {
 import { seedProject, shippedLine } from '@repo/factory-runtime/seed';
 import { systemClock } from '../../clock/system-clock';
 import { createRegistry, type StationRegistry } from '../../cycle/registry';
+import { reconcileSessions } from '../../cycle/reconcile';
+import { listSessions } from '../../cycle/session';
 import { CELL_DIR } from '../../checkpoint';
 import { createJobRegistry } from '../../jobs/registry';
 import { leaveCell } from '../../leave';
@@ -35,7 +44,7 @@ import {
 } from '../../jobs/run-operator-station';
 import { createHeartbeat } from '../../loops/heartbeat';
 import { runGit } from '../../git';
-import type { PaneDriver } from '../../ports';
+import type { PaneDriver, PaneReading } from '../../ports';
 import { spawnHeadless } from '../../runners/headless';
 import type { CommitSha } from '@repo/factory-core/ids';
 import { createSystemAdapter } from '../../adapters/system/system.adapter';
@@ -194,6 +203,7 @@ const depsFor = (
     registry?: StationRegistry;
     wrapped?: Client;
     usage?: RunnerLaunch['usage'];
+    signal?: AbortSignal;
   } = {},
 ): StationDeps => {
   const runner = job.station?.operator?.runner ?? 'claude';
@@ -239,6 +249,7 @@ const depsFor = (
     spawn: spawnHeadless,
     timing: { ...FAST, ...options.timing },
     registry: options.registry ?? createRegistry(),
+    ...(options.signal === undefined ? {} : { signal: options.signal }),
   };
 };
 
@@ -421,7 +432,8 @@ describe('Operator station against the runtime', () => {
       },
     };
     const pane: PaneDriver = {
-      open: async () => undefined,
+      open: async () => ({ tabId: 'tab-1' }),
+      adopt: () => undefined,
       type: async () => undefined,
       read: async () => ({ operator: 'blocked' }),
       tail: async () => '',
@@ -569,3 +581,239 @@ const questionIdOf = async (client: Client, job: Job): Promise<string> => {
   });
   return found;
 };
+
+/** A Herdr pane the test drives: it opens on tab `tab-1` and reads as `state.read` says. */
+const paneDouble = () => {
+  const state: { read: PaneReading['operator'] } = { read: 'working' };
+  const closed: string[] = [];
+  const adopted: string[] = [];
+  const pane: PaneDriver = {
+    open: async () => ({ tabId: 'tab-1' }),
+    adopt: (name, location) => {
+      adopted.push(`${name}:${location.tabId}`);
+    },
+    type: async () => undefined,
+    read: async () => ({ operator: state.read }),
+    tail: async () => '',
+    close: async (name) => {
+      closed.push(name);
+    },
+    confirmTrust: async () => false,
+    closeTask: async () => undefined,
+  };
+  return { pane, state, closed, adopted };
+};
+
+/** Claims the station job as a pane station: the Operator runs in a Herdr pane, not headless. */
+const claimPaneJob = async (client: Client): Promise<Job> => {
+  const job = (await client.call('claim', { cellId: CELL, waitMs: 0 })).job;
+  if (job === null) throw new Error('expected a claimable job');
+  return {
+    ...job,
+    station: {
+      ...job.station!,
+      operator: { ...job.station!.operator!, headless: false },
+    },
+  };
+};
+
+/** Starts a pane station, then stops the Cell while the pane runs: the pane and its session are left behind. */
+const startThenStopCell = async (
+  client: Client,
+  job: Job,
+  pane: PaneDriver,
+): Promise<void> => {
+  const controller = new AbortController();
+  const running = runOperatorStation(job, {
+    ...depsFor(client, job, 'silent', { signal: controller.signal }),
+    pane,
+  });
+  await waitFor(() => listSessions(cellDir).length === 1);
+  controller.abort('the Cell is stopping');
+  await running;
+};
+
+/** Posts one verb to an endpoint, retrying until the adopted server answers. */
+const postVerb = async (
+  url: string,
+  token: string,
+  body: Record<string, unknown>,
+): Promise<void> => {
+  for (let attempt = 0; attempt < 400; attempt += 1) {
+    try {
+      await fetch(url, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ token, ...body }),
+      }).then((response) => response.json());
+      return;
+    } catch {
+      await sleep(20);
+    }
+  }
+  throw new Error('the endpoint never answered');
+};
+
+describe('Operator station restart: panes a previous Cell left running', () => {
+  it('adopts a live pane: the same Cycle completes through the endpoint the pane already has', async () => {
+    const client = await serve();
+    const job = await claimPaneJob(client);
+    const first = paneDouble();
+    const controller = new AbortController();
+    const running = runOperatorStation(job, {
+      ...depsFor(client, job, 'silent', { signal: controller.signal }),
+      pane: first.pane,
+    });
+    await waitFor(() => listSessions(cellDir).length === 1);
+    controller.abort('the Cell is stopping');
+    await running;
+
+    expect(first.closed).toEqual([]);
+    const [session] = listSessions(cellDir);
+    if (session === undefined) throw new Error('expected a session');
+    for (const output of session.job.station?.outputs ?? []) {
+      mkdirSync(dirname(join(session.worktree, output.path)), {
+        recursive: true,
+      });
+      writeFileSync(join(session.worktree, output.path), '# output\n');
+    }
+
+    const second = paneDouble();
+    await reconcileSessions({
+      client,
+      cellId: CELL,
+      cellDataDir: cellDir,
+      registry: createJobRegistry(),
+      pane: second.pane,
+      run: (current, signal, adopted) =>
+        runOperatorStation(
+          current,
+          { ...depsFor(client, current, 'silent'), pane: second.pane, signal },
+          adopted,
+        ),
+    });
+    await postVerb(
+      `http://127.0.0.1:${session.operatorPort}`,
+      session.operatorToken,
+      { op: 'done' },
+    );
+
+    await waitFor(() => listSessions(cellDir).length === 0);
+    const events = await eventsOf(client, job);
+    expect(eventOf(events, 'cycle_completed')).toMatchObject({
+      cycleId: session.cycleId,
+    });
+    expect(second.adopted).toEqual([`${session.paneName}:tab-1`]);
+    expect(second.closed).toEqual([session.paneName]);
+  });
+
+  it('discards a pane that is gone: its session is removed, its tab closed, and no station runs', async () => {
+    const client = await serve();
+    const job = await claimPaneJob(client);
+    const first = paneDouble();
+    await startThenStopCell(client, job, first.pane);
+    const [session] = listSessions(cellDir);
+    if (session === undefined) throw new Error('expected a session');
+
+    const second = paneDouble();
+    second.state.read = 'gone';
+    let runs = 0;
+    await reconcileSessions({
+      client,
+      cellId: CELL,
+      cellDataDir: cellDir,
+      registry: createJobRegistry(),
+      pane: second.pane,
+      run: async () => {
+        runs += 1;
+        return null;
+      },
+    });
+
+    expect(listSessions(cellDir)).toEqual([]);
+    expect(second.closed).toEqual([session.paneName]);
+    expect(runs).toBe(0);
+  });
+
+  it('discards a pane whose lease the Factory took back: the pane is closed, the session removed', async () => {
+    const client = await serve();
+    const job = await claimPaneJob(client);
+    const first = paneDouble();
+    await startThenStopCell(client, job, first.pane);
+    const [session] = listSessions(cellDir);
+    if (session === undefined) throw new Error('expected a session');
+    // The Factory answers the probe with `stale`: the Cycle's epoch moved on while the Cell was down.
+    const staleAnswer: Client = {
+      call: (route, request) =>
+        route === 'heartbeat'
+          ? Promise.resolve({
+              jobs: [{ jobId: session.jobId, status: 'stale' }],
+              signals: [],
+            } as never)
+          : client.call(route, request as never),
+    } as Client;
+
+    const second = paneDouble();
+    let runs = 0;
+    await reconcileSessions({
+      client: staleAnswer,
+      cellId: CELL,
+      cellDataDir: cellDir,
+      registry: createJobRegistry(),
+      pane: second.pane,
+      run: async () => {
+        runs += 1;
+        return null;
+      },
+    });
+
+    expect(listSessions(cellDir)).toEqual([]);
+    expect(second.closed).toEqual([session.paneName]);
+    expect(runs).toBe(0);
+  });
+
+  it('discards a pane whose endpoint port another process holds: the pane is closed and reported', async () => {
+    const client = await serve();
+    const job = await claimPaneJob(client);
+    const first = paneDouble();
+    await startThenStopCell(client, job, first.pane);
+    const [session] = listSessions(cellDir);
+    if (session === undefined) throw new Error('expected a session');
+    const holder = createServer();
+    await new Promise<void>((resolve) => {
+      holder.listen(session.operatorPort, '127.0.0.1', () => resolve());
+    });
+
+    const second = paneDouble();
+    const errors: string[] = [];
+    try {
+      await reconcileSessions({
+        client,
+        cellId: CELL,
+        cellDataDir: cellDir,
+        registry: createJobRegistry(),
+        pane: second.pane,
+        run: (current, signal, adopted) =>
+          runOperatorStation(
+            current,
+            {
+              ...depsFor(client, current, 'silent'),
+              pane: second.pane,
+              signal,
+            },
+            adopted,
+          ),
+        onError: (error) => {
+          errors.push(error instanceof Error ? error.message : String(error));
+        },
+      });
+      await waitFor(() => listSessions(cellDir).length === 0);
+    } finally {
+      await new Promise<void>((resolve) => holder.close(() => resolve()));
+    }
+
+    expect(second.closed).toEqual([session.paneName]);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toMatch(/in use|EADDRINUSE/);
+  });
+});

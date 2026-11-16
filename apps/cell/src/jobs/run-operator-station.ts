@@ -45,6 +45,7 @@ import {
   type PaneClock,
 } from '../cycle/observe';
 import type { StationRegistry, RunHandle } from '../cycle/registry';
+import { deleteSession, writeSession } from '../cycle/session';
 import { fillPrompt, typedFor, type RuntimePromptSet } from '../cycle/signals';
 import { cycleDirName, paneName } from '../names';
 import { newCycleToken, startOperatorServer } from '../operator-socket';
@@ -52,6 +53,7 @@ import type {
   Clock,
   HeadlessProcess,
   PaneDriver,
+  PaneLocation,
   PaneReading,
   RunGit,
   SpawnHeadless,
@@ -113,6 +115,20 @@ export interface StationDeps {
   takeSignals?: () => Signal[];
 }
 
+/**
+ * A pane station a previous Cell left running, as its session file (`cycle/session.ts`) held it. The
+ * pane keeps the port and token it was launched with, so the new Cell binds the same ones.
+ */
+export interface AdoptedStation {
+  paneName: string;
+  tabId: string;
+  worktree: string;
+  token: string;
+  port: number;
+  cycle: RuntimeCycle;
+  readOnlyBaseline?: string;
+}
+
 type Stage = WorkspaceStage;
 /** The station's worktree and the base commit its Cycle starts from, or the stage that failed. */
 export type WorkspaceResult =
@@ -120,6 +136,11 @@ export type WorkspaceResult =
   | { ok: false; stage: Stage; detail: string; missing?: boolean };
 type FailReason = 'timed_out' | 'crashed' | 'stalled' | 'start_failed' | 'lost';
 type Blobs = Record<string, BlobRef | undefined>;
+type Submitter = (
+  step: string,
+  command: OrderCommand,
+  dryRun?: boolean,
+) => Promise<SendOutcome>;
 
 const encode = (text: string): Uint8Array => new TextEncoder().encode(text);
 
@@ -192,30 +213,10 @@ const readUsage = (
   }
 };
 
-/** Runs one Operator station (PROTOCOL §9, `run_operator_station`). */
-export const runOperatorStation = async (
-  job: Job,
-  deps: StationDeps,
-): Promise<Job | null> => {
-  const station = job.station;
-  if (station?.operator === undefined || station.cycleId === undefined) {
-    throw new Error(`job ${job.jobId} is not an Operator station`);
-  }
-  if (station.runtimePrompts === undefined) {
-    throw new Error(`job ${job.jobId} names no runtime prompts`);
-  }
-  const cycleId = station.cycleId as CycleId;
-  const operator = station.operator;
-  const prompts: RuntimePromptSet = station.runtimePrompts;
-  const policy = watchPolicyFor(operator.timeoutMs);
-  const todo = todoOf(job.orderId);
-  const outputs: OutputSpec[] = station.outputs ?? [];
-
-  const submit = async (
-    step: string,
-    command: OrderCommand,
-    dryRun = false,
-  ): Promise<SendOutcome> => {
+/** Submits one command to the runtime for this job, under its epoch. A refusal is an answer, not a throw. */
+const submitterOf =
+  (job: Job, deps: StationDeps): Submitter =>
+  async (step, command, dryRun = false) => {
     if (deps.signal?.aborted) {
       return {
         ok: false,
@@ -242,18 +243,36 @@ export const runOperatorStation = async (
     }
   };
 
-  if (deps.signal?.aborted) return null;
+/** A fresh start: the worktree, the prompt, the StartCycle command and the inputs. Ends the job when it fails. */
+type FreshStart =
+  | {
+      ok: true;
+      worktree: string;
+      promptText: string;
+      readOnlyBaseline: string | undefined;
+    }
+  | { ok: false; next: Job | null };
 
+const startFresh = async (
+  job: Job,
+  deps: StationDeps,
+  submit: Submitter,
+): Promise<FreshStart> => {
+  const station = job.station;
+  const operator = station?.operator;
+  if (station === undefined || operator === undefined) {
+    throw new Error(`job ${job.jobId} is not an Operator station`);
+  }
   const ws = await deps.workspace(job);
   if (!ws.ok) {
-    if (deps.signal?.aborted) return null;
+    if (deps.signal?.aborted) return { ok: false, next: null };
     if (ws.missing) {
       // The job needs a worktree this Cell does not hold: the Work order restarts from Station 0 (CORE §4.3 rule 13).
       const reset = await submit('workspace', {
         type: 'ReportWorktreeMissing',
         detail: ws.detail,
       });
-      return reset.ok ? reset.result.next : null;
+      return { ok: false, next: reset.ok ? reset.result.next : null };
     }
     const logBlob = await putBlob(deps.client, encode(ws.detail), 'text/plain');
     const stage: Stage = ws.stage;
@@ -263,7 +282,7 @@ export const runOperatorStation = async (
       detail: workspaceDetailOf(stage, ws.detail),
       logBlob,
     });
-    return reported.ok ? reported.result.next : null;
+    return { ok: false, next: reported.ok ? reported.result.next : null };
   }
   const worktree = ws.worktree;
 
@@ -289,7 +308,7 @@ export const runOperatorStation = async (
       detail: redactDetail(error.message, 500),
       logBlob,
     });
-    return reported.ok ? reported.result.next : null;
+    return { ok: false, next: reported.ok ? reported.result.next : null };
   }
   const promptBlob = await putBlob(
     deps.client,
@@ -306,7 +325,7 @@ export const runOperatorStation = async (
     },
     promptBlob,
   });
-  if (!started.ok) return null;
+  if (!started.ok) return { ok: false, next: null };
 
   for (const input of station.inputs ?? []) {
     writeInside(worktree, input.path, await getBlob(deps.client, input.blob));
@@ -316,6 +335,48 @@ export const runOperatorStation = async (
     operator.permission === 'read'
       ? await worktreeFingerprint(worktree, gitRunIn(deps.git, worktree))
       : undefined;
+  return { ok: true, worktree, promptText, readOnlyBaseline };
+};
+
+/**
+ * Runs one Operator station (PROTOCOL §9, `run_operator_station`). With `adopted`, the station is a
+ * pane a previous Cell started: its Cycle already runs, so the loop resumes on the same port and token
+ * instead of starting the Cycle again.
+ */
+export const runOperatorStation = async (
+  job: Job,
+  deps: StationDeps,
+  adopted?: AdoptedStation,
+): Promise<Job | null> => {
+  const station = job.station;
+  if (station?.operator === undefined || station.cycleId === undefined) {
+    throw new Error(`job ${job.jobId} is not an Operator station`);
+  }
+  if (station.runtimePrompts === undefined) {
+    throw new Error(`job ${job.jobId} names no runtime prompts`);
+  }
+  const cycleId = station.cycleId as CycleId;
+  const operator = station.operator;
+  const prompts: RuntimePromptSet = station.runtimePrompts;
+  const policy = watchPolicyFor(operator.timeoutMs);
+  const todo = todoOf(job.orderId);
+  const outputs: OutputSpec[] = station.outputs ?? [];
+
+  const submit = submitterOf(job, deps);
+
+  if (deps.signal?.aborted) return null;
+
+  const fresh =
+    adopted === undefined
+      ? await startFresh(job, deps, submit)
+      : {
+          ok: true as const,
+          worktree: adopted.worktree,
+          promptText: '',
+          readOnlyBaseline: adopted.readOnlyBaseline,
+        };
+  if (!fresh.ok) return fresh.next;
+  const { worktree, promptText, readOnlyBaseline } = fresh;
 
   const cycleDir = join(deps.dataDir, 'cycles', cycleDirName(cycleId));
   mkdirSync(cycleDir, { recursive: true });
@@ -323,18 +384,18 @@ export const runOperatorStation = async (
   const promptDir = join(worktree, CELL_DIR, 'cycles', cycleDirName(cycleId));
   mkdirSync(promptDir, { recursive: true });
   const promptPath = join(promptDir, 'prompt.md');
-  writeFileSync(promptPath, promptText);
+  if (adopted === undefined) writeFileSync(promptPath, promptText);
   for (const output of outputs)
     mkdirSync(dirname(join(worktree, output.path)), { recursive: true });
   const kickoff = `Read ${promptPath} and follow it exactly. Finish with the factory-operator command it names.`;
-  const token = newCycleToken();
+  const token = adopted?.token ?? newCycleToken();
   const stdoutPath = join(cycleDir, 'stdout.log');
   const stderrPath = join(cycleDir, 'stderr.log');
   const journal = openJournal(
     join(deps.dataDir, 'runtime', `${cycleId}.jsonl`),
   );
 
-  let cycle: RuntimeCycle = {
+  let cycle: RuntimeCycle = adopted?.cycle ?? {
     startedAt: deps.clock.now(),
     pausedMs: 0,
     reminders: { idle: 0, silent: 0 },
@@ -345,9 +406,12 @@ export const runOperatorStation = async (
   let handoverAt: number | undefined;
   let proc: HeadlessProcess | undefined;
   let pane: string | undefined;
+  let paneLocation: PaneLocation | undefined;
   let paneClock: PaneClock = startPaneClock(cycle.startedAt);
   const waiters = new Map<string, (reply: OperatorReply) => void>();
   const pendingAck: string[] = [];
+  let server: Awaited<ReturnType<typeof startOperatorServer>> | undefined;
+  let savedState = '';
 
   const finish = (next: Job | null): void => {
     ending ??= { next };
@@ -357,6 +421,39 @@ export const runOperatorStation = async (
     if (proc !== undefined) proc.type(text);
     else if (pane !== undefined)
       void deps.pane?.type(pane, text).catch(() => undefined);
+  };
+
+  /**
+   * Writes the session of a pane station, so a Cell that restarts can re-adopt the pane. Written once the
+   * pane and the endpoint exist, and again whenever the cycle state changes. Nothing is written for a headless run.
+   */
+  const saveSession = (): void => {
+    if (
+      pane === undefined ||
+      paneLocation === undefined ||
+      server === undefined
+    )
+      return;
+    const state = JSON.stringify(cycle);
+    if (state === savedState) return;
+    savedState = state;
+    writeSession(deps.dataDir, {
+      orderId: job.orderId,
+      jobId: job.jobId,
+      cycleId,
+      epoch: job.epoch,
+      stationId: station.stationId,
+      paneName: pane,
+      tabId: paneLocation.tabId,
+      taskName: todo,
+      operatorToken: token,
+      operatorPort: Number(new URL(server.url).port),
+      worktree,
+      startedAt: cycle.startedAt,
+      cycle,
+      ...(readOnlyBaseline === undefined ? {} : { readOnlyBaseline }),
+      job,
+    });
   };
 
   /**
@@ -789,74 +886,103 @@ export const runOperatorStation = async (
     },
   };
 
-  let server: Awaited<ReturnType<typeof startOperatorServer>> | undefined;
   deps.registry.add(handle);
   try {
-    server = await startOperatorServer({ token, dispatch });
-    // The Operator inherits the Cell's environment, plus the two variables its CLI reads.
-    const env = {
-      ...process.env,
-      PATH: `${operatorBinOf(cycleDir)}:${process.env.PATH ?? ''}`,
-      FACTORY_OPERATOR_URL: server.url,
-      FACTORY_CYCLE_TOKEN: token,
-    };
-    const runner = deps.runners[operator.runner];
-    if (runner === undefined) {
-      await failCycle(
-        'start_failed',
-        `no launcher for runner ${operator.runner}`,
-      );
-    } else {
-      const command = [runner.binary, ...runner.kickoffArgs(kickoff)];
-      try {
-        if (operator.headless) {
-          proc = deps.spawn({
-            command,
-            cwd: worktree,
-            env,
-            stdoutPath,
-            stderrPath,
-          });
-        } else if (deps.pane !== undefined) {
-          pane = paneName(station.stationId, station.n, cycleId);
-          await deps.pane.open({
-            name: pane,
-            task: todo,
-            logCommand: logCommandOf(job.orderId),
-            command,
-            cwd: worktree,
-            env,
-            stdoutPath,
-            stderrPath,
-          });
-          // An interactive runner starts with no prompt: the kickoff is submitted into its pane (v1 `prompt`).
-          await deps.pane.type(pane, kickoff);
-        } else {
-          throw new Error('the Cell has no pane driver for a pane station');
-        }
-        journal({
-          at: deps.clock.now(),
-          kind: 'pane_ready',
-          headless: operator.headless,
-        });
-      } catch (error) {
+    server = await startOperatorServer({
+      token,
+      dispatch,
+      ...(adopted === undefined ? {} : { port: adopted.port }),
+    });
+    if (adopted === undefined) {
+      // The Operator inherits the Cell's environment, plus the two variables its CLI reads.
+      const env = {
+        ...process.env,
+        PATH: `${operatorBinOf(cycleDir)}:${process.env.PATH ?? ''}`,
+        FACTORY_OPERATOR_URL: server.url,
+        FACTORY_CYCLE_TOKEN: token,
+      };
+      const runner = deps.runners[operator.runner];
+      if (runner === undefined) {
         await failCycle(
           'start_failed',
-          error instanceof Error ? error.message : String(error),
+          `no launcher for runner ${operator.runner}`,
         );
+      } else {
+        const command = [runner.binary, ...runner.kickoffArgs(kickoff)];
+        try {
+          if (operator.headless) {
+            proc = deps.spawn({
+              command,
+              cwd: worktree,
+              env,
+              stdoutPath,
+              stderrPath,
+            });
+          } else if (deps.pane !== undefined) {
+            pane = paneName(station.stationId, station.n, cycleId);
+            paneLocation = await deps.pane.open({
+              name: pane,
+              task: todo,
+              logCommand: logCommandOf(job.orderId),
+              command,
+              cwd: worktree,
+              env,
+              stdoutPath,
+              stderrPath,
+            });
+            // Persisted before the kickoff goes in: a Cell that restarts from here finds the pane it opened.
+            saveSession();
+            // An interactive runner starts with no prompt: the kickoff is submitted into its pane (v1 `prompt`).
+            await deps.pane.type(pane, kickoff);
+          } else {
+            throw new Error('the Cell has no pane driver for a pane station');
+          }
+          journal({
+            at: deps.clock.now(),
+            kind: 'pane_ready',
+            headless: operator.headless,
+          });
+        } catch (error) {
+          await failCycle(
+            'start_failed',
+            error instanceof Error ? error.message : String(error),
+          );
+        }
       }
+    } else {
+      if (deps.pane === undefined) {
+        throw new Error('the Cell has no pane driver to adopt a pane');
+      }
+      // The pane runs with the env it was launched with: same port, same token, the same Cycle.
+      pane = adopted.paneName;
+      paneLocation = { tabId: adopted.tabId };
+      deps.pane.adopt(pane, paneLocation);
+      journal({ at: deps.clock.now(), kind: 'pane_adopted' });
     }
     while (ending === undefined && !deps.signal?.aborted) {
       // A failed tick (the runtime briefly unreachable) is retried on the next one; the leases and
       // the self-fence of the Cell decide when it gives up (PROTOCOL §5.3).
       await tick().catch(() => undefined);
+      saveSession();
       if (ending !== undefined || deps.signal?.aborted) break;
       await sleepTick();
     }
   } finally {
     deps.registry.delete(handle);
     proc?.stop();
-    if (pane !== undefined) await deps.pane?.close(pane).catch(() => undefined);
+    // A pane the Cell stops keeps running, so the next Cell can adopt it (cycle/reconcile.ts). Only the
+    // end of the Cycle, or a lease the Factory took back, closes the pane and removes its session.
+    const staleAbort = String(deps.signal?.reason ?? '').startsWith('stale');
+    const kept =
+      pane !== undefined &&
+      ending === undefined &&
+      deps.signal?.aborted === true &&
+      !staleAbort;
+    if (!kept) {
+      if (pane !== undefined)
+        await deps.pane?.close(pane).catch(() => undefined);
+      deleteSession(deps.dataDir, cycleId);
+    }
     for (const resolve of waiters.values()) {
       resolve({
         ok: false,
@@ -866,7 +992,7 @@ export const runOperatorStation = async (
     }
     waiters.clear();
     await server?.close();
-    rmSync(promptDir, { recursive: true, force: true });
+    if (!kept) rmSync(promptDir, { recursive: true, force: true });
     // The usage arrives after the Cycle may have ended: no epoch, no liveness check (PROTOCOL §9 step 7).
     if (!deps.signal?.aborted) {
       const usage = readUsage(deps.runners[operator.runner], stdoutPath);

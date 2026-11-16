@@ -17,7 +17,11 @@ import { runDeliver } from './deliver';
 import { runPlanJob } from './plan';
 import { runInspection } from './run-inspection';
 import { runMechanic } from './run-mechanic';
-import { runOperatorStation, type RunnerLaunch } from './run-operator-station';
+import {
+  runOperatorStation,
+  type AdoptedStation,
+  type RunnerLaunch,
+} from './run-operator-station';
 import type { JobContext } from './send';
 
 const STATION_TICK_MS = 1_000;
@@ -120,6 +124,7 @@ export const runJob = async (
   ctx: JobContext,
   job: Job,
   signal: AbortSignal,
+  adopted?: AdoptedStation,
 ): Promise<Job | null> => {
   // The continuation the job's last command hands back, captured by `submit` (PROTOCOL §4).
   let continuation: Job | null = null;
@@ -139,45 +144,49 @@ export const runJob = async (
         // The station's worktree stays leased for the whole station, and is released when it ends.
         let releaseWorktree: (() => void) | undefined;
         try {
-          return await runOperatorStation(station, {
-            client: ctx.client,
-            cellId: ctx.cellId,
-            dataDir: ctx.cellDataDir,
-            clock: { now: () => Date.now() },
-            sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
-            git: runGit,
-            workspace: async (current) => {
-              const prepared = await prepareWorkspace(
-                prepareContextOf(ctx, current, signal),
-                current,
-              );
-              if (!prepared.ok) {
+          return await runOperatorStation(
+            station,
+            {
+              client: ctx.client,
+              cellId: ctx.cellId,
+              dataDir: ctx.cellDataDir,
+              clock: { now: () => Date.now() },
+              sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+              git: runGit,
+              workspace: async (current) => {
+                const prepared = await prepareWorkspace(
+                  prepareContextOf(ctx, current, signal),
+                  current,
+                );
+                if (!prepared.ok) {
+                  return {
+                    ok: false,
+                    stage: prepared.stage,
+                    detail: prepared.detail,
+                    ...(prepared.missing ? { missing: true } : {}),
+                  };
+                }
+                releaseWorktree = prepared.release;
                 return {
-                  ok: false,
-                  stage: prepared.stage,
-                  detail: prepared.detail,
-                  ...(prepared.missing ? { missing: true } : {}),
+                  ok: true,
+                  worktree: prepared.worktree,
+                  base: prepared.head as CommitSha,
                 };
-              }
-              releaseWorktree = prepared.release;
-              return {
-                ok: true,
-                worktree: prepared.worktree,
-                base: prepared.head as CommitSha,
-              };
+              },
+              runners: runnersFor(station, ctx.cellDataDir),
+              spawn: spawnHeadless,
+              ...(ctx.pane ? { pane: ctx.pane } : {}),
+              timing: {
+                tickMs: STATION_TICK_MS,
+                questionHoldMs: QUESTION_HOLD_MS,
+                handoverGraceMs: HANDOVER_GRACE_MS,
+              },
+              registry: ctx.stations ?? createRegistry(),
+              signal,
+              takeSignals: () => ctx.takeSignals?.(job.jobId) ?? [],
             },
-            runners: runnersFor(station, ctx.cellDataDir),
-            spawn: spawnHeadless,
-            ...(ctx.pane ? { pane: ctx.pane } : {}),
-            timing: {
-              tickMs: STATION_TICK_MS,
-              questionHoldMs: QUESTION_HOLD_MS,
-              handoverGraceMs: HANDOVER_GRACE_MS,
-            },
-            registry: ctx.stations ?? createRegistry(),
-            signal,
-            takeSignals: () => ctx.takeSignals?.(job.jobId) ?? [],
-          });
+            adopted,
+          );
         } finally {
           releaseWorktree?.();
         }

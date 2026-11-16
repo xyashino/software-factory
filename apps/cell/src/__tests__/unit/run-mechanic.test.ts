@@ -138,7 +138,9 @@ const scriptedPane = (
         seen.replies.push(await askOperator(spec.env, body));
       }
       sent = true;
+      return { tabId: 'tab-mechanic' };
     },
+    adopt: () => undefined,
     type: async () => undefined,
     read: async () => ({ operator: sent ? 'gone' : read }),
     tail: async () => '',
@@ -581,7 +583,7 @@ describe('the Mechanic job run (CORE §14.3, §14.4)', () => {
       ...herdr,
       open: async (spec) => {
         seen.spec = spec;
-        await herdr.open(spec);
+        const location = await herdr.open(spec);
         seen.replies.push(
           await askOperator(
             spec.env,
@@ -591,6 +593,7 @@ describe('the Mechanic job run (CORE §14.3, §14.4)', () => {
             ),
           ),
         );
+        return location;
       },
       close: async (name) => {
         seen.closed.push(name);
@@ -642,7 +645,9 @@ describe('the Mechanic job run (CORE §14.3, §14.4)', () => {
     const pane: PaneDriver = {
       open: async (spec) => {
         seen.spec = spec;
+        return { tabId: 'tab-mechanic' };
       },
+      adopt: () => undefined,
       type: async () => undefined,
       read: async () => {
         reads += 1;
@@ -672,7 +677,9 @@ describe('the Mechanic job run (CORE §14.3, §14.4)', () => {
     const pane: PaneDriver = {
       open: async (spec) => {
         seen.spec = spec;
+        return { tabId: 'tab-mechanic' };
       },
+      adopt: () => undefined,
       type: async () => undefined,
       read: async () => ({ operator: 'blocked' }),
       tail: async () => '',
