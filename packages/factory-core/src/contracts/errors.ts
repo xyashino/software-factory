@@ -24,7 +24,7 @@ export const wireErrorSchema = z.discriminatedUnion('code', [
 export type WireError = z.infer<typeof wireErrorSchema>;
 export type WireErrorCode = WireError['code'];
 
-/** HTTP-like status of each code; the socket transport answers with it. */
+/** HTTP status of each code; the HTTP listener answers with it. */
 export const WIRE_STATUS: Record<WireErrorCode, number> = {
   not_found: 404,
   stale_epoch: 409,

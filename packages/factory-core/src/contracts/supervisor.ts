@@ -243,7 +243,7 @@ export const joinTokenRevokeResponseSchema = z
   .object({ joinTokenId: z.string().min(1), revoked: z.literal(true) })
   .strict();
 
-/** The export archive (STORAGE §7.3), base64 so it crosses the JSON socket. */
+/** The export archive (STORAGE §7.3), base64 so it crosses the JSON wire. */
 export const adminExportResponseSchema = z
   .object({ base64: z.string(), bytes: z.number().int().min(0) })
   .strict();

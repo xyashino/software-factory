@@ -1,11 +1,11 @@
 export const usage = `usage: factory-server [--data-dir <path>] [--once | admin <backup|export|import|rebuild-projections> [file] | admin token create <name>]
 
 Runs the Factory: the single writer of the data directory (default $FACTORY_DATA_DIR, else
-~/.local/share/factory). Serves the runtime on <data-dir>/factory.sock (mode 0600). No TCP listener
-unless remote mode is on.
+~/.local/share/factory). Serves the runtime over HTTP and SSE (PROTOCOL §2, §3) and writes
+<data-dir>/server.json (mode 0600): the address and the local token that local clients read. The file is
+removed on a clean shutdown.
 
-FACTORY_REMOTE=1  also serves the same runtime over HTTP and SSE on TCP (PROTOCOL §2, §3)
-FACTORY_BIND      host:port of that listener (default 127.0.0.1:7878; FACTORY_BIND needs FACTORY_REMOTE=1)
+FACTORY_BIND      host:port of the listener (default 127.0.0.1:7878; port 0 picks a free port)
 GITHUB_WEBHOOK_SECRET  HMAC key of POST /v1/webhooks/github, the pull request state feed (PROTOCOL §3.6)
 
 --once   Reads one {"route", "request"} JSON object on stdin, runs it under the writer lock, prints

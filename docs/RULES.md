@@ -25,8 +25,8 @@ Repo-wide rules in `.nitpick/config.ts` still apply.
 5. Projections **MUST** be updated in the same transaction as the events they derive from, and
    **MUST** be rebuildable from events with an identical result.
 6. No component other than a `factory-runtime` composition **MAY** open the database. CLI and Cell
-   code **MUST NOT** access storage directly. Local clients **MUST** go through the Unix socket to the
-   running `factory-server`, or use the one-shot in-process fallback under the writer lock (STORAGE §1).
+   code **MUST NOT** access storage directly. Local clients **MUST** go through HTTP to the running
+   `factory-server`, or use the one-shot fallback under the writer lock (STORAGE §1).
    A Cell **MUST NOT** open a database connection of its own.
 
 ## 3. Distribution
@@ -40,8 +40,8 @@ Repo-wide rules in `.nitpick/config.ts` still apply.
 4. A Cell **MUST** self-fence when it cannot heartbeat for the self-fence window.
 5. A Work order with an Andon raised **MUST NOT** hold a lease. The only wait on a person that may
    hold one is an open question, bounded by the question hold (CORE §9.2).
-6. Cells **MUST NOT** open inbound network ports. The server **MAY** bind a Unix socket locally
-   (`factory.sock`, mode 0600); in distributed mode it **MAY** bind TCP. The Factory server **MUST NOT**
+6. Cells **MUST NOT** open inbound network ports. The server binds one HTTP listener, on loopback by
+   default (PROTOCOL §2); it is the only transport, with no Unix socket. The Factory server **MUST NOT**
    call Cells; Cells initiate requests.
 7. Every wait **MUST** be bounded: network calls, git, Herdr, Inspections, Operators, question holds,
    Handovers on leave.
@@ -51,7 +51,7 @@ Repo-wide rules in `.nitpick/config.ts` still apply.
 1. `factory-runtime` and `apps/server` **MUST NOT** import Herdr, runner, worktree or `core/cycle` code.
 2. Cells **MUST NOT** import `factory-db` or `factory-definitions`; everything a job needs arrives
    in the `Job`, including the text of runtime prompts.
-3. `factory-operator` **MUST** talk only to its Cell's socket and **MUST NOT** know the Factory
+3. `factory-operator` **MUST** talk only to its Cell's localhost endpoint and **MUST NOT** know the Factory
    address.
 4. v2 packages **MUST NOT** import `@repo/software-factory`.
 5. Runner-specific code **MUST** live only in `apps/cell/src/adapters/runners/<runner>.ts`.

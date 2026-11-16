@@ -35,13 +35,13 @@ const partialConfigSchema = z
     projects: z.array(projectIdSchema).max(64).optional(),
     runners: z.array(z.string().min(1).max(64)).max(32).optional(),
     capabilities: z.array(z.string().min(1).max(64)).max(32).optional(),
-    /** The data directory of the local `factory-server`, which holds `factory.sock`. */
+    /** The data directory of the local `factory-server`, which holds its `server.json` discovery file. */
     factory_data_dir: z.string().min(1).optional(),
     /** Where the Cell keeps its identity, logs and cycles (default `<repo>/.factory-local/cell`). Worktrees stay in the repo. */
     cell_data_dir: z.string().min(1).optional(),
     /** Worktrees kept on disk before the least recently used are evicted. */
     worktree_limit: z.number().int().min(1).max(256).optional(),
-    /** Remote mode (PROTOCOL §2): the Factory's HTTP address. Unset means the local socket. */
+    /** The Factory's HTTP address (PROTOCOL §2). Unset, the running local server's address is used. */
     factory_url: z.string().url().optional(),
     /**
      * Runs every Operator station headless (the runner's print mode, no Herdr pane). Off by default:

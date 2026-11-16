@@ -171,7 +171,7 @@ export interface OperationExtras {
 }
 
 /**
- * Every route the runtime serves, in one table (PROTOCOL §3). The socket server and the in-process
+ * Every route the runtime serves, in one table (PROTOCOL §3). The HTTP listener and the in-process
  * client both call this, so a route behaves the same whichever transport reaches it.
  */
 export const createOperations = (

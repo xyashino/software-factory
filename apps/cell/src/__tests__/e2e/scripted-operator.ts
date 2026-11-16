@@ -3,7 +3,7 @@
  * Cycle through `factory-operator context`, writes the declared outputs, then ends the Cycle with
  * the real `factory-operator` CLI, the same way an agent would. Usage: `bun scripted-operator.ts
  * <scenario> <kickoff>`. Every line the Cell types into it is logged to `typed.log` beside the
- * Cycle socket, never in the worktree.
+ * Cycle's scratch files, never in the worktree.
  */
 import { appendFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -13,11 +13,9 @@ import { fileURLToPath } from 'node:url';
 const CLI = fileURLToPath(
   new URL('../../../../operator-cli/src/cli.ts', import.meta.url),
 );
-/** The socket variable the Cell sets for the Operator (the same name the operator CLI reads). */
-const SOCKET_ENV = 'FACTORY_OPERATOR_SOCKET';
 const [scenario = 'done'] = process.argv.slice(2);
-// The prompt sits in the worktree's `.cell/`, but the socket sits in the Cycle directory: that is where logs go.
-const cycleDir = dirname(process.env[SOCKET_ENV] ?? '.');
+// The prompt sits in the worktree's `.cell/`, while the `bin` shim on PATH sits in the Cycle directory: that is where logs go.
+const cycleDir = dirname((process.env.PATH ?? '').split(':')[0] || '.');
 const typedLog = join(cycleDir, 'typed.log');
 
 const operator = async (

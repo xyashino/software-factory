@@ -2,17 +2,17 @@
 
 All request and response bodies are transport-neutral zod schemas in `factory-core/src/contracts/`.
 The runtime, server, Cell and both CLIs import the same schemas; there is no hand-written duplicate
-of a payload anywhere. Local mode sends the same contracts over the Unix socket to `factory-server`, which
-runs the runtime. HTTP routes below are the remote transport, not a requirement for local operation.
+of a payload anywhere. Every client, local or remote, sends the same contracts over HTTP + SSE to
+`factory-server`, which runs the runtime. The HTTP routes below are the one transport; there is no socket.
 
 ## 1. Actors and credentials
 
 | Actor                           | Credential                                                                                  | Reaches                                                 | Scope                                                                           |
 | :------------------------------ | :------------------------------------------------------------------------------------------ | :------------------------------------------------------ | :------------------------------------------------------------------------------ |
-| Supervisor via `factory`        | Local: operating-system account over the socket; remote: supervisor token (`FACTORY_TOKEN`) | `factory-server` via the socket, or its supervisor API  | everything a Supervisor may do                                                  |
+| Supervisor via `factory`        | Local: the local token in the discovery file (§2); remote: supervisor token (`FACTORY_TOKEN`) | `factory-server` over HTTP, or its supervisor API       | everything a Supervisor may do                                                  |
 | Cell, enrolling                 | join token (`FACTORY_JOIN_TOKEN`), created by `factory cells token create`                  | Remote `POST /v1/cell/join`                             | obtaining a Cell credential                                                     |
-| Cell, enrolled                  | Cell credential, returned once by `join`                                                    | `factory-server` via the socket, or the remote Cell API | writes only to Work orders for which it holds the current epoch; reads any blob |
-| Operator via `factory-operator` | per-Cycle local token (`FACTORY_CYCLE_TOKEN`), random, created by the Cell                  | its Cell's unix socket only                             | only its own Cycle                                                              |
+| Cell, enrolled                  | Cell credential, returned once by `join`                                                    | `factory-server` over HTTP (local or remote)            | writes only to Work orders for which it holds the current epoch; reads any blob |
+| Operator via `factory-operator` | per-Cycle local token (`FACTORY_CYCLE_TOKEN`), random, created by the Cell                  | its Cell's localhost endpoint only                             | only its own Cycle                                                              |
 
 Tokens are opaque random strings. The runtime stores only their hashes.
 
@@ -24,23 +24,33 @@ Tokens are opaque random strings. The runtime stores only their hashes.
 - Revoking a Cell (`factory cells rm <id>`) makes its active leases expire; the next claim, heartbeat or board read reaps them (§5.4).
 - In remote mode, the **first supervisor token** is created on the Factory host with
   `factory-server admin token create <name>`, which writes through the runtime to its database.
-  There is no network path that creates a supervisor token. Local mode uses the local operating-system
-  account and does not create or require a supervisor token.
+  There is no network path that creates a supervisor token. Local mode uses the local token the server
+  writes to the discovery file (§2) and needs no stored supervisor token.
+- **Local token and local join token** (local mode only). On start the server mints two random tokens
+  and writes them to `$FACTORY_DATA_DIR/server.json` (§2). The local supervisor token lives in the
+  server's memory only: it is checked before the stored tokens and is never written to the database, so
+  it ends with the process. The local join token is a runtime join token: it lets a local Cell enrol once,
+  and it is revoked on a clean shutdown. Only the `local` credential class admits the local supervisor token
+  to `POST /v1/admin/backup`; a remote supervisor token is refused there.
 
 ## 2. Transport
 
-- **Local mode (default):** `factory` and local Cells are clients of `factory-server` over the Unix
-  socket `$FACTORY_DATA_DIR/factory.sock` (mode `0600`). The shared zod contracts are the payloads. The
-  socket is local IPC, not a network listener, and no supervisor token is required. The local
-  operating-system account is the trust boundary. Bun's `fetch` supports the socket through its `unix`
-  option.
-- **Remote mode (optional, M4R):** the same `factory-server` additionally binds TCP with HTTP/1.1 +
-  JSON and SSE, served by Hono. The server binds `127.0.0.1` by default; `FACTORY_BIND` sets another
-  address. Remote Cells SHOULD reach it over a private network (WireGuard / Tailscale) or a TLS reverse
-  proxy. The server does not terminate TLS itself in v2.0. WebSocket is not used in v2.0.
+- **One transport, everywhere.** `factory-server` always serves HTTP/1.1 + JSON and SSE, served by Hono.
+  It binds `127.0.0.1:7878` by default; `FACTORY_BIND` sets another address (port `0` asks the system for
+  a free port, for tests). No switch turns it on. The shared zod contracts are the payloads.
+- **Local mode (default):** `factory` and local Cells find the server through the discovery file
+  `$FACTORY_DATA_DIR/server.json`, written on start and removed on a clean shutdown. It holds `url`,
+  `token` (the local supervisor token) and `joinToken` (the local join token; §1). The file is written
+  with mode `0600` on POSIX (Windows has no such mode, and the file keeps the account's default). A
+  client that finds no file, or a file whose server does not answer, runs the one-shot `--once` path (§10).
+  No `FACTORY_TOKEN` is needed. Trust is the operating-system account that can read the file.
+- **Remote mode:** the same listener serves other machines. Remote clients set `FACTORY_URL` and
+  `FACTORY_TOKEN`; remote Cells set `factory_url` and the join token. Remote Cells SHOULD reach it over a
+  private network (WireGuard / Tailscale) or a TLS reverse proxy. The server does not terminate TLS itself
+  in v2.0. WebSocket is not used in v2.0.
 - Remote Cells open **no inbound port**. Everything the Factory needs to tell a Cell arrives in
   responses to requests the Cell makes (claim long-poll and heartbeat).
-- `factory-operator` talks to its Cell over a unix socket (`$FACTORY_OPERATOR_SOCKET`, mode `0600`).
+- `factory-operator` talks to its Cell over a localhost HTTP endpoint (`$FACTORY_OPERATOR_URL`, §3.3).
 
 ## 3. APIs
 
@@ -51,30 +61,30 @@ board/order/event/blob reads, Supervisor commands, the task API, project registr
 admin operations and event subscription. The Cell uses the corresponding Cell client operations: initialize, claim,
 heartbeat, submit command, and read/write blobs.
 
-- `SocketFactoryClient` (the default) sends the shared request/response schemas to `factory-server`
-  over the Unix socket and maps socket errors to the shared error contract. The CLI and local Cells
-  use it.
-- The in-process fallback is used only for a one-shot CLI write when no server is running. It starts the
-  runtime for that command while holding the writer lock (STORAGE §1). It is not a Cell path.
-- `RemoteFactoryClient` serializes the shared request/response schemas over the TCP HTTP routes below
-  and maps HTTP errors to that same contract.
+- `RemoteFactoryClient` (the one HTTP client of the CLI) serializes the shared request/response schemas
+  over the HTTP routes below and maps HTTP errors to the shared error contract. The CLI uses it in both
+  modes: local mode points it at the URL and token of the discovery file, remote mode at `FACTORY_URL`
+  and `FACTORY_TOKEN`. A Cell uses the same HTTP client with its Cell credential.
+- The in-process fallback is used only for a one-shot CLI write when no server answers. It runs
+  `factory-server --once` (JSON on stdin and stdout), which starts the runtime for that command while
+  holding the writer lock (STORAGE §1). It is not a Cell path.
 - Rendering, CLI configuration and storage access are not part of `FactoryClient`. Neither client
   adapter may implement domain decisions or access SQLite directly.
-- Event subscription is an async stream in the client contract; the socket client reads the server's
-  event feed, remote mode adapts `/v1/stream` SSE.
+- Event subscription is an async stream in the client contract; the CLI reads the server's event feed
+  from `GET /v1/stream` (SSE), the same stream in both modes.
 
 ### 3.1 Supervisor operations (`factory` → runtime)
 
-These operations are available through `FactoryClient` in both modes. In remote mode they map to the
-HTTP routes below; local mode sends the same operations over the Unix socket to `factory-server`.
+These operations are available through `FactoryClient` in both modes. Both modes map them to the HTTP
+routes below; local mode sends them to the loopback address in the discovery file.
 
 | Method                    | Path                           | Purpose                                                                                                                                                     |
 | :------------------------ | :----------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `GET`                     | `/v1/board`                    | Queue projection: every open Work order, plus terminal ones updated in the last 7 days (`?all=1` for everything), with status, holder, Station, age         |
 | `GET`                     | `/v1/orders/:id`               | Work order detail: state summary, Cycles, open question, Andon, checkpoint                                                                                  |
 | `GET`                     | `/v1/orders/:id/events?after=` | The Work order's Traveler                                                                                                                                   |
-| `GET`                     | `/v1/plans`                    | Order Plans of every project: slug, project, phase, member count, plan PR state, Andon (CORE §12). Socket path `supervisor/plans`                           |
-| `GET`                     | `/v1/plans/:slug?project=`     | One plan: members in chain order, each with board status, base branch, PR link and blocker, plus the plan PR and Andon. Socket path `supervisor/plans/show` |
+| `GET`                     | `/v1/plans`                    | Order Plans of every project: slug, project, phase, member count, plan PR state, Andon (CORE §12). Route name `supervisor/plans`                           |
+| `GET`                     | `/v1/plans/:slug?project=`     | One plan: members in chain order, each with board status, base branch, PR link and blocker, plus the plan PR and Andon. Route name `supervisor/plans/show` |
 | `GET`                     | `/v1/blobs/:ref`               | A blob (prompt, artifact, log, Handover)                                                                                                                    |
 | `POST`                    | `/v1/orders/:id/answer`        | `Answer`                                                                                                                                                    |
 | `POST`                    | `/v1/orders/:id/resume`        | `Resume` (`--note`, `--from <station>`, `--grant <n>`)                                                                                                      |
@@ -84,8 +94,8 @@ HTTP routes below; local mode sends the same operations over the Unix socket to 
 | `POST`                    | `/v1/orders/:id/priority`      | `Reprioritise`                                                                                                                                              |
 | `POST`                    | `/v1/orders`                   | `createOrder`: a Work order from `projectId`, `todoId`, `title`, `type`, `body` (markdown spec), `line` (a `LineSnapshot`, pinned as sent, hash verified), `priority`, `dependsOn`, optional `plan`, `baseBranch`. Idempotent by `commandId`. Socket path `supervisor/orders/create` |
 | `POST`                    | `/v1/plans`                    | `createPlan`: `projectId`, `slug`, optional `baseBranch`, `members[]` (`todoId`, `title`, `type`, `body`, `line`, `priority`) in chain order. Creates the plan, each member's Work order and the chain. Idempotent by `commandId`. Socket path `supervisor/plans/create` |
-| `POST`                    | `/v1/orders/:id/pr-state`      | `recordPrState`: `prUrl`, `state` (`open \| merged \| closed`). Refused as `precondition` while the Work order has no PR. Socket path `supervisor/orders/pr-state` |
-| `POST`                    | `/v1/plans/:id/pr-state`       | `recordPlanPrState`: `prUrl`, `state`. Refused as `precondition` while the plan has no PR. Socket path `supervisor/plans/pr-state` |
+| `POST`                    | `/v1/orders/:id/pr-state`      | `recordPrState`: `prUrl`, `state` (`open \| merged \| closed`). Refused as `precondition` while the Work order has no PR. Route name `supervisor/orders/pr-state` |
+| `POST`                    | `/v1/plans/:id/pr-state`       | `recordPlanPrState`: `prUrl`, `state`. Refused as `precondition` while the plan has no PR. Route name `supervisor/plans/pr-state` |
 | `POST`                    | `/v1/webhooks/github`          | GitHub `pull_request` webhook (§3.6): records a PR's state on the Work order or plan holding its URL. Outside bearer auth                                  |
 | `GET`                     | `/v1/cells`                    | Cells, their last heartbeat, busy state, current job                                                                                                        |
 | `DELETE`                  | `/v1/cells/:id`                | Revoke a Cell                                                                                                                                               |
@@ -106,7 +116,7 @@ order id and then run `Resume` or `Cancel` on the plan (CORE §12.3); `factory p
 id next to an Andon. The plan routes are read-only; a plan is created by `POST /v1/plans`, never by the server itself.
 In remote and `--once` mode they are the same operations over the same contracts (RULES §6.5).
 
-Project registry (`/v1/projects`). The socket paths are `supervisor/projects` (list),
+Project registry (`/v1/projects`). The route names are `supervisor/projects` (list),
 `supervisor/projects/add`, `supervisor/projects/set` and `supervisor/projects/remove`; each takes the
 same body as its HTTP route, with `projectId` in the body on `set` and `remove`.
 
@@ -149,7 +159,27 @@ only in remote mode.
 With `dryRun: true` the runtime runs `decide` and returns the events it _would_ append, or the error,
 and stores nothing (no events, no idempotency record). Cells use it before a checkpoint push (§8.2).
 
-### 3.3 Operator API (`factory-operator` → Cell, unix socket)
+### 3.3 Operator API (`factory-operator` → Cell, localhost HTTP)
+
+Each Cycle gets its own endpoint: the Cell starts an HTTP server bound to `127.0.0.1` on an
+OS-assigned ephemeral port (`listen(0)`) when the Cycle starts, and closes it when the Cycle ends.
+The Cell passes the base URL as `FACTORY_OPERATOR_URL` (for example `http://127.0.0.1:52817`) and the
+Cycle token as `FACTORY_CYCLE_TOKEN`. The endpoint is loopback-only, so it is never reachable from
+another machine. It has no Unix socket and no path-length limit, so it works the
+same on every operating system.
+
+- **Request:** `POST /` with `content-type: application/json`. The body is one verb: its `op` and
+  payload, plus `token`. `factory-operator` also sends `Authorization: Bearer <token>`; when that header
+  is present it is the token checked, else the body's `token` is. Any other method answers `405`
+  (`Allow: POST`); any other path answers `404`; a body over 1 MiB answers `413`.
+- **Token:** compared in constant time against the Cycle's token. A missing or wrong token answers
+  `401` before the verb is read.
+- **Reply:** one `OperatorReply` JSON object, with the status: `200` for `ok: true`; `400` for
+  `code: invalid` (not JSON, unknown verb, extra field); `401` for `unauthorized`; `409` for a refusal
+  the Cell makes (`rejected`, `stale_epoch`, `not_live`, `precondition`); `500` for `internal`.
+- **Client:** `factory-operator` exits 0 on `ok: true`, 1 on a refusal (it prints `code: message`),
+  2 on bad arguments or a missing environment variable, and 3 when the endpoint cannot be reached or
+  answers with something it cannot read.
 
 | Verb                                                        | Maps to                                                                      |
 | :---------------------------------------------------------- | :--------------------------------------------------------------------------- |
@@ -552,8 +582,9 @@ Executing `run_operator_station`:
    holds. Then run `sync`, and `setup` unless the worktree is already prepared at that commit. On failure →
    `ReportWorkspaceFailed`.
 2. `StartCycle`.
-3. Download and write `inputs` blobs to their paths; create the Cycle socket token.
-4. Open a Herdr pane (or a headless process) with `FACTORY_OPERATOR_SOCKET`, `FACTORY_CYCLE_TOKEN`,
+3. Download and write `inputs` blobs to their paths; create the Cycle token; start the Cycle's
+   localhost Operator endpoint (§3.3).
+4. Open a Herdr pane (or a headless process) with `FACTORY_OPERATOR_URL`, `FACTORY_CYCLE_TOKEN`,
    the runner command and the prompt blob.
 5. Loop: heartbeat (shared), observe the pane, `watch` → remind / fail / block; deliver signals.
    When repeated `idle` / `silent` reminders cross the stall-alert threshold before `timeoutMs`, the
@@ -585,7 +616,7 @@ The Cell exits when every job is released. A Cell that simply vanishes is handle
 
 | Command                                                                                                          | Purpose                                                                                         |
 | :--------------------------------------------------------------------------------------------------------------- | :---------------------------------------------------------------------------------------------- |
-| `factory run`                                                                                                    | Start the server (core): owns the database, serves the task API and state, listens on the socket |
+| `factory run`                                                                                                    | Start the server (core): owns the database, serves the task API and state, serves HTTP on its listener |
 | `factory status [--watch] [--all]`                                                                               | The board; `--watch` follows the runtime event feed locally or `/v1/stream` remotely            |
 | `factory show <order>`                                                                                           | Work order detail, Cycles, Andon, Handover                                                      |
 | `factory log <order> [-f]`                                                                                       | The Traveler, optionally followed                                                               |
@@ -612,20 +643,20 @@ The Cell exits when every job is released. A Cell that simply vanishes is handle
 
 `factory-server` is the core process: `factory run` is its local start command. It owns the database
 through the writer lock, holds tasks and state only (no intake, no git, no gh, no timer), reaps expired
-leases lazily (§5.4), and listens on the local Unix
-socket by default. Remote deployments add an optional TCP HTTP/SSE listener on the same server.
-`factory-cell` runs execution cells as socket clients; they never open the database. A CLI write
-while the server runs goes through the socket to that server. If no server runs, the CLI runs
+leases lazily (§5.4), and serves HTTP + SSE on its listener (§2), writing the discovery file for local
+clients. `factory-cell` runs execution cells as HTTP clients; they never open the database. A CLI write
+while the server runs goes through HTTP to that server. If no server runs, the CLI runs
 `factory-server --once --data-dir <dir>` as a subprocess: it reads one `{route, request}` JSON object
 on stdin, takes the writer lock, runs that route, prints `{ok, response | error}` on stdout and exits
 (`0` ok, `1` failed, `2` refused, `3` writer held). The lock is released when the process exits, so
 the CLI never opens the database itself. A read with no server runs the same way. `factory run` starts
 the long-running server in the foreground and forwards SIGINT and SIGTERM to it.
 
-Local socket routes beyond the HTTP table above: `supervisor/events` is the socket form of
-`/v1/stream` (a long-poll: it answers at once with the stored events after `afterGlobalSeq`, else holds
-up to 25 s for the next commit); `supervisor/join-tokens` (list), `…/create` (the token is returned once)
-and `…/revoke`; `supervisor/admin/export` returns the export archive base64-encoded in JSON. A create
+Route names beyond the HTTP table above: `supervisor/events` is the feed's route name, served as
+`/v1/stream` (SSE, from the cursor `after`, or `Last-Event-ID`); `supervisor/join-tokens` (list),
+`…/create` (the token is returned once) and `…/revoke`; `supervisor/admin/export` returns the export
+archive base64-encoded in JSON; `supervisor/admin/backup` is `POST /v1/admin/backup`, which writes to the
+server's filesystem and so answers only the local supervisor token (§1). A create
 carries its `commandId`: a replay of the same command is refused as `precondition`, so a retry never
 makes a second token. There is no intake route: Work orders and plans come in through `POST /v1/orders`
 and `POST /v1/plans` (the task API, §3.3), and pull request state through the GitHub webhook (§3.6).
@@ -635,7 +666,7 @@ Configuration (`apps/cli`): settings come from the flag, then `FACTORY_DATA_DIR`
 `color`), then the default `~/.local/share/factory`. `NO_COLOR` set to a non-empty value, `--no-color`
 and `"color": false` turn colour off. The config file holds no state; it is never a second database.
 
-Every command above accepts `--json`, and works over the local socket, the one-shot `--once` run and remote
+Every command above accepts `--json`, and works over HTTP to the local server, the one-shot `--once` run and remote
 HTTP (`FACTORY_URL` with `FACTORY_TOKEN`) the same way.
 
 Repository setup (`.factory/`, one per repo, next to `.nitpick/`). `factory init` scaffolds it from the
@@ -664,7 +695,7 @@ optional while the slug is unique across the registered projects, else required.
 `--once` modes give the same output (RULES §6.5).
 
 `factory-server admin …` (token create, backup, export, import, rebuild-projections, recover) operates on
-the server's database. `admin recover` is the socket and HTTP operation `supervisor/admin/recover`
+the server's database. `admin recover` is the HTTP operation `supervisor/admin/recover`
 (`POST /v1/admin/recover`, body `{ projectId? }`); it answers the Work orders it recovered and the
 branches it skipped. Like `admin backup`, the offline form needs the writer lock.
 

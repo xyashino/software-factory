@@ -17,11 +17,15 @@ import {
   type OpenedRuntime,
 } from '@repo/factory-runtime/open-runtime';
 import { createHttpApp } from '../http/app';
-import { socketFactoryClient } from '../socket/client';
-import { startSocketListener, type SocketListener } from '../socket/listener';
+import type { HttpListener } from '../http/listener';
+import {
+  httpClient,
+  listenLocal,
+  LOCAL_TEST_TOKEN,
+} from '../testing/local-http';
 
 /**
- * The project registry answers the same over the local socket, remote HTTP and `--once` (RULES §6.5).
+ * The project registry answers the same over local HTTP, remote HTTP and `--once` (RULES §6.5).
  * Each transport runs the same steps against a fresh data directory with no seeding, and the answers
  * must be equal. The scenario is add, list, set, a duplicate add, a board read, two refusals and a not-found.
  */
@@ -92,17 +96,13 @@ const outcomeOf = async (call: () => Promise<unknown>): Promise<Outcome> => {
   }
 };
 
-/** The steps over the local socket, served the way factory-server serves it. */
-const overSocket = async (steps: Step[]): Promise<Outcome[]> => {
-  const dataDir = freshDataDir('socket');
+/** The steps over local HTTP, served the way factory-server serves it (the local supervisor token). */
+const overLocal = async (steps: Step[]): Promise<Outcome[]> => {
+  const dataDir = freshDataDir('local');
   const opened = openFresh(dataDir);
   await opened.runtime.start();
-  const socketPath = join(dataDir, 'factory.sock');
-  const listener: SocketListener = startSocketListener({
-    runtime: opened.runtime,
-    socketPath,
-  });
-  const client = socketFactoryClient({ socketPath });
+  const listener: HttpListener = listenLocal(opened.runtime);
+  const client = httpClient(listener.url, LOCAL_TEST_TOKEN);
   try {
     const outcomes: Outcome[] = [];
     for (const step of steps) {
@@ -181,19 +181,19 @@ const overOnce = async (steps: Step[]): Promise<Outcome[]> => {
 };
 
 describe('project registry over the three transports', () => {
-  it('answers the same steps the same way over the socket, HTTP and --once', async () => {
+  it('answers the same steps the same way over local HTTP, remote HTTP and --once', async () => {
     const steps = scenario(repo);
 
-    const socket = await overSocket(steps);
+    const local = await overLocal(steps);
     const http = await overHttp(steps);
     const once = await overOnce(steps);
 
-    expect(http).toEqual(socket);
-    expect(once).toEqual(socket);
+    expect(http).toEqual(local);
+    expect(once).toEqual(local);
   }, 120_000);
 
   it('registers, changes and refuses as the PROTOCOL §3.1 rules say', async () => {
-    const outcomes = await overSocket(scenario(repo));
+    const outcomes = await overLocal(scenario(repo));
     const refusal = (index: number) => {
       const outcome = outcomes[index];
       if (!outcome || outcome.ok) throw new Error(`step ${index} succeeded`);
@@ -224,25 +224,39 @@ describe('project registry over the three transports', () => {
 
 describe('cell project ensure (PROTOCOL §3.1)', () => {
   it('adds a missing project with the defaults and keeps an existing one as it is', async () => {
-    const outcomes = await overSocket([
-      {
-        route: 'cellProjectEnsure',
-        request: { projectId: 'demo', repoUrl: repo },
-      },
-      { route: 'projectSet', request: { projectId: 'demo', maxRunning: 3 } },
-      {
-        route: 'cellProjectEnsure',
-        request: {
-          projectId: 'demo',
-          repoUrl: 'https://example.test/other.git',
-        },
-      },
-      { route: 'projectList', request: {} },
-    ]);
+    const opened = openFresh(freshDataDir('cell-ensure'));
+    await opened.runtime.start();
+    const listener: HttpListener = listenLocal(opened.runtime);
+    const supervisor = httpClient(listener.url, LOCAL_TEST_TOKEN);
+    try {
+      const { token: joinToken } = await supervisor.call('joinTokenCreate', {
+        commandId: 'cmd-join-cell-ensure',
+        name: 'pool',
+      });
+      const joined = await fetch(`${listener.url}/v1/cell/join`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ joinToken, name: 'cell-ensure' }),
+      });
+      expect(joined.status).toBe(200);
+      const { credential } = (await joined.json()) as { credential: string };
+      const cell = httpClient(listener.url, credential);
 
-    expect(outcomes[0]).toEqual({
-      ok: true,
-      response: {
+      const first = await cell.call('cellProjectEnsure', {
+        projectId: 'demo',
+        repoUrl: repo,
+      });
+      await supervisor.call('projectSet', {
+        projectId: 'demo',
+        maxRunning: 3,
+      });
+      const second = await cell.call('cellProjectEnsure', {
+        projectId: 'demo',
+        repoUrl: 'https://example.test/other.git',
+      });
+      const list = await supervisor.call('projectList', {});
+
+      expect(first).toEqual({
         project: {
           projectId: 'demo',
           repoUrl: repo,
@@ -251,11 +265,8 @@ describe('cell project ensure (PROTOCOL §3.1)', () => {
           depPolicy: 'delivered',
         },
         created: true,
-      },
-    });
-    expect(outcomes[2]).toEqual({
-      ok: true,
-      response: {
+      });
+      expect(second).toEqual({
         project: {
           projectId: 'demo',
           repoUrl: repo,
@@ -264,11 +275,13 @@ describe('cell project ensure (PROTOCOL §3.1)', () => {
           depPolicy: 'delivered',
         },
         created: false,
-      },
-    });
-    expect(outcomes[3]).toMatchObject({
-      ok: true,
-      response: { projects: [{ projectId: 'demo', maxRunning: 3 }] },
-    });
+      });
+      expect(list).toMatchObject({
+        projects: [{ projectId: 'demo', maxRunning: 3 }],
+      });
+    } finally {
+      await listener.stop();
+      opened.close();
+    }
   }, 60_000);
 });

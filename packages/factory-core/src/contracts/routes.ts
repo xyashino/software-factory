@@ -59,7 +59,7 @@ import {
 } from './cell';
 
 /**
- * The one route table (PROTOCOL §3). The server dispatches on it and the socket client calls it,
+ * The one route table (PROTOCOL §3). The server dispatches on it and the HTTP clients call it,
  * so each payload is written once. Every route is `POST /v1/<path>` with a JSON body.
  */
 export const ROUTES = {

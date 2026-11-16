@@ -34,7 +34,7 @@ export interface Runtime {
   ): Promise<RouteResponse<K>>;
   /**
    * The same routes as a FactoryClient: each request is parsed by the route's schema and each
-   * response is parsed back, exactly as the socket client does. Tests compare the two.
+   * response is parsed back, exactly as the HTTP clients do. Tests compare the two.
    */
   client: FactoryClient;
   /**

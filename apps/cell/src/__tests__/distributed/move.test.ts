@@ -83,14 +83,11 @@ const passesPerStation = (events: StoredEvent[]): Record<string, number> => {
 
 describe('a Factory moved to another machine mid-run', () => {
   it('imports the queue into an empty Factory, the Cells re-join, and every Work order completes once', async () => {
-    world = await createWorld(
-      {
-        'add-export': todo('Add export'),
-        'add-login': todo('Add login'),
-        'add-search': todo('Add search'),
-      },
-      { remote: true },
-    );
+    world = await createWorld({
+      'add-export': todo('Add export'),
+      'add-login': todo('Add login'),
+      'add-search': todo('Add search'),
+    });
     const w = world;
     const orders = ['add-export', 'add-login', 'add-search'].map(orderOf);
     const remoteA = w.factory.remoteUrl;
@@ -151,7 +148,7 @@ describe('a Factory moved to another machine mid-run', () => {
 
     // B takes a supervisor token and a join token per Cell, then serves over HTTP.
     await runAdmin(dataB, ['token', 'create', 'ops-b'], env);
-    const b = await startFactory({ dataDir: dataB, env, remote: true });
+    const b = await startFactory({ dataDir: dataB, env });
     moved = b;
     if (b.remoteUrl === undefined)
       throw new Error('B did not start its remote listener');

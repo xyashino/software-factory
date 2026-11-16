@@ -1,6 +1,6 @@
 export const usage = `usage: factory-operator <command>
 
-Talks only to the Cell that runs this Cycle ($FACTORY_OPERATOR_SOCKET, $FACTORY_CYCLE_TOKEN).
+Talks only to the Cell that runs this Cycle ($FACTORY_OPERATOR_URL, $FACTORY_CYCLE_TOKEN).
 
   done                                  finish the station; the outputs are checkpointed
   verdict pass                          the verdict passes

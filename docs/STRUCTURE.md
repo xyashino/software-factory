@@ -33,7 +33,7 @@ software-factory/
 │   │       │   ├── run-inspection.ts
 │   │       │   └── deliver.ts
 │   │       ├── cycle/             # runtime loop: observe → core/cycle.watch → act; signals; handover on leave
-│   │       ├── operator-socket.ts # unix socket for factory-operator; Cycle tokens
+│   │       ├── operator-socket.ts # localhost HTTP endpoint for factory-operator; Cycle tokens
 │   │       ├── checkpoint.ts      # PROTOCOL §8.2: commit + trailers + dry run + push --force-with-lease
 │   │       └── adapters/          # carried over from v1: herdr, git, github, process, runners/*
 │   │

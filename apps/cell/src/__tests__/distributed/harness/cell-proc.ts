@@ -63,7 +63,7 @@ export const runsIn = (root: string): RunRecord[] => {
 export interface CellOptions {
   /** The Cell's directory root: its config, identity and worktrees. */
   root: string;
-  /** Local mode: the data directory whose `factory.sock` the Cell talks to. */
+  /** Local mode: the data directory whose discovery file (`server.json`) names the Factory to talk to. */
   factoryDataDir?: string;
   /** Remote mode: the Factory's HTTP address, through whatever proxy the test puts there. */
   factoryUrl?: string;

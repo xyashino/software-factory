@@ -35,7 +35,7 @@ const JOB_ENDING =
 const runOnce = async (
   faults: ((proxy: HttpProxy) => void) | undefined,
 ): Promise<{ w: World; proxy: HttpProxy }> => {
-  const w = await createWorld({ [TODO]: todo('Add login') }, { remote: true });
+  const w = await createWorld({ [TODO]: todo('Add login') });
   worlds.push(w);
   const remoteUrl = w.factory.remoteUrl;
   if (remoteUrl === undefined)

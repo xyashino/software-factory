@@ -31,7 +31,12 @@ Single-writer rule:
   writer is held is OPEN-QUESTIONS Q19.
 - The in-process write mutex (§3.1) serialises writes inside the holder. The file lock is what keeps
   a second process from writing at all.
-- The server (`factory-server`) is the only process that writes; the CLI and Cells reach it over the socket.
+- The server (`factory-server`) is the only process that writes; the CLI and Cells reach it over HTTP.
+- The data directory also holds `server.json`, the discovery file of the running server (PROTOCOL §2):
+  its address, the local supervisor token and the local join token. It is written atomically on start
+  with mode `0600` on POSIX, and removed on a clean shutdown; it is not a store, and no database row
+  holds the local supervisor token. A file left by a crash names a server that no longer answers, and
+  clients then take the one-shot path.
 
 Why not Postgres from day one: each active runtime has one writer, so SQLite's single writer is not a
 limit; `BEGIN IMMEDIATE` gives an atomic claim; backup is one file; there is nothing to operate. The
