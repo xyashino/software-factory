@@ -2,6 +2,7 @@ import { join } from 'node:path';
 import type { Job } from '@repo/factory-core/contracts/job';
 import { WireFailure } from '@repo/factory-core/contracts/errors';
 import type { BlobRef, CommitSha, CycleId } from '@repo/factory-core/ids';
+import type { OrderCommand } from '@repo/factory-core/order/commands';
 import type {
   InspectionResult,
   OrderEvent,
@@ -34,7 +35,8 @@ const errorText = (error: unknown): string =>
  *    no Cycle, so no `StartCycle` is sent before it.
  * 2. `StartCycle` from the worktree's HEAD. Every later command needs the live Cycle it opens.
  * 3. run every command of the station, each with its full log as a blob and a status tail
- *    (`passed`, `timed out`, or `failed (exit N)`). No command output reaches the event store.
+ *    (`passed`, `timed out`, or `failed (exit N)`). No command output reaches the event store. Before and
+ *    after each command a `ReportInspectionProgress` shows it in the live `logs` view.
  * 4. read-only check: a tree that changed during the run is `FailCycle{crashed}`, no report.
  * 5. `ReportInspection`, passed when every command exited 0 and none timed out.
  *
@@ -163,6 +165,27 @@ const cycleStartedId = (events: readonly OrderEvent[]): CycleId => {
   return started.cycleId;
 };
 
+/**
+ * Sends one progress command for the live `logs` view. Only a stale epoch or a stopped signal ends the
+ * Inspection: the progress is informational, so any other refusal or transport failure is dropped and
+ * the checks keep running.
+ */
+const reportProgress = async (
+  ctx: JobContext,
+  job: Job,
+  command: Extract<OrderCommand, { type: 'ReportInspectionProgress' }>,
+  signal: AbortSignal,
+): Promise<void> => {
+  try {
+    await submit(ctx, job, command, signal);
+  } catch (error) {
+    if (signal.aborted) throw error;
+    if (error instanceof WireFailure && error.error.code === 'stale_epoch') {
+      throw error;
+    }
+  }
+};
+
 interface CheckInput {
   station: NonNullable<Job['station']>;
   worktree: string;
@@ -187,13 +210,44 @@ const runChecks = async (
     );
     await snapshot({ git: runGit, worktree: input.worktree, ref });
     const results: InspectionResult[] = [];
-    for (const command of input.station.exec ?? []) {
+    const commands = input.station.exec ?? [];
+    for (const [offset, command] of commands.entries()) {
+      const index = offset + 1;
+      await reportProgress(
+        ctx,
+        job,
+        {
+          type: 'ReportInspectionProgress',
+          cycleId,
+          phase: 'started',
+          index,
+          total: commands.length,
+          command,
+        },
+        signal,
+      );
       const run = await runShell(input.shell, {
         command,
         cwd: input.worktree,
         timeoutMs,
       });
       const logBlob: BlobRef = await putLog(ctx, run.output, signal);
+      await reportProgress(
+        ctx,
+        job,
+        {
+          type: 'ReportInspectionProgress',
+          cycleId,
+          phase: 'finished',
+          index,
+          total: commands.length,
+          command,
+          exitCode: run.exitCode,
+          timedOut: run.timedOut,
+          durationMs: run.durationMs,
+        },
+        signal,
+      );
       results.push({
         command,
         exitCode: run.exitCode,

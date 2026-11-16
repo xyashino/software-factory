@@ -533,6 +533,134 @@ describe('ReportInspection', () => {
   });
 });
 
+describe('ReportInspectionProgress', () => {
+  const started = (index = 1) => ({
+    type: 'ReportInspectionProgress' as const,
+    cycleId: cycleIdOf(4),
+    phase: 'started' as const,
+    index,
+    total: 2,
+    command: 'pnpm test',
+  });
+  const finished = (index = 1) => ({
+    ...started(index),
+    phase: 'finished' as const,
+    exitCode: 0,
+    timedOut: false,
+    durationMs: 12_000,
+  });
+
+  it('records a check starting on a running Inspection', () => {
+    const result = decide(stateOf(inspectionEvents()), started(), cell(4));
+
+    expect(result).toEqual({
+      ok: true,
+      value: [
+        {
+          type: 'inspection_progress',
+          cycleId: cycleIdOf(4),
+          phase: 'started',
+          index: 1,
+          total: 2,
+          command: 'pnpm test',
+          exitCode: undefined,
+          timedOut: undefined,
+          durationMs: undefined,
+        },
+      ],
+    });
+  });
+
+  it('records a check finishing with its exit code, timeout flag and duration', () => {
+    const result = decide(stateOf(inspectionEvents()), finished(), cell(4));
+
+    expect(result).toMatchObject({
+      ok: true,
+      value: [
+        {
+          type: 'inspection_progress',
+          phase: 'finished',
+          exitCode: 0,
+          timedOut: false,
+          durationMs: 12_000,
+        },
+      ],
+    });
+  });
+
+  it('leaves the Cycle running, with its retry counts unchanged', () => {
+    const progress = decide(stateOf(inspectionEvents()), finished(), cell(4));
+    if (!progress.ok) throw new Error('the progress should be accepted');
+
+    const after = stateOf([...inspectionEvents(), ...progress.value]);
+
+    expect(after.cycles).toEqual(stateOf(inspectionEvents()).cycles);
+    expect(after.cycles.at(-1)).toMatchObject({ status: 'running' });
+  });
+
+  it('refuses a finished check without its result', () => {
+    const command = { ...finished(), exitCode: undefined };
+
+    const result = decide(stateOf(inspectionEvents()), command, cell(4));
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        code: 'invalid',
+        issues: ['a finished check needs exitCode, timedOut and durationMs'],
+      },
+    });
+  });
+
+  it('refuses an index past the total', () => {
+    const result = decide(stateOf(inspectionEvents()), started(3), cell(4));
+
+    expect(result).toEqual({
+      ok: false,
+      error: { code: 'invalid', issues: ['index is past total'] },
+    });
+  });
+
+  it('refuses an actor other than the Cell', () => {
+    const result = decide(
+      stateOf(inspectionEvents()),
+      started(),
+      contextOf({ kind: 'supervisor', name: 'dev' }, { epoch: 4 }),
+    );
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        code: 'precondition',
+        detail: 'actor supervisor may not run this command',
+      },
+    });
+  });
+
+  it('refuses a Station that is not an Inspection', () => {
+    const command = { ...started(), cycleId: cycleIdOf(1) };
+
+    const result = decide(stateOf(plannedEvents()), command, cell(1));
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        code: 'precondition',
+        detail: 'plan is not an inspection Station',
+      },
+    });
+  });
+
+  it('refuses a stale epoch', () => {
+    const result = decide(stateOf(inspectionEvents()), started(), cell(3));
+
+    expect(result).toEqual({
+      ok: false,
+      error: { code: 'stale_epoch', current: 4 },
+    });
+  });
+});
+
 describe('FailCycle', () => {
   const fail = {
     type: 'FailCycle' as const,

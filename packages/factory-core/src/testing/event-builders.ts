@@ -218,6 +218,21 @@ export const verdictRecorded = (
   ...over,
 });
 
+export const inspectionProgress = (
+  over: Partial<Fields<'inspection_progress'>> = {},
+): Ev<'inspection_progress'> => ({
+  type: 'inspection_progress',
+  cycleId: cycleIdOf(1),
+  phase: 'finished',
+  index: 1,
+  total: 1,
+  command: 'pnpm test',
+  exitCode: 0,
+  timedOut: false,
+  durationMs: 10,
+  ...over,
+});
+
 export const inspectionFinished = (
   over: Partial<Fields<'inspection_finished'>> = {},
 ): Ev<'inspection_finished'> => ({
@@ -500,6 +515,7 @@ export const samples: { [T in OrderEvent['type']]: Ev<T> } = {
   cycle_started: cycleStarted(),
   cycle_completed: cycleCompleted(),
   verdict_recorded: verdictRecorded(),
+  inspection_progress: inspectionProgress(),
   inspection_finished: inspectionFinished(),
   cycle_failed: cycleFailed(),
   cycle_blocked: cycleBlocked(),
