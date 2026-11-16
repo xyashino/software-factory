@@ -1,6 +1,7 @@
 /** Silence and reminder timing when the Cycle's own policy names none (CORE §9.1, v1 values). */
 export const DEFAULT_WATCH_TIMING = {
   idleReminders: 2,
+  idleCooldownMs: 45_000,
   silentMs: 300_000,
   silentNudges: 1,
 } as const;
@@ -20,6 +21,7 @@ export const watchPolicyFor = (
 ): {
   timeoutMs: number;
   idleReminders: number;
+  idleCooldownMs: number;
   silentMs: number;
   silentNudges: number;
 } => {

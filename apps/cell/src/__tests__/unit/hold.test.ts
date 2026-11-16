@@ -29,6 +29,7 @@ describe('question hold', () => {
     const policy = {
       timeoutMs: 60_000,
       idleReminders: 2,
+      idleCooldownMs: 45_000,
       silentMs: 10_000,
       silentNudges: 1,
     };
