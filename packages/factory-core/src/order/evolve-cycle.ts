@@ -27,6 +27,7 @@ export type CycleScopedEvent = Extract<
       | 'cycle_started'
       | 'cycle_completed'
       | 'verdict_recorded'
+      | 'inspection_progress'
       | 'inspection_finished'
       | 'cycle_failed'
       | 'cycle_blocked'
@@ -322,6 +323,9 @@ export const evolveCycleEvent = (
   switch (ev.type) {
     case 'cycle_started':
       return startCycle(state, ev, at);
+    case 'inspection_progress':
+      // Informational only: the Cycle keeps its status, and no count or retry moves.
+      return state;
     case 'usage_recorded':
       // Accepted whatever the Cycle's status (rule 1 exception). A late fact about an unknown Cycle is inert.
       if (!state.cycles.some((cycle) => cycle.cycleId === ev.cycleId))

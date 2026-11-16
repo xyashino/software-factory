@@ -138,6 +138,21 @@ const commandFor = (
           by: cell,
         };
       }
+      if (job.kind === 'publish_blocked') {
+        return {
+          command: {
+            type: 'ReportBlockedPr',
+            result: intent.pass
+              ? {
+                  status: 'published',
+                  prUrl: PR_URL,
+                  commit: commitOf(intent.commit),
+                }
+              : { status: 'failed', detail: 'push was rejected' },
+          },
+          by: cell,
+        };
+      }
       const cycle = started();
       if (!cycle) return undefined;
       if (job.kind === 'run_inspection') {

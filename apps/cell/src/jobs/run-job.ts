@@ -15,9 +15,14 @@ import { spawnHeadless } from '../runners/headless';
 import { prepareWorkspace, type PrepareContext } from '../workspace/prepare';
 import { runDeliver } from './deliver';
 import { runPlanJob } from './plan';
+import { runPublishBlocked } from './publish-blocked';
 import { runInspection } from './run-inspection';
 import { runMechanic } from './run-mechanic';
-import { runOperatorStation, type RunnerLaunch } from './run-operator-station';
+import {
+  runOperatorStation,
+  type AdoptedStation,
+  type RunnerLaunch,
+} from './run-operator-station';
 import type { JobContext } from './send';
 
 const STATION_TICK_MS = 1_000;
@@ -112,14 +117,15 @@ const runnersFor = (
 };
 
 /**
- * Dispatches a claimed job by its kind: `run_inspection`, `run_operator_station`, `mechanic`, `deliver`, and the three
- * plan kinds. Any other kind throws `UnsupportedJobKind` before a command is sent, so its lease lapses and the
+ * Dispatches a claimed job by its kind: `run_inspection`, `run_operator_station`, `mechanic`, `deliver`,
+ * `publish_blocked`, and the three plan kinds. Any other kind throws `UnsupportedJobKind` before a command is sent, so its lease lapses and the
  * reaper takes it back. The job's log directory is removed when the job ends, whatever the outcome.
  */
 export const runJob = async (
   ctx: JobContext,
   job: Job,
   signal: AbortSignal,
+  adopted?: AdoptedStation,
 ): Promise<Job | null> => {
   // The continuation the job's last command hands back, captured by `submit` (PROTOCOL §4).
   let continuation: Job | null = null;
@@ -139,45 +145,50 @@ export const runJob = async (
         // The station's worktree stays leased for the whole station, and is released when it ends.
         let releaseWorktree: (() => void) | undefined;
         try {
-          return await runOperatorStation(station, {
-            client: ctx.client,
-            cellId: ctx.cellId,
-            dataDir: ctx.cellDataDir,
-            clock: { now: () => Date.now() },
-            sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
-            git: runGit,
-            workspace: async (current) => {
-              const prepared = await prepareWorkspace(
-                prepareContextOf(ctx, current, signal),
-                current,
-              );
-              if (!prepared.ok) {
+          return await runOperatorStation(
+            station,
+            {
+              client: ctx.client,
+              cellId: ctx.cellId,
+              dataDir: ctx.cellDataDir,
+              clock: { now: () => Date.now() },
+              sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+              git: runGit,
+              workspace: async (current) => {
+                const prepared = await prepareWorkspace(
+                  prepareContextOf(ctx, current, signal),
+                  current,
+                );
+                if (!prepared.ok) {
+                  return {
+                    ok: false,
+                    stage: prepared.stage,
+                    detail: prepared.detail,
+                    ...(prepared.missing ? { missing: true } : {}),
+                  };
+                }
+                releaseWorktree = prepared.release;
                 return {
-                  ok: false,
-                  stage: prepared.stage,
-                  detail: prepared.detail,
-                  ...(prepared.missing ? { missing: true } : {}),
+                  ok: true,
+                  worktree: prepared.worktree,
+                  base: prepared.head as CommitSha,
                 };
-              }
-              releaseWorktree = prepared.release;
-              return {
-                ok: true,
-                worktree: prepared.worktree,
-                base: prepared.head as CommitSha,
-              };
+              },
+              runners: runnersFor(station, ctx.cellDataDir),
+              spawn: spawnHeadless,
+              ...(ctx.pane ? { pane: ctx.pane } : {}),
+              ...(ctx.notify ? { notify: ctx.notify } : {}),
+              timing: {
+                tickMs: STATION_TICK_MS,
+                questionHoldMs: QUESTION_HOLD_MS,
+                handoverGraceMs: HANDOVER_GRACE_MS,
+              },
+              registry: ctx.stations ?? createRegistry(),
+              signal,
+              takeSignals: () => ctx.takeSignals?.(job.jobId) ?? [],
             },
-            runners: runnersFor(station, ctx.cellDataDir),
-            spawn: spawnHeadless,
-            ...(ctx.pane ? { pane: ctx.pane } : {}),
-            timing: {
-              tickMs: STATION_TICK_MS,
-              questionHoldMs: QUESTION_HOLD_MS,
-              handoverGraceMs: HANDOVER_GRACE_MS,
-            },
-            registry: ctx.stations ?? createRegistry(),
-            signal,
-            takeSignals: () => ctx.takeSignals?.(job.jobId) ?? [],
-          });
+            adopted,
+          );
         } finally {
           releaseWorktree?.();
         }
@@ -208,6 +219,10 @@ export const runJob = async (
         await ctx.pane
           ?.closeTask(job.orderId.slice(job.orderId.indexOf(':') + 1))
           .catch(() => undefined);
+        return continuation;
+      case 'publish_blocked':
+        // v1 `publishBlockedWork`: best-effort, and its report never changes the Andon (the job ends with it).
+        await runPublishBlocked(jobCtx, job, signal);
         return continuation;
       case 'plan_branch':
       case 'plan_pr':

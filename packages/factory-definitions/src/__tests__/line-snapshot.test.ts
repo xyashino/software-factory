@@ -87,7 +87,7 @@ describe('golden hashes', () => {
   it.each([
     [
       'feature',
-      'sha256:7a9bc0fc287a7b4c5b2f37b26f75a96a7926b0a37d083f3a62a33db16f931b4b',
+      'sha256:7c458358a16aa1e865c804df7904b5f1042f34fc2450b878cd31c8280b2c7204',
     ],
     [
       'fast',
@@ -95,10 +95,19 @@ describe('golden hashes', () => {
     ],
     [
       'standard',
-      'sha256:a619784289d17ff1dfbb643e090df2297455d5307206a381af2e700718bd6ac7',
+      'sha256:9065988bdcbc8044dc7d6b86e7f16e584715f4d389748525ec257b2ea8bd4fac',
     ],
   ])('pins the hash of the shipped %s line', (name, hash) => {
     expect(definitions.lines.get(name)?.snapshot.hash).toBe(hash);
+  });
+
+  it('carries requireAdr into the snapshot of the lines that set it', () => {
+    expect(definitions.lines.get('feature')?.snapshot.deliver).toMatchObject({
+      requireAdr: true,
+    });
+    expect(definitions.lines.get('fast')?.snapshot.deliver).not.toHaveProperty(
+      'requireAdr',
+    );
   });
 });
 

@@ -5,6 +5,7 @@ import {
   expireLease,
   releaseJob,
   reportDelivery,
+  reportBlockedPr,
   recordPrState,
   reportWorkspaceFailed,
   reportWorktreeMissing,
@@ -21,6 +22,7 @@ import {
   handOverCycle,
   recordUsage,
   reportInspection,
+  reportInspectionProgress,
   startCycle,
   submitVerdict,
 } from './decide-cycle';
@@ -70,6 +72,8 @@ export const decide = (
       return submitVerdict(state, command, ctx);
     case 'ReportInspection':
       return reportInspection(state, command, ctx);
+    case 'ReportInspectionProgress':
+      return reportInspectionProgress(state, command, ctx);
     case 'FailCycle':
       return failCycle(state, command, ctx);
     case 'BlockCycle':
@@ -96,6 +100,8 @@ export const decide = (
       return reopen(state, command, ctx);
     case 'ReportDelivery':
       return reportDelivery(state, command, ctx);
+    case 'ReportBlockedPr':
+      return reportBlockedPr(state, command, ctx);
     case 'RecordPrState':
       return recordPrState(state, command, ctx);
     case 'RecoverOrder':

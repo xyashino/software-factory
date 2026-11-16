@@ -28,6 +28,20 @@ describe('parseLine (schema v2)', () => {
     expect(validateLine(FILE, parsed.value, operators)).toEqual([]);
   });
 
+  it('accepts deliver.requireAdr as a boolean and rejects other values', () => {
+    const base = readFileSync(VALID, 'utf8');
+    const withFlag = base.replace(
+      /deliver:\n/,
+      'deliver:\n  requireAdr: true\n',
+    );
+    const parsed = parseLine({ file: FILE, path: VALID }, withFlag);
+    if (!parsed.ok) throw new Error('requireAdr: true must parse');
+    expect(parsed.value.deliver.requireAdr).toBe(true);
+
+    const bad = base.replace(/deliver:\n/, 'deliver:\n  requireAdr: yes\n');
+    expect(parseLine({ file: FILE, path: VALID }, bad).ok).toBe(false);
+  });
+
   it('turns durations into milliseconds and keeps sync and setup as workspace prep', () => {
     const parsed = parseLine(
       { file: FILE, path: VALID },

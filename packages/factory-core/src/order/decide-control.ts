@@ -153,6 +153,10 @@ export const resume = (
   if (ctx.actor.kind !== 'mechanic' && state.activeJob?.kind === 'mechanic') {
     return err(precondition('the mechanic is working on the Andon'));
   }
+  // The blocked publish reports on the Andon it was claimed for; a resume first would leave it nothing to report on.
+  if (state.activeJob?.kind === 'publish_blocked') {
+    return err(precondition('the blocked PR is still being published'));
+  }
   // The Mechanic clears an Andon only after it has recorded the incident for it (CORE §14.3).
   if (
     ctx.actor.kind === 'mechanic' &&

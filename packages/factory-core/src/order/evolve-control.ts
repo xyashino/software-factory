@@ -196,6 +196,23 @@ export const applyAndonRaised = (
 });
 
 /**
+ * v1 `publishBlockedWork`: the report ends the publish job and records its result for the open Andon. The
+ * Andon, its phase and its holder are untouched, so the Supervisor still decides the next step.
+ */
+export const applyBlockedPrReported = (
+  state: WorkOrderState,
+  ev: Extract<OrderEvent, { type: 'blocked_pr_reported' }>,
+  at: number,
+): WorkOrderState =>
+  state.activeJob?.jobId === ev.jobId
+    ? {
+        ...state,
+        activeJob: undefined,
+        blockedPr: { andonAt: ev.andonAt, at, result: ev.result },
+      }
+    : state;
+
+/**
  * CORE §14.2: the incident joins the history and clears no Andon by itself. It ends the Mechanic job
  * that recorded it (CORE §14.4), and an `escalate` hands the Andon to the Supervisor (§14.4).
  * When the Mechanic repaired the worktree (`commit`), that commit becomes the latest checkpoint.

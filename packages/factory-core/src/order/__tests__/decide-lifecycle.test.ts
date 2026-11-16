@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { decide } from '../decide';
 import {
+  blockedPrReported,
   andonRaised,
   incidentRecorded,
   blobOf,
@@ -337,11 +338,33 @@ describe('ClaimJob', () => {
     });
   });
 
-  it('refuses a Station claim while an escalated Andon is open', () => {
+  it('claims a blocked publish for an escalated Andon, with no Cycle', () => {
     const state = stateOf([
       created(),
       andonRaised(),
       incidentRecorded({ andonAt: 2000, action: { kind: 'escalate' } }),
+    ]);
+
+    const result = decide(state, claimJob, contextOf());
+
+    expect(result).toMatchObject({
+      ok: true,
+      value: [{ type: 'job_claimed', kind: 'publish_blocked' }],
+    });
+    expect(result.ok && result.value[0]).not.toHaveProperty('cycleId');
+  });
+
+  it('refuses a claim for an escalated Andon once its blocked publish is reported', () => {
+    const state = stateOf([
+      created(),
+      andonRaised(),
+      incidentRecorded({ andonAt: 2000, action: { kind: 'escalate' } }),
+      claim(1, 'publish_blocked'),
+      blockedPrReported({
+        jobId: jobIdOf(1),
+        andonAt: 2000,
+        result: { status: 'no_changes' },
+      }),
     ]);
 
     const result = decide(state, claimJob, contextOf());

@@ -25,6 +25,12 @@ export interface OperatorServerOptions {
   token: string;
   /** Answers one verb. Every reply is produced here, once the request has passed the checks. */
   dispatch: (request: OperatorRequest) => Promise<OperatorReply>;
+  /**
+   * The port to bind. Omitted, the server takes an ephemeral one. A re-adopted pane has its
+   * `FACTORY_OPERATOR_URL` baked in at launch, so its server binds the port the pane already knows.
+   * A port held by someone else rejects the start (EADDRINUSE).
+   */
+  port?: number;
 }
 
 export interface OperatorServer {
@@ -220,7 +226,7 @@ export const startOperatorServer = (
 
   return new Promise<OperatorServer>((resolve, reject) => {
     server.once('error', reject);
-    server.listen(0, OPERATOR_HOST, () => {
+    server.listen(options.port ?? 0, OPERATOR_HOST, () => {
       const { port } = server.address() as AddressInfo;
       let closed = false;
       resolve({

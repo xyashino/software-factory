@@ -103,7 +103,10 @@ export interface Line {
     commit: ArtifactRef;
     report: ArtifactRef;
     to: 'new-pr';
+    /** refuse delivery unless the squashed diff adds exactly one `decisions/*.md` entry */
+    requireAdr?: boolean;
   };
+  /** absolute path of the Line file */
   path: string;
 }
 
@@ -249,6 +252,7 @@ export const deliverSchema = z.strictObject({
   commit: artifactRefSchema,
   report: artifactRefSchema,
   to: z.literal('new-pr', { error: 'must be new-pr' }),
+  requireAdr: z.boolean({ error: 'must be true or false' }).optional(),
 });
 
 /**

@@ -3,7 +3,8 @@ import { hostname } from 'node:os';
 import type { FactoryClient } from '@repo/factory-core/contracts/client';
 import type { CellId } from '@repo/factory-core/ids';
 import { WireFailure } from '@repo/factory-core/contracts/errors';
-import { readConfig, repoCellDataDir } from './config';
+import { notificationsEnabled, readConfig, repoCellDataDir } from './config';
+import { createHerdrAdapter } from './adapters/herdr/herdr.adapter';
 import { loadCellConfig } from './repo-config';
 import { startCell, type RunningCell } from './cell';
 import { ensureRepoProject } from './repo-project';
@@ -23,6 +24,9 @@ import { usage } from './usage';
 
 /** The version the Cell announces at hello. */
 export const CELL_VERSION = '0.0.0';
+
+/** Desktop toasts through the local Herdr CLI (used only when `notificationsEnabled`). */
+const herdrNotify = createHerdrAdapter().notify;
 
 const messageOf = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
@@ -150,6 +154,7 @@ const main = async (): Promise<void> => {
       clock: systemClock,
       version: CELL_VERSION,
       pane: createHerdrPane(),
+      ...(notificationsEnabled(config, env) ? { notify: herdrNotify } : {}),
       onError: (error, context) =>
         console.error(`factory-cell: ${context}: ${messageOf(error)}`),
       onUnauthorized: () => void rejoin(),

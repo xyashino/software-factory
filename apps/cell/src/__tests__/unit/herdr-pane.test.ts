@@ -34,6 +34,22 @@ const answers = {
 };
 
 describe('herdr pane driver', () => {
+  it('returns the tab it opened, and closes that tab once a later Cell adopts the pane', async () => {
+    const { calls, exec } = recording(answers);
+    const opened = await createHerdrPane({ exec }).open({
+      name: 'build_1',
+      task: 'todo-a',
+      ...launch,
+    });
+    expect(opened).toEqual({ tabId: 't1' });
+
+    const later = createHerdrPane({ exec });
+    later.adopt('build_1', opened);
+    await later.close('build_1');
+
+    expect(calls.at(-1)).toEqual(['tab', 'close', 't1']);
+  });
+
   it('creates a workspace for the task, then opens the Operator tab in it', async () => {
     const { calls, exec } = recording(answers);
     const pane = createHerdrPane({ exec });

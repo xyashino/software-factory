@@ -20,6 +20,6 @@ export interface GithubPort {
   }): Promise<{ url: string }>;
   /** Marks a draft PR ready for review. A PR that is already ready is left as it is. */
   markReady(prUrl: string): Promise<void>;
-  /** Replaces the PR's body. */
-  updateBody(prUrl: string, body: string): Promise<void>;
+  /** Replaces the PR's body, and its title when one is given. */
+  updateBody(prUrl: string, body: string, title?: string): Promise<void>;
 }

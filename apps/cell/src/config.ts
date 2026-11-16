@@ -48,6 +48,11 @@ const partialConfigSchema = z
      * Lines run their Operators in panes. Tests turn it on to run real Cell processes without Herdr.
      */
     headless_operators: z.boolean().optional(),
+    /**
+     * Desktop toasts (Herdr notifications) for questions, blocks and deliveries. On by default; an interactive
+     * Cell only. `FACTORY_NOTIFY=0` turns them off too.
+     */
+    notifications: z.boolean().optional(),
   })
   .strict();
 
@@ -63,7 +68,20 @@ export interface CellConfig {
   worktreeLimit: number;
   factoryUrl?: string;
   headlessOperators: boolean;
+  notifications: boolean;
 }
+
+/**
+ * Whether this Cell shows desktop toasts: the config key is on, the Cell is not headless (a headless
+ * Cell has no Operator to notice one), and `FACTORY_NOTIFY` is not `0`.
+ */
+export const notificationsEnabled = (
+  config: Pick<CellConfig, 'notifications' | 'headlessOperators'>,
+  env: NodeJS.ProcessEnv,
+): boolean =>
+  config.notifications &&
+  !config.headlessOperators &&
+  env.FACTORY_NOTIFY !== '0';
 
 /**
  * Parses the TOML text of a config file, keeping only the keys it names. Unknown keys and wrong types
@@ -95,6 +113,7 @@ export const toCellConfig = (partial: PartialConfig): CellConfig => ({
   cellDataDir: partial.cell_data_dir,
   worktreeLimit: partial.worktree_limit ?? DEFAULT_WORKTREE_LIMIT,
   headlessOperators: partial.headless_operators ?? false,
+  notifications: partial.notifications ?? true,
   ...(partial.factory_url !== undefined
     ? { factoryUrl: partial.factory_url }
     : {}),

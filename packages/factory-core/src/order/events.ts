@@ -116,6 +116,7 @@ export const jobKindSchema = z.enum([
   'run_inspection',
   'deliver',
   'mechanic',
+  'publish_blocked',
 ]);
 export const workspaceStageSchema = z.enum([
   'fetch',
@@ -306,6 +307,27 @@ const verdictRecordedSchema = z
     (event) => event.pass || event.feedbackBlob !== undefined,
     'a failing verdict needs feedbackBlob',
   );
+/**
+ * One check of an Inspection starting or finishing, for the live `logs` view. It is informational: the
+ * Cycle stays running and no count or retry changes. A finished check carries its exit code, timeout
+ * flag and duration; a started check carries none.
+ */
+export const inspectionProgressFields = {
+  cycleId: cycleIdSchema,
+  phase: z.enum(['started', 'finished']),
+  index: positiveInt.max(64),
+  total: positiveInt.max(64),
+  command: freeText,
+  exitCode: z.number().int().nullable().optional(),
+  timedOut: z.boolean().optional(),
+  durationMs: nonNegativeInt.optional(),
+};
+const inspectionProgressSchema = z
+  .object({
+    type: z.literal('inspection_progress'),
+    ...inspectionProgressFields,
+  })
+  .strict();
 const inspectionFinishedSchema = z
   .object({
     type: z.literal('inspection_finished'),
@@ -453,6 +475,32 @@ const deliveryFailedSchema = z
     detail: freeText,
   })
   .strict();
+/**
+ * What a `publish_blocked` job reports (v1 `publishBlockedWork`): a draft `[BLOCKED]` PR published on the
+ * branch, nothing to publish because the worktree has no change against its base, or a best-effort failure
+ * that never touches the Andon.
+ */
+export const blockedPrResultSchema = z.discriminatedUnion('status', [
+  z
+    .object({
+      status: z.literal('published'),
+      prUrl,
+      commit: commitShaSchema,
+    })
+    .strict(),
+  z.object({ status: z.literal('no_changes') }).strict(),
+  z.object({ status: z.literal('failed'), detail: freeText }).strict(),
+]);
+export type BlockedPrResult = z.infer<typeof blockedPrResultSchema>;
+
+const blockedPrReportedSchema = z
+  .object({
+    type: z.literal('blocked_pr_reported'),
+    jobId: jobIdSchema,
+    andonAt: nonNegativeInt,
+    result: blockedPrResultSchema,
+  })
+  .strict();
 const prStateChangedSchema = z
   .object({
     type: z.literal('pr_state_changed'),
@@ -496,6 +544,7 @@ export const orderEventSchema = z.discriminatedUnion('type', [
   cycleStartedSchema,
   cycleCompletedSchema,
   verdictRecordedSchema,
+  inspectionProgressSchema,
   inspectionFinishedSchema,
   cycleFailedSchema,
   cycleBlockedSchema,
@@ -512,6 +561,7 @@ export const orderEventSchema = z.discriminatedUnion('type', [
   incidentRecordedSchema,
   deliveryFinishedSchema,
   deliveryFailedSchema,
+  blockedPrReportedSchema,
   prStateChangedSchema,
   orderRecoveredSchema,
 ]);
