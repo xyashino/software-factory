@@ -116,8 +116,55 @@ describe('nextJob row 4: workspace failures', () => {
     expect(next(events)).toEqual({
       kind: 'raise_andon',
       reason: 'workspace_failed',
-      detail: '2 consecutive workspace failures',
+      detail:
+        '2 consecutive workspace failures; last stage worktree: worktree could not be created',
     });
+  });
+
+  it('row 4: the Andon names the latest failure stage and detail', () => {
+    const events = [
+      created(),
+      claim(1),
+      workspaceFailed({
+        jobId: jobIdOf(1),
+        stage: 'fetch',
+        detail: 'git fetch timed out',
+      }),
+      claim(2),
+      workspaceFailed({
+        jobId: jobIdOf(2),
+        stage: 'sync',
+        detail: 'merge conflict in pnpm-lock.yaml',
+      }),
+    ];
+
+    expect(next(events)).toEqual({
+      kind: 'raise_andon',
+      reason: 'workspace_failed',
+      detail:
+        '2 consecutive workspace failures; last stage sync: merge conflict in pnpm-lock.yaml',
+    });
+  });
+
+  it('row 4: the Andon detail stays within 512 characters', () => {
+    const events = [
+      created(),
+      claim(1),
+      workspaceFailed({ jobId: jobIdOf(1), detail: 'y'.repeat(600) }),
+      claim(2),
+      workspaceFailed({ jobId: jobIdOf(2), detail: 'y'.repeat(600) }),
+    ];
+
+    const decided = next(events);
+    expect(decided).toMatchObject({
+      kind: 'raise_andon',
+      reason: 'workspace_failed',
+    });
+    if (decided.kind !== 'raise_andon') throw new Error('expected an Andon');
+    expect(decided.detail).toHaveLength(512);
+    expect(decided.detail.startsWith('2 consecutive workspace failures')).toBe(
+      true,
+    );
   });
 
   it('row 4: one workspace failure retries the same first job', () => {
@@ -154,7 +201,8 @@ describe('nextJob row 4: workspace failures', () => {
     expect(next(events)).toEqual({
       kind: 'raise_andon',
       reason: 'workspace_failed',
-      detail: '2 consecutive workspace failures',
+      detail:
+        '2 consecutive workspace failures; last stage worktree: worktree could not be created',
     });
   });
 

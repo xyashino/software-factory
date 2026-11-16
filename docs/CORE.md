@@ -258,7 +258,14 @@ interface WorkOrderState {
     cycleId?: CycleId;
   };
   epoch: number; // the last issued epoch, 0 before any claim
-  workspaceFailures: { cellId: CellId; jobId: JobId; at: number }[]; // consecutive; see §4.3 rule 10
+  workspaceFailures: {
+    cellId: CellId;
+    jobId: JobId;
+    at: number;
+    stage: WorkspaceStage;
+    detail: string;
+    logBlob: BlobRef;
+  }[]; // consecutive; see §4.3 rule 10
   deliveryFailed?: { jobId: JobId; detail: string }; // set on delivery_failed; cleared on resumed
   delivery?: {
     prUrl: string;

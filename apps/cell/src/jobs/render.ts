@@ -14,7 +14,10 @@ import {
   usableCommitMessage,
   verificationLinesOf,
 } from '@repo/factory-runtime/pr-body';
-import { buildIncidentPrompt } from '@repo/factory-runtime/prompts/incident-prompt';
+import {
+  buildIncidentPrompt,
+  type IncidentPromptInput,
+} from '@repo/factory-runtime/prompts/incident-prompt';
 import {
   buildPrompt,
   type DeclaredUnit,
@@ -151,10 +154,8 @@ export const renderOperatorPrompt = async (input: {
 };
 
 /** The Mechanic's prompt for the Andon it triages (CORE §14.4). The incident template ships with the Cell. */
-export const renderIncidentPrompt = (incident: {
-  reason: string;
-  detail: string;
-}): string => buildIncidentPrompt(incident);
+export const renderIncidentPrompt = (incident: IncidentPromptInput): string =>
+  buildIncidentPrompt(incident);
 
 /**
  * A delivery's commit message, PR title and PR body (v1 PR format). The commit is the builder's own commit artifact

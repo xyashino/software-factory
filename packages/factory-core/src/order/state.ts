@@ -22,7 +22,18 @@ import type {
   InspectionResult,
   JobKind,
   Spec,
+  WorkspaceStage,
 } from './events';
+
+/** One `workspace_failed` event: where the workspace broke, and the blob with its full output. */
+export interface WorkspaceFailure {
+  cellId: CellId;
+  jobId: JobId;
+  at: number;
+  stage: WorkspaceStage;
+  detail: string;
+  logBlob: BlobRef;
+}
 
 export type Priority = 'high' | 'medium' | 'low';
 
@@ -159,7 +170,7 @@ export interface WorkOrderState {
   incidents: IncidentRecord[]; // full history; at most one per Andon (CORE §14.2)
   activeJob?: ActiveJob | undefined;
   epoch: number; // the last issued epoch, 0 before any claim
-  workspaceFailures: { cellId: CellId; jobId: JobId; at: number }[]; // consecutive; see CORE §4.3 rule 10
+  workspaceFailures: WorkspaceFailure[]; // consecutive; see CORE §4.3 rule 10
   deliveryFailed?: { jobId: JobId; detail: string } | undefined;
   delivery?:
     | { prUrl: string; commit: CommitSha; state: 'open' | 'merged' | 'closed' }

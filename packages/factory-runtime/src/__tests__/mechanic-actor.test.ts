@@ -99,6 +99,81 @@ describe('Mechanic job builder & prompt', () => {
     expect(prompt).toContain('git worktree at its current commit');
   });
 
+  it('carries the latest workspace failure into a workspace Andon incident', async () => {
+    const blobs = fakeBlobStore();
+    const defs = shippedDefinitions();
+    const line = defs.lines.get('standard')!.snapshot;
+    const jobId = '01J0000000000000000000000M' as JobId;
+    const logBlob = await storeText(
+      blobs,
+      'fatal: could not read the mirror',
+      'text/plain',
+    );
+    const state = {
+      orderId: `${PROJECT}:fix-ci`,
+      projectId: PROJECT,
+      todoId: 'fix-ci',
+      baseBranch: 'main',
+      dependsOn: [],
+      line,
+      spec: {
+        title: 'fix-ci: Fix CI',
+        type: 'fix',
+        bodyBlob: await storeText(blobs, '# Fix CI', 'text/markdown'),
+      },
+      activeJob: { jobId, epoch: 5 },
+      andon: {
+        reason: 'workspace_failed',
+        detail:
+          '2 consecutive workspace failures; last stage sync: fetch failed',
+        at: 3000,
+        triage: 'mechanic',
+      },
+      workspaceFailures: [
+        {
+          cellId: CELL,
+          jobId,
+          at: 2000,
+          stage: 'fetch',
+          detail: 'timed out',
+          logBlob,
+        },
+        {
+          cellId: CELL,
+          jobId,
+          at: 2500,
+          stage: 'sync',
+          detail: 'fetch failed',
+          logBlob,
+        },
+      ],
+      cycles: [],
+    } as unknown as WorkOrderState;
+
+    const job = await buildJob(
+      {
+        blobs,
+        runtimePrompts: defs.runtimePrompts,
+        config: DEFAULT_CONFIG,
+      },
+      state,
+      {
+        projectId: PROJECT,
+        repoUrl: REPO,
+        baseBranch: 'main',
+        maxRunning: 2,
+        depPolicy: 'delivered',
+      },
+      { kind: 'mechanic', andonAt: 3000, n: 1 },
+    );
+
+    expect(job.mechanic?.incident).toEqual({
+      reason: 'workspace_failed',
+      detail: state.andon?.detail,
+      workspaceFailure: { stage: 'sync', detail: 'fetch failed', logBlob },
+    });
+  });
+
   it('buildIncidentPrompt tells the Mechanic it can edit files in the worktree', () => {
     const text = buildIncidentPrompt({
       reason: 'delivery_failed',
@@ -106,5 +181,28 @@ describe('Mechanic job builder & prompt', () => {
     });
     expect(text).toContain('fix the code, tests, config, or');
     expect(text).not.toContain('may not edit');
+  });
+
+  it('buildIncidentPrompt names the workspace stage, detail and log tail', () => {
+    const text = buildIncidentPrompt({
+      reason: 'workspace_failed',
+      detail: '2 consecutive workspace failures; last stage sync: fetch failed',
+      workspace: { stage: 'sync', detail: 'fetch failed' },
+      logTail: 'fatal: unable to access the mirror',
+    });
+    expect(text).toContain('Stage: sync');
+    expect(text).toContain('Detail: fetch failed');
+    expect(text).toContain('fatal: unable to access the mirror');
+    expect(text).not.toContain('{{');
+  });
+
+  it('buildIncidentPrompt says so when there is no workspace failure or log', () => {
+    const text = buildIncidentPrompt({
+      reason: 'delivery_failed',
+      detail: 'tests failed',
+    });
+    expect(text).toContain('(this Andon is not a workspace failure)');
+    expect(text).toContain('(no workspace log was captured)');
+    expect(text).not.toContain('{{');
   });
 });
