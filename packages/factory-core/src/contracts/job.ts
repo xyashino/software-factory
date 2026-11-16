@@ -222,7 +222,7 @@ const PLAN_KINDS = new Set(['plan_branch', 'plan_pr', 'plan_pr_ready']);
 /**
  * A job a Cell runs: PROTOCOL §4, the shape the claim and the continuation return. A Work order job
  * names an OrderId and carries its `workspace`; a plan job names a PlanId, carries a `plan` block and
- * no workspace (plan jobs work on the bare mirror only).
+ * no workspace (plan jobs work on the repo's refs only).
  */
 export const jobSchema = z
   .object({

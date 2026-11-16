@@ -17,7 +17,7 @@ import { paneName } from '../names';
 import { newCycleToken, startOperatorSocket } from '../operator-socket';
 import type { PaneDriver } from '../ports';
 import type { SystemPort } from '../ports/system.port';
-import { GIT_TIMEOUT_MS } from '../workspace/mirror';
+import { GIT_TIMEOUT_MS } from '../workspace/repo';
 import { prepareWorkspace } from '../workspace/prepare';
 import {
   describeFailure,
@@ -64,7 +64,10 @@ const GIT_IDENTITY = [
 export interface MechanicDeps {
   client: FactoryClient;
   cellId: CellId;
+  /** The Cell's instance data directory: logs, the repair directory. */
   dataDir: string;
+  /** The repo the Cell works in: the Work order worktree is made under its `.worktrees/`. */
+  repoRoot: string;
   /** Optional system port + worktree tracking; when present with `job.workspace`, runs in the Work order worktree. */
   system?: SystemPort;
   worktreeLimit?: number;
@@ -149,7 +152,7 @@ const commitAndPushRepair = async (input: {
     };
   }
   if (textOf(status).trim() !== '') {
-    // `.cell/` is excluded via the mirror's `info/exclude` written by `ensureMirror`.
+    // `.cell/` is excluded via the repo's common `info/exclude` written by the workspace prepare.
     const added = await git(['add', '-A', '--', '.']);
     if (!succeeded(added)) {
       return {
@@ -186,16 +189,18 @@ const commitAndPushRepair = async (input: {
     return { ok: true, changedFiles: [] };
   }
 
+  // The tip the lease expects is the remote's branch as the prepare's fetch saw it; the push names refs/heads/*.
+  const remoteRef = `refs/remotes/origin/${input.branch}`;
   const branchRef = `refs/heads/${input.branch}`;
   const tipRun = await git([
     'rev-parse',
     '--verify',
     '--quiet',
-    `${branchRef}^{commit}`,
+    `${remoteRef}^{commit}`,
   ]);
   const remoteTip = succeeded(tipRun) ? textOf(tipRun).trim() : '';
   const lease = `${branchRef}:${remoteTip}`;
-  // Push directly to repoUrl (not `origin`): the mirror is a `--mirror` clone that rejects explicit refspecs.
+  // Push to repoUrl, the URL `origin` names (the checkpoint pushes there too).
   const pushed = await git([
     'push',
     '--quiet',
@@ -279,11 +284,12 @@ export const runMechanic = async (
 
   let worktree: string | undefined;
   let startHead: string | undefined;
+  let releaseWorktree: (() => void) | undefined;
   if (job.workspace !== undefined && shell !== undefined) {
     const prepared = await prepareWorkspace(
       {
         shell,
-        cellDataDir: deps.dataDir,
+        repoRoot: deps.repoRoot,
         worktreeLimit: deps.worktreeLimit ?? 8,
         inUse,
       },
@@ -292,6 +298,7 @@ export const runMechanic = async (
     if (prepared.ok) {
       worktree = prepared.worktree;
       startHead = prepared.head;
+      releaseWorktree = prepared.release;
     } else {
       promptText += `\n### Workspace prepare note\n\nPreparing the Work order worktree failed at \`${prepared.stage}\`: ${prepared.detail}\nYou are running in the repair directory instead.\n`;
     }
@@ -513,7 +520,7 @@ export const runMechanic = async (
       await deps.sleep(deps.tickMs);
     }
   } finally {
-    if (worktree !== undefined) inUse.delete(worktree);
+    releaseWorktree?.();
     await deps.pane.close(name).catch(() => undefined);
     await socket?.close();
     rmSync(promptDir, { recursive: true, force: true });

@@ -17,6 +17,7 @@ import {
 } from '@repo/factory-core/ids';
 import { seedProject, shippedLine } from '@repo/factory-runtime/seed';
 import { createFixtureRepo, todoFile } from '../../fixture-repo';
+import { factoryFiles } from '../../../testing/factory-fixture';
 import { startHttpProxy, type HttpProxy } from './tcp-proxy';
 import { startCell, type CellOptions, type RunningCell } from './cell-proc';
 import {
@@ -78,7 +79,7 @@ export interface World {
   readonly root: string;
   /** The Factory's data directory. */
   readonly dataDir: string;
-  /** The fixture repository: the git remote the mirror clones and the Cells push to. */
+  /** The fixture repository: the git remote the Cells fetch and push to. */
   readonly repo: string;
   /** The fake GitHub: one JSON file per pull request. */
   readonly ghDir: string;
@@ -255,7 +256,11 @@ export const createWorld = async (
   mkdirSync(ghDir);
   const repo = join(root, 'repo');
   mkdirSync(repo);
-  for (const [name, text] of Object.entries(PROJECT_FILES)) {
+  // The repo's own `.factory/`: the Cell renders the Operator prompt from it on the worktree (PROTOCOL §4).
+  for (const [name, text] of Object.entries({
+    ...PROJECT_FILES,
+    ...factoryFiles(),
+  })) {
     await Bun.write(join(repo, name), text);
   }
   await createFixtureRepo(repo, todos);
@@ -318,6 +323,7 @@ export const createWorld = async (
         factoryDataDir: dataDir,
         ghDir,
         fakeBin: FAKE_BIN,
+        repoUrl: remote,
         env,
         ...cellOptions,
       });

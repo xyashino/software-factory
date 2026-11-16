@@ -7,7 +7,7 @@ import {
 } from '@repo/factory-core/contracts/job';
 import { WireFailure } from '@repo/factory-core/contracts/errors';
 import type { CommitSha } from '@repo/factory-core/ids';
-import { GIT_TIMEOUT_MS } from '../workspace/mirror';
+import { GIT_TIMEOUT_MS } from '../workspace/repo';
 import { prepareWorkspace } from '../workspace/prepare';
 import {
   gitCommand,
@@ -41,7 +41,7 @@ const tailOfRun = (run: ShellRun): string =>
  * Runs one `deliver` job end to end (PROTOCOL §8.3, CORE §4.3 rule 9). The order is fixed:
  *
  * 1. prepare the workspace at the job's base. A failure reports `ReportDelivery{failed}`.
- * 2. read the branch tip the mirror holds (the Work order's checkpoints) and check it out. An absent
+ * 2. read the branch tip origin holds (the Work order's checkpoints) and check it out. An absent
  *    branch is an empty expectation for the lease, and the base stands in for the tip.
  * 3. rebase on `origin/<baseBranch>`. A conflict aborts the rebase and reports `delivery_failed`.
  * 4. squash: `reset --soft` to the rebased base, so the branch's net change is staged.
@@ -73,7 +73,7 @@ export const runDeliver = async (
   const prepared = await prepareWorkspace(
     {
       shell,
-      cellDataDir: ctx.cellDataDir,
+      repoRoot: ctx.repoRoot,
       worktreeLimit: ctx.worktreeLimit,
       inUse: ctx.inUse,
     },
@@ -112,7 +112,7 @@ export const runDeliver = async (
     );
     throw error;
   } finally {
-    ctx.inUse.delete(prepared.worktree);
+    prepared.release();
   }
 };
 
@@ -168,7 +168,10 @@ const deliverWorktree = async (
   signal: AbortSignal,
 ): Promise<void> => {
   const branch = job.repo.branch;
-  const baseRef = `refs/heads/${job.repo.baseBranch}`;
+  // The remote's branches as the prepare's fetch saw them (refs/remotes/origin/*). The lease and the push
+  // name the same branch on the remote, so they use refs/heads/*.
+  const baseRef = `refs/remotes/origin/${job.repo.baseBranch}`;
+  const remoteRef = `refs/remotes/origin/${branch}`;
   const branchRef = `refs/heads/${branch}`;
 
   const baseRun = await git(shell, worktree, [
@@ -179,7 +182,7 @@ const deliverWorktree = async (
   ]);
   if (!succeeded(baseRun)) {
     throw new DeliveryFailed(
-      `branch ${job.repo.baseBranch} is not in the mirror`,
+      `branch ${job.repo.baseBranch} is missing on origin`,
     );
   }
 
@@ -187,7 +190,7 @@ const deliverWorktree = async (
     'rev-parse',
     '--verify',
     '--quiet',
-    `${branchRef}^{commit}`,
+    `${remoteRef}^{commit}`,
   ]);
   const remoteTip = succeeded(tipRun) ? textOf(tipRun).trim() : '';
   const startAt = remoteTip === '' ? head : remoteTip;
@@ -288,8 +291,7 @@ const deliverWorktree = async (
     : [];
   const body = rendered.body.split(PR_ADR_TOKEN).join(adrSectionOf(decisions));
 
-  // The push goes to the repo URL, not to `origin`: the mirror is a `--mirror` clone, and git refuses an
-  // explicit refspec on a mirror remote.
+  // The push goes to the job's repo URL: the same remote `origin` names, as the checkpoint pushes to it.
   const dryPush = await git(shell, worktree, [
     'push',
     '--dry-run',

@@ -363,7 +363,7 @@ export const renderPlanBody = (
 };
 
 /**
- * The Job a claimed plan job becomes (PROTOCOL §4). A plan job runs on the bare mirror only, so it has no
+ * The Job a claimed plan job becomes (PROTOCOL §4). A plan job runs on the repo's refs only, so it has no
  * workspace and no station. `plan_pr` and `plan_pr_ready` carry the sub-PR list as a blob; `plan_pr_ready`
  * names the plan PR it marks ready. Pure apart from the one body blob write.
  */

@@ -155,6 +155,7 @@ const main = async (): Promise<void> => {
       client,
       cellId: identity.cellId,
       config: { ...config, projects: repo.projects },
+      repoRoot: loaded.repoRoot,
       cellDataDir,
       system: createSystemAdapter(),
       clock: systemClock,

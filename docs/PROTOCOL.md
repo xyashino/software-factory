@@ -117,8 +117,8 @@ same body as its HTTP route, with `projectId` in the body on `set` and `remove`.
 - Set: at least one of `baseBranch`, `maxRunning`, `depPolicy`. A `baseBranch` change is refused as
   `precondition` while the project has a Work order that is not `delivered`, `merged` or `cancelled`
   (running orders must not switch base; v2-21 pins the base per Work order). Setting the same base
-  branch is a no-op. `repoUrl` is not accepted (the body is strict): mirrors and Cell checkouts would go
-  stale, so remove and re-add the project.
+  branch is a no-op. `repoUrl` is not accepted (the body is strict): the Cell works in the repo's `origin`,
+  so a stored second url would go stale; remove and re-add the project.
 - Remove: refused as `precondition` while the project has any Work order or event. A project
   with history is never deleted, so projections stay rebuildable (STORAGE §4).
 - An unknown `projectId` on set or remove answers `not_found`.
@@ -210,7 +210,7 @@ interface Job {
     sync: string[];
     setup: string[];
     timeoutMs: number;
-  }; // dir = <todoId>, relative to the Cell's worktrees/; absent on plan jobs (no worktree)
+  }; // dir = <todoId>, relative to <repo>/.worktrees/; absent on plan jobs (no worktree)
   station?: {
     stationId;
     cycleId;
@@ -278,7 +278,7 @@ interface Job {
 **Plan jobs.** `plan_branch`, `plan_pr` and `plan_pr_ready` belong to an Order Plan (CORE §12). They
 are claimed, leased, heartbeated and fenced like any other job (§5): `job_claimed` with a new epoch on
 the plan stream, a lease row, the reaper, `stale_epoch` on a late write. They have no Station, no
-Cycle, no worktree and no `workspace` block: the Cell only fetches its mirror and talks to `git` and
+Cycle, no worktree and no `workspace` block: the Cell only fetches the repo's `origin` and talks to `git` and
 the GitHub adapter. A job that cannot finish reports `ReportPlanJobFailed`; two in a row raise the
 plan's Andon. All three are **idempotent**, so a retry or a takeover never creates a second branch or
 PR.
@@ -455,7 +455,7 @@ reported as `stale` in the heartbeat response, which is the Cell's cue to stop i
 - WIP of failed Cycles, for the Supervisor only: `factory-wip/<todoId>/<cycleId>`. (A separate
   namespace: git cannot hold `factory/<todoId>` and `factory/<todoId>/…` at the same time.)
 - The Cell's scratch directory `.cell/` in the worktree (inputs, outputs) is excluded through the
-  mirror's `info/exclude`, so the target repository needs no `.gitignore` entry.
+  repo's common `info/exclude` (`<repo>/.git/info/exclude`), so the target repository needs no `.gitignore` entry.
 
 ### 8.2 The checkpoint procedure
 
@@ -525,11 +525,17 @@ The trailers make a Work order's progress recoverable from git alone until deliv
 <repo>/.factory-local/cell/        # the Cell's state for its repository (gitignored); cell-2, ... per extra instance
 ├── credential                     # the Cell credential from `join` (mode 0600)
 ├── cell.lock                      # the instance's writer lock
-├── repos/<projectId>.git          # bare mirror, fetched before every job
-├── worktrees/<todoId>/            # one per Work order held recently; LRU-evicted
-│   └── .cell/                     # inputs, outputs, Cycle scratch (excluded from git)
 └── runtime/<cycleId>.jsonl        # runtime journal (CORE §9.3)
+
+<repo>/                            # the repository the Cell works in: its checkout and its origin remote
+├── .git/info/exclude              # `.cell/`, `.worktrees/` and `.factory-local/`, added once by the Cell
+├── .worktrees/<todoId>/           # one detached worktree per Work order held recently; LRU-evicted
+│   └── .cell/                     # inputs, outputs, Cycle scratch (excluded from git)
+└── .factory-local/locks/          # the repo lock (git.lock) and one in-use lease per worktree
 ```
+
+The worktrees are made directly from the repo's `.git`, so `git worktree list` in the repo shows them. The
+Cell never creates a bare mirror or a `repos/` directory, and it never moves the repo's checked-out branch.
 
 Deleting the credential makes the Cell join again as a new Cell; nothing else is lost.
 
@@ -541,8 +547,10 @@ name normalized to a project id.
 
 Executing `run_operator_station`:
 
-1. Fetch the mirror; create or reset the worktree at `base`; run `sync` + `setup` unless the worktree
-   is already prepared at that commit. On failure → `ReportWorkspaceFailed`.
+1. Under the repo lock, fetch `origin`; create or reset the detached worktree at `base` under
+   `<repo>/.worktrees/`; lease it; evict the least recently used worktrees beyond the limit that no job
+   holds. Then run `sync`, and `setup` unless the worktree is already prepared at that commit. On failure →
+   `ReportWorkspaceFailed`.
 2. `StartCycle`.
 3. Download and write `inputs` blobs to their paths; create the Cycle socket token.
 4. Open a Herdr pane (or a headless process) with `FACTORY_OPERATOR_SOCKET`, `FACTORY_CYCLE_TOKEN`,
@@ -559,7 +567,7 @@ a cleaned 2 KiB tail (ANSI stripped, v1 logic), `ReportInspection`.
 
 `deliver`: §8.3 delivery.
 
-`plan_branch`, `plan_pr`, `plan_pr_ready`: fetch the mirror, then §4 (Plan jobs). A leaving Cell
+`plan_branch`, `plan_pr`, `plan_pr_ready`: fetch `origin` under the repo lock, then §4 (Plan jobs). A leaving Cell
 lets such a job finish if it ends within 5 min, else `ReleaseJob`, like delivery.
 
 **Leaving** (`SIGTERM`, or the device going away on purpose): stop claiming, then for each job:
@@ -676,5 +684,5 @@ branches it skipped. Like `admin backup`, the offline form needs the writer lock
 | Line YAML edited during a Work order                         | No effect: the Work order uses its pinned snapshot                                                                                | Nothing                                     |
 | Base branch moves during a Work order                        | Stations keep their base; delivery rebases; a conflict raises an Andon `delivery_failed`                                          | Nothing                                     |
 | PR closed or changes requested after delivery                | `factory reopen` sends the Work order back to a Station on top of the delivered commit                                            | Nothing                                     |
-| Cell cache wiped                                             | Mirrors and worktrees are rebuilt on the next job                                                                                 | Nothing                                     |
+| Cell cache wiped                                             | Worktrees are rebuilt on the next job, from a fresh fetch of `origin`                                                             | Nothing                                     |
 | Blob upload interrupted                                      | Hash mismatch → rejected; command referencing a missing blob → `invalid`                                                          | Nothing                                     |

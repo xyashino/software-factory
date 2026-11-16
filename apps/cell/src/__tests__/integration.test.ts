@@ -31,7 +31,7 @@ import { runJob } from '../jobs/run-job';
 import type { JobContext } from '../jobs/send';
 import { createHeartbeat } from '../loops/heartbeat';
 import { factoryFiles } from '../testing/factory-fixture';
-import { commitFile, git, makeRepo } from '../testing/git-repo';
+import { cloneRepo, commitFile, git, makeRepo } from '../testing/git-repo';
 import type { GithubPort } from '../ports/github.port';
 
 /** The fixture server: factory-server over a seeded data directory, spawned by path (no import). */
@@ -44,6 +44,8 @@ const ONE_CELL = parseConfig('projects = ["software-factory"]');
 
 let root: string;
 let origin: string;
+/** The Cell's repo: a clone of origin, the checkout the Cell's worktrees are made from. */
+let repoRoot: string;
 let dataDir: string;
 let cellDataDir: string;
 const children: Bun.Subprocess[] = [];
@@ -55,6 +57,7 @@ beforeEach(() => {
   cellDataDir = join(root, 'cell');
   // The origin carries the shipped `.factory/`: the Cell renders the Operator prompt and the PR body from it.
   makeRepo(origin, { 'README.md': '# repo\n', ...factoryFiles() });
+  repoRoot = cloneRepo(origin, join(root, 'repo'));
   mkdirSync(dataDir, { recursive: true });
 });
 
@@ -124,6 +127,7 @@ const jobContext = (client: FactoryClient): JobContext => ({
   client,
   cellId: CELL,
   system: createSystemAdapter(),
+  repoRoot,
   cellDataDir,
   worktreeLimit: 8,
   inUse: new Set(),
@@ -304,6 +308,7 @@ describe('Cell over the socket', () => {
       client,
       cellId: CELL,
       config: ONE_CELL,
+      repoRoot,
       cellDataDir,
       system: createSystemAdapter(),
       clock: systemClock,
@@ -336,6 +341,7 @@ describe('Cell over the socket', () => {
       client,
       cellId: CELL,
       config: ONE_CELL,
+      repoRoot,
       cellDataDir,
       system: createSystemAdapter(),
       clock: systemClock,
@@ -453,6 +459,7 @@ describe('Cell over the socket', () => {
       client,
       cellId: CELL,
       config: ONE_CELL,
+      repoRoot,
       cellDataDir,
       system: createSystemAdapter(),
       clock: systemClock,

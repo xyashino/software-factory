@@ -6,14 +6,18 @@ import { must } from './git';
 export const FIXTURE_ORIGIN = 'https://example.test/cell-fixture.git';
 
 /**
- * A repository a Cell runs in (`--repo-dir`): a git repository with an origin, created once. The Cell
- * keeps its state in `<dir>/.factory-local/cell` unless a test names another data directory.
+ * A repository a Cell runs in (`--repo-dir`): a git repository whose `origin` is the project's repo, created
+ * once. The Cell fetches that origin for its worktrees, so a test that runs jobs names the real remote. The
+ * Cell keeps its state in `<dir>/.factory-local/cell` unless a test names another data directory.
  */
-export const cellRepo = async (dir: string): Promise<string> => {
+export const cellRepo = async (
+  dir: string,
+  origin: string = FIXTURE_ORIGIN,
+): Promise<string> => {
   mkdirSync(dir, { recursive: true });
   if (!existsSync(join(dir, '.git'))) {
     await must(dir, ['init', '--quiet', '-b', 'main']);
-    await must(dir, ['remote', 'add', 'origin', FIXTURE_ORIGIN]);
+    await must(dir, ['remote', 'add', 'origin', origin]);
   }
   return dir;
 };

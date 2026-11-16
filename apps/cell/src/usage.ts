@@ -19,7 +19,7 @@ config:  ~/.config/factory-cell/config.toml (or $XDG_CONFIG_HOME/factory-cell/co
            runners = ["claude"]        runners it can start
            capabilities = []           declared capabilities
            factory_data_dir = "..."    where factory.sock is (default $FACTORY_DATA_DIR)
-           cell_data_dir = "..."       mirrors, worktrees, identity (default <repo>/.factory-local/cell)
+           cell_data_dir = "..."       identity, logs, cycles (default <repo>/.factory-local/cell)
            worktree_limit = 8          worktrees kept per repo before eviction
 
 Stop immediately with SIGINT, or gracefully leave with SIGTERM (asks live stations to hand over).`;

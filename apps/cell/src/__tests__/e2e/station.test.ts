@@ -34,7 +34,10 @@ import { createHeartbeat } from '../../loops/heartbeat';
 import { runGit } from '../../git';
 import type { PaneDriver } from '../../ports';
 import { spawnHeadless } from '../../runners/headless';
-import { prepareWorkspace } from '../../workspace';
+import type { CommitSha } from '@repo/factory-core/ids';
+import { createSystemAdapter } from '../../adapters/system/system.adapter';
+import { prepareWorkspace } from '../../workspace/prepare';
+import { cloneRepo } from '../../testing/git-repo';
 import { commitOf, must } from '../helpers/git';
 import { commitFactoryTo } from '../../testing/factory-fixture';
 
@@ -58,6 +61,9 @@ let root: string;
 let dataDir: string;
 let cellDir: string;
 let repo: string;
+let cellRepo: string;
+/** The worktree lease the last station took, released before the next station prepares. */
+let releaseHeldWorktree: (() => void) | undefined;
 let opened: OpenedRuntime | undefined;
 let listener: SocketListener | undefined;
 
@@ -72,6 +78,8 @@ beforeEach(async () => {
   });
   // The repo's own `.factory/`: the Cell renders the Operator prompt from it on the worktree.
   commitFactoryTo(repo);
+  // The Cell's repo is a checkout of the fixture: its worktrees are made under its `.worktrees/`.
+  cellRepo = cloneRepo(repo, join(root, 'cell-repo'));
   seedProject(dataDir, { projectId: PROJECT, repoUrl: repo });
 });
 
@@ -187,8 +195,32 @@ const depsFor = (
     clock: { now: () => Date.now() },
     sleep,
     git: runGit,
-    workspace: (current) =>
-      prepareWorkspace({ job: current, dataDir: cellDir }),
+    workspace: async (current) => {
+      // The previous station's worktree is released, as the Cell's job runner releases it when a job ends.
+      releaseHeldWorktree?.();
+      releaseHeldWorktree = undefined;
+      const prepared = await prepareWorkspace(
+        {
+          shell: {
+            system: createSystemAdapter(),
+            logDir: join(cellDir, 'logs', current.jobId),
+          },
+          repoRoot: cellRepo,
+          worktreeLimit: 8,
+          inUse: new Set(),
+        },
+        current,
+      );
+      if (!prepared.ok) {
+        return { ok: false, stage: prepared.stage, detail: prepared.detail };
+      }
+      releaseHeldWorktree = prepared.release;
+      return {
+        ok: true,
+        worktree: prepared.worktree,
+        base: prepared.head as CommitSha,
+      };
+    },
     runners: { [runner]: launch },
     spawn: spawnHeadless,
     timing: { ...FAST, ...options.timing },
@@ -239,7 +271,7 @@ describe('Operator station against the runtime', () => {
     await runOperatorStation(job, deps);
 
     const promptPath = /^Read (\S+) and follow/.exec(kickoff)?.[1] ?? '';
-    expect(promptPath).toContain(join(cellDir, 'worktrees'));
+    expect(promptPath).toContain(join(cellRepo, '.worktrees'));
     expect(promptPath).toContain(join(CELL_DIR, 'cycles'));
     expect(promptPath.endsWith('prompt.md')).toBe(true);
     expect(existsSync(promptPath)).toBe(false);

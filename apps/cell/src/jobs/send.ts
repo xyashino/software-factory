@@ -20,6 +20,9 @@ export interface JobContext {
   client: FactoryClient;
   cellId: CellId;
   system: SystemPort;
+  /** The repo the Cell works in: worktrees live under its `.worktrees/`, and plan jobs read its refs. */
+  repoRoot: string;
+  /** The Cell's instance data directory: logs, runtime journals, cycles. Never git state. */
   cellDataDir: string;
   worktreeLimit: number;
   /** Worktrees a job holds; eviction keeps them. */
