@@ -34,7 +34,6 @@ stations:
     kind: operator
     operator: builder
     inputs: []
-    requires: []
 
   - id: quality-gate
     kind: inspection
@@ -43,7 +42,6 @@ stations:
       - pnpm check-types
       - pnpm lint
       - pnpm test
-    requires: []
     onFail:
       retry: build
       max: 3
@@ -55,7 +53,6 @@ stations:
       - build.report
       - build.commit
       - quality-gate.gate
-    requires: []
     onFail:
       retry: build
       max: 2

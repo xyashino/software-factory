@@ -1,3 +1,4 @@
+import { posix } from 'node:path';
 import type { BlobRef } from '@repo/factory-core/ids';
 import type {
   CycleContext,
@@ -30,24 +31,64 @@ export interface PromptInput {
   operatorCommands: string[];
 }
 
+/** `id: path` when the catalog resolved the path, else the bare id. */
+const unitLine = ({ id, path }: DeclaredUnit): string =>
+  path === undefined ? id : `${id}: ${path}`;
+
+const unitBullet = ({ id, path }: DeclaredUnit): string =>
+  path === undefined ? `- ${id}` : `- ${id}: ${path}`;
+
+const formatInputBullet = (item: CycleInput): string => {
+  if (item.kind === 'artifact') {
+    return `- ${item.stationId}.${item.key}: ${item.materialiseAs}`;
+  }
+  if (item.kind === 'inspection') {
+    return `- ${item.stationId}.inspection: ${item.commands.join(', ')}`;
+  }
+  if (item.kind === 'order' && item.field !== 'body') {
+    return `- task.${item.field}: ${item.value}`;
+  }
+  return '';
+};
+
+const renderInputsList = (input: PromptInput): string => {
+  const lines = input.context.inputs
+    .map(formatInputBullet)
+    .filter((line) => line !== '');
+  return lines.length > 0 ? lines.join('\n') : '- (no inputs)';
+};
+
 /**
  * Every variable an Operator profile may use: the built-ins (`BUILT_IN_VARIABLES`, relative paths
- * only) and one `<key>Path` per artifact the Cycle hands over, as v1 named them.
+ * only), each artifact key (`report: report.md`), and one `<key>Path` per artifact the Cycle hands over.
  */
 const variablesOf = (
   input: PromptInput,
   context: string,
-): Record<string, string> => ({
-  ...Object.fromEntries(
-    input.context.outputs.map((output) => [`${output.key}Path`, output.path]),
-  ),
-  taskId: input.todoId,
-  attemptId: input.cycleId,
-  artifactDir: '.cell/outputs',
-  evidenceDir: '.cell/evidence',
-  todoBody: input.todoBody,
-  context,
-});
+): Record<string, string> => {
+  const firstOutput = input.context.outputs[0];
+  const stepDir = firstOutput
+    ? posix.dirname(firstOutput.path)
+    : `.cell/steps/${input.profile.id}`;
+  const path = stepDir.endsWith('/') ? stepDir : `${stepDir}/`;
+
+  return {
+    ...Object.fromEntries(
+      input.context.outputs.map((output) => [`${output.key}Path`, output.path]),
+    ),
+    ...input.profile.artifacts,
+    taskId: input.todoId,
+    attemptId: input.cycleId,
+    artifactDir: stepDir,
+    path,
+    evidenceDir: `${stepDir}/evidence`,
+    todoBody: input.todoBody,
+    context,
+    inputs: renderInputsList(input),
+    rules: input.declared.rules.map(unitBullet).join('\n'),
+    skills: input.declared.skills.map(unitBullet).join('\n'),
+  };
+};
 
 /**
  * Renders the prompt of one Cycle (CORE §7, PROTOCOL §4): the Operator profile body, then the inputs,
@@ -92,6 +133,9 @@ const contextBlock = (
     });
 
   for (const item of input.context.inputs) {
+    if (item.kind === 'artifact' && input.profile.body.includes('{{inputs}}')) {
+      continue;
+    }
     blocks.push(inputBlock(item, input, contentOf, pathOf));
   }
   for (const note of input.context.notes) {
@@ -147,7 +191,10 @@ const contextBlock = (
       ),
     );
   }
-  if (input.declared.rules.length > 0) {
+  if (
+    !input.profile.body.includes('{{rules}}') &&
+    input.declared.rules.length > 0
+  ) {
     blocks.push(
       contentOf(
         'declared.rules',
@@ -155,7 +202,10 @@ const contextBlock = (
       ),
     );
   }
-  if (input.declared.skills.length > 0) {
+  if (
+    !input.profile.body.includes('{{skills}}') &&
+    input.declared.skills.length > 0
+  ) {
     blocks.push(
       contentOf(
         'declared.skills',
@@ -165,10 +215,6 @@ const contextBlock = (
   }
   return blocks;
 };
-
-/** `id: path` when the catalog resolved the path, else the bare id. */
-const unitLine = ({ id, path }: DeclaredUnit): string =>
-  path === undefined ? id : `${id}: ${path}`;
 
 const inputBlock = (
   item: CycleInput,

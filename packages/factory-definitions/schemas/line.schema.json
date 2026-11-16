@@ -97,10 +97,6 @@
       "pattern": "^[a-z][a-z0-9-]*$",
       "not": { "enum": ["task", "operator"] }
     },
-    "tag": {
-      "type": "string",
-      "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"
-    },
     "inputRef": {
       "type": "string",
       "pattern": "^[a-z][a-z0-9-]*\\.[a-z][a-zA-Z0-9]*$",
@@ -133,12 +129,6 @@
           "default": [],
           "items": { "$ref": "#/definitions/inputRef" }
         },
-        "requires": {
-          "type": "array",
-          "default": [],
-          "maxItems": 32,
-          "items": { "$ref": "#/definitions/tag" }
-        },
         "onFail": { "$ref": "#/definitions/onFail" },
         "maxRestarts": {
           "type": "integer",
@@ -167,12 +157,6 @@
           "minItems": 1,
           "maxItems": 32,
           "items": { "$ref": "#/definitions/machineText" }
-        },
-        "requires": {
-          "type": "array",
-          "default": [],
-          "maxItems": 32,
-          "items": { "$ref": "#/definitions/tag" }
         },
         "onFail": { "$ref": "#/definitions/onFail" },
         "maxRestarts": {

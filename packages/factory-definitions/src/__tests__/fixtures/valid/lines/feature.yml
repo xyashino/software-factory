@@ -44,7 +44,6 @@ stations:
     operator: builder
     inputs:
       - plan.plan
-    requires: [docker]
 
   - id: quality-gate
     kind: inspection

@@ -51,12 +51,10 @@ stations:
     timeout: 2m
     exec:
 ${checks.map((check) => `      - ${JSON.stringify(check)}`).join('\n')}
-    requires: []
   - id: build
     kind: operator
     operator: builder
     inputs: []
-    requires: []
 deliver:
   commit: build.commit
   report: build.report

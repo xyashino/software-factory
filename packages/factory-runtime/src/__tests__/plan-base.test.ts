@@ -44,7 +44,6 @@ const row = (
   nextKind: 'job',
   jobKind: 'run_operator_station',
   runner: null,
-  requiredCapabilities: [],
   stationId: null,
   stationIndex: null,
   progressed: false,

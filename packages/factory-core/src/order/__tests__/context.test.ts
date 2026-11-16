@@ -57,7 +57,7 @@ describe('resolveCycleContext for a first Cycle', () => {
       notes: [],
       nudges: [],
       priorQuestions: [],
-      outputs: [{ key: 'plan', path: '.cell/outputs/plan' }],
+      outputs: [{ key: 'plan', path: '.cell/steps/plan/plan' }],
     });
   });
 
@@ -82,7 +82,7 @@ describe('resolveCycleContext for a first Cycle', () => {
       key: 'plan',
       cycleId: cycleIdOf(1),
       blob: blobOf(2),
-      materialiseAs: '.cell/inputs/plan.plan',
+      materialiseAs: '.cell/steps/plan/plan',
     });
   });
 

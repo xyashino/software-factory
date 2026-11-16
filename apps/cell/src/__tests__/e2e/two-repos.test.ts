@@ -48,12 +48,19 @@ const ALPHA_NITPICK: Record<string, string> = {
     git: { 'rich-commit': { doc: { title: 'Rich commit' } } },
     general: { 'decision-log': { doc: { title: 'Decision log' } } },
     testing: { 'testing-unit': { doc: 'unit' } },
+    coding: { 'coding-minimal': { doc: 'minimal' } },
+    typescript: { 'ts-strict': { doc: 'strict' } },
   },
-  skills: { evidence: { source: './skills/evidence' } },
+  skills: {
+    evidence: { source: './skills/evidence' },
+    caveman: { source: './skills/caveman' },
+  },
 };
 `,
   '.nitpick/skills/evidence/SKILL.md': '# evidence\n',
   '.agents/skills/evidence/SKILL.md': '# evidence\n',
+  '.nitpick/skills/caveman/SKILL.md': '# caveman\n',
+  '.agents/skills/caveman/SKILL.md': '# caveman\n',
 };
 
 let root: string;
@@ -75,9 +82,11 @@ beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), 'cell-two-repos-'));
   alphaRepo = join(root, 'alpha');
   bravoRepo = join(root, 'bravo');
+  const alphaDefinitions = withMarker(factoryFiles(), 'ALPHA');
+  delete (alphaDefinitions as Record<string, string>)['.factory/config.json'];
   makeRepo(alphaRepo, {
     'README.md': '# alpha\n',
-    ...withMarker(factoryFiles(), 'ALPHA'),
+    ...alphaDefinitions,
     ...ALPHA_NITPICK,
   });
   makeRepo(bravoRepo, {
@@ -175,7 +184,7 @@ describe('two repositories with distinct .factory/ on one factory-server', () =>
     expect(alphaPrompt).toContain('testing: .agents/rules/testing.md');
     expect(alphaPrompt).toContain('evidence: .agents/skills/evidence/SKILL.md');
     expect(alphaPrompt).not.toMatch(ABSOLUTE_PATH);
-    expect(bravoPrompt).toContain('\nrich-commit\n');
+    expect(bravoPrompt).toContain('- rich-commit');
     expect(bravoPrompt).not.toContain('rich-commit:');
     const payloads = JSON.stringify([alphaJob, bravoJob]);
     expect(payloads).not.toContain('PROFILE-');

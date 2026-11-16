@@ -80,12 +80,6 @@ const schemaCases: Case[] = [
     /must be one of/,
   ],
   [
-    'rejects a requires tag that is not a lowercase tag',
-    ['requires: [docker]', 'requires: [Docker!]'],
-    'stations[1].requires[0]',
-    /lowercase tag/,
-  ],
-  [
     'rejects onFail.max 0',
     ['max: 3', 'max: 0'],
     'stations[2].onFail.max',
@@ -99,13 +93,13 @@ const schemaCases: Case[] = [
   ],
   [
     'rejects maxRestarts out of range',
-    ['requires: [docker]', 'requires: [docker]\n    maxRestarts: 101'],
+    ['- plan.plan', '- plan.plan\n    maxRestarts: 101'],
     'stations[1].maxRestarts',
     /from 0 to 100/,
   ],
   [
     'rejects an unknown key inside a station',
-    ['requires: [docker]', 'requires: [docker]\n    colour: red'],
+    ['- plan.plan', '- plan.plan\n    colour: red'],
     'stations[1].colour',
     /unknown key/,
   ],
@@ -169,8 +163,8 @@ const crossFileCases: Case[] = [
   [
     'rejects onFail on a station whose profile does not judge',
     [
-      'requires: [docker]',
-      'requires: [docker]\n    onFail:\n      retry: plan\n      max: 1',
+      '- plan.plan',
+      '- plan.plan\n    onFail:\n      retry: plan\n      max: 1',
     ],
     'stations[1].onFail',
     /only a judging profile/,

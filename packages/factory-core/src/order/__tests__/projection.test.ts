@@ -169,13 +169,6 @@ describe('toProjection: orders columns (STORAGE §4)', () => {
     expect(toProjection(building(), { ...META, next }).runner).toBeNull();
   });
 
-  it('required_capabilities are the requires tags of the next Station', () => {
-    expect(
-      toProjection(building(), { ...META, next: buildJob })
-        .requiredCapabilities,
-    ).toEqual(['docker']);
-  });
-
   it('station_id is the Station of the next job', () => {
     expect(
       toProjection(building(), { ...META, next: buildJob }).stationId,
@@ -325,7 +318,6 @@ describe('toProjection: shape and determinism', () => {
     'next_kind',
     'job_kind',
     'runner',
-    'required_capabilities',
     'station_id',
     'station_index',
     'progressed',

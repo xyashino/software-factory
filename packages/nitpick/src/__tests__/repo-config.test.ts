@@ -26,10 +26,16 @@ describe('Repo config works when', () => {
     expect((await built()).problems).toEqual([]);
   });
 
-  it('renders worker with frontmatter', async () => {
-    const worker = (await built()).read('.agents', 'agents', 'worker.md');
-    expect(worker).toContain('name: worker');
-    expect(worker).not.toContain('coord');
+  it('defines no roles: those live in .factory/operators', async () => {
+    const { files } = await built();
+    expect(
+      [...files.keys()].some((file) => file.includes(join('agents', 'agents'))),
+    ).toBe(false);
+  });
+
+  it('inlines the md rule texts in their group file', async () => {
+    const testing = (await built()).read('.agents', 'rules', 'testing.md');
+    expect(testing).toContain('(A) Test pyramid');
   });
 
   it('writes the built-in AODI reference from the package', async () => {

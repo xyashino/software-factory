@@ -48,14 +48,12 @@ stations:
     kind: operator
     operator: planner
     inputs: []
-    requires: []
 
   - id: plan-review
     kind: operator
     operator: plan-reviewer
     inputs:
       - plan.plan
-    requires: []
     onFail:
       retry: plan
       max: 2
@@ -65,7 +63,6 @@ stations:
     operator: builder
     inputs:
       - plan.plan
-    requires: []
 
   - id: quality-gate
     kind: inspection
@@ -74,7 +71,6 @@ stations:
       - pnpm check-types
       - pnpm lint
       - pnpm test
-    requires: []
     onFail:
       retry: build
       max: 3
@@ -87,7 +83,6 @@ stations:
       - build.report
       - build.commit
       - quality-gate.gate
-    requires: []
     onFail:
       retry: build
       max: 2

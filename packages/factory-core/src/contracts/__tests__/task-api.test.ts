@@ -23,7 +23,6 @@ const line = {
       id: 'build',
       kind: 'operator',
       runner: 'claude',
-      requires: [],
       maxRestarts: 0,
       maxLostRestarts: 0,
       verdict: false,
@@ -73,7 +72,6 @@ describe('Work order request (createOrder)', () => {
           {
             id: 'gate',
             kind: 'inspection',
-            requires: [],
             maxRestarts: 0,
             maxLostRestarts: 0,
             artifacts: [],

@@ -29,10 +29,6 @@ const isClaimable = (
   if (!cell.projects.includes(entry.projectId)) return false;
   if (entry.runner !== undefined && !cell.runners.includes(entry.runner))
     return false;
-  if (
-    !entry.requiredCapabilities.every((tag) => cell.capabilities.includes(tag))
-  )
-    return false;
   if (inCooldown(entry, cell.cellId, limits.now)) return false;
   const limit: { max: number; running: number } | undefined =
     limits.perProjectRunning[entry.projectId];

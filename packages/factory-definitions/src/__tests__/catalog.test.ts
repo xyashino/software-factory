@@ -3,8 +3,11 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { describe, expect, it } from 'vitest';
 import {
+  catalogFromConfig,
   nitpickCatalog,
+  readFactoryConfig,
   readRuleIds,
+  resolveCatalog,
   type NitpickCatalog,
 } from '../nitpick-catalog';
 import { validateOperatorCatalog } from '../operator-catalog';
@@ -45,7 +48,7 @@ const CONFIG = `export default {
   output: [{ path: 'docs/ai' }, { path: 'other' }],
   rules: {
     git: { 'rich-commit': { doc: { title: 'Rich commit' } }, 'git-short': { doc: 'short' } },
-    testing: { 'testing-unit': { doc: 'unit' } },
+    testing: { 'testing-unit': { doc: 'unit' }, 'testing-pyramid': { doc: { file: './p.md', inline: true } } },
   },
   skills: { evidence: { source: './skills/evidence' } },
 };`;
@@ -122,6 +125,14 @@ describe('nitpickCatalog', () => {
     );
   });
 
+  it('maps an inline file rule to the group file', async () => {
+    const root = repoWithConfig(CONFIG);
+    const catalog = await nitpickCatalog(root);
+    expect(catalog.rulePaths.get('testing-pyramid')).toBe(
+      'docs/ai/rules/testing.md',
+    );
+  });
+
   it('uses the first output path only', async () => {
     const root = repoWithConfig(CONFIG);
     const catalog = await nitpickCatalog(root);
@@ -169,6 +180,79 @@ describe('nitpickCatalog', () => {
     expect(catalog.rulePaths.size).toBe(0);
     expect(catalog.skillPaths.size).toBe(0);
     expect(catalog.ruleIds.has('testing')).toBe(true);
+  });
+});
+
+describe('Factory config catalog (config.json)', () => {
+  it('reads .factory/config.json and builds catalog from configured base paths', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'sf-factory-config-'));
+    const factoryDir = join(root, '.factory');
+    mkdirSync(factoryDir, { recursive: true });
+    writeFileSync(
+      join(factoryDir, 'config.json'),
+      JSON.stringify({ rules: './my-rules', skills: './my-skills' }),
+    );
+
+    // Create rules: one in root, one in group, one with frontmatter id
+    mkdirSync(join(root, 'my-rules', 'backend'), { recursive: true });
+    writeFileSync(join(root, 'my-rules', 'standalone.md'), '# Standalone rule');
+    writeFileSync(
+      join(root, 'my-rules', 'backend', 'db-access.md'),
+      '# DB access rule',
+    );
+    writeFileSync(
+      join(root, 'my-rules', 'custom.md'),
+      '---\nid: custom-rule-id\n---\n# Custom rule',
+    );
+
+    // Create skills: one with SKILL.md, one without
+    mkdirSync(join(root, 'my-skills', 'evidence'), { recursive: true });
+    writeFileSync(
+      join(root, 'my-skills', 'evidence', 'SKILL.md'),
+      '# Evidence skill',
+    );
+    mkdirSync(join(root, 'my-skills', 'ignored-no-skill'), { recursive: true });
+
+    const config = readFactoryConfig(factoryDir);
+    expect(config).toEqual({ rules: './my-rules', skills: './my-skills' });
+    if (!config) return;
+
+    const direct = catalogFromConfig(root, config);
+    expect(direct.ruleIds.has('standalone')).toBe(true);
+
+    const catalog = await resolveCatalog(root);
+    expect(catalog).toBeDefined();
+    if (!catalog) return;
+
+    expect(catalog.ruleIds.has('standalone')).toBe(true);
+    expect(catalog.ruleIds.has('backend')).toBe(true);
+    expect(catalog.ruleIds.has('db-access')).toBe(true);
+    expect(catalog.ruleIds.has('custom-rule-id')).toBe(true);
+    expect(catalog.rulePaths.get('standalone')).toBe('my-rules/standalone.md');
+    expect(catalog.rulePaths.get('db-access')).toBe(
+      'my-rules/backend/db-access.md',
+    );
+    expect(catalog.rulePaths.get('backend')).toBe('my-rules/backend');
+
+    expect(catalog.skillPaths.has('evidence')).toBe(true);
+    expect(catalog.skillPaths.get('evidence')).toBe(
+      'my-skills/evidence/SKILL.md',
+    );
+    expect(catalog.skillPaths.has('ignored-no-skill')).toBe(false);
+  });
+
+  it('reads config from this repository with .factory/config.json', async () => {
+    const catalog = await resolveCatalog(REPO_ROOT);
+    expect(catalog).toBeDefined();
+    if (!catalog) return;
+
+    expect(catalog.ruleIds.has('rich-commit')).toBe(true);
+    expect(catalog.ruleIds.has('decision-log')).toBe(true);
+    expect(catalog.ruleIds.has('testing')).toBe(true);
+    expect(catalog.skillPaths.has('evidence')).toBe(true);
+    expect(catalog.skillPaths.get('evidence')).toBe(
+      '.nitpick/skills/evidence/SKILL.md',
+    );
   });
 });
 

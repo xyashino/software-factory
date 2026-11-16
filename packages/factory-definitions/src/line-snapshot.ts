@@ -47,7 +47,6 @@ const toStation = (
 ): Record<string, unknown> => {
   const base = {
     id: station.id,
-    requires: station.requires,
     ...(station.onFail === undefined ? {} : { onFail: station.onFail }),
     maxRestarts: station.maxRestarts,
     maxLostRestarts: station.maxLostRestarts,
@@ -71,6 +70,9 @@ const toStation = (
       : { runner: pool.runner, operator: poolOf(pool) }),
     verdict: profile?.verdict ?? false,
     artifacts: Object.keys(profile?.artifacts ?? {}).sort(),
+    ...(profile?.artifacts && Object.keys(profile.artifacts).length > 0
+      ? { artifactFiles: profile.artifacts }
+      : {}),
   };
 };
 

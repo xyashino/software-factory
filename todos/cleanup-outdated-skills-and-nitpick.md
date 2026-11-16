@@ -1,6 +1,6 @@
 ---
 status: todo
-priority: medium
+priority: low
 depends_on: []
 line: standard
 factory: v2

@@ -44,7 +44,6 @@ export interface OrderProjection {
   nextKind: Next['kind'];
   jobKind: JobKind | null;
   runner: string | null;
-  requiredCapabilities: string[];
   stationId: StationId | null;
   stationIndex: number | null;
   progressed: boolean;
@@ -62,7 +61,6 @@ interface StationRef {
   id: StationId;
   index: number;
   runner: string | undefined;
-  requires: string[];
 }
 
 /** The Station of the next job; else the Station the phase points at; undefined when there is none. */
@@ -83,7 +81,7 @@ const stationRef = (
   const station = findStation(state.line, id);
   const index = stationIndex(state.line, id);
   if (!station || index === undefined) return undefined;
-  return { id, index, runner: station.runner, requires: station.requires };
+  return { id, index, runner: station.runner };
 };
 
 const avoidCellsOf = (state: WorkOrderState): OrderProjection['avoidCells'] => {
@@ -137,7 +135,6 @@ export const toProjection = (
     nextKind: next.kind,
     jobKind: next.kind === 'job' ? next.job.kind : null,
     runner: runsOperator ? (station?.runner ?? null) : null,
-    requiredCapabilities: station ? [...station.requires] : [],
     stationId: station?.id ?? null,
     stationIndex: station?.index ?? null,
     progressed:

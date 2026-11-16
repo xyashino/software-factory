@@ -11,6 +11,7 @@ const fixtureDir = (name: string): string =>
 
 const BASELINE = '0000_baseline';
 const DROP_INTAKE = '0001_drop_intake';
+const DROP_REQUIRED = '0002_drop_required_capabilities';
 
 const LEGACY_FILES = [
   '0001_init.sql',
@@ -91,9 +92,9 @@ describe('the migration runner on a fresh database', () => {
 
     const applied = migrate(db, MIGRATIONS_DIR);
 
-    expect(applied).toEqual([BASELINE, DROP_INTAKE]);
+    expect(applied).toEqual([BASELINE, DROP_INTAKE, DROP_REQUIRED]);
     expect(tableNames(db)).toEqual(STORAGE_TABLES);
-    expect(appliedNames(db)).toEqual([BASELINE, DROP_INTAKE]);
+    expect(appliedNames(db)).toEqual([BASELINE, DROP_INTAKE, DROP_REQUIRED]);
   });
 
   it('applies nothing on a second run', () => {
@@ -101,7 +102,7 @@ describe('the migration runner on a fresh database', () => {
     migrate(db, MIGRATIONS_DIR);
 
     expect(migrate(db, MIGRATIONS_DIR)).toEqual([]);
-    expect(appliedNames(db)).toEqual([BASELINE, DROP_INTAKE]);
+    expect(appliedNames(db)).toEqual([BASELINE, DROP_INTAKE, DROP_REQUIRED]);
   });
 
   it('applies only the migrations that are new', () => {
@@ -149,12 +150,14 @@ describe('adopting the baseline on a legacy database', () => {
 
     const applied = migrate(db, MIGRATIONS_DIR);
 
-    expect(applied).toEqual([DROP_INTAKE]);
+    expect(applied).toEqual([DROP_INTAKE, DROP_REQUIRED]);
     expect(appliedNames(db)).toEqual(
-      [...LEGACY_FILES, BASELINE, DROP_INTAKE].sort(),
+      [...LEGACY_FILES, BASELINE, DROP_INTAKE, DROP_REQUIRED].sort(),
     );
     expect(tableNames(db)).not.toContain('intake');
-    expect(workOrders(db)).toEqual(orders);
+    const [expectedOrder] = JSON.parse(orders);
+    delete (expectedOrder as Record<string, unknown>).required_capabilities;
+    expect(JSON.parse(workOrders(db))).toEqual([expectedOrder]);
   });
 
   it('applies nothing once the baseline is adopted', () => {
@@ -174,9 +177,10 @@ describe('adopting the baseline on a legacy database', () => {
       '0002_join_token_command_id.sql',
       '0003_order_plan.sql',
       DROP_INTAKE,
+      DROP_REQUIRED,
     ]);
     expect(appliedNames(db)).toEqual(
-      [...LEGACY_FILES, BASELINE, DROP_INTAKE].sort(),
+      [...LEGACY_FILES, BASELINE, DROP_INTAKE, DROP_REQUIRED].sort(),
     );
     expect(
       db

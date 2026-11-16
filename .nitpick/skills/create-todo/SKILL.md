@@ -55,7 +55,7 @@ When explicitly invoked by the user:
    - Split complex epics into discrete, high-cohesion `todos/<name>.md` files.
    - Do not bundle unrelated concerns (e.g. keep `@repo/uih` and `@repo/ui` in separate files).
 3. **Drafting from Template**:
-   - Use the canonical template structure from `.agents/templates/todo.md`.
+   - Use the canonical template structure from `references/todo.md` (next to this file).
    - Populate sections: **Objective**, **Context & Problem Statement**, **Specification / Scope**, **Implementation Plan**, and **Acceptance Criteria**.
 4. **Agent Override (only when the user names a runner, tier or model)**:
    - Set `runner` and/or `tier` (`advanced` hard / cross-package, `default`, `light` trivial edits). Never write a model id, tasks have no `model` key.

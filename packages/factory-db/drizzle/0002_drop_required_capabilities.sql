@@ -1,0 +1,1 @@
+ALTER TABLE `orders` DROP COLUMN `required_capabilities`;

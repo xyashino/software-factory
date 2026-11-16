@@ -69,6 +69,10 @@ export const AODI_LEGEND = readSource(
 
 const instructionPath = (id: string): string => posix.join('rules', `${id}.md`);
 
+/** A `{ file }` rule doc gets its own `rules/<id>.md`, unless `inline` puts its text in the group file. */
+const ownsFile = (doc: unknown): boolean =>
+  typeof doc === 'object' && doc !== null && !('inline' in doc && doc.inline);
+
 const keysIn = (text: string): string[] =>
   [...text.matchAll(REF)].map((match) => match[1] as string);
 
@@ -232,7 +236,7 @@ export const buildDocs = (
   const unitTargets = new Map<string, string>([
     ...rules.map(({ id, group, doc }): [string, string] => [
       id,
-      typeof doc === 'object' ? instructionPath(id) : groupPath(group),
+      ownsFile(doc) ? instructionPath(id) : groupPath(group),
     ]),
     ...agents.map(({ id }): [string, string] => [id, agentPath(id)]),
     ...skills.map(({ id }): [string, string] => [id, skillPath(id)]),
@@ -273,7 +277,9 @@ export const buildDocs = (
       ...extra,
     };
     if (typeof doc === 'function') return doc(ctx);
-    return read(doc.file)?.replace(REF, (_, key: string) => ctx.file(key));
+    return read(doc.file)?.replace(REF, (_, key: string) =>
+      key in refs ? ctx.file(key) : ctx.ref(key),
+    );
   };
 
   const ids = new Set<string>();
@@ -295,7 +301,7 @@ export const buildDocs = (
     if (run && !fix) {
       problems.push(`Rule "${id}": fix is required when run is defined`);
     }
-    if (typeof doc !== 'object') continue;
+    if (!ownsFile(doc)) continue;
     const text = resolveDoc(doc, `Rule "${id}"`, instructionPath(id));
     if (text === undefined) continue;
     instructionFiles.set(
@@ -310,9 +316,9 @@ export const buildDocs = (
       .map(
         (rule, index) =>
           `${index + 1}. (${rule.importance}) ${
-            typeof rule.doc === 'object'
+            ownsFile(rule.doc)
               ? link(from, instructionPath(rule.id), rule.id)
-              : resolveDoc(rule.doc, `Rule "${rule.id}"`, from)
+              : resolveDoc(rule.doc, `Rule "${rule.id}"`, from)?.trim()
           }`,
       )
       .join('\n');

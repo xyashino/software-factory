@@ -536,7 +536,6 @@ type JobSpec =
       base: CommitSha | 'branch_base';
       operator: Station['operator'];
       runner: string;
-      requires: string[];
     }
   | {
       kind: 'run_inspection';
@@ -545,14 +544,12 @@ type JobSpec =
       cause: CycleCause;
       base: CommitSha | 'branch_base';
       commands: string[];
-      requires: string[];
     }
   | { kind: 'deliver'; base: CommitSha }
   | { kind: 'mechanic'; andonAt: number; n: number }; // no workspace (§14.4)
 ```
 
-Every `JobSpec` carries `requires` so queue selection can match Cells without reading the Line again.
-`run_operator_station` carries `runner` for the same reason.
+`run_operator_station` carries `runner` so queue selection can match Cells without reading the Line again.
 
 Decision table (first matching row wins):
 
@@ -645,7 +642,6 @@ interface QueueEntry {
   next: Next['kind'];
   jobKind?: JobSpec['kind'];
   runner?: string; // for Operator stations
-  requiredCapabilities: string[]; // the Station's `requires` tags (e.g. 'docker', 'gpu')
   dependsOn: OrderId[];
   plan?: PlanSlug; // plan members only: selects the stacked outcome for in-plan dependencies
   deps: 'satisfied' | 'waiting' | 'broken'; // computed when the queue is read, from the other Work orders
@@ -670,7 +666,7 @@ interface Limits {
 ```
 
 A Work order is claimable by a Cell iff: `holder = queue`, `next = job`, `deps = satisfied`, the Cell
-serves the project, the Cell has the Station's runner and all `requiredCapabilities`, the Cell is
+serves the project, the Cell has the Station's runner, the Cell is
 not in an active `avoidCells` cooldown (`until > limits.now`), and the project is under its
 concurrency limit.
 

@@ -1,0 +1,4 @@
+{
+  "rules": "./.nitpick/rules",
+  "skills": "./.nitpick/skills"
+}

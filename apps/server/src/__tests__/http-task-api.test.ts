@@ -92,7 +92,6 @@ const lineSnapshot = (name = LINE_NAME): LineSnapshot => {
         id: 'build' as StationId,
         kind: 'operator' as const,
         runner: 'claude',
-        requires: [],
         maxRestarts: 0,
         maxLostRestarts: 0,
         verdict: false,

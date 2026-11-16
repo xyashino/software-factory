@@ -102,11 +102,9 @@ describe('prompt rules', () => {
     });
 
     expect(text).toContain(
-      '## Input: declared.rules\n\nrich-commit: .agents/rules/rich-commit.md\ntesting: .agents/rules/testing.md',
+      '- rich-commit: .agents/rules/rich-commit.md\n- testing: .agents/rules/testing.md',
     );
-    expect(text).toContain(
-      '## Input: declared.skills\n\nevidence: .agents/skills/evidence/SKILL.md',
-    );
+    expect(text).toContain('- evidence: .agents/skills/evidence/SKILL.md');
     expect(text).not.toMatch(ABSOLUTE_PATH);
   });
 
@@ -121,8 +119,8 @@ describe('prompt rules', () => {
       },
     });
 
-    expect(text).toContain('## Input: declared.rules\n\nrich-commit\n');
-    expect(text).toContain('## Input: declared.skills\n\nevidence');
+    expect(text).toContain('- rich-commit');
+    expect(text).toContain('- evidence');
     expect(text).not.toContain('rich-commit:');
   });
 

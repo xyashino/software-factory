@@ -52,7 +52,6 @@ export const stationSchema = z
     operator: operatorPoolSchema.optional(),
     timeoutMs: z.number().int().min(1).optional(),
     runner: tag.optional(),
-    requires: z.array(tag).max(32),
     onFail: z
       .object({ retry: stationIdSchema, max: z.number().int().min(0).max(100) })
       .strict()
@@ -74,6 +73,8 @@ export const stationSchema = z
       )
       .max(32)
       .default([]),
+    // Map of artifact key -> relative file name declared in operator profile.
+    artifactFiles: z.record(z.string(), z.string()).optional(),
     // Shell commands of an Inspection, run in order (PROTOCOL §4 `exec`).
     exec: z
       .array(

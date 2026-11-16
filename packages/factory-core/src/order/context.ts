@@ -14,7 +14,7 @@ export type CycleInput =
       key: string;
       cycleId: CycleId;
       blob: BlobRef;
-      materialiseAs: string; // relative path, e.g. `.cell/inputs/plan.plan`
+      materialiseAs: string; // relative path, e.g. `.cell/steps/plan/plan.md`
     }
   | {
       kind: 'inspection';
@@ -93,14 +93,17 @@ const earlierInputs = (
         ];
       }
       const cycle = requireCycle(state, cycleId);
-      return Object.entries(cycle.artifacts).map(([key, blob]): CycleInput => ({
-        kind: 'artifact',
-        stationId: station.id,
-        key,
-        cycleId,
-        blob,
-        materialiseAs: `${SCRATCH_DIR}/inputs/${station.id}.${key}`,
-      }));
+      return Object.entries(cycle.artifacts).map(([key, blob]): CycleInput => {
+        const filename = station.artifactFiles?.[key] ?? key;
+        return {
+          kind: 'artifact',
+          stationId: station.id,
+          key,
+          cycleId,
+          blob,
+          materialiseAs: `${SCRATCH_DIR}/steps/${station.id}/${filename}`,
+        };
+      });
     });
 };
 
@@ -181,7 +184,12 @@ const causeSections = (
   }
 };
 
-/** Questions asked in earlier Cycles of this Station, answered or abandoned (CORE §7). */
+/**
+ * Questions asked in this Station's prior Cycles that have answers (CORE §7).
+ *
+ * Ordered as stored. Questions without an answer are omitted: an open question
+ * does not reach a fresh prompt until a user answers it.
+ */
 const priorQuestionsOf = (
   state: WorkOrderState,
   stationId: StationId,
@@ -200,10 +208,13 @@ const priorQuestionsOf = (
 };
 
 const outputsOf = (station: Station): CycleContext['outputs'] =>
-  station.artifacts.map((key) => ({
-    key,
-    path: `${SCRATCH_DIR}/outputs/${key}`,
-  }));
+  station.artifacts.map((key) => {
+    const filename = station.artifactFiles?.[key] ?? key;
+    return {
+      key,
+      path: `${SCRATCH_DIR}/steps/${station.id}/${filename}`,
+    };
+  });
 
 /**
  * What a Cycle of `stationId` starts with, given the cause of its job (CORE §7). Pure: the runtime

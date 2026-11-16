@@ -40,7 +40,7 @@ describe('parseLine (schema v2)', () => {
     expect(parsed.value).not.toHaveProperty('operator');
   });
 
-  it('fills the restart defaults: maxRestarts 1, maxLostRestarts 3, requires []', () => {
+  it('fills the restart defaults: maxRestarts 1, maxLostRestarts 3', () => {
     const parsed = parseLine(
       { file: FILE, path: VALID },
       readFileSync(VALID, 'utf8'),
@@ -52,9 +52,7 @@ describe('parseLine (schema v2)', () => {
       kind: 'operator',
       maxRestarts: 1,
       maxLostRestarts: 3,
-      requires: [],
     });
-    expect(parsed.value.stations[1]?.requires).toEqual(['docker']);
   });
 
   it('defaults operator headless to false and permission to write', () => {

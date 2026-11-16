@@ -72,24 +72,6 @@ describe('selectClaimable: the claimable rule', () => {
     ).toEqual([orderOf('task-a')]);
   });
 
-  it('skips a Work order when the Cell lacks one required capability', () => {
-    expect(
-      claimableIds(
-        [entry({ requiredCapabilities: ['docker', 'gpu'] })],
-        cell({ capabilities: ['docker'] }),
-      ),
-    ).toEqual([]);
-  });
-
-  it('offers a Work order when the Cell has every required capability', () => {
-    expect(
-      claimableIds(
-        [entry({ requiredCapabilities: ['docker', 'gpu'] })],
-        cell({ capabilities: ['gpu', 'docker', 'extra'] }),
-      ),
-    ).toEqual([orderOf('task-a')]);
-  });
-
   it('skips a Work order while the Cell is in an active cooldown', () => {
     const cooling = entry({
       avoidCells: [{ cellId: CELL, until: NOW + 1 }],

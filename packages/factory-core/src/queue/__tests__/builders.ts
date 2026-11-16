@@ -30,7 +30,6 @@ export const entry = (overrides: Partial<QueueEntry> = {}): QueueEntry => ({
   createdAt: 1_000,
   holder: 'queue',
   next: 'job',
-  requiredCapabilities: [],
   dependsOn: [],
   deps: 'satisfied',
   progressed: false,

@@ -12,6 +12,7 @@ workspace:
     timeout: 10m
     exec:
       - pnpm install --frozen-lockfile
+      - pnpm run --if-present nitpick:sync
 
 operators:
   planner:
@@ -48,14 +49,12 @@ stations:
     kind: operator
     operator: planner
     inputs: []
-    requires: []
 
   - id: plan-review
     kind: operator
     operator: plan-reviewer
     inputs:
       - plan.plan
-    requires: []
     onFail:
       retry: plan
       max: 2
@@ -65,7 +64,6 @@ stations:
     operator: builder
     inputs:
       - plan.plan
-    requires: []
 
   - id: quality-gate
     kind: inspection
@@ -74,7 +72,7 @@ stations:
       - pnpm check-types
       - pnpm lint
       - pnpm test
-    requires: []
+      - pnpm nitpick:check
     onFail:
       retry: build
       max: 3
@@ -87,7 +85,6 @@ stations:
       - build.report
       - build.commit
       - quality-gate.gate
-    requires: []
     onFail:
       retry: build
       max: 2

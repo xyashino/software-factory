@@ -73,8 +73,6 @@ export const orders = sqliteTable(
     jobKind: text('job_kind'),
     /** When the next job is an Operator station. */
     runner: text('runner'),
-    /** JSON array, the next Station's `requires`. */
-    requiredCapabilities: text('required_capabilities').notNull().default('[]'),
     stationId: text('station_id'),
     stationIndex: integer('station_index'),
     /** 0/1. */

@@ -90,7 +90,7 @@ describe('the line builder', () => {
   it('builds the default Line of the harness', () => {
     const built = lineBuilder()
       .operator('plan', { artifacts: ['plan'] })
-      .operator('build', { requires: ['docker'] })
+      .operator('build')
       .operator('audit', {
         verdict: true,
         artifacts: ['review'],

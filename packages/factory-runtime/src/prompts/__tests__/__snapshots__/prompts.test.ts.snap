@@ -6,8 +6,11 @@ exports[`prompt snapshots per Line Station > renders fast/build with no absolute
 
 You are the Builder for task todo-fast-build, attempt C000000000000000000000000A. You implement the task solo.
 
-## Task
-Body of todo-fast-build
+## Inputs
+
+Read each input before you begin:
+- task.title: Title todo-fast-build
+- task.branch: todo-fast-build
 
 ## Context
 ## Input: task.title
@@ -27,37 +30,37 @@ todo-fast-build
 
 ## Input: outputs
 
-commit: .cell/outputs/commit
-report: .cell/outputs/report
+commit: .cell/steps/build/commit.txt
+report: .cell/steps/build/report.md
 
 
-## Input: declared.rules
+## Rules
 
-rich-commit
-decision-log
-testing
+You must follow the declared rules.
+- rich-commit
+- decision-log
+- testing
 
+## Skills
 
-## Input: declared.skills
-
-evidence
-
+You must use the following skills:
+- evidence
+- caveman
 
 ## Instructions
 
-1. Follow \`.nitpick/agents/cell.md\`. If the change is complex, write a short plan first.
-2. Strictly follow the test pyramid in the \`testing\` rules of \`.nitpick/config.ts\`.
-3. Run the basic repo checks (typecheck, lint, test) for every package you touched, then \`pnpm nitpick:check\`. Fix every nitpick finding before you finish; the doctor audits the same rules.
-   - ADR \`summary\` must be 10-70 characters; \`why\` 10-200. Count them before you write the file.
-4. Proof: this attempt's evidence directory is \`.cell/evidence\`. For a change without UI, proof is the test/check output. Save the output of each check you ran as a file there (e.g. \`check.txt\`, \`test.txt\`, \`ci.txt\`, \`diff-summary.txt\`). Do not write proof to \`/tmp\`, to the worktree, or to another attempt's directory; the supervisor only sees files in \`.cell/evidence\`.
-5. Record one new entry in \`decisions/\` following the \`decision-log\` rule in \`.nitpick/config.ts\`. The \`scope\` must match an allowed pattern in \`.nitpick/config.ts\` (for example \`factory\`, \`factory/workflows\`, \`repo\`). The file name slug starts with the first segment of the scope (scope \`factory/workflows\` gives \`...-factory-add-...\`), never with the package name. Stage the new entry with \`git add decisions/<file>\` before you finish; the doctor rejects an unstaged entry. The whole task ships as one commit with exactly one new entry: if an earlier attempt of this task already added one on this branch, update that file instead of adding another.
+1. If the change is complex, write a short plan first.
+2. Follow the declared rules and skills; read each file before you edit.
+3. Run the basic repo checks (typecheck, lint, test) for every package you touched, then \`pnpm nitpick:check\`, and fix every finding. The doctor audits the same rules.
+4. Proof: this attempt's evidence directory is \`.cell/steps/build/evidence\`. For a change without UI, proof is the test/check output. Save the output of each check you ran as a file there (e.g. \`check.txt\`, \`test.txt\`, \`ci.txt\`, \`diff-summary.txt\`). Do not write proof to \`/tmp\`, to the worktree, or to another attempt's directory; the supervisor only sees files in \`.cell/steps/build/evidence\`.
+5. Record one new entry in \`decisions/\` per the declared \`decision-log\` rule and stage it with \`git add decisions/<file>\`. The task ships as one commit with exactly one new entry: if an earlier attempt already added one, update that file.
 6. Do not reuse or edit files from other attempts.
 7. Write and edit files with your file-edit tool. Do not write files through shell heredocs, \`python -c\`, \`sed -i\`, or \`tee\`, and do not run \`rm -rf\`: the automatic approval blocks these and the task stalls waiting for a human.
 
 ## Deliverables
 
-- \`.cell/outputs/report\`: what changed, files modified, checks run, proof path (\`.cell/evidence\`). Caveman format: bullet facts only. No greetings or fluff.
-- \`.cell/outputs/commit\`: a rich commit message in the form \`type(scope): title\`, then a blank line, then a \`- \` change list, covering the whole task (not only this attempt). Write it to this exact path; its title becomes the PR title and its change list the PR's Changes section.
+- \`.cell/steps/build/report.md\`: what changed, files modified, checks run, proof path (\`.cell/steps/build/evidence\`). Caveman format: bullet facts only. No greetings or fluff.
+- \`.cell/steps/build/commit.txt\`: a rich commit message in the form \`type(scope): title\`, then a blank line, then a \`- \` change list, covering the whole task (not only this attempt). List behaviour changes, not every file touched. Write it to this exact path; its title becomes the PR title and its change list the PR's Changes section.
 
 ## Finish
 
@@ -77,8 +80,11 @@ exports[`prompt snapshots per Line Station > renders feature/audit with no absol
 
 You are the Doctor for task todo-feature-audit, attempt C000000000000000000000000A. You audit quality, proof and rules. You review; you do not edit code.
 
-## Task
-Body of todo-feature-audit
+## Inputs
+
+Read each input before you begin:
+- task.title: Title todo-feature-audit
+- task.branch: todo-feature-audit
 
 ## Context
 ## Input: task.title
@@ -98,27 +104,27 @@ todo-feature-audit
 
 ## Input: outputs
 
-feedback: .cell/outputs/feedback
+feedback: .cell/steps/audit/feedback.md
 
 
-## Input: declared.rules
+## Rules
 
-rich-commit
-decision-log
+You must follow the declared rules.
+- rich-commit
+- decision-log
 
+## Skills
 
-## Input: declared.skills
-
-evidence
-
+You must use the following skills:
+- evidence
 
 ## Instructions
 
 1. Read the cell's changes in the worktree with \`git diff HEAD\` (plus untracked and staged files): HEAD is the base this task was started from. Do not diff against \`origin/main\`: it moves while tasks run, and a newer main shows changes the task never made as reverted.
 2. Scope: the change does what the task and the cell report say, nothing more.
-3. Rules: check the rules in the \`.nitpick/config.ts\` rules tree that apply to the changed files, by reading them. For \`rich-commit\`, check the message in the \`build.commit\` input against the rule text (\`type(scope): title\`, blank line, \`- \` change list). Do not judge HEAD: the commit of this attempt does not exist yet (the supervisor makes it after the audit).
-4. Proof: the cell's proof is in the directory of the \`build.report\` input (the cell's evidence directory). Check it there. \`.cell/evidence\` holds only this audit's prompt and feedback; an empty \`.cell/evidence\` is not missing proof.
-5. Decision log: exactly one new entry in decisions/ matches the \`decision-log\` rule in \`.nitpick/config.ts\`, with the right scope.
+3. Rules: check the declared rules against the changed files. For \`rich-commit\`, check the message in the \`build.commit\` input against the rule text (\`type(scope): title\`, blank line, \`- \` change list). Do not judge HEAD: the commit of this attempt does not exist yet (the supervisor makes it after the audit).
+4. Proof: the cell's proof is in the directory of the \`build.report\` input (the cell's evidence directory). Check it there. \`.cell/steps/audit/evidence\` holds only this audit's prompt and feedback; an empty \`.cell/steps/audit/evidence\` is not missing proof.
+5. Decision log: exactly one new entry in \`decisions/\` matches the declared \`decision-log\` rule.
 
 ## Commands
 
@@ -153,8 +159,11 @@ exports[`prompt snapshots per Line Station > renders feature/build with no absol
 
 You are the Builder for task todo-feature-build, attempt C000000000000000000000000A. You implement the task solo.
 
-## Task
-Body of todo-feature-build
+## Inputs
+
+Read each input before you begin:
+- task.title: Title todo-feature-build
+- task.branch: todo-feature-build
 
 ## Context
 ## Input: task.title
@@ -174,37 +183,37 @@ todo-feature-build
 
 ## Input: outputs
 
-commit: .cell/outputs/commit
-report: .cell/outputs/report
+commit: .cell/steps/build/commit.txt
+report: .cell/steps/build/report.md
 
 
-## Input: declared.rules
+## Rules
 
-rich-commit
-decision-log
-testing
+You must follow the declared rules.
+- rich-commit
+- decision-log
+- testing
 
+## Skills
 
-## Input: declared.skills
-
-evidence
-
+You must use the following skills:
+- evidence
+- caveman
 
 ## Instructions
 
-1. Follow \`.nitpick/agents/cell.md\`. If the change is complex, write a short plan first.
-2. Strictly follow the test pyramid in the \`testing\` rules of \`.nitpick/config.ts\`.
-3. Run the basic repo checks (typecheck, lint, test) for every package you touched, then \`pnpm nitpick:check\`. Fix every nitpick finding before you finish; the doctor audits the same rules.
-   - ADR \`summary\` must be 10-70 characters; \`why\` 10-200. Count them before you write the file.
-4. Proof: this attempt's evidence directory is \`.cell/evidence\`. For a change without UI, proof is the test/check output. Save the output of each check you ran as a file there (e.g. \`check.txt\`, \`test.txt\`, \`ci.txt\`, \`diff-summary.txt\`). Do not write proof to \`/tmp\`, to the worktree, or to another attempt's directory; the supervisor only sees files in \`.cell/evidence\`.
-5. Record one new entry in \`decisions/\` following the \`decision-log\` rule in \`.nitpick/config.ts\`. The \`scope\` must match an allowed pattern in \`.nitpick/config.ts\` (for example \`factory\`, \`factory/workflows\`, \`repo\`). The file name slug starts with the first segment of the scope (scope \`factory/workflows\` gives \`...-factory-add-...\`), never with the package name. Stage the new entry with \`git add decisions/<file>\` before you finish; the doctor rejects an unstaged entry. The whole task ships as one commit with exactly one new entry: if an earlier attempt of this task already added one on this branch, update that file instead of adding another.
+1. If the change is complex, write a short plan first.
+2. Follow the declared rules and skills; read each file before you edit.
+3. Run the basic repo checks (typecheck, lint, test) for every package you touched, then \`pnpm nitpick:check\`, and fix every finding. The doctor audits the same rules.
+4. Proof: this attempt's evidence directory is \`.cell/steps/build/evidence\`. For a change without UI, proof is the test/check output. Save the output of each check you ran as a file there (e.g. \`check.txt\`, \`test.txt\`, \`ci.txt\`, \`diff-summary.txt\`). Do not write proof to \`/tmp\`, to the worktree, or to another attempt's directory; the supervisor only sees files in \`.cell/steps/build/evidence\`.
+5. Record one new entry in \`decisions/\` per the declared \`decision-log\` rule and stage it with \`git add decisions/<file>\`. The task ships as one commit with exactly one new entry: if an earlier attempt already added one, update that file.
 6. Do not reuse or edit files from other attempts.
 7. Write and edit files with your file-edit tool. Do not write files through shell heredocs, \`python -c\`, \`sed -i\`, or \`tee\`, and do not run \`rm -rf\`: the automatic approval blocks these and the task stalls waiting for a human.
 
 ## Deliverables
 
-- \`.cell/outputs/report\`: what changed, files modified, checks run, proof path (\`.cell/evidence\`). Caveman format: bullet facts only. No greetings or fluff.
-- \`.cell/outputs/commit\`: a rich commit message in the form \`type(scope): title\`, then a blank line, then a \`- \` change list, covering the whole task (not only this attempt). Write it to this exact path; its title becomes the PR title and its change list the PR's Changes section.
+- \`.cell/steps/build/report.md\`: what changed, files modified, checks run, proof path (\`.cell/steps/build/evidence\`). Caveman format: bullet facts only. No greetings or fluff.
+- \`.cell/steps/build/commit.txt\`: a rich commit message in the form \`type(scope): title\`, then a blank line, then a \`- \` change list, covering the whole task (not only this attempt). List behaviour changes, not every file touched. Write it to this exact path; its title becomes the PR title and its change list the PR's Changes section.
 
 ## Finish
 
@@ -224,8 +233,11 @@ exports[`prompt snapshots per Line Station > renders feature/plan with no absolu
 
 You are the Planner for task todo-feature-plan, attempt C000000000000000000000000A. You plan; you do not edit code.
 
-## Task
-Body of todo-feature-plan
+## Inputs
+
+Read each input before you begin:
+- task.title: Title todo-feature-plan
+- task.branch: todo-feature-plan
 
 ## Context
 ## Input: task.title
@@ -245,23 +257,35 @@ todo-feature-plan
 
 ## Input: outputs
 
-plan: .cell/outputs/plan
+plan: .cell/steps/plan/plan.md
 
+
+## Rules
+
+You must follow the declared rules.
+- coding
+- testing
+- typescript
+
+## Skills
+
+You must use the following skills:
+- caveman
 
 ## Instructions
 
-1. Read the task. Read \`.nitpick/agents/cell.md\` and the rules in the \`.nitpick/config.ts\` rules tree that apply to the change.
+1. Read the task in the context and the declared rules.
 2. Explore the codebase enough to name the files, modules and tests the change touches.
 3. Write the plan: goal, files to change, steps in order, tests to add, proof to collect.
 4. If complex, keep the plan short. Name the rules that apply by path.
 
 ## Deliverables
 
-- \`.cell/outputs/plan\`: the plan, caveman format. Bullet facts only. No greetings or fluff.
+- \`.cell/steps/plan/plan.md\`: the plan, caveman format. Bullet facts only. No greetings or fluff.
 
 ## Finish
 
-Write \`.cell/outputs/plan\`, then run \`factory-operator done\`.
+Write \`.cell/steps/plan/plan.md\`, then run \`factory-operator done\`.
 
 ## sf commands
 
@@ -277,8 +301,11 @@ exports[`prompt snapshots per Line Station > renders feature/plan-review with no
 
 You are the Plan Reviewer for task todo-feature-plan-review, attempt C000000000000000000000000A. You review the plan; you do not edit code or the plan.
 
-## Task
-Body of todo-feature-plan-review
+## Inputs
+
+Read each input before you begin:
+- task.title: Title todo-feature-plan-review
+- task.branch: todo-feature-plan-review
 
 ## Context
 ## Input: task.title
@@ -298,19 +325,31 @@ todo-feature-plan-review
 
 ## Input: outputs
 
-feedback: .cell/outputs/feedback
+feedback: .cell/steps/plan-review/feedback.md
 
+
+## Rules
+
+You must follow the declared rules.
+- coding
+- testing
+- typescript
+
+## Skills
+
+You must use the following skills:
+- caveman
 
 ## Instructions
 
-1. Read the plan in the context and the task above.
+1. Read the plan and the task in the context.
 2. Judge one question only: does the plan solve the problem described in the task? Fail the plan only if, carried out as written, it would leave that problem unsolved or break the code.
 3. Do not fail the plan for style, wording, or details that do not affect whether the problem is solved.
 
 ## Finish
 
-- The plan solves the problem: run \`factory-operator verdict pass\`. Do not write \`.cell/outputs/feedback\` in this case, even though the outputs list shows it: a pass needs no feedback and the command takes none.
-- Otherwise write each blocking problem to \`.cell/outputs/feedback\`, one line per problem, then run \`factory-operator verdict fail --feedback .cell/outputs/feedback\`.
+- The plan solves the problem: run \`factory-operator verdict pass\`. Do not write \`.cell/steps/plan-review/feedback.md\` in this case, even though the outputs list shows it: a pass needs no feedback and the command takes none.
+- Otherwise write each blocking problem to \`.cell/steps/plan-review/feedback.md\`, one line per problem, then run \`factory-operator verdict fail --feedback .cell/steps/plan-review/feedback.md\`.
 
 ## sf commands
 
@@ -326,8 +365,11 @@ exports[`prompt snapshots per Line Station > renders standard/audit with no abso
 
 You are the Doctor for task todo-standard-audit, attempt C000000000000000000000000A. You audit quality, proof and rules. You review; you do not edit code.
 
-## Task
-Body of todo-standard-audit
+## Inputs
+
+Read each input before you begin:
+- task.title: Title todo-standard-audit
+- task.branch: todo-standard-audit
 
 ## Context
 ## Input: task.title
@@ -347,27 +389,27 @@ todo-standard-audit
 
 ## Input: outputs
 
-feedback: .cell/outputs/feedback
+feedback: .cell/steps/audit/feedback.md
 
 
-## Input: declared.rules
+## Rules
 
-rich-commit
-decision-log
+You must follow the declared rules.
+- rich-commit
+- decision-log
 
+## Skills
 
-## Input: declared.skills
-
-evidence
-
+You must use the following skills:
+- evidence
 
 ## Instructions
 
 1. Read the cell's changes in the worktree with \`git diff HEAD\` (plus untracked and staged files): HEAD is the base this task was started from. Do not diff against \`origin/main\`: it moves while tasks run, and a newer main shows changes the task never made as reverted.
 2. Scope: the change does what the task and the cell report say, nothing more.
-3. Rules: check the rules in the \`.nitpick/config.ts\` rules tree that apply to the changed files, by reading them. For \`rich-commit\`, check the message in the \`build.commit\` input against the rule text (\`type(scope): title\`, blank line, \`- \` change list). Do not judge HEAD: the commit of this attempt does not exist yet (the supervisor makes it after the audit).
-4. Proof: the cell's proof is in the directory of the \`build.report\` input (the cell's evidence directory). Check it there. \`.cell/evidence\` holds only this audit's prompt and feedback; an empty \`.cell/evidence\` is not missing proof.
-5. Decision log: exactly one new entry in decisions/ matches the \`decision-log\` rule in \`.nitpick/config.ts\`, with the right scope.
+3. Rules: check the declared rules against the changed files. For \`rich-commit\`, check the message in the \`build.commit\` input against the rule text (\`type(scope): title\`, blank line, \`- \` change list). Do not judge HEAD: the commit of this attempt does not exist yet (the supervisor makes it after the audit).
+4. Proof: the cell's proof is in the directory of the \`build.report\` input (the cell's evidence directory). Check it there. \`.cell/steps/audit/evidence\` holds only this audit's prompt and feedback; an empty \`.cell/steps/audit/evidence\` is not missing proof.
+5. Decision log: exactly one new entry in \`decisions/\` matches the declared \`decision-log\` rule.
 
 ## Commands
 
@@ -402,8 +444,11 @@ exports[`prompt snapshots per Line Station > renders standard/build with no abso
 
 You are the Builder for task todo-standard-build, attempt C000000000000000000000000A. You implement the task solo.
 
-## Task
-Body of todo-standard-build
+## Inputs
+
+Read each input before you begin:
+- task.title: Title todo-standard-build
+- task.branch: todo-standard-build
 
 ## Context
 ## Input: task.title
@@ -423,37 +468,37 @@ todo-standard-build
 
 ## Input: outputs
 
-commit: .cell/outputs/commit
-report: .cell/outputs/report
+commit: .cell/steps/build/commit.txt
+report: .cell/steps/build/report.md
 
 
-## Input: declared.rules
+## Rules
 
-rich-commit
-decision-log
-testing
+You must follow the declared rules.
+- rich-commit
+- decision-log
+- testing
 
+## Skills
 
-## Input: declared.skills
-
-evidence
-
+You must use the following skills:
+- evidence
+- caveman
 
 ## Instructions
 
-1. Follow \`.nitpick/agents/cell.md\`. If the change is complex, write a short plan first.
-2. Strictly follow the test pyramid in the \`testing\` rules of \`.nitpick/config.ts\`.
-3. Run the basic repo checks (typecheck, lint, test) for every package you touched, then \`pnpm nitpick:check\`. Fix every nitpick finding before you finish; the doctor audits the same rules.
-   - ADR \`summary\` must be 10-70 characters; \`why\` 10-200. Count them before you write the file.
-4. Proof: this attempt's evidence directory is \`.cell/evidence\`. For a change without UI, proof is the test/check output. Save the output of each check you ran as a file there (e.g. \`check.txt\`, \`test.txt\`, \`ci.txt\`, \`diff-summary.txt\`). Do not write proof to \`/tmp\`, to the worktree, or to another attempt's directory; the supervisor only sees files in \`.cell/evidence\`.
-5. Record one new entry in \`decisions/\` following the \`decision-log\` rule in \`.nitpick/config.ts\`. The \`scope\` must match an allowed pattern in \`.nitpick/config.ts\` (for example \`factory\`, \`factory/workflows\`, \`repo\`). The file name slug starts with the first segment of the scope (scope \`factory/workflows\` gives \`...-factory-add-...\`), never with the package name. Stage the new entry with \`git add decisions/<file>\` before you finish; the doctor rejects an unstaged entry. The whole task ships as one commit with exactly one new entry: if an earlier attempt of this task already added one on this branch, update that file instead of adding another.
+1. If the change is complex, write a short plan first.
+2. Follow the declared rules and skills; read each file before you edit.
+3. Run the basic repo checks (typecheck, lint, test) for every package you touched, then \`pnpm nitpick:check\`, and fix every finding. The doctor audits the same rules.
+4. Proof: this attempt's evidence directory is \`.cell/steps/build/evidence\`. For a change without UI, proof is the test/check output. Save the output of each check you ran as a file there (e.g. \`check.txt\`, \`test.txt\`, \`ci.txt\`, \`diff-summary.txt\`). Do not write proof to \`/tmp\`, to the worktree, or to another attempt's directory; the supervisor only sees files in \`.cell/steps/build/evidence\`.
+5. Record one new entry in \`decisions/\` per the declared \`decision-log\` rule and stage it with \`git add decisions/<file>\`. The task ships as one commit with exactly one new entry: if an earlier attempt already added one, update that file.
 6. Do not reuse or edit files from other attempts.
 7. Write and edit files with your file-edit tool. Do not write files through shell heredocs, \`python -c\`, \`sed -i\`, or \`tee\`, and do not run \`rm -rf\`: the automatic approval blocks these and the task stalls waiting for a human.
 
 ## Deliverables
 
-- \`.cell/outputs/report\`: what changed, files modified, checks run, proof path (\`.cell/evidence\`). Caveman format: bullet facts only. No greetings or fluff.
-- \`.cell/outputs/commit\`: a rich commit message in the form \`type(scope): title\`, then a blank line, then a \`- \` change list, covering the whole task (not only this attempt). Write it to this exact path; its title becomes the PR title and its change list the PR's Changes section.
+- \`.cell/steps/build/report.md\`: what changed, files modified, checks run, proof path (\`.cell/steps/build/evidence\`). Caveman format: bullet facts only. No greetings or fluff.
+- \`.cell/steps/build/commit.txt\`: a rich commit message in the form \`type(scope): title\`, then a blank line, then a \`- \` change list, covering the whole task (not only this attempt). List behaviour changes, not every file touched. Write it to this exact path; its title becomes the PR title and its change list the PR's Changes section.
 
 ## Finish
 

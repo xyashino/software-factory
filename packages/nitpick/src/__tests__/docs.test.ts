@@ -155,6 +155,41 @@ describe('Rule docs work when', () => {
     expect(read('.ai', 'AGENTS.md')).not.toContain('r.md');
   });
 
+  it('inline a file doc in the group file when inline is set', async () => {
+    const { read, keys, problems } = await build(
+      {
+        rules: {
+          g: {
+            r: { importance: A, doc: { file: './r.md', inline: true } },
+            s: { importance: A, doc: 'other' },
+          },
+        },
+      },
+      { 'r.md': 'see {{ref:s}}\n' },
+    );
+    expect(problems).toEqual([]);
+    expect(read('.ai', 'rules', 'g.md')).toBe(
+      '## G\n\n1. (A) see [s](g.md)\n2. (A) other\n',
+    );
+    expect(keys).not.toContain(join('.ai', 'rules', 'r.md'));
+  });
+
+  it('link rule, agent and skill ids from a file doc', async () => {
+    const { read, problems } = await build(
+      {
+        rules: { g: { r: { importance: A, doc: 'x' } } },
+        agents: { a: { doc: 'agent' } },
+        refs: { k: './k.md' },
+        entry: { doc: { file: './entry.md' } },
+      },
+      { 'entry.md': '{{ref:r}} {{ref:a}} {{ref:k}}', 'k.md': '' },
+    );
+    expect(problems).toEqual([]);
+    expect(read('.ai', 'AGENTS.md')).toContain(
+      '[r](rules/g.md) [a](agents/a.md) [k](references/k.md)',
+    );
+  });
+
   it('report a missing doc file and unknown refs per occurrence', async () => {
     const { problems } = await build(
       {

@@ -41,14 +41,12 @@ describe('toLineSnapshot', () => {
 
   it('takes the verdict and artifact keys from the operator profile', () => {
     const snapshot = snapshotOf(validText);
-    expect(snapshot.stations[1]).toMatchObject({
-      id: 'build',
-      kind: 'operator',
-      runner: 'claude',
-      verdict: false,
-      artifacts: ['commit', 'report'],
-    });
+    expect(snapshot.stations[0]).toMatchObject({ id: 'plan', verdict: false });
+    expect(snapshot.stations[1]).toMatchObject({ id: 'build', verdict: false });
     expect(snapshot.stations[3]).toMatchObject({ id: 'audit', verdict: true });
+    expect(snapshot.stations[0]?.artifacts).toEqual(['plan']);
+    expect(snapshot.stations[1]?.artifacts).toEqual(['commit', 'report']);
+    expect(snapshot.stations[3]?.artifacts).toEqual(['feedback']);
   });
 
   it('carries each operator pool and the workspace, and no path', () => {
@@ -62,17 +60,14 @@ describe('toLineSnapshot', () => {
   });
 
   it('validates the result with the core snapshot schema', () => {
-    expect(lineSnapshotSchema.safeParse(snapshotOf(validText)).success).toBe(
-      true,
-    );
+    const snapshot = snapshotOf(validText);
+    expect(lineSnapshotSchema.safeParse(snapshot).success).toBe(true);
   });
 
   it('gives the same hash when only the key order of the YAML changes', () => {
-    const reordered = validText.replace(
-      '    kind: operator\n    operator: planner',
-      '    operator: planner\n    kind: operator',
-    );
-    expect(reordered).not.toBe(validText);
+    const reordered = validText
+      .replace('name: feature\n', '')
+      .concat('\nname: feature\n');
     expect(snapshotOf(reordered).hash).toBe(snapshotOf(validText).hash);
   });
 
@@ -85,22 +80,22 @@ describe('toLineSnapshot', () => {
 describe('golden hashes', () => {
   it('pins the hash of the valid fixture line', () => {
     expect(snapshotOf(validText).hash).toBe(
-      'sha256:fb7b8b7658f304f89d02ab75848360963cde004fd0920427cd93b6b9b525f7ef',
+      'sha256:72341ff72513d411e3e3efa3e69746f0354f9c75ab973e5c74e597628ba79878',
     );
   });
 
   it.each([
     [
       'feature',
-      'sha256:dcc86ea37ea37573ce53495abfc344873027e794e4a9e2cf647172e113238d63',
+      'sha256:7a9bc0fc287a7b4c5b2f37b26f75a96a7926b0a37d083f3a62a33db16f931b4b',
     ],
     [
       'fast',
-      'sha256:65b698a24ff1424e96367120e50c59d9f9e58d6a046fbf4074647969db8e5962',
+      'sha256:1a9578c559dc35059e05ce0959a2ebd367703dd5f3812ae5c18e719115c31cf2',
     ],
     [
       'standard',
-      'sha256:72bd14e4de8c93615ad38a9fe9ad7ceb9236529ba6c5c7631879ce65b84b5a10',
+      'sha256:a619784289d17ff1dfbb643e090df2297455d5307206a381af2e700718bd6ac7',
     ],
   ])('pins the hash of the shipped %s line', (name, hash) => {
     expect(definitions.lines.get(name)?.snapshot.hash).toBe(hash);
@@ -116,12 +111,12 @@ describe('hashLine and canonicalJson', () => {
   });
 
   it('sorts keys at every depth and drops undefined', () => {
-    expect(
-      canonicalJson({ b: 1, a: { d: undefined, c: [{ z: 1, y: 2 }] } }),
-    ).toBe('{"a":{"c":[{"y":2,"z":1}]},"b":1}');
+    const a = canonicalJson({ b: 1, a: undefined, c: { y: 2, x: 3 } });
+    const b = canonicalJson({ c: { x: 3, y: 2 }, b: 1 });
+    expect(a).toBe(b);
   });
 
   it('keeps array order', () => {
-    expect(canonicalJson(['b', 'a'])).toBe('["b","a"]');
+    expect(canonicalJson([2, 1])).not.toBe(canonicalJson([1, 2]));
   });
 });

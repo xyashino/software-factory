@@ -13,6 +13,10 @@ export const BUILT_IN_VARIABLES = [
   'evidenceDir',
   'todoBody',
   'context',
+  'rules',
+  'skills',
+  'inputs',
+  'path',
 ] as const;
 
 /** Where a profile file came from: relative for messages, absolute for reading. */
@@ -44,15 +48,16 @@ export interface OperatorProfile {
 }
 
 const KEBAB_ID = /^[a-z][a-z0-9-]*$/;
+const RULE_ID = /^[a-z][a-z0-9/-]*$/;
 const CAMEL_KEY = /^[a-z][a-zA-Z0-9]*$/;
 const JUDGE_FEEDBACK_FILE = 'feedback.md';
 
-const catalogIds = (kind: string, example: string) => {
+const catalogIds = (kind: string, example: string, regex = KEBAB_ID) => {
   return z
     .array(
       z
         .string()
-        .regex(KEBAB_ID, `must be a kebab-case ${kind} id, like "${example}"`),
+        .regex(regex, `must be a kebab-case ${kind} id, like "${example}"`),
     )
     .default([])
     .refine(
@@ -70,7 +75,7 @@ const profileFrontmatter = z
     id: z.string().regex(KEBAB_ID, 'must be kebab-case, like "plan-reviewer"'),
     label: z.string().trim().min(1, 'must not be empty'),
     verdict: z.boolean().default(false),
-    rules: catalogIds('rule', 'rich-commit'),
+    rules: catalogIds('rule', 'rich-commit', RULE_ID),
     skills: catalogIds('skill', 'evidence'),
     artifacts: z.record(
       z.string(),
@@ -152,6 +157,7 @@ export const parseOperatorProfile = (
 
   const allowed = new Set<string>([
     ...BUILT_IN_VARIABLES,
+    ...Object.keys(frontmatter.artifacts),
     ...Object.keys(frontmatter.artifacts).map((key) => `${key}Path`),
   ]);
   for (const name of new Set(templateVariables(split.body))) {

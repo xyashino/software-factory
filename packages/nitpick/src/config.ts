@@ -49,8 +49,10 @@ type UnitIds<
   A extends string,
 > = { [G in keyof R]: keyof R[G] & string }[keyof R] | A;
 
+type FileDoc = { file: string; inline?: boolean };
+
 type Doc<I extends string, K extends string> =
-  string | { file: string } | ((ctx: Ctx<I, K>) => string);
+  string | FileDoc | ((ctx: Ctx<I, K>) => string);
 
 type Check =
   | { run: (context: CheckContext) => void | Promise<void>; fix: string }

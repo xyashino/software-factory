@@ -40,7 +40,7 @@ export interface RemoteClientOptions {
 /** The longest a feed read holds when nothing is new; a little more than a claim long-poll. */
 const FEED_HOLD_MS = 25_000;
 /** A feed read with `waitMs: 0` still waits this long for events the server already holds. */
-const MIN_FEED_HOLD_MS = 100;
+const MIN_FEED_HOLD_MS = 1_000;
 
 /** Splits complete SSE blocks out of a buffer; the rest stays for the next chunk. */
 const takeBlocks = (buffer: string): { blocks: string[]; rest: string } => {

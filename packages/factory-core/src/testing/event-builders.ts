@@ -46,7 +46,6 @@ const operator = (id: string, extra: Partial<Station> = {}): Station => ({
   id: stationOf(id),
   kind: 'operator',
   runner: 'claude',
-  requires: [],
   maxRestarts: 1,
   maxLostRestarts: 3,
   artifacts: [],
@@ -55,7 +54,7 @@ const operator = (id: string, extra: Partial<Station> = {}): Station => ({
 
 const DEFAULT_STATIONS: Station[] = [
   operator('plan', { artifacts: ['plan'] }),
-  operator('build', { requires: ['docker'] }),
+  operator('build'),
   operator('audit', {
     verdict: true,
     artifacts: ['review'],
@@ -64,7 +63,6 @@ const DEFAULT_STATIONS: Station[] = [
   {
     id: stationOf('check'),
     kind: 'inspection',
-    requires: [],
     onFail: { retry: stationOf('build'), max: 1 },
     maxRestarts: 1,
     maxLostRestarts: 3,

@@ -38,7 +38,6 @@ import type { WorkOrderState } from '../state';
 const op = (id: string, extra: Partial<Station> = {}): Station => ({
   id: stationOf(id),
   kind: 'operator',
-  requires: [],
   maxRestarts: 1,
   maxLostRestarts: 3,
   artifacts: [],
@@ -596,7 +595,6 @@ describe('nextJob rows 15-16: the phase', () => {
         {
           id: stationOf('check'),
           kind: 'inspection',
-          requires: [],
           maxRestarts: 1,
           maxLostRestarts: 3,
           artifacts: [],

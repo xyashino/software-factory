@@ -8,7 +8,7 @@ import { listFiles } from './files';
 import { parseLine, type Line } from './line-schema';
 import { validateLine } from './line-validate';
 import { toLineSnapshot } from './line-snapshot';
-import { nitpickCatalog, type NitpickCatalog } from './nitpick-catalog';
+import { resolveCatalog, type NitpickCatalog } from './nitpick-catalog';
 import { validateOperatorCatalog } from './operator-catalog';
 import { parseOperatorProfile, type OperatorProfile } from './operator-profile';
 import {
@@ -173,7 +173,7 @@ export const loadDefinitions = (
 
 /**
  * Loads a repository's definitions from `<repoRoot>/.factory/`. When the repo
- * has a `.nitpick/` catalog, declared rules and skills are validated against
+ * has a catalog (`.factory/config.json` or `.nitpick/`), declared rules and skills are validated against
  * it; without one, they are not checked. A missing `.factory/` is one error
  * saying what to add.
  */
@@ -190,7 +190,6 @@ export const loadRepoDefinitions = async (
       },
     ]);
   }
-  const hasCatalog = existsSync(join(repoRoot, '.nitpick', 'config.ts'));
-  const catalog = hasCatalog ? await nitpickCatalog(repoRoot) : undefined;
+  const catalog = await resolveCatalog(repoRoot);
   return loadDefinitions(factoryRoot, catalog);
 };

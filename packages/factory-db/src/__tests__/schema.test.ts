@@ -137,6 +137,12 @@ const legacySchema = (): Database => {
     db.exec(readFileSync(join(LEGACY_MIGRATIONS_DIR, name), 'utf8'));
   }
   db.exec(readFileSync(join(MIGRATIONS_DIR, '0001_drop_intake.sql'), 'utf8'));
+  db.exec(
+    readFileSync(
+      join(MIGRATIONS_DIR, '0002_drop_required_capabilities.sql'),
+      'utf8',
+    ),
+  );
   return db;
 };
 

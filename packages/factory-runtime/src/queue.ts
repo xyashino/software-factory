@@ -55,7 +55,6 @@ const entryOf = (
   next: row.nextKind,
   ...(row.jobKind ? { jobKind: row.jobKind } : {}),
   ...(row.runner ? { runner: row.runner } : {}),
-  requiredCapabilities: row.requiredCapabilities,
   dependsOn: row.dependsOn,
   deps,
   progressed: row.progressed,

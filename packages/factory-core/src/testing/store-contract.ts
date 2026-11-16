@@ -73,7 +73,6 @@ const rowOf = (
   nextKind: 'done',
   jobKind: null,
   runner: null,
-  requiredCapabilities: [],
   stationId: null,
   stationIndex: null,
   progressed: false,

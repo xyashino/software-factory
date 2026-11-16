@@ -7,7 +7,6 @@ import { stationIdSchema, type StationId } from '../ids';
 
 /** Fields of a Station the builder can set. Defaults match a plain operator Station. */
 export interface StationOptions {
-  requires?: string[];
   maxRestarts?: number;
   maxLostRestarts?: number;
   artifacts?: string[];
@@ -22,7 +21,6 @@ const operator = (id: string, options: StationOptions): Station => ({
   id: stationOf(id),
   kind: 'operator',
   runner: 'claude',
-  requires: options.requires ?? [],
   maxRestarts: options.maxRestarts ?? 1,
   maxLostRestarts: options.maxLostRestarts ?? 3,
   artifacts: options.artifacts ?? [],
@@ -40,7 +38,6 @@ const operator = (id: string, options: StationOptions): Station => ({
 const inspection = (id: string, options: StationOptions): Station => ({
   id: stationOf(id),
   kind: 'inspection',
-  requires: options.requires ?? [],
   maxRestarts: options.maxRestarts ?? 1,
   maxLostRestarts: options.maxLostRestarts ?? 3,
   artifacts: options.artifacts ?? [],

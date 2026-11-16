@@ -34,7 +34,7 @@ Not wired yet:
 Rules live under `rules.<group>.<id>`. Group = key, id = key, nothing else to author.
 
 - `importance`: `A | O | D | I`, required. Printed as tag, e.g. `1. (I) text`.
-- `doc`: see [Doc forms](#doc-forms). A `{ file }` doc is written to `<path>/rules/<id>.md` and linked as `N. (A) [id](id.md)`; string and callback docs are inlined in the group file.
+- `doc`: see [Doc forms](#doc-forms). A `{ file }` doc is written to `<path>/rules/<id>.md` and linked as `N. (A) [id](id.md)`; string, callback and `{ file, inline: true }` docs are inlined in the group file.
 - `run`: optional check script (was `check`). Gets `CheckContext`. Needs `fix`.
 - `fix`: text after the problems of the rule (`Fix: ...`). Required with `run`.
 - `include` / `exclude`: globs (`path.matchesGlob`) filtering `files` passed to `run`.
@@ -97,7 +97,8 @@ Without `entry` the root docs start with `# Information for AI`. The built-in AO
 Same for rules, agents and `entry`:
 
 - `string`: used as is.
-- `{ file: './path.md' }`: content of the file, CRLF normalized to LF, `{{ref:key}}` replaced by links to `refs` keys. Missing file = verification problem (exit 3).
+- `{ file: './path.md' }`: content of the file, CRLF normalized to LF, `{{ref:key}}` replaced by a link: to the `refs` key when one exists, else to the rule, agent or skill id. Missing file or unknown key = verification problem (exit 3).
+- `{ file, inline: true }` (rules): the file text is inlined in the group file like a string doc, instead of getting its own `rules/<id>.md`.
 - `(ctx) => string`: `ctx` has `ref(id)` (rule or agent id), `file(key)` (`refs` key) and `insert(key)` (`refs` key). `entry` also gets `header`.
 - `insert(key)` inlines the content of the `refs` file at generation time (trimmed, CRLF normalized, `{{ref:key}}` replaced); `file(key)` only links it. Missing file = verification problem (exit 3) and an empty string is inlined.
 - Base of every path (`doc` files, `refs`): the `.nitpick/` directory; absolute paths allowed.

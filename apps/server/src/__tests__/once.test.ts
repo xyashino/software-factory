@@ -27,7 +27,7 @@ const runOnce = async (
   input: string,
 ): Promise<{ code: number; stdout: string; stderr: string }> => {
   const child = Bun.spawn(['bun', MAIN, '--once', '--data-dir', dataDir], {
-    env: { ...process.env, FACTORY_DATA_DIR: '' },
+    env: { ...process.env, FACTORY_DATA_DIR: '', FACTORY_BIND: '127.0.0.1:0' },
     stdin: new Blob([input]),
     stdout: 'pipe',
     stderr: 'pipe',
@@ -101,7 +101,11 @@ describe('factory-server --once', () => {
 
   it('exits with code 3 while another process holds the data directory', async () => {
     const holder = Bun.spawn(['bun', MAIN, '--data-dir', dataDir], {
-      env: { ...process.env, FACTORY_DATA_DIR: '' },
+      env: {
+        ...process.env,
+        FACTORY_DATA_DIR: '',
+        FACTORY_BIND: '127.0.0.1:0',
+      },
       stdout: 'pipe',
       stderr: 'pipe',
     });

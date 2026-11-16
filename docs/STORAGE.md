@@ -227,7 +227,6 @@ CREATE TABLE orders (
   next_kind              TEXT NOT NULL,                 -- CORE §6 Next.kind
   job_kind               TEXT,                          -- when next_kind = 'job'
   runner                 TEXT,                          -- when the next job is an Operator station
-  required_capabilities  TEXT NOT NULL DEFAULT '[]',    -- JSON array, the next Station's `requires`
   station_id             TEXT,
   station_index          INTEGER,
   progressed             INTEGER NOT NULL,              -- 0/1

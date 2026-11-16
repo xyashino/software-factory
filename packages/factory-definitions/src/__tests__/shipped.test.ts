@@ -10,7 +10,7 @@ import { join } from 'node:path';
 import { projectIdSchema } from '@repo/factory-core/ids';
 import { describe, expect, it } from 'vitest';
 import { check } from '../check';
-import { nitpickCatalog } from '../nitpick-catalog';
+import { nitpickCatalog, resolveCatalog } from '../nitpick-catalog';
 import { loadDefinitions } from '../load';
 
 const PACKAGE_ROOT = join(import.meta.dirname, '..', '..');
@@ -83,12 +83,13 @@ describe('shipped definitions', () => {
     }
   });
 
-  it('prepare every line workspace before any station: fetch origin, then install', () => {
+  it('prepare every line workspace before any station: fetch origin, then install and sync the AI docs', () => {
     for (const { line } of definitions().lines.values()) {
       expect(line.workspace.sync?.exec).toEqual(['git fetch origin']);
       expect(line.workspace.sync?.timeoutMs).toBe(120_000);
       expect(line.workspace.setup.exec).toEqual([
         'pnpm install --frozen-lockfile',
+        'pnpm run --if-present nitpick:sync',
       ]);
     }
   });
@@ -112,7 +113,7 @@ describe('shipped definitions', () => {
     expect(definitions().operators.get('builder')).toMatchObject({
       label: 'Builder',
       rules: ['rich-commit', 'decision-log', 'testing'],
-      skills: ['evidence'],
+      skills: ['evidence', 'caveman'],
     });
     expect(definitions().operators.get('doctor')?.verdict).toBe(true);
   });
@@ -123,6 +124,12 @@ describe('shipped definitions', () => {
 
   it('pass check() with the .nitpick catalog: every declared rule and skill exists', async () => {
     const catalog = await nitpickCatalog(REPO_ROOT);
+    expect(check(FACTORY_ROOT, { catalog })).toEqual([]);
+  });
+
+  it('pass check() with the resolved catalog from .factory/config.json', async () => {
+    const catalog = await resolveCatalog(REPO_ROOT);
+    expect(catalog).toBeDefined();
     expect(check(FACTORY_ROOT, { catalog })).toEqual([]);
   });
 

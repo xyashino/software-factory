@@ -1,9 +1,6 @@
 import { basename } from 'node:path';
 import { z } from 'zod';
-import {
-  isMachineIndependentId,
-  isMachineIndependentText,
-} from '@repo/factory-core/machine-local';
+import { isMachineIndependentText } from '@repo/factory-core/machine-local';
 import { err, ok, type Result } from '@repo/factory-core/result';
 import { parseDuration } from './duration';
 import { zodErrors, type DefinitionError } from './errors';
@@ -25,7 +22,6 @@ const KEBAB_ID = /^[a-z][a-z0-9-]*$/;
 const ARTIFACT_KEY = /^[a-z][a-zA-Z0-9]*$/;
 /** `<stationId>.<artifactKey>` or `<stationId>.gate`. */
 const INPUT_REF = /^([a-z][a-z0-9-]*)\.([a-z][a-zA-Z0-9]*)$/;
-const TAG = /^[a-z0-9][a-z0-9_-]{0,63}$/;
 const DURATION_HINT = 'must be a duration like 30s, 20m or 1h';
 const MAX_RANGE_HINT = 'must be a whole number from 1 to 5';
 const RESTART_HINT = 'must be a whole number from 0 to 100';
@@ -37,16 +33,16 @@ const TOP_LEVEL_OPERATOR_MESSAGE =
 
 export type Permission = 'read' | 'write';
 
-/** A reference to an artifact a station hands over: `<stationId>.<artifactKey>`. */
+/** An input an operator station reads: an artifact from a prior station, or an inspection gate. */
+export type InputRef =
+  | { kind: 'artifact'; stationId: string; artifactKey: string }
+  | { kind: 'gate'; stationId: string };
+
+/** An artifact a delivery commits or reports. */
 export interface ArtifactRef {
   stationId: string;
   artifactKey: string;
 }
-
-/** A station input: an artifact of an earlier Operator station, or an Inspection's pass result. */
-export type InputRef =
-  | { kind: 'artifact'; stationId: string; artifactKey: string }
-  | { kind: 'gate'; stationId: string };
 
 export interface OnFail {
   retry: string;
@@ -66,8 +62,6 @@ export interface OperatorPool {
 /** Fields every Station shares, schema v2. */
 interface StationBase {
   id: string;
-  /** capability tags a Cell must have to run this Station */
-  requires: string[];
   onFail?: OnFail;
   maxRestarts: number;
   maxLostRestarts: number;
@@ -99,12 +93,17 @@ export interface CommandBlock {
 export interface Line {
   name: string;
   description: string;
-  /** Per-job workspace preparation, run before any station of a job. Not a phase. */
-  workspace: { sync?: CommandBlock; setup: CommandBlock };
+  workspace: {
+    sync?: CommandBlock;
+    setup: CommandBlock;
+  };
   operators: Record<string, OperatorPool>;
   stations: LineStation[];
-  deliver: { commit: ArtifactRef; report: ArtifactRef; to: 'new-pr' };
-  /** absolute path of the Line file */
+  deliver: {
+    commit: ArtifactRef;
+    report: ArtifactRef;
+    to: 'new-pr';
+  };
   path: string;
 }
 
@@ -152,11 +151,6 @@ const stationIdSchema = z
   .string()
   .regex(KEBAB_ID, 'must be kebab-case, like "quality-gate"')
   .refine((id) => !RESERVED_STATION_IDS.includes(id), 'is a reserved id');
-
-const tagSchema = z
-  .string()
-  .regex(TAG, 'must be a lowercase tag, like "docker"')
-  .refine(isMachineIndependentId, 'tag must not name a machine-local value');
 
 const inputRefSchema = z.string().transform((value, ctx) => {
   const ref = parseRef(value);
@@ -228,7 +222,6 @@ export const operatorStationSchema = z.strictObject({
   kind: z.literal('operator'),
   operator: z.string().regex(KEBAB_ID, 'must name a key of operators:'),
   inputs: z.array(inputRefSchema).default([]),
-  requires: z.array(tagSchema).max(32).default([]),
   onFail: onFailSchema.optional(),
   maxRestarts: restartSchema(1),
   maxLostRestarts: restartSchema(3),
@@ -242,7 +235,6 @@ export const inspectionStationSchema = z.strictObject({
     .array(machineText)
     .min(1, 'must list at least one command')
     .max(32, 'must list at most 32 commands'),
-  requires: z.array(tagSchema).max(32).default([]),
   onFail: onFailSchema.optional(),
   maxRestarts: restartSchema(1),
   maxLostRestarts: restartSchema(3),
@@ -310,7 +302,6 @@ const toOperatorPool = (data: OperatorPoolData): OperatorPool => ({
 const toStation = (data: StationData): LineStation => {
   const base = {
     id: data.id,
-    requires: data.requires,
     ...(data.onFail === undefined ? {} : { onFail: data.onFail }),
     maxRestarts: data.maxRestarts,
     maxLostRestarts: data.maxLostRestarts,

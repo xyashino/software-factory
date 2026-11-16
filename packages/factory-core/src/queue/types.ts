@@ -13,7 +13,6 @@ export interface QueueEntry {
   next: Next['kind'];
   jobKind?: JobSpec['kind'];
   runner?: string; // for Operator stations
-  requiredCapabilities: string[]; // the Station's `requires` tags (e.g. 'docker', 'gpu')
   dependsOn: OrderId[];
   deps: 'satisfied' | 'waiting' | 'broken'; // computed when the queue is read, from the other Work orders
   progressed: boolean; // at least one Station passed
