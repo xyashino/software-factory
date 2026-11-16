@@ -218,6 +218,9 @@ export const buildJob = async (
         ...(reportBlob === undefined ? {} : { reportBlob }),
         logCommand: `factory log ${state.orderId}`,
         verification: verificationOf(line),
+        ...(line.deliver?.requireAdr === undefined
+          ? {}
+          : { requireAdr: line.deliver.requireAdr }),
       },
     });
   }

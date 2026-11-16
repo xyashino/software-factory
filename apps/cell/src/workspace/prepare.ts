@@ -180,6 +180,8 @@ const placeWorktree = async (
     commit = base.commit;
   }
 
+  // The Work order's own branch: the one deliver and publish push, named `factory/<todoId>` (names.ts).
+  const branch = job.repo.branch;
   const root = worktreesRootOf(repoRoot);
   let worktree: string;
   try {
@@ -211,10 +213,26 @@ const placeWorktree = async (
         true,
       );
     }
+    // A reused worktree must still be on the Work order's branch: a detached or foreign checkout is not resumed.
+    const onBranch = await gitIn(ctx.shell, worktree, [
+      'symbolic-ref',
+      '--quiet',
+      '--short',
+      'HEAD',
+    ]);
+    note(onBranch);
+    if (!succeeded(onBranch) || textOf(onBranch).trim() !== branch) {
+      lease.release();
+      return fail(
+        'worktree',
+        `worktree ${workspace.dir} is not on branch ${branch}`,
+      );
+    }
   } else {
     const placed = await ensureWorktree(ctx.shell, {
       repoRoot,
       path: worktree,
+      branch,
       commit,
       timeoutMs: GIT_TIMEOUT_MS,
     });

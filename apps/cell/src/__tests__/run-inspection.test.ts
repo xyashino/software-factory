@@ -313,11 +313,11 @@ describe('inspection job', () => {
   });
 
   describe('on a reused worktree, holding the work of earlier Stations', () => {
-    /** The worktree as a builder left it: placed at the base, its work uncommitted. */
+    /** The worktree as a builder left it: placed at the base on the Work order branch, its work uncommitted. */
     const placeDirtyWorktree = (): void => {
       const path = join(repoRoot, '.worktrees', 'todo-1');
       mkdirSync(join(repoRoot, '.worktrees'), { recursive: true });
-      git(repoRoot, 'worktree', 'add', '--detach', path, head);
+      git(repoRoot, 'worktree', 'add', '-B', 'factory/todo-1', path, head);
       writeFileSync(join(path, 'builder.txt'), 'the builder work\n');
     };
     const reusedJob = (exec: string[]): Job =>
@@ -435,6 +435,92 @@ describe('inspection job', () => {
     ).rejects.toBeInstanceOf(WireFailure);
 
     expect(commandsOf(calls, 'FailCycle')).toHaveLength(0);
+  });
+
+  it('reports each check as started then finished, in order, before the inspection report', async () => {
+    const { context, calls } = contextWith();
+
+    await runInspection(context, inspectionJob(['true', 'echo two']), signal());
+
+    expect(
+      shapeOf(calls).filter(
+        (step) =>
+          step.includes('Progress') || step.includes('ReportInspection'),
+      ),
+    ).toEqual([
+      'submitCommand:ReportInspectionProgress',
+      'submitCommand:ReportInspectionProgress',
+      'submitCommand:ReportInspectionProgress',
+      'submitCommand:ReportInspectionProgress',
+      'submitCommand:ReportInspection',
+    ]);
+    expect(
+      commandsOf(calls, 'ReportInspectionProgress').map((command) => [
+        command?.phase,
+        command?.index,
+        command?.total,
+        command?.command,
+      ]),
+    ).toEqual([
+      ['started', 1, 2, 'true'],
+      ['finished', 1, 2, 'true'],
+      ['started', 2, 2, 'echo two'],
+      ['finished', 2, 2, 'echo two'],
+    ]);
+  });
+
+  it('reports the exit code, timeout flag and duration when a check finishes', async () => {
+    const { context, calls } = contextWith();
+
+    await runInspection(
+      context,
+      inspectionJob(['exit 2'], { inspectionTimeoutMs: 300 }),
+      signal(),
+    );
+
+    const finished = commandsOf(calls, 'ReportInspectionProgress').find(
+      (command) => command?.phase === 'finished',
+    );
+    expect(finished).toMatchObject({
+      cycleId: CYCLE,
+      exitCode: 2,
+      timedOut: false,
+      durationMs: expect.any(Number),
+    });
+    expect(parsedAsSubmitted(calls)).toBe(true);
+  });
+
+  it('stops the inspection when a progress report is refused as a stale epoch', async () => {
+    const { context, calls } = contextWith((sent) => {
+      if (sent.request.command?.type === 'ReportInspectionProgress') {
+        throw new WireFailure({ code: 'stale_epoch', current: 4 }, 409);
+      }
+      return accepting(sent);
+    });
+
+    await expect(
+      runInspection(context, inspectionJob(['true', 'echo two']), signal()),
+    ).rejects.toBeInstanceOf(WireFailure);
+
+    expect(commandsOf(calls, 'ReportInspectionProgress')).toHaveLength(1);
+    expect(commandsOf(calls, 'ReportInspection')).toHaveLength(0);
+    expect(commandsOf(calls, 'FailCycle')).toHaveLength(0);
+  });
+
+  it('keeps running the checks when a progress report is refused for another reason', async () => {
+    const { context, calls } = contextWith((sent) => {
+      if (sent.request.command?.type === 'ReportInspectionProgress') {
+        throw new WireFailure({ code: 'precondition', detail: 'refused' }, 409);
+      }
+      return accepting(sent);
+    });
+
+    await runInspection(context, inspectionJob(['true', 'echo two']), signal());
+
+    expect(commandsOf(calls, 'ReportInspection')).toEqual([
+      expect.objectContaining({ passed: true }),
+    ]);
+    expect(reportedResults(calls)).toHaveLength(2);
   });
 
   it('sends nothing at all when its signal is already aborted', async () => {

@@ -40,20 +40,28 @@ export const removeWorktree = async (
 };
 
 /**
- * Puts the worktree at `commit`, detached, under the repo lock. A worktree git still knows is reset to the
- * commit with its untracked files removed; `node_modules` and the `.cell/` marker are gitignored, so they
- * survive. A worktree that cannot be reset is removed and created again. Returns the run that failed, or null.
+ * Puts the worktree at `commit` on the named branch `branch` (`factory/<todoId>`), under the repo lock. `-B`
+ * creates the branch or resets one an evicted worktree left behind, so no branch-exists error comes up. A
+ * worktree git still knows is reset to the commit with its untracked files removed; `node_modules` and the
+ * `.cell/` marker are gitignored, so they survive. A worktree that cannot be reset is removed and created
+ * again. Returns the run that failed, or null.
  */
 export const ensureWorktree = async (
   ctx: ShellContext,
-  input: { repoRoot: string; path: string; commit: string; timeoutMs: number },
+  input: {
+    repoRoot: string;
+    path: string;
+    branch: string;
+    commit: string;
+    timeoutMs: number;
+  },
 ): Promise<ShellRun | null> => {
-  const { repoRoot, path, commit, timeoutMs } = input;
+  const { repoRoot, path, branch, commit, timeoutMs } = input;
   if (existsSync(join(path, '.git'))) {
     const checkedOut = await gitIn(
       ctx,
       path,
-      ['checkout', '--force', '--detach', commit],
+      ['checkout', '--force', '-B', branch, commit],
       timeoutMs,
     );
     if (succeeded(checkedOut)) {
@@ -70,7 +78,7 @@ export const ensureWorktree = async (
   const added = await gitIn(
     ctx,
     repoRoot,
-    ['worktree', 'add', '--detach', path, commit],
+    ['worktree', 'add', '-B', branch, path, commit],
     timeoutMs,
   );
   return succeeded(added) ? null : added;

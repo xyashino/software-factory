@@ -177,8 +177,8 @@ const deliverJob = (
 const signal = (): AbortSignal => new AbortController().signal;
 
 /**
- * Creates the job's worktree on `commit` (detached), as Station 0 would have, unless it exists already.
- * Returns the worktree path.
+ * Creates the job's worktree on `commit`, on the Work order branch, as Station 0 would have, unless it exists
+ * already. Returns the worktree path.
  */
 const placeWorktree = (commit: string = baseHead): string => {
   if (git(repoRoot, 'worktree', 'list', '--porcelain').includes(worktree)) {
@@ -187,7 +187,7 @@ const placeWorktree = (commit: string = baseHead): string => {
   // The commit may exist only on origin (a predecessor's branch): the Cell's repo fetches before it is placed.
   git(repoRoot, 'fetch', '--quiet', 'origin');
   mkdirSync(dirname(worktree), { recursive: true });
-  git(repoRoot, 'worktree', 'add', '--detach', worktree, commit);
+  git(repoRoot, 'worktree', 'add', '-B', BRANCH, worktree, commit);
   return worktree;
 };
 
@@ -631,5 +631,106 @@ describe('deliver job on a stacked base (CORE §12.5)', () => {
     const [report] = reportsOf(calls);
     expect(report).toMatchObject({ status: 'failed' });
     expect(String(report?.detail)).toMatch(/^rebase conflict/);
+  });
+});
+
+/** The deliver job with `deliver.requireAdr` set as the Line sets it (`undefined` leaves it unset). */
+const gatedJob = (requireAdr: boolean | undefined): Job => {
+  const job = deliverJob();
+  return { ...job, deliver: { ...job.deliver, requireAdr } } as Job;
+};
+
+/**
+ * Installs a post-commit hook in the Cell's repo (the worktrees share its hooks). It runs after every commit
+ * the worktree makes, the staging one included, so the script skips the staging commit by its subject.
+ */
+const postCommitHook = (script: string): void => {
+  writeFileSync(
+    join(repoRoot, '.git', 'hooks', 'post-commit'),
+    `#!/bin/sh\n[ "$(git log -1 --format=%s)" = "staging delivery" ] || ${script}\n`,
+    { mode: 0o755 },
+  );
+};
+
+describe('deliver job: the pre-push gate', () => {
+  it('refuses to push when a file is left uncommitted after the delivery commit', async () => {
+    postCommitHook('echo left > stray.txt');
+    work('wip-1.txt', 'one\n');
+    const { context, calls, github } = contextWith();
+
+    await runDeliver(context, deliverJob(), signal());
+
+    expect(branchTip()).toBe('');
+    expect(github.created).toEqual([]);
+    const [report] = reportsOf(calls);
+    expect(report).toMatchObject({ status: 'failed' });
+    expect(String(report?.detail)).toMatch(
+      /^delivery refused: uncommitted files remain.*stray\.txt/,
+    );
+  });
+
+  it('ignores files under .cell/ when it checks the worktree is clean', async () => {
+    postCommitHook('mkdir -p .cell && echo state > .cell/state.json');
+    work('wip-1.txt', 'one\n');
+    const { context, calls } = contextWith();
+
+    await runDeliver(context, deliverJob(), signal());
+
+    expect(reportsOf(calls)).toEqual([
+      expect.objectContaining({ status: 'finished', commit: branchTip() }),
+    ]);
+  });
+
+  it('refuses to push with requireAdr when the commit adds no decisions/ entry', async () => {
+    work('wip-1.txt', 'one\n');
+    const { context, calls, github } = contextWith();
+
+    await runDeliver(context, gatedJob(true), signal());
+
+    expect(branchTip()).toBe('');
+    expect(github.created).toEqual([]);
+    const [report] = reportsOf(calls);
+    expect(report).toMatchObject({ status: 'failed' });
+    expect(String(report?.detail)).toMatch(
+      /^delivery refused: expected exactly one new decisions\/ entry, found 0$/,
+    );
+  });
+
+  it('delivers with requireAdr when the commit adds exactly one decisions/ entry', async () => {
+    work('decisions/20261115-120000-factory-add-thing.md', '---\n');
+    work('wip-1.txt', 'one\n');
+    const { context, calls } = contextWith();
+
+    await runDeliver(context, gatedJob(true), signal());
+
+    expect(reportsOf(calls)).toEqual([
+      expect.objectContaining({ status: 'finished', commit: branchTip() }),
+    ]);
+  });
+
+  it('refuses to push with requireAdr when the commit adds two decisions/ entries', async () => {
+    work('decisions/20261115-120000-factory-add-thing.md', '---\n');
+    work('decisions/20261115-120100-factory-add-other.md', '---\n');
+    const { context, calls, github } = contextWith();
+
+    await runDeliver(context, gatedJob(true), signal());
+
+    expect(branchTip()).toBe('');
+    expect(github.created).toEqual([]);
+    const [report] = reportsOf(calls);
+    expect(String(report?.detail)).toMatch(
+      /expected exactly one new decisions\/ entry, found 2$/,
+    );
+  });
+
+  it('delivers without a decisions/ entry when requireAdr is false', async () => {
+    work('wip-1.txt', 'one\n');
+    const { context, calls } = contextWith();
+
+    await runDeliver(context, gatedJob(false), signal());
+
+    expect(reportsOf(calls)).toEqual([
+      expect.objectContaining({ status: 'finished', commit: branchTip() }),
+    ]);
   });
 });

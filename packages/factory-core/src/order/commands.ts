@@ -20,6 +20,7 @@ import {
   freeText,
   incidentActionSchema,
   incidentChangeSchema,
+  inspectionProgressFields,
   inspectionResultSchema,
   operatorSchema,
   pinnedLineSchema,
@@ -115,6 +116,12 @@ const reportInspectionSchema = z
     cycleId: cycleIdSchema,
     passed: z.boolean(),
     results: z.array(inspectionResultSchema).max(64),
+  })
+  .strict();
+const reportInspectionProgressSchema = z
+  .object({
+    type: z.literal('ReportInspectionProgress'),
+    ...inspectionProgressFields,
   })
   .strict();
 const failCycleSchema = z
@@ -277,6 +284,7 @@ export const orderCommandSchema = z.discriminatedUnion('type', [
   reportWorktreeMissingSchema,
   completeCycleSchema,
   submitVerdictSchema,
+  reportInspectionProgressSchema,
   reportInspectionSchema,
   failCycleSchema,
   blockCycleSchema,

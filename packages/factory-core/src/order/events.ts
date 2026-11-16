@@ -307,6 +307,27 @@ const verdictRecordedSchema = z
     (event) => event.pass || event.feedbackBlob !== undefined,
     'a failing verdict needs feedbackBlob',
   );
+/**
+ * One check of an Inspection starting or finishing, for the live `logs` view. It is informational: the
+ * Cycle stays running and no count or retry changes. A finished check carries its exit code, timeout
+ * flag and duration; a started check carries none.
+ */
+export const inspectionProgressFields = {
+  cycleId: cycleIdSchema,
+  phase: z.enum(['started', 'finished']),
+  index: positiveInt.max(64),
+  total: positiveInt.max(64),
+  command: freeText,
+  exitCode: z.number().int().nullable().optional(),
+  timedOut: z.boolean().optional(),
+  durationMs: nonNegativeInt.optional(),
+};
+const inspectionProgressSchema = z
+  .object({
+    type: z.literal('inspection_progress'),
+    ...inspectionProgressFields,
+  })
+  .strict();
 const inspectionFinishedSchema = z
   .object({
     type: z.literal('inspection_finished'),
@@ -523,6 +544,7 @@ export const orderEventSchema = z.discriminatedUnion('type', [
   cycleStartedSchema,
   cycleCompletedSchema,
   verdictRecordedSchema,
+  inspectionProgressSchema,
   inspectionFinishedSchema,
   cycleFailedSchema,
   cycleBlockedSchema,
