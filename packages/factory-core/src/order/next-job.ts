@@ -22,6 +22,26 @@ const requireStation = (state: WorkOrderState, id: StationId): Station => {
   return station;
 };
 
+/** The longest workspace Andon detail, in characters: the latest stage and detail, kept concise. */
+const WORKSPACE_DETAIL_CHARS = 512;
+
+/**
+ * The workspace Andon (row 4): names the count, then the latest failure's stage and detail, so the
+ * Mechanic sees the real cause without reading the log (CORE §4.3 rule 10).
+ */
+const workspaceAndon = (state: WorkOrderState): Next => {
+  const failures = state.workspaceFailures;
+  const count = failures.length;
+  const latest = failures[count - 1];
+  const summary = `${count} consecutive workspace failures`;
+  if (latest === undefined) return andon('workspace_failed', summary);
+  const text = `${summary}; last stage ${latest.stage}: ${latest.detail}`;
+  return andon(
+    'workspace_failed',
+    Array.from(text).slice(0, WORKSPACE_DETAIL_CHARS).join(''),
+  );
+};
+
 const usedOf = (counters: Record<StationId, number>, id: StationId): number =>
   counters[id] ?? 0;
 
@@ -183,12 +203,7 @@ export const nextJob = (state: WorkOrderState): Next => {
   // 3
   if (state.andon) return andonRow(state, state.andon);
   // 4
-  if (state.workspaceFailures.length >= 2) {
-    return andon(
-      'workspace_failed',
-      `${state.workspaceFailures.length} consecutive workspace failures`,
-    );
-  }
+  if (state.workspaceFailures.length >= 2) return workspaceAndon(state);
   // 5
   const resume = resumeRow(state);
   if (resume) return resume;

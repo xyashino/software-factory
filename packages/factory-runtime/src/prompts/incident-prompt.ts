@@ -15,6 +15,14 @@ Reason: {{reason}}
 
 {{detail}}
 
+### Workspace failure
+
+{{workspace}}
+
+### Workspace log tail
+
+{{logTail}}
+
 ### Last lines of the blocked pane
 
 {{pane}}
@@ -40,15 +48,29 @@ will record the commit and changed files for you). If you cannot resolve the And
 export interface IncidentPromptInput {
   reason: string;
   detail: string;
+  /** The latest `workspace_failed` behind a workspace Andon: where it broke and why. */
+  workspace?: { stage: string; detail: string };
+  /** The bounded tail of that failure's log, read by the Cell at render time. */
+  logTail?: string;
   pane?: string;
   feedback?: string;
 }
+
+const workspaceOf = (workspace: IncidentPromptInput['workspace']): string =>
+  workspace === undefined
+    ? '(this Andon is not a workspace failure)'
+    : `Stage: ${workspace.stage}\nDetail: ${workspace.detail}`;
 
 /** The Mechanic's prompt for one Andon. Every placeholder has a value, so nothing is left blank by accident. */
 export const buildIncidentPrompt = (input: IncidentPromptInput): string =>
   renderTemplate(INCIDENT_TEMPLATE, {
     reason: input.reason,
     detail: input.detail,
+    workspace: workspaceOf(input.workspace),
+    logTail:
+      input.logTail === undefined
+        ? '(no workspace log was captured)'
+        : `\`\`\`\n${input.logTail}\n\`\`\``,
     pane: input.pane ?? '(no pane output was captured)',
     feedback: input.feedback ?? '(none)',
   });

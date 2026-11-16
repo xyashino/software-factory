@@ -208,6 +208,11 @@ export const buildJob = async (
     const latestCommit =
       state.checkpoint?.commit ??
       [...state.cycles].reverse().find((cycle) => cycle.commit)?.commit;
+    // A workspace Andon carries its latest failure: the stage, detail and log the Mechanic diagnoses from.
+    const failure =
+      andon.reason === 'workspace_failed'
+        ? state.workspaceFailures[state.workspaceFailures.length - 1]
+        : undefined;
     return jobSchema.parse({
       ...common,
       kind: 'mechanic',
@@ -215,7 +220,19 @@ export const buildJob = async (
       mechanic: {
         andonAt: next.job.andonAt,
         n: next.job.n,
-        incident: { reason: andon.reason, detail: andon.detail },
+        incident: {
+          reason: andon.reason,
+          detail: andon.detail,
+          ...(failure === undefined
+            ? {}
+            : {
+                workspaceFailure: {
+                  stage: failure.stage,
+                  detail: failure.detail,
+                  logBlob: failure.logBlob,
+                },
+              }),
+        },
         // A Mechanic always runs in a Herdr pane (PROTOCOL §9) with write permission to edit the worktree, whatever the pool says.
         operator: { ...station.operator, permission: 'write', headless: false },
       },

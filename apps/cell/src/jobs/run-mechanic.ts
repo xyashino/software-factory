@@ -9,7 +9,7 @@ import type {
   OperatorReply,
   OperatorRequest,
 } from '@repo/factory-core/contracts/operator';
-import type { CellId, CommitSha } from '@repo/factory-core/ids';
+import type { BlobRef, CellId, CommitSha } from '@repo/factory-core/ids';
 import type { OrderCommand } from '@repo/factory-core/order/commands';
 import { getRunner } from '../adapters/runners/registry';
 import { CELL_DIR } from '../checkpoint';
@@ -27,13 +27,31 @@ import {
   textOf,
   type ShellContext,
 } from '../workspace/shell';
+import { getBlob } from './blobs';
 import { orderIdOf, todoOf } from './job-shape';
 import { logCommandOf } from './pane-commands';
 import { renderIncidentPrompt } from './render';
+import { tailOf } from './send';
 
 /** What the Mechanic is told to do when its incident says `nudge` (CORE §14.3). */
 export const MECHANIC_NUDGE =
   'Continue the task and finish with the factory-operator command it names.';
+
+/**
+ * The bounded tail of a workspace failure's log, read from its blob when the prompt is rendered (CORE
+ * §4.3 rule 10). The log never enters events or the Andon. A log that cannot be read is left out, and
+ * the prompt says so, rather than failing the Mechanic job.
+ */
+const logTailOf = async (
+  client: FactoryClient,
+  ref: BlobRef,
+): Promise<string | undefined> => {
+  try {
+    return tailOf(Buffer.from(await getBlob(client, ref)).toString('utf8'));
+  } catch {
+    return undefined;
+  }
+};
 
 const COMMIT_RE = /^[0-9a-f]{40}$/;
 const GIT_IDENTITY = [
@@ -232,8 +250,22 @@ export const runMechanic = async (
 
   const repairDir = repairDirOf(deps.dataDir, job.jobId);
   mkdirSync(repairDir, { recursive: true });
-  // The Cell renders the incident prompt from the Andon the job carries (CORE §14.4).
-  let promptText = renderIncidentPrompt(mechanic.incident);
+  // The Cell renders the incident prompt from the Andon the job carries (CORE §14.4). A workspace
+  // failure adds its stage, detail and the bounded tail of its log.
+  const { incident } = mechanic;
+  const failure = incident.workspaceFailure;
+  const logTail =
+    failure === undefined
+      ? undefined
+      : await logTailOf(deps.client, failure.logBlob);
+  let promptText = renderIncidentPrompt({
+    reason: incident.reason,
+    detail: incident.detail,
+    ...(failure === undefined
+      ? {}
+      : { workspace: { stage: failure.stage, detail: failure.detail } }),
+    ...(logTail === undefined ? {} : { logTail }),
+  });
 
   const inUse = deps.inUse ?? new Set<string>();
   const shell: ShellContext | undefined =

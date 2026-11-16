@@ -75,12 +75,22 @@ const mechanicJob = (overrides: Partial<Job> = {}): Job =>
   });
 
 /** A fake runtime: records every command it is sent and answers each with an empty result. */
-const fakeClient = (refuse?: { code: string; detail: string }) => {
+const fakeClient = (
+  refuse?: { code: string; detail: string },
+  blobs?: Record<string, string>,
+) => {
   const submitted: Submitted[] = [];
   const client = {
     call: async (route: string, request: unknown) => {
       if (route === 'blobGet') {
-        return { base64: Buffer.from('# Incident\n').toString('base64') };
+        if (blobs === undefined) {
+          return { base64: Buffer.from('# Incident\n').toString('base64') };
+        }
+        const text = blobs[(request as { ref: string }).ref];
+        if (text === undefined) {
+          throw { error: { code: 'not_found', detail: 'no such blob' } };
+        }
+        return { base64: Buffer.from(text).toString('base64') };
       }
       if (route === 'submitCommand') {
         const req = request as { command: Command; epoch?: number };
@@ -146,6 +156,29 @@ const scriptedPane = (
     confirmTrust: async () => false,
     closeTask: async () => undefined,
   };
+};
+
+const LOG_BLOB = `sha256:${'a'.repeat(64)}`;
+
+/** A Mechanic job for a workspace Andon whose latest failure carries `LOG_BLOB`. */
+const workspaceJob = (): Job => {
+  const job = mechanicJob();
+  return jobSchema.parse({
+    ...job,
+    mechanic: {
+      ...job.mechanic,
+      incident: {
+        reason: 'workspace_failed',
+        detail:
+          '2 consecutive workspace failures; last stage sync: fetch failed',
+        workspaceFailure: {
+          stage: 'sync',
+          detail: 'fetch failed',
+          logBlob: LOG_BLOB,
+        },
+      },
+    },
+  });
 };
 
 const depsFor = (
@@ -397,6 +430,51 @@ describe('the Mechanic job run (CORE §14.3, §14.4)', () => {
     if (!result.ok) return;
     expect(result.base).toBe(head);
     expect(result.worktree).toContain('worktrees');
+  });
+
+  it('appends the bounded tail of the workspace log to the prompt of a workspace Andon', async () => {
+    const log = `head-marker ${'x'.repeat(4000)} tail-marker`;
+    const { client } = fakeClient(undefined, { [LOG_BLOB]: log });
+    const seen = newSeen();
+    let prompt = '';
+    const pane = scriptedPane(
+      [incident('escalate', 'the workspace could not be synced')],
+      seen,
+      'working',
+      (spec) => {
+        prompt = readFileSync(join(spec.cwd, 'prompt.md'), 'utf8');
+      },
+    );
+
+    await runMechanic(workspaceJob(), depsFor(dataDir, client, pane));
+
+    expect(prompt).toContain('Stage: sync');
+    expect(prompt).toContain('Detail: fetch failed');
+    expect(prompt).toContain('tail-marker');
+    expect(prompt).not.toContain('head-marker');
+    expect(prompt).not.toContain('x'.repeat(2100));
+  });
+
+  it('runs the Mechanic without a log tail when the workspace log cannot be read', async () => {
+    const { client, submitted } = fakeClient(undefined, {});
+    const seen = newSeen();
+    let prompt = '';
+    const pane = scriptedPane(
+      [incident('escalate', 'the workspace log is gone')],
+      seen,
+      'working',
+      (spec) => {
+        prompt = readFileSync(join(spec.cwd, 'prompt.md'), 'utf8');
+      },
+    );
+
+    await runMechanic(workspaceJob(), depsFor(dataDir, client, pane));
+
+    expect(prompt).toContain('Stage: sync');
+    expect(prompt).toContain('(no workspace log was captured)');
+    expect(submitted.map((sent) => sent.command.type)).toEqual([
+      'RecordIncident',
+    ]);
   });
 
   it('escalates an Andon it cannot resolve, with the incident attached', async () => {

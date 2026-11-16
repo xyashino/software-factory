@@ -11,7 +11,11 @@ import {
   projectIdSchema,
   stationIdSchema,
 } from '../ids';
-import { cycleCauseSchema, jobKindSchema } from '../order/events';
+import {
+  cycleCauseSchema,
+  jobKindSchema,
+  workspaceStageSchema,
+} from '../order/events';
 import { cycleContextSchema } from '../order/context-schema';
 import { planJobKindSchema } from '../plan/events';
 
@@ -192,6 +196,15 @@ const mechanicSchema = z
       .object({
         reason: z.string().min(1).max(64),
         detail: z.string().max(65536),
+        /** The latest `workspace_failed` behind a workspace Andon; its log is read by the Cell, not inlined. */
+        workspaceFailure: z
+          .object({
+            stage: workspaceStageSchema,
+            detail: z.string().max(65536),
+            logBlob: blobRefSchema,
+          })
+          .strict()
+          .optional(),
       })
       .strict(),
     /** The runner the Mechanic runs with: the Line's first Operator pool (CORE §14.4). */
