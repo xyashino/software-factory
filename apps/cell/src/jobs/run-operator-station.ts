@@ -57,7 +57,7 @@ import type {
   RunGit,
   SpawnHeadless,
 } from '../ports';
-import type { WorkspaceResult } from '../workspace';
+import type { WorkspaceStage } from '../workspace/prepare';
 import { getBlob, putBlob } from './blobs';
 import { todoOf } from './job-shape';
 import { logCommandOf } from './pane-commands';
@@ -109,7 +109,11 @@ export interface StationDeps {
   takeSignals?: () => Signal[];
 }
 
-type Stage = 'fetch' | 'sync' | 'worktree' | 'setup';
+type Stage = WorkspaceStage;
+/** The station's worktree and the base commit its Cycle starts from, or the stage that failed. */
+export type WorkspaceResult =
+  | { ok: true; worktree: string; base: CommitSha }
+  | { ok: false; stage: Stage; detail: string };
 type FailReason = 'timed_out' | 'crashed' | 'stalled' | 'start_failed' | 'lost';
 type Blobs = Record<string, BlobRef | undefined>;
 

@@ -10,7 +10,7 @@ import type { CellId, CycleId, JobId, OrderId } from '@repo/factory-core/ids';
 import { createSystemAdapter } from '../adapters/system/system.adapter';
 import { runInspection } from '../jobs/run-inspection';
 import type { JobContext } from '../jobs/send';
-import { makeRepo } from '../testing/git-repo';
+import { cloneRepo, makeRepo } from '../testing/git-repo';
 
 const CELL = '01J0000000000000000000000W' as CellId;
 const JOB = '01J0000000000000000000000J' as JobId;
@@ -30,12 +30,15 @@ type Answer = (sent: Sent) => unknown;
 
 let root: string;
 let origin: string;
+/** The Cell's repo: a clone of origin. */
+let repoRoot: string;
 let head: string;
 
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), 'factory-cell-inspection-'));
   origin = join(root, 'origin');
   head = makeRepo(origin);
+  repoRoot = cloneRepo(origin, join(root, 'repo'));
 });
 
 afterEach(() => {
@@ -66,6 +69,7 @@ const contextWith = (answer: Answer = accepting) => {
     client,
     cellId: CELL,
     system: createSystemAdapter(),
+    repoRoot,
     cellDataDir: join(root, 'cell'),
     worktreeLimit: 8,
     inUse: new Set(),

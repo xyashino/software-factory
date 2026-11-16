@@ -51,6 +51,7 @@ describe('startCell leave()', () => {
       client,
       cellId: CELL,
       config: parseConfig(`projects =["${'software-factory' as ProjectId}"]`),
+      repoRoot: join(cellDataDir, 'repo'),
       cellDataDir,
       system: createSystemAdapter(),
       clock: systemClock,

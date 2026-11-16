@@ -36,7 +36,9 @@ export interface CellOptions {
   client: FactoryClient;
   cellId: CellId;
   config: CellConfig;
-  /** The Cell's own data directory: mirrors, worktrees, logs. */
+  /** The repo the Cell works in (`loaded.repoRoot`): job worktrees live under its `.worktrees/`. */
+  repoRoot: string;
+  /** The Cell's own data directory: identity, logs, runtime journals, cycles. */
   cellDataDir: string;
   system: SystemPort;
   clock: ClockPort;
@@ -124,6 +126,7 @@ export const startCell = async (options: CellOptions): Promise<RunningCell> => {
     client,
     cellId,
     system: options.system,
+    repoRoot: options.repoRoot,
     cellDataDir: options.cellDataDir,
     worktreeLimit: config.worktreeLimit,
     inUse: new Set(),

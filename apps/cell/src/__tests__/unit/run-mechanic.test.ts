@@ -16,14 +16,14 @@ import type { CellId } from '@repo/factory-core/ids';
 import { createSystemAdapter } from '../../adapters/system/system.adapter';
 import { CELL_DIR } from '../../checkpoint';
 import { runMechanic, type MechanicDeps } from '../../jobs/run-mechanic';
-import { prepareWorkspace } from '../../workspace';
+import { prepareWorkspace } from '../../workspace/prepare';
 import {
   createHerdrPane,
   type HerdrExec,
   type HerdrOutcome,
 } from '../../runners/herdr-pane';
 import type { LaunchSpec, PaneDriver, PaneReading } from '../../ports';
-import { git, makeRepo } from '../../testing/git-repo';
+import { cloneRepo, git, makeRepo } from '../../testing/git-repo';
 
 const JOB_ID = '01M7FHM3CH4N1C0B0000000001';
 const ORDER_ID = 'software-factory:v2-24-mechanic';
@@ -190,6 +190,7 @@ const depsFor = (
   client,
   cellId: CELL,
   dataDir,
+  repoRoot: join(dataDir, 'repo'),
   pane,
   now: () => Date.now(),
   sleep: async () => undefined,
@@ -286,6 +287,7 @@ describe('the Mechanic job run (CORE §14.3, §14.4)', () => {
   it('prepares the Work order worktree, commits and pushes Mechanic edits, and records commit and changes', async () => {
     const origin = join(dataDir, 'origin');
     const head = makeRepo(origin);
+    const repoRoot = cloneRepo(origin, join(dataDir, 'repo'));
     const cellDataDir = join(dataDir, 'cell');
     const { client, submitted } = fakeClient();
     const seen = newSeen();
@@ -327,12 +329,13 @@ describe('the Mechanic job run (CORE §14.3, §14.4)', () => {
       job,
       depsFor(cellDataDir, client, pane, {
         system: createSystemAdapter(),
+        repoRoot,
         worktreeLimit: 4,
         inUse,
       }),
     );
 
-    expect(seen.spec?.cwd).toContain(join(cellDataDir, 'worktrees'));
+    expect(seen.spec?.cwd).toContain(join(repoRoot, '.worktrees'));
     expect(promptInWorktree.length).toBeGreaterThan(0);
     expect(statusBeforeEdits).toBe('');
     expect(seen.spec?.env.FACTORY_OPERATOR_SOCKET).toContain(
@@ -405,10 +408,10 @@ describe('the Mechanic job run (CORE §14.3, §14.4)', () => {
     expect(submitted.map((s) => s.command.type)).toEqual(['RecordIncident']);
   });
 
-  it('prepares a worktree in workspace.ts for a Mechanic job with workspace', async () => {
+  it('prepares a worktree under the repo .worktrees for a Mechanic job with workspace', async () => {
     const origin = join(dataDir, 'origin');
     const head = makeRepo(origin);
-    const cellDataDir = join(dataDir, 'cell');
+    const repoRoot = cloneRepo(origin, join(dataDir, 'repo'));
     const job = mechanicJob({
       repo: {
         url: origin,
@@ -424,12 +427,24 @@ describe('the Mechanic job run (CORE §14.3, §14.4)', () => {
       },
     });
 
-    const result = await prepareWorkspace({ job, dataDir: cellDataDir });
+    const result = await prepareWorkspace(
+      {
+        shell: {
+          system: createSystemAdapter(),
+          logDir: join(dataDir, 'logs'),
+        },
+        repoRoot,
+        worktreeLimit: 8,
+        inUse: new Set(),
+      },
+      job,
+    );
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.base).toBe(head);
-    expect(result.worktree).toContain('worktrees');
+    expect(result.head).toBe(head);
+    expect(result.worktree).toContain(join(repoRoot, '.worktrees'));
+    result.release();
   });
 
   it('appends the bounded tail of the workspace log to the prompt of a workspace Andon', async () => {

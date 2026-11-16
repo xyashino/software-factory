@@ -74,6 +74,8 @@ export interface CellOptions {
   /** The fake `gh` state directory and the fake runner shims' directory, on PATH. */
   ghDir: string;
   fakeBin: string;
+  /** The project's repo: the `origin` the Cell's repo fetches, so its worktrees are the project's commits. */
+  repoUrl?: string;
   /** Extra environment, for example the suite's knobs. */
   env?: Record<string, string>;
 }
@@ -106,8 +108,8 @@ export const startCell = async (
   options: CellOptions,
 ): Promise<RunningCell> => {
   const paths = cellPathsIn(options.root);
-  // The Cell runs in its root's repository: --repo-dir, with an origin to register the project from.
-  await cellRepo(options.root);
+  // The Cell runs in its root's repository: --repo-dir, with an origin to register the project from and fetch.
+  await cellRepo(options.root, options.repoUrl);
   const config = [
     'projects = ["software-factory"]',
     'runners = ["claude", "cursor"]',

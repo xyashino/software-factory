@@ -2,21 +2,36 @@ import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Job } from '@repo/factory-core/contracts/job';
-import type { RunShell } from '../ports';
-import { prepareWorkspace } from '../workspace';
+import { createSystemAdapter } from '../adapters/system/system.adapter';
+import { prepareWorkspace, type PrepareContext } from '../workspace/prepare';
+import { shellQuote } from '../workspace/shell';
+import { cloneRepo, git } from '../testing/git-repo';
 import { makeRemote, must, scratch } from './helpers/git';
 
 let dir: string;
 let remote: string;
 let base: string;
+let repoRoot: string;
 
 beforeEach(async () => {
   dir = scratch('workspace');
   ({ remote, base } = await makeRemote(dir));
+  repoRoot = cloneRepo(remote, join(dir, 'repo'));
 });
 
 afterEach(() => {
   rmSync(dir, { recursive: true, force: true });
+});
+
+/** The prepare context of a Cell whose repo is the clone; logs go under the scratch directory. */
+const contextFor = (
+  overrides: Partial<PrepareContext> = {},
+): PrepareContext => ({
+  shell: { system: createSystemAdapter(), logDir: join(dir, 'logs') },
+  repoRoot,
+  worktreeLimit: 8,
+  inUse: new Set(),
+  ...overrides,
 });
 
 /** A job as the Cell receives it, pointing at the fixture remote. */
@@ -35,52 +50,60 @@ const jobFor = (overrides: Partial<Job> = {}): Job =>
 
 describe('operator workspace', () => {
   it('prepares two Work orders of one repo at once on a fresh Cell, both ok', async () => {
-    // Two preparations of one repo at the same time (the mirror lock takes them in turn): the first clone must not break the second.
-    const cellDir = join(dir, 'cell-fresh');
+    // Two preparations of one repo at the same time take the repo lock in turn: neither breaks the other.
     const [first, second] = await Promise.all([
-      prepareWorkspace({
-        job: jobFor({
-          orderId: 'software-factory:add-login' as Job['orderId'],
+      prepareWorkspace(
+        contextFor(),
+        jobFor({
+          workspace: {
+            dir: 'add-login',
+            sync: [],
+            setup: [],
+            timeoutMs: 60_000,
+          },
         }),
-        dataDir: cellDir,
-      }),
-      prepareWorkspace({
-        job: jobFor({
+      ),
+      prepareWorkspace(
+        contextFor(),
+        jobFor({
           orderId: 'software-factory:add-logout' as Job['orderId'],
           repo: {
             url: remote,
             baseBranch: 'main',
             branch: 'factory/add-logout',
           },
+          workspace: {
+            dir: 'add-logout',
+            sync: [],
+            setup: [],
+            timeoutMs: 60_000,
+          },
         }),
-        dataDir: cellDir,
-      }),
+      ),
     ]);
 
-    expect(first).toMatchObject({ ok: true, base });
-    expect(second).toMatchObject({ ok: true, base });
+    expect(first).toMatchObject({ ok: true, head: base });
+    expect(second).toMatchObject({ ok: true, head: base });
+    if (first.ok) first.release();
+    if (second.ok) second.release();
   });
 
-  it('creates the worktree at the base commit on the Work order branch', async () => {
-    const result = await prepareWorkspace({
-      job: jobFor(),
-      dataDir: join(dir, 'cell'),
-    });
+  it('creates a detached worktree at the base commit under the repo', async () => {
+    const result = await prepareWorkspace(contextFor(), jobFor());
 
-    expect(result).toMatchObject({ ok: true, base });
+    expect(result).toMatchObject({ ok: true, head: base });
     if (!result.ok) return;
+    expect(result.worktree).toBe(join(repoRoot, '.worktrees', 'worktree'));
     expect(await must(result.worktree, ['rev-parse', 'HEAD'])).toBe(base);
     expect(
       await must(result.worktree, ['rev-parse', '--abbrev-ref', 'HEAD']),
-    ).toBe('factory/add-login');
+    ).toBe('HEAD');
     expect(existsSync(join(result.worktree, '.cell'))).toBe(true);
+    result.release();
   });
 
-  it('keeps the .cell directory out of the commits, through the mirror exclude file', async () => {
-    const result = await prepareWorkspace({
-      job: jobFor(),
-      dataDir: join(dir, 'cell'),
-    });
+  it('keeps the .cell directory out of the commits, through the repo info/exclude file', async () => {
+    const result = await prepareWorkspace(contextFor(), jobFor());
     if (!result.ok) throw new Error(result.detail);
     writeFileSync(
       join(result.worktree, '.cell', 'scratch.txt'),
@@ -91,164 +114,136 @@ describe('operator workspace', () => {
     expect(await must(result.worktree, ['status', '--porcelain'])).toBe(
       '?? plan.md',
     );
+    result.release();
   });
 
   it('resolves a branch-based base to the remote branch tip', async () => {
-    const result = await prepareWorkspace({
-      job: jobFor({ base: { branchBase: 'main' } } as never),
-      dataDir: join(dir, 'cell'),
-    });
+    const result = await prepareWorkspace(
+      contextFor(),
+      jobFor({ base: { branchBase: 'main' } } as never),
+    );
 
-    expect(result).toMatchObject({ ok: true, base });
+    expect(result).toMatchObject({ ok: true, head: base });
+    if (result.ok) result.release();
   });
 
   it('reports a fetch failure with the stage it failed at', async () => {
-    const result = await prepareWorkspace({
-      job: jobFor({
-        repo: {
-          url: join(dir, 'missing.git'),
-          baseBranch: 'main',
-          branch: 'b',
-        },
-      } as never),
-      dataDir: join(dir, 'cell'),
-    });
+    git(repoRoot, 'remote', 'set-url', 'origin', join(dir, 'missing.git'));
+
+    const result = await prepareWorkspace(contextFor(), jobFor());
 
     expect(result).toMatchObject({ ok: false, stage: 'fetch' });
   });
 
   it('reports a missing base branch at the worktree stage', async () => {
-    const result = await prepareWorkspace({
-      job: jobFor({ base: { branchBase: 'no-such-branch' } } as never),
-      dataDir: join(dir, 'cell'),
-    });
+    const result = await prepareWorkspace(
+      contextFor(),
+      jobFor({ base: { branchBase: 'no-such-branch' } } as never),
+    );
 
     expect(result).toMatchObject({ ok: false, stage: 'worktree' });
   });
 
   it('resets an existing worktree to the base and removes the Operator leftovers', async () => {
-    const dataDir = join(dir, 'cell');
-    const first = await prepareWorkspace({ job: jobFor(), dataDir });
+    const context = contextFor();
+    const first = await prepareWorkspace(context, jobFor());
     if (!first.ok) throw new Error(first.detail);
     writeFileSync(join(first.worktree, 'leftover.md'), 'from the last Cycle');
+    first.release();
 
-    const again = await prepareWorkspace({ job: jobFor(), dataDir });
+    const again = await prepareWorkspace(context, jobFor());
 
     expect(again).toMatchObject({ ok: true });
-    expect(existsSync(join(first.worktree, 'leftover.md'))).toBe(false);
-    expect(readFileSync(join(first.worktree, 'README.md'), 'utf8')).toBe(
+    if (!again.ok) return;
+    expect(existsSync(join(again.worktree, 'leftover.md'))).toBe(false);
+    expect(readFileSync(join(again.worktree, 'README.md'), 'utf8')).toBe(
       '# fixture\n',
     );
+    again.release();
   });
 
   describe('sync and setup', () => {
-    /** A shell that records each line it runs, and fails the lines named in `failing`. */
-    const recordingShell = (failing: string[] = []) => {
-      const ran: { cwd: string; command: string; timeoutMs: number }[] = [];
-      const shell: RunShell = async (cwd, command, timeoutMs) => {
-        ran.push({ cwd, command, timeoutMs });
-        return failing.includes(command)
-          ? { ok: false, detail: `${command} failed` }
-          : { ok: true, detail: '' };
-      };
-      return { ran, shell };
-    };
+    /** A file the sync and setup lines append to, so the test reads what ran. */
+    const runLog = (): string => join(dir, 'runs.txt');
+    const linesRun = (): string[] =>
+      existsSync(runLog())
+        ? readFileSync(runLog(), 'utf8').split('\n').filter(Boolean)
+        : [];
+    const logLine = (name: string): string =>
+      `echo ${name} >> ${shellQuote(runLog())}`;
 
-    it('runs sync, then setup, in the worktree with the workspace timeout', async () => {
-      const { ran, shell } = recordingShell();
-      const result = await prepareWorkspace({
-        job: jobFor({
+    it('runs sync, then setup, in the worktree', async () => {
+      const result = await prepareWorkspace(
+        contextFor(),
+        jobFor({
           workspace: {
             dir: 'worktree',
-            sync: ['pnpm fetch'],
-            setup: ['pnpm install', 'pnpm build'],
+            sync: [logLine('sync')],
+            setup: [logLine('setup')],
             timeoutMs: 5_000,
           },
         } as never),
-        dataDir: join(dir, 'cell'),
-        shell,
-      });
+      );
 
       expect(result).toMatchObject({ ok: true });
-      if (!result.ok) return;
-      expect(ran).toEqual([
-        { cwd: result.worktree, command: 'pnpm fetch', timeoutMs: 5_000 },
-        { cwd: result.worktree, command: 'pnpm install', timeoutMs: 5_000 },
-        { cwd: result.worktree, command: 'pnpm build', timeoutMs: 5_000 },
-      ]);
+      expect(linesRun()).toEqual(['sync', 'setup']);
+      if (result.ok) result.release();
     });
 
-    it('skips sync and setup when the worktree is already prepared at the same base', async () => {
-      const dataDir = join(dir, 'cell');
+    it('runs sync on every prepare and setup once per commit', async () => {
+      const context = contextFor();
       const job = jobFor({
         workspace: {
           dir: 'worktree',
-          sync: [],
-          setup: ['pnpm install'],
+          sync: [logLine('sync')],
+          setup: [logLine('setup')],
           timeoutMs: 5_000,
         },
       } as never);
-      const first = recordingShell();
-      await prepareWorkspace({ job, dataDir, shell: first.shell });
-      const again = recordingShell();
+      const first = await prepareWorkspace(context, job);
+      if (first.ok) first.release();
+      const again = await prepareWorkspace(context, job);
+      if (again.ok) again.release();
 
-      const result = await prepareWorkspace({
-        job,
-        dataDir,
-        shell: again.shell,
-      });
-
-      expect(result).toMatchObject({ ok: true });
-      expect(first.ran).toHaveLength(1);
-      expect(again.ran).toHaveLength(0);
+      expect(linesRun()).toEqual(['sync', 'setup', 'sync']);
     });
 
     it('reports a failing sync at the sync stage and runs no setup', async () => {
-      const { ran, shell } = recordingShell(['pnpm fetch']);
-      const result = await prepareWorkspace({
-        job: jobFor({
+      const result = await prepareWorkspace(
+        contextFor(),
+        jobFor({
           workspace: {
             dir: 'worktree',
-            sync: ['pnpm fetch'],
-            setup: ['pnpm install'],
+            sync: ['exit 3'],
+            setup: [logLine('setup')],
             timeoutMs: 5_000,
           },
         } as never),
-        dataDir: join(dir, 'cell'),
-        shell,
-      });
+      );
 
       expect(result).toMatchObject({ ok: false, stage: 'sync' });
-      expect(ran.map((line) => line.command)).toEqual(['pnpm fetch']);
+      expect(linesRun()).toEqual([]);
     });
 
-    it('reports a failing setup at the setup stage and does not mark the worktree prepared', async () => {
-      const dataDir = join(dir, 'cell');
+    it('reports a failing setup at the setup stage and runs it again on the next prepare', async () => {
+      const flag = join(dir, 'ready.flag');
       const job = jobFor({
         workspace: {
           dir: 'worktree',
           sync: [],
-          setup: ['pnpm install'],
+          setup: [`test -f ${shellQuote(flag)}`],
           timeoutMs: 5_000,
         },
       } as never);
-      const failed = recordingShell(['pnpm install']);
+      const context = contextFor();
 
-      const result = await prepareWorkspace({
-        job,
-        dataDir,
-        shell: failed.shell,
-      });
-      expect(result).toMatchObject({ ok: false, stage: 'setup' });
+      const failed = await prepareWorkspace(context, job);
+      expect(failed).toMatchObject({ ok: false, stage: 'setup' });
 
-      const retry = recordingShell();
-      const again = await prepareWorkspace({
-        job,
-        dataDir,
-        shell: retry.shell,
-      });
-      expect(again).toMatchObject({ ok: true });
-      expect(retry.ran.map((line) => line.command)).toEqual(['pnpm install']);
+      writeFileSync(flag, '');
+      const retry = await prepareWorkspace(context, job);
+      expect(retry).toMatchObject({ ok: true });
+      if (retry.ok) retry.release();
     });
   });
 });

@@ -11,7 +11,7 @@ export interface ProjectRecord {
 }
 
 /**
- * What `set` may change (PROTOCOL §3.1). There is no `repoUrl`: mirrors and Cell checkouts would go
+ * What `set` may change (PROTOCOL §3.1). There is no `repoUrl`: the Cell's origin and worktrees would go
  * stale, so a project with another repository is removed and added again.
  */
 export interface ProjectPatch {
