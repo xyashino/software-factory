@@ -216,6 +216,7 @@ export const evolve = (
     case 'cycle_started':
     case 'cycle_completed':
     case 'verdict_recorded':
+    case 'inspection_progress':
     case 'inspection_finished':
     case 'cycle_failed':
     case 'cycle_blocked':

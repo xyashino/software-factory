@@ -22,6 +22,7 @@ import {
   handOverCycle,
   recordUsage,
   reportInspection,
+  reportInspectionProgress,
   startCycle,
   submitVerdict,
 } from './decide-cycle';
@@ -71,6 +72,8 @@ export const decide = (
       return submitVerdict(state, command, ctx);
     case 'ReportInspection':
       return reportInspection(state, command, ctx);
+    case 'ReportInspectionProgress':
+      return reportInspectionProgress(state, command, ctx);
     case 'FailCycle':
       return failCycle(state, command, ctx);
     case 'BlockCycle':
