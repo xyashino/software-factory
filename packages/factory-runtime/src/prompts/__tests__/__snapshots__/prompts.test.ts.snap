@@ -37,15 +37,15 @@ report: .cell/steps/build/report.md
 ## Rules
 
 You must follow the declared rules.
-- rich-commit
-- decision-log
-- testing
+- rich-commit: .nitpick/rules/git/rich-commit.md
+- decision-log: .nitpick/rules/general/decision-log.md
+- testing: .nitpick/rules/testing
 
 ## Skills
 
 You must use the following skills:
-- evidence
-- caveman
+- evidence: .nitpick/skills/evidence/SKILL.md
+- caveman: .nitpick/skills/caveman/SKILL.md
 
 ## Instructions
 
@@ -110,13 +110,13 @@ feedback: .cell/steps/audit/feedback.md
 ## Rules
 
 You must follow the declared rules.
-- rich-commit
-- decision-log
+- rich-commit: .nitpick/rules/git/rich-commit.md
+- decision-log: .nitpick/rules/general/decision-log.md
 
 ## Skills
 
 You must use the following skills:
-- evidence
+- evidence: .nitpick/skills/evidence/SKILL.md
 
 ## Instructions
 
@@ -190,15 +190,15 @@ report: .cell/steps/build/report.md
 ## Rules
 
 You must follow the declared rules.
-- rich-commit
-- decision-log
-- testing
+- rich-commit: .nitpick/rules/git/rich-commit.md
+- decision-log: .nitpick/rules/general/decision-log.md
+- testing: .nitpick/rules/testing
 
 ## Skills
 
 You must use the following skills:
-- evidence
-- caveman
+- evidence: .nitpick/skills/evidence/SKILL.md
+- caveman: .nitpick/skills/caveman/SKILL.md
 
 ## Instructions
 
@@ -263,14 +263,14 @@ plan: .cell/steps/plan/plan.md
 ## Rules
 
 You must follow the declared rules.
-- coding
-- testing
-- typescript
+- coding: .nitpick/rules/coding
+- testing: .nitpick/rules/testing
+- typescript: .nitpick/rules/typescript
 
 ## Skills
 
 You must use the following skills:
-- caveman
+- caveman: .nitpick/skills/caveman/SKILL.md
 
 ## Instructions
 
@@ -331,13 +331,13 @@ feedback: .cell/steps/audit/feedback.md
 ## Rules
 
 You must follow the declared rules.
-- rich-commit
-- decision-log
+- rich-commit: .nitpick/rules/git/rich-commit.md
+- decision-log: .nitpick/rules/general/decision-log.md
 
 ## Skills
 
 You must use the following skills:
-- evidence
+- evidence: .nitpick/skills/evidence/SKILL.md
 
 ## Instructions
 
@@ -411,15 +411,15 @@ report: .cell/steps/build/report.md
 ## Rules
 
 You must follow the declared rules.
-- rich-commit
-- decision-log
-- testing
+- rich-commit: .nitpick/rules/git/rich-commit.md
+- decision-log: .nitpick/rules/general/decision-log.md
+- testing: .nitpick/rules/testing
 
 ## Skills
 
 You must use the following skills:
-- evidence
-- caveman
+- evidence: .nitpick/skills/evidence/SKILL.md
+- caveman: .nitpick/skills/caveman/SKILL.md
 
 ## Instructions
 

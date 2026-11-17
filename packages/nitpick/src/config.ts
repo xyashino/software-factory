@@ -63,7 +63,7 @@ type Check =
 type Output = {
   path: string;
   root: string;
-  toc?: { agents?: boolean; skills?: boolean };
+  toc?: { agents?: boolean; skills?: boolean; rules?: boolean };
   triggers?: boolean;
   copy?: boolean;
 };

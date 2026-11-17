@@ -48,7 +48,7 @@ describe('Root docs work when', () => {
     });
     expect(problems).toEqual([]);
     expect(read('.ai', 'AGENTS.md')).toBe(
-      `# Information for AI [r](rules/g.md)\n\n## Rule files\n\n${AODI_LEGEND}\n\n- [rules/g.md](rules/g.md)\n`,
+      `# Information for AI [r](rules/g.md)\n\n## Rules\n\n${AODI_LEGEND}\n\n### G\n\n- (A) [r](rules/g.md): x\n`,
     );
   });
 
@@ -92,13 +92,45 @@ describe('Rule groups work when', () => {
       '## Git\n\n1. (I) third\n2. (A) first\n',
     );
     expect(read('.ai', 'AGENTS.md')).toContain(
-      `## Rule files\n\n${AODI_LEGEND}\n\n- [rules/git.md](rules/git.md)\n- [rules/ui.md](rules/ui.md)\n`,
+      `## Rules\n\n${AODI_LEGEND}\n\n### Git\n\n`,
     );
     expect(keys).toEqual([
       join('.ai', 'AGENTS.md'),
       join('.ai', 'rules', 'git.md'),
       join('.ai', 'rules', 'ui.md'),
     ]);
+  });
+
+  it('summarize each rule in the root by its first content line', async () => {
+    const { read } = await build({
+      rules: {
+        git: {
+          first: {
+            importance: A,
+            doc: '# Title\nUse [rich](x.md) commits.\nMore',
+          },
+          late: { importance: 'I', doc: 'Second rule' },
+        },
+      },
+    });
+    expect(read('.ai', 'AGENTS.md')).toContain(
+      '## Rules\n\n' +
+        AODI_LEGEND +
+        '\n\n### Git\n\n- (A) [first](rules/git.md): Use rich commits.\n- (I) [late](rules/git.md): Second rule\n',
+    );
+  });
+
+  it('skip intro lines and list markers in a rule summary', async () => {
+    const { read } = await build({
+      rules: {
+        git: {
+          first: { importance: A, doc: 'Intro line:\n- Use list item.' },
+        },
+      },
+    });
+    expect(read('.ai', 'AGENTS.md')).toContain(
+      '- (A) [first](rules/git.md): Use list item.',
+    );
   });
 
   it('derives the title from the group key', async () => {
@@ -152,7 +184,9 @@ describe('Rule docs work when', () => {
     expect(read('.ai', 'rules', 'r.md')).toBe(
       'see [x/k](../references/x/k.md) and [x/k](../references/x/k.md)\n',
     );
-    expect(read('.ai', 'AGENTS.md')).not.toContain('r.md');
+    expect(read('.ai', 'AGENTS.md')).toContain(
+      '- (A) [r](rules/r.md): see x/k and x/k',
+    );
   });
 
   it('inline a file doc in the group file when inline is set', async () => {
@@ -487,7 +521,7 @@ describe('Outputs work when', () => {
     ]);
     expect(problems).toEqual([]);
     const root = read('.ai', 'CLAUDE.md') as string;
-    expect(root).toContain('- [rules/g.md](rules/g.md)');
+    expect(root).toContain('](rules/');
     expect(read('AGENTS.md')).toBe(
       root
         .replaceAll('](rules/', '](.ai/rules/')
@@ -512,7 +546,7 @@ describe('Outputs work when', () => {
 
   it('falls back to the default output for an empty list', async () => {
     const { read } = await setup([]);
-    expect(read('.ai', 'AGENTS.md')).toContain('## Rule files');
+    expect(read('.ai', 'AGENTS.md')).toContain('# Information for AI');
   });
 
   it('reports the written path of each rule', async () => {
