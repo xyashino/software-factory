@@ -189,6 +189,8 @@ describe('completing a job', () => {
     const text = '# Plan\n';
     const plan = (await import('./test-kit')).sha256Ref(text);
     await w.blobs.put(plan, new TextEncoder().encode(text), 'text/markdown');
+    // The build runs on `claude`: the Cell drops it, so the Cycle's end cannot hand the next station back.
+    await helloCell(w, CELL, []);
 
     await w.runtime.call('submitCommand', {
       cellId: CELL,

@@ -8,6 +8,8 @@ import {
   WriterHeldError,
   type OpenedRuntime,
 } from '@repo/factory-runtime/open-runtime';
+import { isRefusal, toWireError } from './application/core/error-handling';
+import { withRouteSchema } from './application/core/schema/zod';
 import { openForAdmin } from './admin-command';
 
 /** Exit codes of `factory-server --once` (PROTOCOL §10): the CLI tells them apart. */
@@ -52,29 +54,22 @@ export const runOnce = async (
       };
     }
     const route = input.route;
-    const parsed = ROUTES[route].request.safeParse(input.request);
-    if (!parsed.success) {
-      return {
-        exitCode: ONCE_EXIT.refused,
-        output: { ok: false, error: invalidWire(parsed.error.issues) },
-      };
-    }
     // A one-shot holds the writer lock for its whole run, so a long-poll here would block every other
     // process (a server starting up, the next one-shot) for the full wait. It answers at once instead.
+    const parsed = withRouteSchema(route)(input.request);
     const request =
-      route === 'supervisorEvents'
-        ? { ...parsed.data, waitMs: 0 }
-        : parsed.data;
+      route === 'supervisorEvents' ? { ...parsed, waitMs: 0 } : parsed;
     const response = await opened.runtime.call(route, request as never);
     return {
       exitCode: ONCE_EXIT.ok,
       output: { ok: true, response: ROUTES[route].response.parse(response) },
     };
   } catch (error) {
-    if (isRuntimeError(error)) {
+    // A refusal is the request's fault (exit 2); a failure in the response's parse is not (exit 1).
+    if (isRefusal(error) || isRuntimeError(error)) {
       return {
         exitCode: ONCE_EXIT.refused,
-        output: { ok: false, error: error.wire },
+        output: { ok: false, error: toWireError(error) },
       };
     }
     console.error('factory-server --once failed', error);

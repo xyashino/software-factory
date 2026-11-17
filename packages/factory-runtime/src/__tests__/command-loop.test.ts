@@ -98,7 +98,7 @@ describe('command loop', () => {
     });
 
     expect(first.next?.kind).toBe('run_operator_station');
-    expect(first.next?.station?.stationId).toBe('plan-review');
+    expect(first.next?.station?.stationId).toBe('build');
     expect(again).toEqual(first);
   });
 
@@ -358,10 +358,11 @@ describe('claims', () => {
 describe('continuation', () => {
   it('returns no next job when the Cell cannot run the next station', async () => {
     const w = world();
-    // The plan Station runs on `claude`; the plan review runs on `cursor`, which this Cell lacks.
+    // The plan and the build Stations both run on `claude`; the Cell drops it before the plan completes.
     await helloCell(w, CELL, ['claude']);
     const orderId = await createOrder(w, { todoId: 'todo-a' });
     const job = await claim(w);
+    await helloCell(w, CELL, []);
 
     const result = await runPlanStation(w, job, {
       start: 's-cont',
@@ -378,7 +379,7 @@ describe('continuation', () => {
 
   it('hands no next job back when the Cell releases its job (PROTOCOL §9)', async () => {
     const w = world();
-    // The Cell could run the next station (the plan review runs on `cursor`): only the release keeps it
+    // The Cell could run the next station (the build runs on `claude`): only the release keeps it
     // from being claimed straight back, which would hand the same job to the Cell that gave it up.
     await helloCell(w, CELL, ['claude', 'cursor']);
     await createOrder(w, { todoId: 'todo-a' });
