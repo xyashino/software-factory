@@ -6,7 +6,7 @@ Path `decisions/YYYYMMDD-HHmmss-[<TICKET>-]<scope-prefix>-<verb>-<object>.md`:
 
 - `YYYYMMDD-HHmmss`: real local datetime when the entry is written. No `NNNN` numbers: parallel PRs never clash on a number, so rebasing never renames entries.
 - `<TICKET>`: optional tracker id (`[A-Z][A-Z0-9]*-\d+`, uppercase only). Present iff frontmatter `ticket` is present; `none` is rejected.
-- slug: kebab-case `[a-z0-9-]`, 8-60 chars. Starts with first `scope` segment (`parka/dashboard` -> `parka-`), then imperative verb from allow-list, then object.
+- slug: kebab-case `[a-z0-9-]`, 8-60 chars. Starts with first `scope` segment (`factory/cell` -> `factory-`), then imperative verb from allow-list, then object.
 - no two entries share the same ticket (or empty) and slug, whatever the datetime.
 
 Content: YAML frontmatter, blank line, nested `- ` list. Nothing else (no heading, prose, code fence, blank line).
@@ -18,7 +18,7 @@ Frontmatter, flat `key: value`. Plain scalar must not contain `: ` or ` #`, else
 - required `summary`: one line, 10-70 chars.
 - required `why`: one line, 10-200 chars.
 - optional `date`: `YYYY-MM-DD`.
-- optional `supersedes`: full name of existing older entry without `decisions/` and `.md`, e.g. `20261009-093000-parka-order-tiles`.
+- optional `supersedes`: full name of existing older entry without `decisions/` and `.md`, e.g. `20261009-093000-factory-order-tiles`.
 - optional `tags`: kebab-case list, `[a, b]` or `- a` lines.
 - optional metrics, only if known: `models` (list), `inputTokens`, `outTokens`, `cost`, `workTimeInMinutes`.
 

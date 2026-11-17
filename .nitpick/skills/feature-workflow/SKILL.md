@@ -5,8 +5,6 @@ deps:
   plan_requirements: ../plan-requirements/SKILL.md
   plan_be: ../plan-be/SKILL.md
   plan_db: ../plan-db/SKILL.md
-  plan_domain: ../plan-domain/SKILL.md
-  plan_fe: ../plan-fe/SKILL.md
   clone: ../clone/SKILL.md
   do_ui: ../do-ui/SKILL.md
 ---
@@ -50,18 +48,16 @@ spending on the next stage.
    business rules, constraints, acceptance criteria.
 2. **Plan BE** — run `/plan-be` (deps.plan_be): endpoints/procedures, contracts.
 3. **Plan DB** — run `/plan-db` (deps.plan_db): schema, migrations, relations.
-4. **Plan Domain** — run `/plan-domain` (deps.plan_domain): domain models + events.
-5. **Plan FE** — run `/plan-fe` (deps.plan_fe): views, components, state, API calls.
-6. **Define the seams (facades)** — lock the contracts/DTOs/events/interfaces and
+4. **Define the seams (facades)** — lock the contracts/DTOs/events/interfaces and
    the cross-layer communication rules that let layers proceed independently.
-7. **Parallel implementation** — once seams are fixed, implement layers against
+5. **Parallel implementation** — once seams are fixed, implement layers against
    them, parallel where possible:
    - backend logic, DB model, domain, and frontend each to the agreed facade;
    - use `/clone` (deps.clone) against the ideal example for code style;
    - use `/do-ui` (deps.do_ui) for pixel work from a graphic.
-8. **Integration + tests** — wire layers together; run unit, integration,
+6. **Integration + tests** — wire layers together; run unit, integration,
    contract, and e2e tests.
-9. **Verify + iterate** — run tests, check the success metrics, manual test, fix,
+7. **Verify + iterate** — run tests, check the success metrics, manual test, fix,
    repeat until the feature works.
 
 ## RULES

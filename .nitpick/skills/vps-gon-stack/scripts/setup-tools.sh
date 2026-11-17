@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
-# Debian 13 factory tooling: git, mise, Node, pnpm, repo, deps, Playwright browser, agent CLIs.
+# Debian 13 factory tooling: git, mise, Node, pnpm, bun, repo, deps, herdr, agent CLIs.
 # Run as factory (NOT root). Needs phase B + C and GitHub access (setup-git.sh). Re-run safe. No secrets here.
-# Env: REPO_URL, GIT_NAME, GIT_EMAIL, AGENT_CLIS (space/comma list: cursor antigravity claude opencode;
+# Env: REPO_URL (default https://github.com/xyashino/software-factory.git), REPO_DIR (default ~/workspaces/<repo name>),
+# GIT_NAME, GIT_EMAIL, AGENT_CLIS (space/comma list: cursor antigravity claude opencode;
 # unset + terminal = the script asks per CLI, unset + no terminal = install all)
 set -Eeuo pipefail
 
-REPO_URL="${REPO_URL:-https://github.com/xyashino/omino.git}"
+REPO_URL="${REPO_URL:-https://github.com/xyashino/software-factory.git}"
 GIT_NAME="${GIT_NAME:-Software Factory}"
 GIT_EMAIL="${GIT_EMAIL:-factory@$(hostname -s)}"
 AGENT_CLIS="${AGENT_CLIS:-}"
-REPO_DIR="$HOME/workspaces/omino"
+REPO_DIR="${REPO_DIR:-$HOME/workspaces/$(basename "${REPO_URL%.git}")}"
 
 log() { printf '\n==> %s\n' "$*"; }
 die() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
@@ -60,7 +61,7 @@ setup_git() {
 
 clone_repo() {
   log "Repository"
-  mkdir -p "$HOME/workspaces"
+  mkdir -p "$(dirname "$REPO_DIR")"
   if [ -d "$REPO_DIR/.git" ]; then
     git -C "$REPO_DIR" remote set-url origin "$REPO_URL"
     git -C "$REPO_DIR" pull --ff-only
@@ -83,12 +84,20 @@ install_mise() {
   (cd "$REPO_DIR" && mise install)
 }
 
+install_bun() {
+  log "bun (runs pnpm sf and pnpm factory)"
+  # Installer puts the binary in ~/.bun/bin. PATH comes from ~/.factory-env (once)
+  grep -qF '.bun/bin' "$HOME/.factory-env" ||
+    echo 'export PATH="$HOME/.bun/bin:$PATH"' >>"$HOME/.factory-env"
+  export PATH="$HOME/.bun/bin:$PATH"
+  command -v bun >/dev/null 2>&1 && return
+  curl -fsSL https://bun.sh/install | bash
+}
+
 install_repo_deps() {
-  log "Dependencies + Playwright browser"
+  log "Dependencies"
   cd "$REPO_DIR"
   CI=true pnpm install --frozen-lockfile </dev/null
-  # Browser only. System libs were installed in phase B. Playwright lives in vibe-test, not the root
-  pnpm --filter @repo/vibe-test exec playwright install chromium </dev/null
 }
 
 install_herdr() {
@@ -136,7 +145,7 @@ install_antigravity_cli() {
 verify() {
   log "Verify"
   local cmd
-  for cmd in git git-lfs curl jq rg mise node pnpm herdr docker; do
+  for cmd in git git-lfs curl jq rg mise node pnpm bun herdr docker; do
     command -v "$cmd" >/dev/null 2>&1 && echo "[OK] $cmd" || echo "[MISSING] $cmd"
   done
   # Only the selected agent CLIs: versions only, no login needed
@@ -146,7 +155,7 @@ verify() {
   if want_cli opencode; then command -v opencode >/dev/null 2>&1 && opencode --version || echo "[MISSING] opencode"; fi
   node --version
   pnpm --version
-  ls "$HOME/.cache/ms-playwright" 2>/dev/null | head -3
+  bun --version
 }
 
 main() {
@@ -158,6 +167,7 @@ main() {
   clone_repo
   select_clis
   install_mise
+  install_bun
   install_repo_deps
   install_herdr
   if want_cli cursor; then install_cursor_cli; fi

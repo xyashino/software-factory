@@ -1,13 +1,16 @@
 #!/usr/bin/env bash
 # Debian 13 full setup, run as root AFTER the first ssh key login. Re-run safe.
-# Order: A ssh hardening -> B root setup -> C factory user -> D GitHub token + factory tooling -> E env files + Postgres -> F factory timer.
+# Order: A ssh hardening -> B root setup -> C factory user -> D GitHub token + factory tooling -> E env files -> F factory-server + factory-cell units.
 # Needs the sibling scripts in the same directory.
-# Env (optional): FACTORY_USER, REPO_URL (https form), GIT_NAME, GIT_EMAIL, PLAYWRIGHT_VERSION, SKIP_DB=1, FACTORY_INTERVAL, AGENT_CLIS (agent CLIs to install; unset = the script asks)
+# Env (optional): FACTORY_USER, REPO_URL (https form, default https://github.com/xyashino/software-factory.git), REPO_DIR (default ~factory/workspaces/<repo name>), GIT_NAME, GIT_EMAIL, PLAYWRIGHT_VERSION, AGENT_CLIS (agent CLIs to install; unset = the script asks)
 set -Eeuo pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FACTORY_USER="${FACTORY_USER:-factory}"
-export FACTORY_USER
+REPO_URL="${REPO_URL:-https://github.com/xyashino/software-factory.git}"
+FACTORY_HOME="$(getent passwd "$FACTORY_USER" | cut -d: -f6 || true)"
+REPO_DIR="${REPO_DIR:-${FACTORY_HOME:-/home/$FACTORY_USER}/workspaces/$(basename "${REPO_URL%.git}")}"
+export FACTORY_USER REPO_URL REPO_DIR
 
 log() { printf '\n########## %s\n' "$*"; }
 die() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
@@ -56,7 +59,7 @@ as_factory() {
 # setup-git.sh exits 10 when there is no token. runuser -c has no terminal, so root asks and pipes it to gh
 github_access() {
   local status=0 token
-  as_factory REPO_URL setup-git.sh || status=$?
+  as_factory REPO_URL,REPO_DIR setup-git.sh || status=$?
   [ "$status" -eq 10 ] || return "$status"
   [ -t 0 ] || die "No terminal to paste the token. Sign in as $FACTORY_USER (see above), then re-run."
   read -rsp 'Paste the token (hidden): ' token
@@ -65,7 +68,7 @@ github_access() {
   printf '%s' "$token" |
     runuser -l "$FACTORY_USER" -c 'gh auth login --hostname github.com --git-protocol https --with-token'
   unset token
-  as_factory REPO_URL setup-git.sh
+  as_factory REPO_URL,REPO_DIR setup-git.sh
 }
 
 log "A: SSH hardening (key-only login)"
@@ -84,20 +87,20 @@ log "D: choose agent CLIs to install"
 choose_agent_clis
 export AGENT_CLIS
 
-log "D: tooling as $FACTORY_USER (mise, Node, pnpm, repo, Playwright browser, herdr + selected agent CLIs)"
-as_factory REPO_URL,GIT_NAME,GIT_EMAIL,AGENT_CLIS setup-tools.sh
+log "D: tooling as $FACTORY_USER (mise, Node, pnpm, bun, repo, herdr + selected agent CLIs)"
+as_factory REPO_URL,REPO_DIR,GIT_NAME,GIT_EMAIL,AGENT_CLIS setup-tools.sh
 
-log "E: .env / .dev.vars for every app + Postgres migrations, as $FACTORY_USER (Postgres is started only to migrate, then stopped. SKIP_DB=1 skips it)"
-as_factory SKIP_DB setup-env.sh
+log "E: .env from .env.example where the repo has one, as $FACTORY_USER"
+as_factory REPO_URL,REPO_DIR setup-env.sh
 
-log "F: factory timer as $FACTORY_USER (installed, not enabled)"
-as_factory FACTORY_INTERVAL setup-service.sh
+log "F: factory-server + factory-cell systemd units, as root (installed, not enabled)"
+bash "$DIR/setup-service.sh"
 
 cat <<DONE
 
 ########## ALL DONE
 1. Test login in a NEW terminal: ssh -i <key> $FACTORY_USER@<host>
-2. As $FACTORY_USER sign in to the runners named in packages/factory/src/config/models.json: NO_OPEN_BROWSER=1 agent login (Cursor) / agy (Antigravity) / claude / opencode auth login
-3. Repo: ~/workspaces/omino. Preview the queue: pnpm factory --dry-run. Start: systemctl --user enable --now omino-factory.timer
-4. apps/*/.env and apps/*/.dev.vars created from their templates (random *_SECRET). Postgres migrated and stopped: start it with "pnpm db:up"
+2. As $FACTORY_USER sign in to the agent CLIs you installed: NO_OPEN_BROWSER=1 agent login (Cursor) / agy (Antigravity) / claude / opencode auth login
+3. Repo: $REPO_DIR. Put GH_TOKEN (PR poll) in /etc/factory/factory-server.env, then start: systemctl enable --now factory-server factory-cell. Logs: journalctl -u factory-server -u factory-cell -f. v1 instead: as $FACTORY_USER, cd $REPO_DIR && pnpm sf:run
+4. .env files created from .env.example where the repo has them (random *_SECRET). The factory keeps its state in SQLite, no database to start
 DONE

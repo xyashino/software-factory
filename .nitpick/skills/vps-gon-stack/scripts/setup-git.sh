@@ -2,10 +2,10 @@
 # Debian 13 factory: GitHub access with gh + a fine-grained token. Run as factory. Re-run safe.
 # - one token for clone, push, PRs and blocked-task issues (git uses gh as credential helper)
 # - no token yet: prints how to create one and exits 10 (main.sh then asks for it)
-# Env: REPO_URL (https form, default https://github.com/xyashino/omino.git)
+# Env: REPO_URL (https form, default https://github.com/xyashino/software-factory.git)
 set -Eeuo pipefail
 
-REPO_URL="${REPO_URL:-https://github.com/xyashino/omino.git}"
+REPO_URL="${REPO_URL:-https://github.com/xyashino/software-factory.git}"
 NEEDS_TOKEN=10
 
 log() { printf '\n==> %s\n' "$*"; }

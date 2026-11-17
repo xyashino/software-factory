@@ -82,7 +82,7 @@ Goal: system packages, Docker, GitHub CLI, firewall on root. Needs phase A done 
 1. Packages (build tools, git, libvips, rootless Docker deps, ripgrep).
 2. Docker Engine from official repo.
 3. GitHub CLI from official repo.
-4. Playwright system libs via Playwright's own `install-deps` (temporary apt Node, removed after). Version in `PLAYWRIGHT_VERSION` at top of the script, keep equal to catalog `@playwright/test`.
+4. Playwright system libs via Playwright's own `install-deps` (temporary apt Node, removed after). Version in `PLAYWRIGHT_VERSION` at top of the script (for the Playwright MCP).
 5. ufw (ssh port only) + fail2ban + unattended-upgrades. Aborts if no key in `authorized_keys`.
 6. Verify: `docker run hello-world`, tools present.
 
@@ -91,7 +91,7 @@ Fast path: [scripts/setup-root.sh](../scripts/setup-root.sh) pushed from local o
 ```powershell
 # Local machine, after phase A
 # Go to this skill dir (change path to yours), paths below are relative
-cd C:\Users\john\omino\.nitpick\skills\vps-gon-stack
+cd C:\Users\john\software-factory\.nitpick\skills\vps-gon-stack
 # tr strips CR on the VPS (PowerShell adds CRLF when piping)
 Get-Content .\scripts\setup-root.sh -Raw |
   ssh -i "$env:USERPROFILE\.ssh\id_ed25519_new" root@1.1.1.1 "tr -d '\r' | bash -s"
@@ -175,7 +175,7 @@ gh --version
 ```bash
 # Temporary Node + npm from Debian (only to run install-deps)
 apt-get install -y nodejs npm
-# Install Chromium system libs for this Playwright version (match catalog @playwright/test)
+# Install Chromium system libs for this Playwright version
 npx --yes playwright@1.64.0 install-deps chromium
 # Remove temporary Node. Libs stay (they are installed as manual packages)
 apt-get purge -y nodejs npm
@@ -203,7 +203,7 @@ systemctl enable --now unattended-upgrades
 
 ## Phase C - factory user
 
-Goal: non-root `factory` account (key login only, no sudo, no password) with its own rootless Docker. Needs phase A (root key) and phase B (Docker, `uidmap`). Tooling (mise, Node, pnpm, repo, agents) is next part. Re-run safe.
+Goal: non-root `factory` account (key login only, no sudo, no password) with its own rootless Docker. Needs phase A (root key) and phase B (Docker, `uidmap`). Tooling (mise, Node, pnpm, bun, repo, agents) is next part. Re-run safe.
 
 1. Create user, dirs (`workspaces`, `logs`, `config`), copy root's `authorized_keys`.
 2. Shell env `~/.factory-env` (PATH, `DOCKER_HOST` to rootless socket), sourced from `.bashrc` and `.profile`.
@@ -217,7 +217,7 @@ Fast path: [scripts/setup-factory.sh](../scripts/setup-factory.sh) pushed from l
 ```powershell
 # Local machine, after phase B
 # Go to this skill dir (change path to yours), paths below are relative
-cd C:\Users\john\omino\.nitpick\skills\vps-gon-stack
+cd C:\Users\john\software-factory\.nitpick\skills\vps-gon-stack
 # tr strips CR on the VPS (PowerShell adds CRLF when piping)
 Get-Content .\scripts\setup-factory.sh -Raw |
   ssh -i "$env:USERPROFILE\.ssh\id_ed25519_new" root@1.1.1.1 "tr -d '\r' | bash -s"
@@ -282,7 +282,7 @@ docker info | grep -i rootless
 
 Goal: `factory` can clone, push branches, open PRs and issues for blocked tasks, with one token bound to this repo only. Runs **as factory**. Needs phase B (`gh`) and C. Re-run safe (working token = nothing asked).
 
-1. Create the token yourself: https://github.com/settings/personal-access-tokens/new. Repository access: **Only select repositories** > `omino`. Permissions, all **Read and write**: Contents (push), Pull requests (PRs), Issues (blocked tasks), Workflows (changes in `.github/workflows`). Pick an expiry and note it.
+1. Create the token yourself: https://github.com/settings/personal-access-tokens/new. Repository access: **Only select repositories** > the repo the factory serves (this one: `software-factory`). Permissions, all **Read and write**: Contents (push), Pull requests (PRs), Issues (blocked tasks), Workflows (changes in `.github/workflows`). Pick an expiry and note it.
 2. `gh auth login --with-token` stores it for `factory` (`~/.config/gh/hosts.yml`, owner-only).
 3. `gh auth setup-git`: git uses gh as credential helper for `https://github.com`, so plain `git clone/push` works.
 4. Check: the token can push (`gh api repos/<repo> --jq .permissions.push` = `true`) and `git ls-remote` works.
@@ -296,36 +296,36 @@ Manual commands (as factory):
 gh auth login --hostname github.com --git-protocol https --with-token
 # git clone/push over https use the gh token
 gh auth setup-git --hostname github.com
-# "true" = token can push
-gh api repos/xyashino/omino --jq .permissions.push
+# "true" = token can push (OWNER/REPO of your repo, this one: xyashino/software-factory)
+gh api repos/OWNER/REPO --jq .permissions.push
 # Works when it prints a commit hash
-git ls-remote https://github.com/xyashino/omino.git HEAD
+git ls-remote https://github.com/OWNER/REPO.git HEAD
 ```
 
 ### Factory tooling
 
-Goal: working dev environment for `factory`: git, Node, pnpm, repo, dependencies, Playwright browser. Runs **as factory** (no root, no sudo). Needs phase B (system libs), phase C (user, `~/.factory-env`) and GitHub access above. Re-run safe (pulls repo, skips installed tools). No secrets here.
+Goal: working dev environment for `factory`: git, Node, pnpm, bun, repo, dependencies. Runs **as factory** (no root, no sudo). Needs phase B (system libs), phase C (user, `~/.factory-env`) and GitHub access above. Re-run safe (pulls repo, skips installed tools). No secrets here.
 
 1. Git defaults (name, email, `pull.ff only`, `init.defaultBranch main`).
-2. Clone repo to `~/workspaces/omino` over https (gh token). Re-run = `git pull --ff-only`.
+2. Clone the repo (`REPO_URL`, default this repo) to `~/workspaces/<repo name>` (`REPO_DIR`) over https (gh token). Re-run = `git pull --ff-only`.
 3. mise: install standalone CLI, trust repo config, install Node + pnpm from `.mise.toml`.
-4. `pnpm install --frozen-lockfile` + `playwright install chromium` (browser only, libs came from phase B).
+4. bun (`~/.bun/bin`, PATH added to `~/.factory-env`): `pnpm sf` and `pnpm factory` run on it. Then `pnpm install --frozen-lockfile`.
 5. Install herdr (`~/.local/bin`). Installed only, never started by the script.
 6. Install the agent CLIs you picked (`main.sh` asks per CLI, or `AGENT_CLIS` preset): Claude Code (`~/.local/bin`), opencode (`~/.opencode/bin`, PATH added to `~/.factory-env`), Cursor CLI `agent` and Antigravity CLI `agy` (both `~/.local/bin`). Installed only, no sign-in.
-7. Verify: tools respond (herdr checked with `command -v`, agent CLIs with `--version`), Playwright browser cached.
+7. Verify: tools respond (herdr checked with `command -v`, agent CLIs with `--version`), node, pnpm and bun versions.
 
 Fast path: [scripts/setup-tools.sh](../scripts/setup-tools.sh) pushed from local over ssh **as factory**.
 
 ```powershell
 # Local machine, after phase C
 # Go to this skill dir (change path to yours), paths below are relative
-cd C:\Users\john\omino\.nitpick\skills\vps-gon-stack
+cd C:\Users\john\software-factory\.nitpick\skills\vps-gon-stack
 # tr strips CR on the VPS (PowerShell adds CRLF when piping)
 Get-Content .\scripts\setup-tools.sh -Raw |
   ssh -i "$env:USERPROFILE\.ssh\id_ed25519_new" factory@1.1.1.1 "tr -d '\r' | bash -s"
 ```
 
-Custom values: `REPO_URL`, `GIT_NAME`, `GIT_EMAIL` env vars (set them in the remote command before `bash -s`).
+Custom values: `REPO_URL`, `REPO_DIR`, `GIT_NAME`, `GIT_EMAIL` env vars (set them in the remote command before `bash -s`).
 
 ### Manual commands
 
@@ -348,9 +348,12 @@ git lfs install
 2. Repo:
 
 ```bash
-mkdir -p ~/workspaces
-git clone https://github.com/xyashino/omino.git ~/workspaces/omino
-cd ~/workspaces/omino
+# REPO_URL: https URL of the repo the factory serves (this repo: https://github.com/xyashino/software-factory.git)
+REPO_URL=https://github.com/xyashino/software-factory.git
+REPO_DIR=~/workspaces/$(basename "${REPO_URL%.git}")
+mkdir -p "$(dirname "$REPO_DIR")"
+git clone "$REPO_URL" "$REPO_DIR"
+cd "$REPO_DIR"
 ```
 
 3. mise (Node + pnpm pinned via .mise.toml):
@@ -368,13 +371,16 @@ node --version
 pnpm --version
 ```
 
-4. Dependencies + Playwright browser:
+4. bun (runs `pnpm sf` and `pnpm factory`) + dependencies:
 
 ```bash
+# Official installer, puts binary in ~/.bun/bin
+curl -fsSL https://bun.sh/install | bash
+grep -qF '.bun/bin' ~/.factory-env || echo 'export PATH="$HOME/.bun/bin:$PATH"' >> ~/.factory-env
+export PATH="$HOME/.bun/bin:$PATH"
+bun --version
 # Exact lockfile install, fails if lockfile is out of date
 pnpm install --frozen-lockfile
-# Download Chromium only (system libs already installed in phase B)
-pnpm --filter @repo/vibe-test exec playwright install chromium
 ```
 
 5. herdr (install only, do NOT run it):
@@ -414,75 +420,60 @@ opencode --version
 pnpm --filter @repo/nitpick test
 ```
 
-## Phase E - env files + Postgres
+## Phase E - env files
 
-Goal: every app has its local env files and a migrated database, so you can start working without setup. No real secrets. Runs **as factory**. Needs phase D. Re-run safe: an existing file is only checked for existence, never opened (delete it to regenerate). Names are logged, values never.
+Goal: every place that ships a `.env.example` gets its local `.env`. No real secrets. The factory keeps its state in SQLite (the `factory-server` data dir), so there is no database to start or migrate. The repo ships no `.env.example` today: then the step does nothing. Runs **as factory**. Needs phase D. Re-run safe: an existing file is only checked for existence, never opened (delete it to regenerate). Names are logged, values never.
 
-For each app in `apps/*`:
-
-1. Copy `.env.example` to `.env` (read by `drizzle-kit`) and `.dev.vars.example` to `.dev.vars` (read by `wrangler dev`). Template values stay as they are, except `*_SECRET`: random 64 hex chars. File mode 0600.
-2. App with `docker-compose.yml`: start Postgres, wait for its healthcheck, run `pnpm db:migrate` with `DATABASE_URL` from `.env`, stop Postgres again (data volume stays). A Postgres that already runs is left running. `SKIP_DB=1` skips this step.
+For the repo root and each app in `apps/*` that has a `.env.example`: copy it to `.env`. Template values stay as they are, except `*_SECRET`: random 64 hex chars. File mode 0600.
 
 Fast path: [scripts/setup-env.sh](../scripts/setup-env.sh) (as factory). `main.sh` runs it as step E.
 
 ### Manual commands
 
-Log in as factory first. Example for `omino-api`.
-
-1. Env files:
+Log in as factory first.
 
 ```bash
-cd ~/workspaces/omino/apps/omino-api
-# Owner-only copies of the templates (-n: never overwrite)
+cd ~/workspaces/software-factory
+# Owner-only copy of the template (-n: never overwrite)
 cp -n .env.example .env && chmod 600 .env
-cp -n .dev.vars.example .dev.vars && chmod 600 .dev.vars
-# Random AUTH_SECRET instead of the template placeholder
-sed -i "s/^AUTH_SECRET=.*/AUTH_SECRET=\"$(openssl rand -hex 32)\"/" .dev.vars
+# Random secret instead of a template placeholder (repeat per *_SECRET name)
+sed -i "s/^AUTH_SECRET=.*/AUTH_SECRET=\"$(openssl rand -hex 32)\"/" .env
+# Names only, no values: is every variable filled?
+awk -F= '/^[A-Z]/ { printf "%s filled=%d\n", $1, length($2) > 0 }' .env
 ```
 
-2. Postgres + migrations:
+## Phase F - factory-server + factory-cell units
 
-```bash
-# Same as pnpm db:up, plus wait until the healthcheck passes
-docker compose up -d --wait
-# drizzle-kit reads DATABASE_URL from the environment
-set -a && . ./.env && set +a && pnpm db:migrate
-# Stop again so nothing keeps running (volume omino_postgres_data stays)
-pnpm db:down
-```
+Goal: `factory` runs the v2 Software Factory on its own. Runs **as root**. Needs phase D (repo, token, agent CLIs) and C (user). Re-run safe (units rewritten, enabled state kept).
 
-3. Verify (names only, no values):
+1. Copy `deploy/systemd/factory-server.service` and `deploy/systemd/factory-cell.service` from the checkout to `/etc/systemd/system/` (both `Type=simple`, `User=factory`, `Restart=on-failure`). Create empty `/etc/factory/factory-server.env` and `/etc/factory/factory-cell.env` (0600) for the optional `EnvironmentFile=-`.
+2. A drop-in `checkout.conf` per unit: `ExecStart` runs `pnpm factory-server` / `pnpm factory-cell --repo-dir <repo>` through a login shell in the factory user's checkout (so mise, bun and pnpm are on PATH), `WorkingDirectory` is that checkout, `ProtectHome=no` (the shipped units hide `/home` and expect the repo in `/var/lib/factory/repo`). The Cell drop-in also relaxes `ProtectSystem` to `full` and lets it write the checkout and the factory home (agent CLI state).
+3. Installed, **not enabled**: sign in to the agent CLIs first, put `GH_TOKEN` (PR poll) in `/etc/factory/factory-server.env`, for a remote Cell set `FACTORY_JOIN_TOKEN` in `/etc/factory/factory-cell.env`.
 
-```bash
-# Every variable filled?
-awk -F= '/^[A-Z]/ { printf "%s filled=%d\n", $1, length($2) > 0 }' .env .dev.vars
-# API against local Postgres: start the db, then the Worker
-pnpm db:up && pnpm dev
-```
+The server is the single writer of the Factory data dir (`%S/factory`, SQLite). The Cell polls it for Jobs and runs one Work order in its checkout (`<repo>/.factory-local/cell`). Todos with `factory: v2` become Work orders through intake. Restore after a lost machine: `deploy/RESTORE.md`.
 
-## Phase F - software factory timer
+v1 (`pnpm sf`, no units): as factory in the repo, `pnpm sf:run` runs one pass over `todos/` without `factory: v2`. `pnpm sf:status` shows tasks, `pnpm sf:reset` clears them.
 
-Goal: `factory` works the `todos/` queue on its own. Runs **as factory**. Needs phase D (repo, token, agent CLIs) and E. Re-run safe (units rewritten, enabled state kept).
-
-1. systemd user units in `~/.config/systemd/user/`: `omino-factory.service` (oneshot, login shell, `pnpm factory` in `~/workspaces/omino`, no start timeout) and `omino-factory.timer` (5 min after boot, then `FACTORY_INTERVAL` after each pass ends, default `10min`). Linger from phase C keeps them running without a login.
-2. Installed, **not enabled**: sign in to the runners named in `packages/factory/src/config/models.json` first.
-
-One pass (`packages/factory`): sync `main`, take the next ready task (`status: todo`, dependencies `done`, no open `factory/<id>` PR or blocked issue; high priority first), branch `factory/<id>`, execute -> review (read-only) until `VERDICT: pass`, commit through the normal hooks, push, open PR. A task that cannot finish gets a `factory-blocked` issue; close it to retry. Agent CLI failing (signed out, missing) stops the pass, the timer tries again later.
-
-Fast path: [scripts/setup-service.sh](../scripts/setup-service.sh) (as factory). `main.sh` runs it as step F.
+Fast path: [scripts/setup-service.sh](../scripts/setup-service.sh) (as root). `main.sh` runs it as step F.
 
 ### Manual commands
 
 ```bash
-cd ~/workspaces/omino
-# Queue preview with the agent for every role, nothing runs
-pnpm factory --dry-run
-# Start (now + every 10 min after each pass)
-systemctl --user enable --now omino-factory.timer
-# Follow a pass
-journalctl --user -u omino-factory -f
-# Next run time
-systemctl --user list-timers omino-factory.timer
+# As root. Install the shipped units
+install -m 0644 /home/factory/workspaces/software-factory/deploy/systemd/factory-server.service /etc/systemd/system/
+install -m 0644 /home/factory/workspaces/software-factory/deploy/systemd/factory-cell.service /etc/systemd/system/
+# Optional env files, owner-only
+install -d -m 0755 /etc/factory
+install -m 0600 /dev/null /etc/factory/factory-server.env
+install -m 0600 /dev/null /etc/factory/factory-cell.env
+# Run the checkout instead of the packaged binaries (edit the drop-ins: ExecStart, WorkingDirectory, ProtectHome=no)
+systemctl edit factory-server
+systemctl edit factory-cell
+systemctl daemon-reload
+# Start
+systemctl enable --now factory-server factory-cell
+# Follow
+journalctl -u factory-server -u factory-cell -f
 # Stop
-systemctl --user disable --now omino-factory.timer
+systemctl disable --now factory-cell factory-server
 ```

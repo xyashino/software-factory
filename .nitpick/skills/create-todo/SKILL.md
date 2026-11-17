@@ -26,7 +26,7 @@ A `todos/<name>.md` file is not just a bullet point — it is an **executable te
 
 ### Key Tenets
 
-1. **Single Responsibility**: One markdown file per logical package, module, or distinct problem (e.g. `todos/astro-config.md`, `todos/booking-management.md`).
+1. **Single Responsibility**: One markdown file per logical package, module, or distinct problem (e.g. `todos/cell-config-json.md`, `todos/todos-import-export.md`).
 2. **Context-Rich, Zero Ambiguity**: Explain the _why_ alongside the _what_. State the architectural layer (Universal, Web UI, Domain Core, Integration).
 3. **Exact Dependency Alignments**: Reference explicit packages from `pnpm-workspace.yaml` `catalog:` or `workspace:*`.
 4. **Token-Lean Verification**: Avoid multi-step command churn. Use the unified CI verification gate (`pnpm ci:verify`) as the single deterministic verification step.
@@ -36,10 +36,10 @@ A `todos/<name>.md` file is not just a bullet point — it is an **executable te
 ## 📁 File Naming & Directory Convention
 
 - **Directory**: Always output files to `todos/` in the repository root.
-- **File Name**: Strictly kebab-case reflecting the package or feature name:
-  - `@repo/astro-config` $\rightarrow$ `todos/astro-config.md`
-  - `@repo/uih` $\rightarrow$ `todos/uih.md`
-  - `booking-checkout` $\rightarrow$ `todos/booking-checkout.md`
+- **File Name**: Strictly kebab-case reflecting the package or feature name. The file name without `.md` is the todo id, used in `depends_on`:
+  - `apps/cell` $\rightarrow$ `todos/cell-config-json.md`
+  - `packages/factory-definitions` $\rightarrow$ `todos/todos-import-export.md`
+  - `gate-failure-diagnosis` $\rightarrow$ `todos/gate-failure-diagnosis.md`
 
 ---
 
@@ -53,16 +53,39 @@ When explicitly invoked by the user:
    - Read relevant ADRs in `decisions/` only if the task directly alters architectural contracts.
 2. **Scoping**:
    - Split complex epics into discrete, high-cohesion `todos/<name>.md` files.
-   - Do not bundle unrelated concerns (e.g. keep `@repo/uih` and `@repo/ui` in separate files).
+   - Do not bundle unrelated concerns (e.g. keep `apps/cell` and `apps/server` changes in separate files).
 3. **Drafting from Template**:
    - Use the canonical template structure from `references/todo.md` (next to this file).
    - Populate sections: **Objective**, **Context & Problem Statement**, **Specification / Scope**, **Implementation Plan**, and **Acceptance Criteria**.
-4. **Agent Override (only when the user names a runner, tier or model)**:
-   - Set `runner` and/or `tier` (`advanced` hard / cross-package, `default`, `light` trivial edits). Never write a model id, tasks have no `model` key.
-   - User names a model → find its runner and tier in `packages/factory/src/config/models.json` (same as `pnpm factory models`). Not there → say so, do not invent one.
+4. **Frontmatter**:
+   - Set only keys the parsers read (table below). Never add `execute`, `review`, `runner`, `tier` or `model` keys: tasks do not select them.
+   - A `line` the user does not name stays `feature`. A change `type` the user does not name stays `feat`.
 5. **Lean Validation**:
    - Verify markdown formatting and ensure all acceptance criteria are actionable checkboxes (`- [ ]`).
    - Do **NOT** run test or build commands during todo creation — drafting specs does not execute code.
+
+---
+
+## 🧾 Frontmatter Keys
+
+Parsed by `packages/factory-definitions/src/todo.ts` (v2 intake) and `packages/software-factory/src/supervisor/pick-todo.ts` (v1, `pnpm sf`).
+
+| Key          | Values                                                                                  | Default   | Used by | Meaning                                                                      |
+| ------------ | --------------------------------------------------------------------------------------- | --------- | ------- | ---------------------------------------------------------------------------- |
+| `status`     | `todo` \| `done` \| `cancelled`                                                         | required  | v1, v2  | Only `todo` is picked up.                                                    |
+| `priority`   | `high` \| `medium` \| `low`                                                             | `medium`  | v1, v2  | Highest first, then by file name.                                            |
+| `depends_on` | list of todo ids (file names without `.md`)                                             | `[]`      | v1, v2  | Todos that must be delivered first.                                          |
+| `line`       | a Line name: `fast`, `standard`, `feature` (`.factory/lines/<name>.yml`)                | `feature` | v2      | The Line the Work order runs on.                                             |
+| `workflow`   | a v1 workflow name                                                                      | `feature` | v1      | Alias of `line` in v2. If both are set they must be equal.                   |
+| `type`       | `feat`, `fix`, `chore`, `refactor`, `docs`, `test`, `perf`, `build`, `ci`, `style`, `revert` | `feat`    | v2      | Change category: branch `<type>/<id>` and commit type.                       |
+| `plan`       | plan slug: `[a-z0-9][a-z0-9-]{0,63}`                                                    | none      | v2      | Groups todos into an Order Plan. In-plan `depends_on` must form a linear chain. |
+| `factory`    | `v2`                                                                                    | none      | v1, v2  | Marks the todo for v2 intake. v1 (`pnpm sf`) skips a todo with `factory: v2`. |
+
+Rules of thumb:
+
+- Targeting v2 (`factory-server` + `factory-cell`, `pnpm factory`): set `factory: v2`, `line` and `type`.
+- Targeting v1 (`pnpm sf`): set `workflow`, leave out `factory`, `line`, `type` and `plan`.
+- The title is the first `# ` heading; a `<todo-id>:` prefix is dropped.
 
 ---
 
@@ -74,10 +97,11 @@ Every generated file in `todos/` must adhere to this markdown structure:
 ---
 status: todo
 priority: medium # high | medium | low
-depends_on: [] # ids (file names without .md) that must be done first
-# optional per-role agent override, defaults in packages/factory/src/config/models.json, keys execute and review:
-# execute: { runner: claude, tier: light } # runner: cursor | antigravity | claude | codex | opencode, tier: advanced | default | light
-# review: { runner: cursor, tier: default }
+depends_on: [] # todo ids (file names without .md) that must be done first
+factory: v2 # v2 intake. Leave out for v1 (`pnpm sf`)
+line: feature # fast | standard | feature (v1: `workflow`)
+type: feat # feat | fix | chore | refactor | docs | test | perf | build | ci | style | revert
+# plan: my-plan # optional Order Plan slug, in-plan depends_on form a linear chain
 ---
 
 # Todo: [Scope / Package / Feature Name]
@@ -96,7 +120,7 @@ depends_on: [] # ids (file names without .md) that must be done first
 
 ## 📦 Specification / Scope
 
-- **Target**: `[e.g. packages/<name> or apps/<name>/src/modules/<module>]`
+- **Target**: `[e.g. packages/<name> or apps/<name>/src/<module>]`
 - **Classification**: `[Universal Tooling | Web UI | Domain Core | Integration | Infrastructure]`
 - **Dependencies**:
   - `[package-a: catalog:]`

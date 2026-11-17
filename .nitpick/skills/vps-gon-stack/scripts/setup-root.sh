@@ -3,7 +3,7 @@
 # No factory user here (next part). Run phase A first (key login must work).
 set -Eeuo pipefail
 
-# Keep in sync with @playwright/test in pnpm-workspace.yaml catalog (or "latest")
+# Playwright version whose Chromium system libs are installed (for the Playwright MCP). "latest" also works
 PLAYWRIGHT_VERSION="${PLAYWRIGHT_VERSION:-1.64.0}"
 
 log() { printf '\n==> %s\n' "$*"; }
