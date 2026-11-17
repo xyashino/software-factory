@@ -41,7 +41,7 @@ export const PR_TEMPLATE_VARS = {
 } as const satisfies Record<string, readonly string[]>;
 
 /**
- * The runtime prompts a Job carries (PROTOCOL §4). Each key names its file
+ * The runtime prompts a Job carries. Each key names its file
  * under `templates/runtime/` and the placeholders it must contain. The
  * runtime renders them; this package only checks and loads the text.
  */
@@ -87,7 +87,7 @@ interface Slot {
 
 /**
  * The distinct placeholder names in a template, in order of first appearance.
- * Only the scanner: rendering is done by the runtime (v2-09).
+ * Only the scanner: rendering is done by the runtime.
  */
 export const templateVariables = (template: string): string[] => {
   const names = new Set<string>();
@@ -150,10 +150,8 @@ export const loadRuntimePrompts = (
   return ok(bodies);
 };
 
-/**
- * Every placeholder must be declared, and every declared variable must be used
- * (a runtime prompt without its placeholder is reported here).
- */
+// Every placeholder must be declared, and every declared variable must be used
+// (a runtime prompt without its placeholder is reported here).
 const checkVariables = (
   file: string,
   body: string,
@@ -182,11 +180,9 @@ const checkVariables = (
   return errors;
 };
 
-/**
- * Reads each slot's file in `dir` and checks it: every file must belong to a
- * slot, every slot must have a file, and every placeholder must be declared.
- * Declared variables a template does not use are reported too.
- */
+// Reads each slot's file in `dir` and checks it: every file must belong to a
+// slot, every slot must have a file, and every placeholder must be declared.
+// Declared variables a template does not use are reported too.
 const readSlots = (
   packageRoot: string,
   dir: string,

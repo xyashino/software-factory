@@ -22,7 +22,6 @@ import { JobStopped, submit, type JobContext } from './send';
 const MAX_DETAIL_CHARS = 500;
 const COMMIT = /^[0-9a-f]{40}$/;
 
-/** The identity of the WIP commit a blocked publish writes (the delivery squashes it later). */
 const IDENTITY = [
   '-c',
   'user.name=Software Factory',
@@ -30,7 +29,6 @@ const IDENTITY = [
   'user.email=software-factory@localhost',
 ];
 
-/** The last characters of a run's output, for a failure detail, with machine-local values redacted. */
 const tailOfRun = (run: ShellRun): string =>
   redactDetail(textOf(run).trim(), MAX_DETAIL_CHARS, 'end');
 
@@ -40,10 +38,9 @@ const errorText = (error: unknown): string =>
     MAX_DETAIL_CHARS,
   );
 
-/** A publish that cannot finish here: reported as failed, and nothing more is pushed. */
+// A publish that cannot finish here: reported as failed, and nothing more is pushed.
 class PublishFailed extends Error {}
 
-/** Runs one git command in the worktree. */
 const git = (
   shell: ShellContext,
   cwd: string,
@@ -55,10 +52,6 @@ const git = (
     timeoutMs: GIT_TIMEOUT_MS,
   });
 
-/**
- * Sends `ReportBlockedPr` for the job. The Andon it names is left as it is. Once the report lands, a toast
- * names the block and, when the PR is published, its URL. A failed toast changes nothing.
- */
 const report = async (
   ctx: JobContext,
   job: Job,
@@ -84,7 +77,7 @@ const report = async (
 };
 
 /**
- * Runs one `publish_blocked` job (v1 `publishBlockedWork`, PROTOCOL §8.3). A supervisor-held Andon gets its
+ * Runs one `publish_blocked` job. A supervisor-held Andon gets its
  * work on GitHub for human inspection: the worktree's changes against `origin/<baseBranch>` go to a draft
  * `[BLOCKED]` PR. It is best-effort and never changes the Andon:
  *

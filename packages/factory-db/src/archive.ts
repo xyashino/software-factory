@@ -54,7 +54,7 @@ const countsFromArchive = (archiveBytes: Uint8Array): ArchiveCounts => {
   return { globalSeq, projects, events, blobs };
 };
 
-/** Refuses to write over an existing file: an export or a backup never replaces anything. */
+// Refuses to write over an existing file: an export or a backup never replaces anything.
 const assertNew = async (file: string): Promise<void> => {
   if (await Bun.file(file).exists()) {
     throw new Error(`refusing to overwrite ${file}`);
@@ -62,9 +62,9 @@ const assertNew = async (file: string): Promise<void> => {
 };
 
 /**
- * Backup, export and import over one SQLite connection (STORAGE §7). Every operation runs under the
+ * Backup, export and import over one SQLite connection. Every operation runs under the
  * writer lock, and reads go through the store's gate, so a read never sees a half-written command.
- * Export and import delegate to `export-import.ts` (`STORAGE §7.3` tar format).
+ * Export and import delegate to `export-import.ts` (tar format).
  */
 export const sqliteArchive = (
   db: Database,

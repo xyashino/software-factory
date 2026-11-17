@@ -15,7 +15,7 @@ import type { Priority } from '@repo/factory-core/order/state';
 import type { FactoryDatabase } from './db';
 import { type NewOrderRecord, type OrderRecord, orders } from './schema';
 
-/** One `orders` row as read (STORAGE §4). JSON columns are strings, booleans are 0/1. */
+/** One `orders` row as read. JSON columns are strings, booleans are 0/1. */
 export type OrderRow = OrderRecord;
 
 /** One `orders` row as written. */
@@ -95,7 +95,7 @@ export const projectionOfRow = (row: OrderRow): OrderProjection => {
   };
 };
 
-/** Writes a projection row: insert, or replace the row of the same order (STORAGE §3 step 4). */
+/** Writes a projection row: insert, or replace the row of the same order. */
 export const upsertOrder = (
   db: FactoryDatabase,
   projection: OrderProjection,

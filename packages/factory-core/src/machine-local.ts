@@ -1,7 +1,5 @@
-/**
- * Machine-local values (I2, RULES §2.2): absolute and home-relative paths, Windows drive paths,
- * hostnames, pane ids and process ids. They must never reach a stored event.
- */
+// Machine-local values (I2): absolute and home-relative paths, Windows drive paths,
+// hostnames, pane ids and process ids. They must never reach a stored event.
 const PATHS_HOSTS_PANES: readonly RegExp[] = [
   /(^|[\s"'(=,])(\/[\w.@-]+){2,}/,
   /(^|[\s"'(=,])~\//,
@@ -14,7 +12,7 @@ const PATHS_HOSTS_PANES: readonly RegExp[] = [
   /\bpid[=: ]\d+/i,
 ];
 
-/** Host:port pairs. Only free text is checked for them: an id may start with digits and a hyphen. */
+// Host:port pairs. Only free text is checked for them: an id may start with digits and a hyphen.
 const HOST_PORT: readonly RegExp[] = [
   /\b[a-z][a-z0-9-]*:\d{2,5}\b/i,
   /\b\d{1,3}(\.\d{1,3}){3}:\d+\b/,

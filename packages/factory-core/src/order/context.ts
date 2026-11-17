@@ -4,7 +4,7 @@ import type { CycleCause, InspectionResult } from './events';
 import { requireCycle } from './evolve-helpers';
 import type { WorkOrderState } from './state';
 
-/** Where the Cell keeps the Cycle's scratch files, relative to the worktree (PROTOCOL §4). */
+// Where the Cell keeps the Cycle's scratch files, relative to the worktree.
 const SCRATCH_DIR = '.cell';
 
 export type CycleInput =
@@ -39,7 +39,7 @@ export type CycleFeedback =
       logBlobs: BlobRef[];
     };
 
-/** What the prompt of one Cycle is built from (CORE §7). Paths are relative; no absolute path. */
+/** What the prompt of one Cycle is built from. Paths are relative; no absolute path. */
 export interface CycleContext {
   inputs: CycleInput[];
   notes: { fromStation: StationId; text: string }[];
@@ -71,7 +71,7 @@ const orderInputs = (state: WorkOrderState): CycleInput[] => [
   { kind: 'order', field: 'branch', value: state.todoId },
 ];
 
-/** Artifacts and Inspection commands of the Stations that passed before this one (CORE §7). */
+// Artifacts and Inspection commands of the Stations that passed before this one.
 const earlierInputs = (
   state: WorkOrderState,
   stationId: StationId,
@@ -115,7 +115,7 @@ const notesFor = (
     .filter((note) => note.to === stationId)
     .map((note) => ({ fromStation: note.fromStation, text: note.text }));
 
-/** The failure a retry must fix: a verdict's feedback, or an Inspection's results and logs. */
+// The failure a retry must fix: a verdict's feedback, or an Inspection's results and logs.
 const feedbackFor = (
   state: WorkOrderState,
   stationId: StationId,
@@ -141,7 +141,6 @@ const feedbackFor = (
   return undefined;
 };
 
-/** The resume, handover and restart sections, by the cause of this Cycle (CORE §5.3, §7). */
 const causeSections = (
   state: WorkOrderState,
   cause: CycleCause,
@@ -184,12 +183,10 @@ const causeSections = (
   }
 };
 
-/**
- * Questions asked in this Station's prior Cycles that have answers (CORE §7).
- *
- * Ordered as stored. Questions without an answer are omitted: an open question
- * does not reach a fresh prompt until a user answers it.
- */
+// Questions asked in this Station's prior Cycles that have answers.
+//
+// Ordered as stored. Questions without an answer are omitted: an open question
+// does not reach a fresh prompt until a user answers it.
 const priorQuestionsOf = (
   state: WorkOrderState,
   stationId: StationId,
@@ -217,7 +214,7 @@ const outputsOf = (station: Station): CycleContext['outputs'] =>
   });
 
 /**
- * What a Cycle of `stationId` starts with, given the cause of its job (CORE §7). Pure: the runtime
+ * What a Cycle of `stationId` starts with, given the cause of its job. Pure: the runtime
  * renders the result into a prompt and stores it as a blob.
  */
 export const resolveCycleContext = (

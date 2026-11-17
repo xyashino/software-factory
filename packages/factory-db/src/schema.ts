@@ -9,7 +9,7 @@ import {
 } from 'drizzle-orm/sqlite-core';
 
 /**
- * The only definition of the database schema (STORAGE §4, §9). `drizzle-kit generate` turns it into
+ * The only definition of the database schema. `drizzle-kit generate` turns it into
  * the migrations in `drizzle/`: never hand-write SQL for a schema change. CI (`db:check`) fails when
  * this file and `drizzle/` drift apart. The shape equals migrations 0001-0003 of the frozen
  * `migrations/` folder: `unique()` is emitted as a unique index, which SQLite stores with the same
@@ -63,11 +63,11 @@ export const orders = sqliteTable(
     /** JSON array of order ids. */
     dependsOn: text('depends_on').notNull(),
     lastSeq: integer('last_seq').notNull(),
-    /** Board status (CORE §4.2), before dependency overlay. */
+    /** Board status, before dependency overlay. */
     status: text('status').notNull(),
     /** 'queue' | 'cell' | 'supervisor' | 'none'. */
     holder: text('holder').notNull(),
-    /** CORE §6 Next.kind. */
+    /** Next.kind. */
     nextKind: text('next_kind').notNull(),
     /** When next_kind = 'job'. */
     jobKind: text('job_kind'),
@@ -88,9 +88,9 @@ export const orders = sqliteTable(
     createdAt: integer('created_at').notNull(),
     /** `at` of the last event. */
     updatedAt: integer('updated_at').notNull(),
-    /** The Order Plan this Work order is a member of (CORE §12.1); null for a plain todo (migration 0003). */
+    /** The Order Plan this Work order is a member of; null for a plain todo (migration 0003). */
     plan: text('plan'),
-    /** The base branch the Work order was created on (CORE §12.5; migration 0003). */
+    /** The base branch the Work order was created on (migration 0003). */
     baseBranch: text('base_branch').notNull().default(''),
   },
   (table) => [
@@ -105,7 +105,7 @@ export const orders = sqliteTable(
   ],
 );
 
-/** The projection of one Order Plan (CORE §12.3, STORAGE §4); the stream id is `planId`. */
+/** The projection of one Order Plan; the stream id is `planId`. */
 export const plans = sqliteTable(
   'plans',
   {

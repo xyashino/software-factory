@@ -1,5 +1,5 @@
 /**
- * The `supervisor_tokens` table (STORAGE §4): one row per supervisor token, keyed by the SHA-256 of
+ * The `supervisor_tokens` table: one row per supervisor token, keyed by the SHA-256 of
  * the token. The plain token is shown once, by `admin token create`, and never stored.
  */
 export interface SupervisorTokenStore {

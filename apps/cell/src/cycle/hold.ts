@@ -1,7 +1,7 @@
 import type { RuntimeCycle } from '@repo/factory-core/cycle/watch';
 
 /**
- * The question hold (CORE §9.2): while a question is open the Cycle is parked. Opening the hold
+ * The question hold: while a question is open the Cycle is parked. Opening the hold
  * stamps `pausedSince`; closing it adds the held time to `pausedMs`, which the watch never counts.
  * Both return a new cycle; the input is not changed.
  */

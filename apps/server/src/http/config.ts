@@ -1,4 +1,4 @@
-/** The default address of the HTTP listener (PROTOCOL §2): loopback only. */
+/** The default address of the HTTP listener: loopback only. */
 export const DEFAULT_HOST = '127.0.0.1';
 export const DEFAULT_PORT = 7878;
 
@@ -6,14 +6,14 @@ export interface ListenerConfig {
   hostname: string;
   port: number;
   /**
-   * `GITHUB_WEBHOOK_SECRET`: the HMAC key of `POST /v1/webhooks/github` (PROTOCOL §3.6). Unset, the
+   * `GITHUB_WEBHOOK_SECRET`: the HMAC key of `POST /v1/webhooks/github`. Unset, the
    * webhook answers `503 not_configured`.
    */
   githubWebhookSecret?: string;
 }
 
 /**
- * Reads the bind address (PROTOCOL §2). `FACTORY_BIND=host[:port]` (`[v6]:port` for IPv6) sets where
+ * Reads the bind address. `FACTORY_BIND=host[:port]` (`[v6]:port` for IPv6) sets where
  * the listener binds and defaults to `127.0.0.1:7878`. Port 0 asks the system for a free port (tests).
  * The listener always runs: there is no switch to turn it on.
  */

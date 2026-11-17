@@ -1,6 +1,5 @@
 import { dlopen, FFIType } from 'bun:ffi';
 
-/** flock(2) operations: exclusive, non-blocking, unlock. */
 const LOCK_EX = 2;
 const LOCK_NB = 4;
 const LOCK_UN = 8;

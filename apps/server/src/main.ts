@@ -14,18 +14,18 @@ import { runtimeConfigFrom } from './runtime-config';
 import { usage } from './usage';
 
 /**
- * How long the join token a local Cell enrolls with stays valid (PROTOCOL §3.2). A new one is minted on
+ * How long the join token a local Cell enrolls with stays valid. A new one is minted on
  * every start, and the previous one is revoked on a clean shutdown, so it only outlives a crash by this much.
  */
 export const LOCAL_JOIN_TTL_S = 24 * 60 * 60;
 
-/** The data directory: `$FACTORY_DATA_DIR`, else `~/.local/share/factory` (STORAGE §1). */
+/** The data directory: `$FACTORY_DATA_DIR`, else `~/.local/share/factory`. */
 export const dataDirFromEnv = (env: NodeJS.ProcessEnv): string =>
   env.FACTORY_DATA_DIR ?? join(homedir(), '.local', 'share', 'factory');
 
 /**
  * The data directory: `--data-dir <path>` (or `--data-dir=<path>`) wins over `$FACTORY_DATA_DIR`,
- * which wins over `~/.local/share/factory` (STORAGE §1).
+ * which wins over `~/.local/share/factory`.
  */
 export const resolveDataDir = (
   argv: readonly string[],
@@ -54,15 +54,13 @@ const stripDataDirFlag = (argv: readonly string[]): string[] => {
   return result;
 };
 
-/**
- * `factory-server`: the single writer of a Factory data directory (STORAGE §1). It takes the writer
- * lock, arms the runtime's boot grace, serves HTTP + SSE on its address (PROTOCOL §2), writes the
- * discovery file for local clients, and shuts down cleanly on SIGINT or SIGTERM: the discovery file is
- * removed, the listener stops, the local join token is revoked, the lock is released.
- *
- * The signal handlers are installed before anything is opened, so a signal that arrives while the
- * server starts still goes through the same shutdown.
- */
+// `factory-server`: the single writer of a Factory data directory. It takes the writer
+// lock, arms the runtime's boot grace, serves HTTP + SSE on its address, writes the
+// discovery file for local clients, and shuts down cleanly on SIGINT or SIGTERM: the discovery file is
+// removed, the listener stops, the local join token is revoked, the lock is released.
+//
+// The signal handlers are installed before anything is opened, so a signal that arrives while the
+// server starts still goes through the same shutdown.
 const main = async (): Promise<void> => {
   if (process.argv.includes('--help')) {
     console.log(usage);

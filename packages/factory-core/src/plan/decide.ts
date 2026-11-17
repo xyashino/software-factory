@@ -22,7 +22,6 @@ const precondition = (detail: string): DomainError => ({
 
 const refusal = (error: DomainError): PlanDecision => err(error);
 
-/** Refuses any actor kind outside `kinds` (the actor rule of CORE §12.3). */
 const requireActor = (
   ctx: PlanDecideContext,
   kinds: Actor['kind'][],
@@ -31,7 +30,7 @@ const requireActor = (
     ? undefined
     : precondition(`actor ${ctx.actor.kind} may not run this command`);
 
-/** The epoch fence (CORE §12.3): the caller must hold the epoch of the plan's active job. */
+// The epoch fence: the caller must hold the epoch of the plan's active job.
 const fenced = (
   state: PlanState,
   ctx: PlanDecideContext,
@@ -45,7 +44,6 @@ const fenced = (
   return { ok: true, job };
 };
 
-/** A cell's report under its job: the epoch fence, then the job kind the report is for. */
 const reportUnder = (
   state: PlanState,
   ctx: PlanDecideContext,
@@ -67,7 +65,7 @@ const reportUnder = (
 const PLAN_OPEN_PHASES = new Set(['branching', 'active', 'pr_open']);
 
 /**
- * Decides the events a plan command produces (CORE §12.3). `state` is undefined before the plan
+ * Decides the events a plan command produces. `state` is undefined before the plan
  * exists. Pure: ids come from `ctx`. The first refusal wins: existence, actor, epoch, preconditions.
  */
 export const decidePlan = (

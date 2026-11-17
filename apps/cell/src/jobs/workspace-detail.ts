@@ -1,6 +1,5 @@
 import { isMachineIndependentText } from '@repo/factory-core/machine-local';
 
-/** The longest detail a `ReportWorkspaceFailed` carries; the full output goes to its log blob. */
 const MAX_DETAIL_CHARS = 500;
 
 /**

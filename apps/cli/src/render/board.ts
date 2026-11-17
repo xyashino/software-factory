@@ -3,12 +3,12 @@ import type { Paint } from './paint';
 
 export type BoardRow = RouteResponse<'board'>['orders'][number];
 
-/** Terminal board rows older than this are hidden unless `--all` (PROTOCOL §3.1). */
+/** Terminal board rows older than this are hidden unless `--all`. */
 export const TERMINAL_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
 const TERMINAL = new Set(['merged', 'delivered', 'cancelled']);
 
-/** Paints a board status (CORE §4.2, STORAGE §4). Unknown statuses stay plain. */
+/** Paints a board status. Unknown statuses stay plain. */
 export const paintStatus = (paint: Paint, status: string): string => {
   switch (status) {
     case 'running':
@@ -58,7 +58,7 @@ export const isHiddenByDefault = (row: BoardRow, now: number): boolean =>
 const pad = (text: string, width: number): string => text.padEnd(width);
 
 /**
- * The board as a table (PROTOCOL §10, `factory status`). Widths are computed on plain text and the
+ * The board as a table (`factory status`). Widths are computed on plain text and the
  * colour is applied after padding, so the columns line up with or without colour.
  */
 export const renderBoard = (

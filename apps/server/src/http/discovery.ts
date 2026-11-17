@@ -13,7 +13,7 @@ import {
   type Discovery,
 } from '@repo/factory-core/contracts/discovery';
 
-/** The discovery file's mode on POSIX: the operating-system account only (PROTOCOL §2). */
+/** The discovery file's mode on POSIX: the operating-system account only. */
 export const DISCOVERY_MODE = 0o600;
 
 /** The discovery file inside a data directory. */

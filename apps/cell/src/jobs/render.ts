@@ -25,11 +25,9 @@ import {
   type DeclaredUnit,
 } from '@repo/factory-runtime/prompts/build-prompt';
 
-/**
- * Prompt and PR rendering on the Cell (PROTOCOL §4, §9). The server sends structured inputs and blob refs; the
- * Cell reads the repo's own `.factory/` from the worktree and renders the Operator prompt, the Mechanic prompt and
- * the PR body. A repo whose `.factory/` cannot render the job fails that job with a diagnostic; nothing is guessed.
- */
+// Prompt and PR rendering on the Cell. The server sends structured inputs and blob refs; the
+// Cell reads the repo's own `.factory/` from the worktree and renders the Operator prompt, the Mechanic prompt and
+// the PR body. A repo whose `.factory/` cannot render the job fails that job with a diagnostic; nothing is guessed.
 
 const decoder = new TextDecoder();
 
@@ -62,7 +60,6 @@ export interface RenderedDelivery {
 const diagnosisOf = (error: DefinitionError): string =>
   `${error.file} ${error.field}: ${error.message}`;
 
-/** The repo's definitions as its worktree holds them: `.factory/` validated, `.nitpick/` checked when present. */
 const repoDefinitions = async (worktree: string): Promise<Definitions> => {
   const loaded = await loadRepoDefinitions(worktree);
   if (!loaded.ok) {
@@ -75,7 +72,6 @@ const repoDefinitions = async (worktree: string): Promise<Definitions> => {
 
 const textOf = (bytes: Uint8Array): string => decoder.decode(bytes);
 
-/** Declared ids with their repo-relative paths where the repo's `.nitpick/` catalog resolves them. */
 const declaredUnits = (
   ids: string[],
   paths: ReadonlyMap<string, string>,
@@ -85,7 +81,6 @@ const declaredUnits = (
     return path === undefined ? { id } : { id, path };
   });
 
-/** Every blob the prompt of a Cycle names: the spec body, the inputs, the verdict and the inspection logs. */
 const promptBlobsOf = (todoBody: BlobRef, context: CycleContext): BlobRef[] => {
   const refs: BlobRef[] = [todoBody];
   for (const item of context.inputs) {
@@ -100,7 +95,7 @@ const promptBlobsOf = (todoBody: BlobRef, context: CycleContext): BlobRef[] => {
   return [...new Set(refs)];
 };
 
-/** The Operator prompt of a station job, built from the repo's profile and templates (CORE §7, PROTOCOL §4). */
+/** The Operator prompt of a station job, built from the repo's profile and templates. */
 export const renderOperatorPrompt = async (input: {
   job: Job;
   worktree: string;
@@ -155,12 +150,12 @@ export const renderOperatorPrompt = async (input: {
   }
 };
 
-/** The Mechanic's prompt for the Andon it triages (CORE §14.4). The incident template ships with the Cell. */
+/** The Mechanic's prompt for the Andon it triages. The incident template ships with the Cell. */
 export const renderIncidentPrompt = (incident: IncidentPromptInput): string =>
   buildIncidentPrompt(incident);
 
 /**
- * The `[BLOCKED]` draft PR of an Andon, from the repo's `.factory/templates/pr/blocked.md` (v1 `publishBlockedWork`).
+ * The `[BLOCKED]` draft PR of an Andon, from the repo's `.factory/templates/pr/blocked.md`.
  * A repo whose templates cannot render it throws `RenderFailed`, so the publish reports why and changes nothing.
  */
 export const renderBlockedPr = async (input: {
@@ -178,7 +173,7 @@ export const renderBlockedPr = async (input: {
 };
 
 /**
- * A delivery's commit message, PR title and PR body (v1 PR format). The commit is the builder's own commit artifact
+ * A delivery's commit message, PR title and PR body. The commit is the builder's own commit artifact
  * when it is usable, else the rich commit built from the spec; the body comes from the repo's `pr/body` template.
  */
 export const renderDelivery = async (input: {

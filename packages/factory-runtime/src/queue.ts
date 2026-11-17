@@ -19,10 +19,8 @@ import type {
 import type { ProjectRecord } from '@repo/factory-core/ports/projects';
 import type { RuntimePorts } from './ports';
 
-/**
- * CORE §12.6: the root of a plan waits until the plan has its branch (`phase` not `branching`). A
- * member whose plan has no row yet waits too: intake creates the plan before its members, so this is a race.
- */
+// The root of a plan waits until the plan has its branch (`phase` not `branching`). A
+// member whose plan has no row yet waits too: intake creates the plan before its members, so this is a race.
 const rootGated = (
   row: OrderProjection,
   plansById: ReadonlyMap<PlanId, PlanProjection>,
@@ -34,7 +32,7 @@ const rootGated = (
   return isRoot && plan.phase === 'branching';
 };
 
-/** The queue as `selectClaimable` reads it: every Work order with its dependency state (CORE §8). */
+/** The queue as `selectClaimable` reads it: every Work order with its dependency state. */
 export interface Queue {
   entries: QueueEntry[];
   limits: Limits;
@@ -84,7 +82,7 @@ export const loadQueueSnapshot = async (
 
 /**
  * Builds the queue from a snapshot, in O(N). `replace` swaps in the projection a command is about to
- * write, so a continuation sees the Work order as it will stand after the command (STORAGE §3).
+ * write, so a continuation sees the Work order as it will stand after the command.
  */
 export const queueOf = (
   snapshot: QueueSnapshot,

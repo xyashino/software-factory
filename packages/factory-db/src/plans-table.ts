@@ -19,7 +19,7 @@ import type { PlanNext } from '@repo/factory-core/plan/next-job';
 import type { FactoryDatabase } from './db';
 import { type PlanRecord, plans } from './schema';
 
-/** One `plans` row as read (STORAGE §4). JSON columns are strings. */
+/** One `plans` row as read. JSON columns are strings. */
 export type PlanRow = PlanRecord;
 
 /** The row a plan projection is stored as. Pure serialisation: no fold, no domain decision. */
@@ -100,7 +100,7 @@ export const projectionOfPlanRow = (row: PlanRow): PlanProjection => {
   };
 };
 
-/** Writes a plan row: insert, or replace the row of the same plan (STORAGE §3 step 4). */
+/** Writes a plan row: insert, or replace the row of the same plan. */
 export const upsertPlan = (
   db: FactoryDatabase,
   projection: PlanProjection,

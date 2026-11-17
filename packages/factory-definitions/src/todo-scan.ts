@@ -28,16 +28,15 @@ export interface TodoScan {
   diagnostics: TodoDiagnostic[];
   /** state of every todo file with a valid id, keyed by OrderId (dependency rule input) */
   fileStates: Map<OrderId, TodoFileState>;
-  /** every valid plan's member todos in chain order, root first (CORE §12.2); all runnable */
+  /** every valid plan's member todos in chain order, root first; all runnable */
   planChains: Map<PlanSlug, Todo[]>;
 }
 
-/** Options of one scan. `requireV2`: only todos with `factory: v2` may become Work orders (ROADMAP M9). */
+/** Options of one scan. `requireV2`: only todos with `factory: v2` may become Work orders. */
 export interface TodoScanOptions {
   requireV2?: boolean;
 }
 
-/** A todo that parsed and passed the v2 filter, with what its own checks found. */
 interface Candidate {
   file: string;
   todo: Todo;
@@ -46,12 +45,12 @@ interface Candidate {
 
 /**
  * Parses every todo file and reports why each one is not runnable. Pure: the
- * caller supplies the file texts (I/O is v2-10). `knownLines` are the Line
+ * caller supplies the file texts. `knownLines` are the Line
  * names that exist; `knownOrderIds` are OrderIds that already have a Work
  * order, so a todo re-added after delivery gets a diagnostic, not a second order.
- * With `requireV2`, a todo without `factory: v2` is left out silently: v1 owns it.
+ * With `requireV2`, a todo without `factory: v2` is left out silently.
  *
- * A plan (CORE §12.2) is valid only when its chain checks out and every member is runnable. An
+ * A plan is valid only when its chain checks out and every member is runnable. An
  * invalid plan keeps none of its members: each `todo`-status member gets `plan_invalid`.
  */
 export const scanTodos = (

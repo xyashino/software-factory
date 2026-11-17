@@ -13,7 +13,7 @@ import type { Revocation, Revocations } from './revocations';
 export const hashToken = (token: string): string =>
   createHash('sha256').update(token).digest('hex');
 
-/** A new random token: 256 bits, base64url. The plain form is returned once and never stored. */
+// A new random token: 256 bits, base64url. The plain form is returned once and never stored.
 const newToken = (): string => randomBytes(32).toString('base64url');
 
 /**
@@ -27,12 +27,12 @@ export const sameHash = (stored: string, presented: string): boolean => {
 };
 
 /**
- * What the remote transport needs from the runtime, and nothing more (PROTOCOL §1, §2). Every
+ * What the remote transport needs from the runtime, and nothing more. Every
  * credential check is here, so the server holds no token table of its own and the hashes never leave
- * the runtime. The local supervisor token is not stored: the server checks it in memory (PROTOCOL §1).
+ * the runtime. The local supervisor token is not stored: the server checks it in memory.
  */
 export interface RemoteAccess {
-  /** Enrolls a Cell with a join token (PROTOCOL §3.2). The credential is returned once. */
+  /** Enrolls a Cell with a join token. The credential is returned once. */
   joinCell(request: JoinRequest): Promise<JoinResponse>;
   /** The name of the supervisor token's owner, or undefined for an unknown token. */
   supervisorName(token: string): Promise<string | undefined>;
@@ -43,7 +43,7 @@ export interface RemoteAccess {
   orderOfJob(cellId: CellId, jobId: JobId): Promise<LeaseStreamId>;
   /**
    * Creates a supervisor token (`factory-server admin token create`). The plain token is returned
-   * once. Needs the writer lock; no network route calls it (PROTOCOL §1).
+   * once. Needs the writer lock; no network route calls it.
    */
   createSupervisorToken(name: string): Promise<{ name: string; token: string }>;
   /**

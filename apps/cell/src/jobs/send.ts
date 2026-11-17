@@ -39,7 +39,7 @@ export interface JobContext {
   /** Runs every Operator station headless, whatever its Line says (config `headless_operators`). */
   headlessOperators?: boolean;
   /**
-   * Told the continuation a job-ending command handed back (PROTOCOL §4). Set per job by `runJob`, which
+   * Told the continuation a job-ending command handed back. Set per job by `runJob`, which
    * returns it to the claim loop so the Cell runs it.
    */
   onContinuation?: (next: Job) => void;
@@ -49,7 +49,7 @@ export interface JobContext {
 
 /**
  * Thrown when the job must send nothing more: its signal fired (self-fence, stale lease, shutdown). No
- * command is sent after the fence (PROTOCOL §5.4), so the job ends here.
+ * command is sent after the fence, so the job ends here.
  */
 export class JobStopped extends Error {
   constructor(reason: string) {
@@ -86,7 +86,7 @@ export const putLog = async (
 
 /**
  * Sends one command for the job's order, with its content-derived commandId. `dryRun` runs every check
- * and appends nothing (PROTOCOL §8.2), so a Cell can learn that it may push before it does.
+ * and appends nothing, so a Cell can learn that it may push before it does.
  */
 export const submit = async (
   ctx: JobContext,

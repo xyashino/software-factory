@@ -10,10 +10,8 @@ import { upsertPlan } from './plans-table';
 import { orders, plans } from './schema';
 import { feedRows, type SqliteEventStore } from './sqlite-event-store';
 
-/** Events read per page while rebuilding. */
 const PAGE = 500;
 
-/** A stream folded so far: its state, the last seq seen, and the times of its first and last event. */
 interface Folding<S> {
   state: S;
   lastSeq: number;
@@ -23,10 +21,8 @@ interface Folding<S> {
 
 type Page = ReturnType<typeof feedRows>;
 
-/**
- * Folds one page of events of either kind in global order, which keeps each stream in seq order.
- * A `planId` envelope is a plan event; anything else is a Work order event.
- */
+// Folds one page of events of either kind in global order, which keeps each stream in seq order.
+// A `planId` envelope is a plan event; anything else is a Work order event.
 const foldPage = (
   orderFoldings: Map<OrderId, Folding<WorkOrderState>>,
   planFoldings: Map<PlanId, Folding<PlanState>>,
@@ -54,7 +50,7 @@ const foldPage = (
 };
 
 /**
- * Rebuilds `orders` and `plans` from `events` on one open connection (STORAGE §6): truncates both,
+ * Rebuilds `orders` and `plans` from `events` on one open connection: truncates both,
  * folds every stream in global order, and writes one row per stream. Returns the number of Work
  * order rows, the count the admin operation has always reported.
  */
@@ -89,7 +85,7 @@ const metaOf = <S>(folding: Folding<S>): RowMeta => ({
 });
 
 /**
- * Rebuilds the projections from `events` (STORAGE §6). The store never computes a projection: the
+ * Rebuilds the projections from `events`. The store never computes a projection: the
  * caller passes the core functions. Rebuilding twice gives the same tables.
  */
 export const rebuildProjections = (

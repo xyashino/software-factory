@@ -5,11 +5,11 @@ type PlanRow = RouteResponse<'plans'>['plans'][number];
 type PlanDetail = RouteResponse<'planDetail'>;
 type PlanMember = PlanDetail['members'][number];
 
-/** The plan PR state, as the row carries it; `not opened` until intake or `plan_pr` opens one. */
+// The plan PR state, as the row carries it; `not opened` until intake or `plan_pr` opens one.
 const prStateOf = (plan: PlanRow): string => plan.prState ?? 'not opened';
 
 /**
- * `factory plan ls`: one row per plan (PROTOCOL §10): slug, project, member count, phase and the plan
+ * `factory plan ls`: one row per plan: slug, project, member count, phase and the plan
  * PR state. An empty registry says so on one line.
  */
 export const renderPlanList = (
@@ -25,10 +25,8 @@ export const renderPlanList = (
   return [paint.dim(header), ...lines].join('\n');
 };
 
-/**
- * One member's label in the chain: its board status, the PR into a non-plan base when it is delivered
- * (`PR into factory/wo-1`), and its blocker when it has one. Members stay in chain order.
- */
+// One member's label in the chain: its board status, the PR into a non-plan base when it is delivered
+// (`PR into factory/wo-1`), and its blocker when it has one. Members stay in chain order.
 const chainItem = (member: PlanMember, planBranch: string): string => {
   const status = member.status ?? member.state;
   const parts: string[] = [];
@@ -47,7 +45,7 @@ const chainItem = (member: PlanMember, planBranch: string): string => {
 };
 
 /**
- * `factory plan status <slug>` (PROTOCOL §10): the header, the chain in order, one line per member with
+ * `factory plan status <slug>`: the header, the chain in order, one line per member with
  * its base and PR, then the plan PR and any Andon with the command that clears it.
  */
 export const renderPlanStatus = (detail: PlanDetail, paint: Paint): string => {

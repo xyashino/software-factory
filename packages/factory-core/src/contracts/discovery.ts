@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 /**
- * The discovery file (PROTOCOL §2, STORAGE §1): `factory-server` writes it into its data directory on
+ * The discovery file: `factory-server` writes it into its data directory on
  * start and removes it on a clean shutdown. A local client reads it to find the server's URL and the
  * credentials it needs, so no manual `FACTORY_TOKEN` is set. The file is written with mode 0600 on
  * POSIX; the server's token is never logged. This module only names and parses the file; the reads and
@@ -17,7 +17,7 @@ export const discoverySchema = z.object({
   url: z.string().min(1),
   /** The supervisor credential local CLI calls use (bearer). Valid only while this server runs. */
   token: z.string().min(1),
-  /** A join token a local Cell exchanges once for its own credential (PROTOCOL §3.2). */
+  /** A join token a local Cell exchanges once for its own credential. */
   joinToken: z.string().min(1),
 });
 

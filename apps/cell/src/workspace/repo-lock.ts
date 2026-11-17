@@ -10,13 +10,10 @@ export interface Lease {
   release(): void;
 }
 
-/** How long a waiting prepare sleeps between tries of the repo lock. */
 const LOCK_POLL_MS = 50;
 
-/** The lock files of a Cell's repo: under `<repoRoot>/.factory-local/`, which the repo ignores. */
 const LOCK_DIR = join('.factory-local', 'locks');
 
-/** Opens a lock file (creating its directory) and tries the exclusive flock once. */
 const tryLock = (file: string): Lease | undefined => {
   mkdirSync(dirname(file), { recursive: true, mode: 0o700 });
   const fd = openSync(file, 'a+', 0o600);

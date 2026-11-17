@@ -19,7 +19,7 @@ export interface ClaimLoopOptions {
   sleep: (ms: number) => Promise<void>;
   /**
    * Runs one claimed job to its end. It resolves with the continuation the Factory handed back, the job
-   * of the same Work order this Cell already holds (PROTOCOL §4), or null. The Cell is free again when it
+   * of the same Work order this Cell already holds, or null. The Cell is free again when it
    * returns or throws.
    */
   runJob: (job: Job, signal: AbortSignal) => Promise<Job | null>;
@@ -29,7 +29,7 @@ export interface ClaimLoopOptions {
 }
 
 /**
- * The claim loop of a Cell (PROTOCOL §5.2): one loop that claims one Work order at a time. A claimed job
+ * The claim loop of a Cell: one loop that claims one Work order at a time. A claimed job
  * is registered before it runs, so the heartbeat keeps its lease. Its continuations run on this Cell
  * before it claims again. A claim that fails or comes back empty waits before it tries again.
  */
@@ -78,11 +78,9 @@ export const runClaimLoop = async (
   }
 };
 
-/**
- * A continuation this Cell will not run (it is stopping) is released at once, so the Work order goes back
- * to the queue for the next Cell (PROTOCOL §9: no Cycle started yet, `ReleaseJob`). A fenced Cell sends
- * nothing (PROTOCOL §5.4): its lease lapses and the reaper takes the job back.
- */
+// A continuation this Cell will not run (it is stopping) is released at once, so the Work order goes back
+// to the queue for the next Cell (no Cycle started yet, `ReleaseJob`). A fenced Cell sends
+// nothing: its lease lapses and the reaper takes the job back.
 const releaseUnstarted = async (
   options: ClaimLoopOptions,
   job: Job,
@@ -102,7 +100,7 @@ const releaseUnstarted = async (
   }
 };
 
-/** Runs one claimed job in the registry, so the heartbeat keeps its lease while it runs. */
+// Runs one claimed job in the registry, so the heartbeat keeps its lease while it runs.
 const runClaimed = async (
   options: ClaimLoopOptions,
   job: Job,

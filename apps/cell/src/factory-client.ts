@@ -12,12 +12,12 @@ import type { OrderCommand } from '@repo/factory-core/order/commands';
 
 export type { FactoryClient } from '@repo/factory-core/contracts/client';
 
-/** `$FACTORY_DATA_DIR`, else `~/.local/share/factory` (STORAGE §1). */
+/** `$FACTORY_DATA_DIR`, else `~/.local/share/factory`. */
 export const factoryDataDirOf = (env: NodeJS.ProcessEnv): string =>
   env.FACTORY_DATA_DIR ?? join(homedir(), '.local', 'share', 'factory');
 
 /**
- * The discovery file a running `factory-server` wrote into its data directory (PROTOCOL §2). Absent or
+ * The discovery file a running `factory-server` wrote into its data directory. Absent or
  * damaged reads as undefined: no server is known there.
  */
 export const discoveryIn = (dataDir: string): Discovery | undefined => {
@@ -38,7 +38,7 @@ export interface CommandIdInput {
   command: OrderCommand;
 }
 
-/** Recursively sorts object keys, so the same value always serialises to the same text. */
+// Recursively sorts object keys, so the same value always serialises to the same text.
 const canonical = (value: unknown): unknown => {
   if (Array.isArray(value)) return value.map(canonical);
   if (value && typeof value === 'object') {

@@ -57,18 +57,18 @@ export interface CellOptions {
   githubFor?: (cwd: string) => GithubPort;
   /**
    * The Factory refused this Cell's credential (401). The Cell stops its own jobs at once (`stop`), then
-   * the caller joins again as a new Cell (PROTOCOL §1). Called at most once.
+   * the caller joins again as a new Cell. Called at most once.
    */
   onUnauthorized?: () => void;
 }
 
 export interface RunningCell {
-  /** The runtime config the Factory answered at hello (PROTOCOL §5.1). */
+  /** The runtime config the Factory answered at hello. */
   readonly config: HelloResponse['config'];
   /** Stops claims, aborts every job, and stops the heartbeat. Jobs end at their next step. */
   stop(): void;
   /**
-   * Leaves the Cell gracefully (PROTOCOL §9): pauses claims, asks every live Operator station to hand
+   * Leaves the Cell gracefully: pauses claims, asks every live Operator station to hand
    * over, waits up to the leave cap while heartbeats keep running, and then stops the Cell.
    */
   leave(pollMs?: number): Promise<{ remaining: number }>;
@@ -80,7 +80,7 @@ const wait = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
- * Starts a Cell (PROTOCOL §5): `hello` for the runtime config, then one claim loop and one heartbeat
+ * Starts a Cell: `hello` for the runtime config, then one claim loop and one heartbeat
  * loop. The heartbeat's self-fence uses the Factory's `selfFenceMs`, so the Cell stops
  * its jobs before their lease can expire. A Cell that cannot reach the Factory at hello does not start.
  */
@@ -157,7 +157,7 @@ export const startCell = async (options: CellOptions): Promise<RunningCell> => {
     registry.abortAll('the Cell is stopping');
   };
 
-  // The plan jobs running here, so a leaving Cell can let them finish or release them (PROTOCOL §9).
+  // The plan jobs running here, so a leaving Cell can let them finish or release them.
   const heldPlans = new Map<JobId, Job>();
   const runHeld = (
     job: Job,

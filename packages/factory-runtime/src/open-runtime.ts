@@ -37,7 +37,7 @@ import {
   type Timers,
 } from './ports';
 
-/** The database file inside the data directory (STORAGE §1, `factory.db`). */
+/** The database file inside the data directory (`factory.db`). */
 export const DATABASE_FILE_NAME = 'factory.db';
 
 /** Re-exported so a caller of `openRuntime` can tell a held directory apart without the db package. */
@@ -69,14 +69,12 @@ const realTimers: Timers = {
   },
 };
 
-/**
- * The legacy migration that adds the Order Plan columns (migrations/0003_order_plan.sql). It runs
- * only on a database older than the baseline, which then adopts the baseline without running it.
- */
+// The legacy migration that adds the Order Plan columns (migrations/0003_order_plan.sql). It runs
+// only on a database older than the baseline, which then adopts the baseline without running it.
 const ORDER_PLAN_MIGRATION = '0003_order_plan.sql';
 
 /**
- * Opens a Factory data directory as the single writer (STORAGE §1): takes the writer lock first, so a
+ * Opens a Factory data directory as the single writer: takes the writer lock first, so a
  * second process is refused before the database is touched; migrates the schema; loads the bundled
  * runtime prompts; and composes the runtime from the SQLite adapters. The lock is released on close.
  * Throws `WriterHeldError` when another process holds the directory.
@@ -89,7 +87,7 @@ export const openRuntime = (options: OpenRuntimeOptions): OpenedRuntime => {
     const file = join(options.dataDir, DATABASE_FILE_NAME);
     database = openDatabase(file);
     const applied = migrate(database, MIGRATIONS_DIR);
-    // Legacy migration 0003 adds `orders.plan` and `orders.base_branch`: a rebuild fills them for existing rows (STORAGE §6).
+    // Legacy migration 0003 adds `orders.plan` and `orders.base_branch`: a rebuild fills them for existing rows.
     if (applied.includes(ORDER_PLAN_MIGRATION)) {
       rebuildOn(drizzleOf(database), projectionOf);
     }
@@ -97,7 +95,7 @@ export const openRuntime = (options: OpenRuntimeOptions): OpenedRuntime => {
       loadRuntimePrompts(PACKAGE_ROOT),
     );
     const clock = options.clock ?? systemClock;
-    // Reads run on their own read-only WAL connection, so a write or a sweep never queues them (STORAGE §3.1).
+    // Reads run on their own read-only WAL connection, so a write or a sweep never queues them.
     readDatabase = openReadDatabase(file);
     const store = openSqliteEventStore(database, readDatabase);
     const gate = store.gate;

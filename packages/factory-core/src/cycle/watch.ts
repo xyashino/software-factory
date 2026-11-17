@@ -1,4 +1,4 @@
-/** What the Operator's pane reports at the moment of the check (CORE §9.1). */
+/** What the Operator's pane reports at the moment of the check. */
 export interface Observation {
   operator: 'working' | 'idle' | 'blocked' | 'gone' | 'unknown';
   lastOutputAt: number;
@@ -33,7 +33,6 @@ export type WatchDecision =
   | { type: 'fail'; reason: 'timed_out' | 'crashed' | 'stalled' }
   | { type: 'block'; reason: 'runner_prompt' };
 
-/** Time the Cycle has been active: elapsed minus held time, the open hold included. */
 const activeMs = (cycle: RuntimeCycle, now: number): number => {
   const openHold =
     cycle.pausedSince === undefined ? 0 : now - cycle.pausedSince;

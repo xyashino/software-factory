@@ -1,11 +1,10 @@
 import type { OrderId, PlanSlug } from '@repo/factory-core/ids';
 import type { Todo } from './todo';
 
-/** The result of checking one plan's chain (CORE §12.2). `chain` is in order, root first. */
+/** The result of checking one plan's chain. `chain` is in order, root first. */
 export type PlanCheck =
   { ok: true; chain: Todo[] } | { ok: false; reason: string };
 
-/** Member todos of one plan: the todos with `status: todo` that name it. */
 const membersOf = (todos: readonly Todo[], slug: PlanSlug): Todo[] =>
   todos.filter((todo) => todo.plan === slug && todo.status === 'todo');
 

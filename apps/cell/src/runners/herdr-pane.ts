@@ -7,10 +7,9 @@ import type {
 } from '../ports';
 import { acceptClaudeTrust, claudeConfigPathOf } from './claude-trust';
 
-/** How long the agent takes to leave its startup screen after Enter, as v1 waited. */
+// How long the agent takes to leave its startup screen after Enter.
 const STARTUP_WAIT_MS = 3000;
 
-/** The folder-trust screen of Antigravity (`agy`), as v1 matched it. */
 const TRUST_SCREEN =
   /Do you trust the contents of this project\?[\s\S]*Yes, I trust this folder/;
 
@@ -23,7 +22,7 @@ export interface HerdrOutcome {
 
 export type HerdrExec = (args: readonly string[]) => Promise<HerdrOutcome>;
 
-/** The real Herdr call: the `herdr` binary, argument vector, no shell (v1 adapter surface). */
+/** The real Herdr call: the `herdr` binary, argument vector, no shell. */
 export const execHerdr: HerdrExec = (args) =>
   new Promise<HerdrOutcome>((resolve) => {
     execFile(
@@ -38,7 +37,7 @@ export const execHerdr: HerdrExec = (args) =>
     );
   });
 
-/** A JSON string field of a Herdr answer, read without a full parse (v1 `findJsonString`). */
+/** A JSON string field of a Herdr answer, read without a full parse. */
 export const findJsonString = (
   text: string,
   key: string,
@@ -47,7 +46,6 @@ export const findJsonString = (
   return match?.[1];
 };
 
-/** Herdr's agent status words, mapped to what the watch needs (CORE §9.1). */
 const toOperator = (status: string | undefined): PaneReading['operator'] => {
   switch (status) {
     case 'working':
@@ -64,12 +62,11 @@ const toOperator = (status: string | undefined): PaneReading['operator'] => {
   }
 };
 
-/** One `--env KEY=VALUE` pair per variable, each one argument, unquoted: Herdr receives it verbatim. */
 const envArgs = (env: Readonly<Record<string, string>>): string[] =>
   Object.entries(env).flatMap(([key, value]) => ['--env', `${key}=${value}`]);
 
 /**
- * Runs the Operator in a Herdr pane: one workspace per task (as v1 did), a tab for the Operator in it,
+ * Runs the Operator in a Herdr pane: one workspace per task, a tab for the Operator in it,
  * the agent, the typed text, the read and the close.
  */
 export const createHerdrPane = (
@@ -119,12 +116,12 @@ export const createHerdrPane = (
     }
     workspaces.set(task, workspaceId);
     if (logCommand !== undefined) {
-      // The workspace's first tab is the task's `logs` tab, as in v1. Cosmetic: a failure here is not an error.
+      // The workspace's first tab is the task's `logs` tab. Cosmetic: a failure here is not an error.
       const tabId = findJsonString(created.stdout, 'tab_id');
       const paneId = findJsonString(created.stdout, 'pane_id');
       try {
         if (tabId !== undefined) await ok(['tab', 'rename', tabId, 'logs']);
-        // As v1: clear the screen and scrollback, then exec the follower, so no echoed command is left above it.
+        // Clear the screen and scrollback, then exec the follower, so no echoed command is left above it.
         const clearAndRun = `printf '\\033[2J\\033[3J\\033[H' && exec ${logCommand}`;
         if (paneId !== undefined)
           await ok(['pane', 'run', paneId, clearAndRun]);
@@ -187,7 +184,7 @@ export const createHerdrPane = (
           ...args,
         ]);
       } catch (error) {
-        // A trust screen stops the start (`blocked during startup`): confirm it, as v1 did, then go on.
+        // A trust screen stops the start (`blocked during startup`): confirm it, then go on.
         const startupBlock =
           error instanceof Error &&
           error.message.includes('blocked during startup');

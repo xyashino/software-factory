@@ -17,7 +17,6 @@ const signalOf = (row: SignalRow): Signal =>
     ...(JSON.parse(row.payload) as object),
   }) as Signal;
 
-/** The payload column: what a Signal says beyond its id, job and kind (which are columns of their own). */
 const payloadOf = (signal: Signal): Record<string, unknown> =>
   signal.kind === 'answer'
     ? { questionId: signal.questionId, text: signal.text }

@@ -12,7 +12,7 @@ export class MissingVariableError extends Error {
 
 /**
  * Replaces every `{{key}}` with its value. Throws MissingVariableError for a placeholder with no
- * value; it never renders an empty string instead (RULES §5.3: prompt text comes from templates).
+ * value; it never renders an empty string instead (prompt text comes from templates).
  */
 export const renderTemplate = (
   template: string,

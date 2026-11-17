@@ -16,7 +16,7 @@ import { events, orders, projects } from './schema';
 import type { StatementGate } from './sqlite-event-store';
 import type { WriterLock } from './writer-lock';
 
-/** The Work order statuses after which a base branch is no longer held (CORE §4.2). */
+// The Work order statuses after which a base branch is no longer held.
 const TERMINAL_STATUSES = ['delivered', 'merged', 'cancelled'];
 
 type ProjectRow = typeof projects.$inferSelect;
@@ -28,17 +28,12 @@ const refused = (
   reason,
 });
 
-/** The `projects` row of one id, or undefined. */
 const rowOf = (
   orm: FactoryDatabase,
   projectId: string,
 ): ProjectRow | undefined =>
   orm.select().from(projects).where(eq(projects.projectId, projectId)).get();
 
-/**
- * True when the project has any Work order or event. Events belong to a project through
- * their order id, which is `<projectId>:<todoId>` (core `orderIdOf`).
- */
 const hasHistory = (orm: FactoryDatabase, projectId: string): boolean => {
   const eventPrefix = `${projectId}:`;
   const hasOrder =
@@ -61,7 +56,7 @@ const hasHistory = (orm: FactoryDatabase, projectId: string): boolean => {
   return hasOrder || hasEvent;
 };
 
-/** True when a Work order of the project is not terminal, so it runs on the base branch now. */
+// True when a Work order of the project is not terminal, so it runs on the base branch now.
 const holdsBaseBranch = (orm: FactoryDatabase, projectId: string): boolean =>
   orm
     .select({ one: sql`1` })
@@ -76,7 +71,7 @@ const holdsBaseBranch = (orm: FactoryDatabase, projectId: string): boolean =>
     .get() !== undefined;
 
 /**
- * The `projects` table behind `ProjectStore` (STORAGE §4). Reads run on the WAL read connection;
+ * The `projects` table behind `ProjectStore`. Reads run on the WAL read connection;
  * writes assert the writer lock and run inside the statement gate, so the check and the write form
  * one synchronous section: a refusal changes nothing.
  */

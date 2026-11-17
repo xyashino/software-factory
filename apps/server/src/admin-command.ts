@@ -7,14 +7,13 @@ import {
 import type { RuntimeConfig } from '@repo/factory-runtime/ports';
 import { adminUsage } from './usage';
 
-/** The admin operations of STORAGE §7, by their command names. */
 const OPERATIONS = [
   'backup',
   'export',
   'import',
   'rebuild-projections',
 ] as const;
-/** Operations that take no file argument. */
+// Operations that take no file argument.
 const NO_FILE = new Set<Operation>(['rebuild-projections']);
 type Operation = (typeof OPERATIONS)[number];
 
@@ -31,11 +30,9 @@ export const openForAdmin = (
   config: Partial<RuntimeConfig> = {},
 ): OpenedRuntime => openRuntime({ dataDir, config });
 
-/**
- * `factory-server admin token create <name>` (PROTOCOL §1): creates a supervisor token through the
- * runtime, the only way one is created. The plain token is printed once, on stdout, with its name;
- * only its hash is stored. No network route creates one.
- */
+// `factory-server admin token create <name>`: creates a supervisor token through the
+// runtime, the only way one is created. The plain token is printed once, on stdout, with its name;
+// only its hash is stored. No network route creates one.
 const runTokenCommand = async (
   args: readonly string[],
   dataDir: string,

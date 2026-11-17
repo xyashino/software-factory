@@ -2,7 +2,6 @@ import { mkdirSync, openSync, closeSync, writeSync } from 'node:fs';
 import { dirname } from 'node:path';
 import type { CommandResult, SystemPort } from '../../ports/system.port';
 
-/** Closes the log file descriptor even when the process fails to spawn. */
 const withLog = <T>(
   logPath: string,
   body: (fd: number) => Promise<T>,
@@ -79,7 +78,6 @@ const killGroup = (pid: number): void => {
   }
 };
 
-/** Copies a child stream into the log as chunks arrive. */
 const pump = async (
   stream: ReadableStream<Uint8Array> | null | undefined,
   fd: number,

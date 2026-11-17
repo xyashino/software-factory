@@ -2,11 +2,9 @@ import { z } from 'zod';
 import { stationIdSchema } from '../ids';
 import { incidentChangeSchema } from '../order/events';
 
-/**
- * The Operator socket wire (PROTOCOL §3.3): one JSON object per line from `factory-operator` to the
- * Cell, one reply per line. The verb is `op`; every other field is that verb's payload. The Cell
- * checks the token first, then this schema, so an unknown verb or field is refused before any work.
- */
+// The Operator socket wire: one JSON object per line from `factory-operator` to the
+// Cell, one reply per line. The verb is `op`; every other field is that verb's payload. The Cell
+// checks the token first, then this schema, so an unknown verb or field is refused before any work.
 const token = z.string().min(16).max(256);
 const text = z.string().min(1).max(8192);
 
@@ -32,7 +30,7 @@ export const operatorRequestSchema = z.discriminatedUnion('op', [
     handover: z.string().max(65536),
   }),
   withToken({ op: z.literal('context') }),
-  /** A Mechanic job records its incident for the Andon it triages (CORE §14.2). */
+  /** A Mechanic job records its incident for the Andon it triages. */
   withToken({
     op: z.literal('incident'),
     diagnosis: text,
@@ -40,7 +38,7 @@ export const operatorRequestSchema = z.discriminatedUnion('op', [
     changes: z.array(incidentChangeSchema).max(16),
     outcome: text,
   }),
-  /** A Mechanic job hands the Andon to the Supervisor, with the incident attached (CORE §14.4). */
+  /** A Mechanic job hands the Andon to the Supervisor, with the incident attached. */
   withToken({ op: z.literal('escalate'), diagnosis: text, outcome: text }),
 ]);
 

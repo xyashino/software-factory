@@ -16,7 +16,7 @@ export interface AppendInput {
   response: unknown; // what to return on an idempotent replay
 }
 
-/** One append to an Order Plan stream (CORE §12.3). Same rules as `AppendInput`, plan-shaped. */
+/** One append to an Order Plan stream. Same rules as `AppendInput`, plan-shaped. */
 export interface PlanAppendInput {
   planId: PlanId;
   commandId: string;
@@ -39,7 +39,7 @@ export type PlanAppendResult =
   | { kind: 'replayed'; response: unknown }
   | { kind: 'conflict'; currentSeq: number };
 
-/** The synchronous part of the store, usable inside `EventStore.transaction` (STORAGE §3.1). */
+/** The synchronous part of the store, usable inside `EventStore.transaction`. */
 export interface StoreTx {
   load(orderId: OrderId): Promise<StoredEvent[]>;
   append(input: AppendInput): Promise<AppendResult>;
@@ -55,7 +55,7 @@ export interface EventStore {
   /** The same as `append`, for a plan stream: one transaction with its `plans` row. */
   appendPlan(input: PlanAppendInput): Promise<PlanAppendResult>;
   /**
-   * The response stored for a command that already ran (STORAGE §3 step 1). Read before `decide`,
+   * The response stored for a command that already ran. Read before `decide`,
    * because a replayed command may no longer be decidable against the current state.
    */
   response(commandId: string): Promise<{ response: unknown } | undefined>;
@@ -63,9 +63,9 @@ export interface EventStore {
   feed(afterGlobalSeq: number, limit: number): Promise<StoredEvent[]>;
   /**
    * Atomically: check idempotency, check expectedSeq, insert events, update projections,
-   * store the command result (STORAGE §3).
+   * store the command result.
    */
   append(input: AppendInput): Promise<AppendResult>;
-  /** Runs `fn` inside one write transaction (claim, reaper, continuation). STORAGE §3.1. */
+  /** Runs `fn` inside one write transaction (claim, reaper, continuation). */
   transaction<T>(fn: (tx: StoreTx) => Promise<T>): Promise<T>;
 }

@@ -33,7 +33,6 @@ import {
   type Actor,
 } from './events';
 
-/** Payload shapes shared by several commands; free text and blobs follow the events they produce. */
 const stationTarget = z.union([stationIdSchema, z.literal('supervisor')]);
 const dependsOn = z.array(orderIdSchema).max(64);
 const shaOrUndefined = commitShaSchema.optional();
@@ -219,7 +218,7 @@ const reportDeliverySchema = z
     ]),
   })
   .strict();
-/** The Cell's report of a `publish_blocked` job (v1 `publishBlockedWork`); it never changes the Andon. */
+// The Cell's report of a `publish_blocked` job; it never changes the Andon.
 const reportBlockedPrSchema = z
   .object({
     type: z.literal('ReportBlockedPr'),
@@ -272,7 +271,7 @@ const recordIncidentSchema = z
   })
   .strict();
 
-/** Every command of CORE §5.2, discriminated by `type`. The payloads mirror the events they emit. */
+/** Discriminated by `type`. The payloads mirror the events they emit. */
 export const orderCommandSchema = z.discriminatedUnion('type', [
   createOrderSchema,
   updateSpecSchema,
@@ -314,7 +313,7 @@ export type CommandOf<T extends OrderCommandType> = Extract<
 >;
 
 /**
- * Why a command is refused (CORE §5.2). `stale_epoch` means the caller lost its lease and must stop
+ * Why a command is refused. `stale_epoch` means the caller lost its lease and must stop
  * working on the Work order; `not_live` means its Cycle already ended.
  */
 export type DomainError =
@@ -324,7 +323,7 @@ export type DomainError =
   | { code: 'precondition'; detail: string }
   | { code: 'invalid'; issues: string[] };
 
-/** What `decide` may read besides the state and the command (CORE §5.1). Pure: no clock, no randomness. */
+/** What `decide` may read besides the state and the command. Pure: no clock, no randomness. */
 export interface DecideContext {
   now: number; // Factory clock
   ids: { next(): string }; // ULIDs, injected so tests are deterministic

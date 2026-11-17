@@ -3,11 +3,11 @@ import { RuntimeError, notFound } from './errors';
 import { hashToken } from './remote';
 import type { RuntimePorts } from './ports';
 
-/** The SHA-256 hex of a join token: the only form the runtime stores (PROTOCOL §1). */
+/** The SHA-256 hex of a join token: the only form the runtime stores. */
 export const hashJoinToken = hashToken;
 
 /**
- * Creates a join token (PROTOCOL §1): 256 random bits, stored as a hash with its expiry. The plain
+ * Creates a join token: 256 random bits, stored as a hash with its expiry. The plain
  * token is returned here and nowhere else. Tokens enroll Cells; they cannot claim work.
  *
  * One `commandId` makes at most one token. A replay (the CLI retries with the same id) is refused
@@ -46,7 +46,7 @@ export const createJoinToken = async (
   return { joinTokenId, name: request.name, token, expiresAt };
 };
 
-/** Revokes a join token. Unknown ids are `not_found` (PROTOCOL §3.5). */
+/** Revokes a join token. Unknown ids are `not_found`. */
 export const revokeJoinToken = async (
   ports: RuntimePorts,
   joinTokenId: string,

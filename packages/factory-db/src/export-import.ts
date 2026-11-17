@@ -22,7 +22,7 @@ import {
 import { type TarEntry, readTar, writeTar } from './tar';
 
 /**
- * The portable export format (STORAGE §7.3): `export.factory.tar` holds `manifest.json`,
+ * The portable export format: `export.factory.tar` holds `manifest.json`,
  * `projects.jsonl`, `events.jsonl` in global order, and `blobs/<sha256 hex>` for every stored blob an
  * event cites. Leases, tokens, Cells, signals and the idempotency table are not exported.
  */
@@ -50,24 +50,20 @@ export interface ImportResult {
   orders: number;
 }
 
-/** An event line as the envelope it is: a plan stream line carries `planId`, a Work order line `orderId`. */
 const envelopeOf = (value: unknown): StoredEvent | StoredPlanEvent => {
   const plan = planStoredEventSchema.safeParse(value);
   return plan.success ? plan.data : storedEventSchema.parse(value);
 };
 
-/** The stream an envelope belongs to: the `order_id` column stores both kinds of stream id. */
 const streamOf = (envelope: StoredEvent | StoredPlanEvent): string =>
   'planId' in envelope ? envelope.planId : envelope.orderId;
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
-/** One JSON value per line, as `.jsonl` is written. */
 const linesOf = (values: readonly unknown[]): Uint8Array =>
   encoder.encode(values.map((value) => `${JSON.stringify(value)}\n`).join(''));
 
-/** The non-empty lines of a `.jsonl` entry, each parsed as JSON. */
 const parseLines = (bytes: Uint8Array, name: string): unknown[] =>
   decoder
     .decode(bytes)
@@ -81,7 +77,6 @@ const parseLines = (bytes: Uint8Array, name: string): unknown[] =>
       }
     });
 
-/** Every stored event, in global order, read a page at a time. */
 const allEvents = (orm: FactoryDatabase): (StoredEvent | StoredPlanEvent)[] => {
   const all: (StoredEvent | StoredPlanEvent)[] = [];
   let after = 0;
@@ -134,7 +129,7 @@ const archiveOn = (orm: FactoryDatabase, exportedAt: number): Uint8Array => {
 
 /**
  * Writes the whole Factory as one archive, read in one write transaction so the parts agree with each
- * other (STORAGE §7.3). `exportedAt` is the Factory clock, in milliseconds.
+ * other. `exportedAt` is the Factory clock, in milliseconds.
  */
 export const exportFactory = (
   store: SqliteEventStore,
@@ -199,7 +194,7 @@ const requireEntry = (
   return bytes;
 };
 
-/** Refuses an import unless the database holds no project, event or blob yet. */
+// Refuses an import unless the database holds no project, event or blob yet.
 const ensureEmpty = (orm: FactoryDatabase): void => {
   const occupied =
     orm.select().from(projects).limit(1).all().length > 0 ||
@@ -298,7 +293,7 @@ const importOn = (
 };
 
 /**
- * Loads an export into an empty database, in one write transaction (STORAGE §7.3): projects, blobs
+ * Loads an export into an empty database, in one write transaction: projects, blobs
  * and events unchanged (events keep their `global_seq`), then the `orders` projection rebuilt by
  * `project`. Refuses a non-empty database, a bad manifest, an unsafe or truncated archive, a blob that
  * does not hash to its name, and events out of order. `ExpireLease` is appended by the runtime, not here.

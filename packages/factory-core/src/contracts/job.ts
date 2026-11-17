@@ -19,10 +19,8 @@ import {
 import { cycleContextSchema } from '../order/context-schema';
 import { planJobKindSchema } from '../plan/events';
 
-/**
- * A path the Cell resolves itself: relative to its worktree, never absolute, never climbing out.
- * Absolute POSIX and Windows forms are refused (PROTOCOL §4, RULES §4.5).
- */
+// A path the Cell resolves itself: relative to its worktree, never absolute, never climbing out.
+// Absolute POSIX and Windows forms are refused.
 const relativePath = z
   .string()
   .min(1)
@@ -44,7 +42,7 @@ const repoSchema = z
   .strict();
 
 /**
- * How the Cell gets the worktree (PROTOCOL §9): `fresh` places it at the job's base, discarding what was there;
+ * How the Cell gets the worktree: `fresh` places it at the job's base, discarding what was there;
  * `reuse` keeps the uncommitted work of earlier Stations, and a worktree the Cell does not hold is reported
  * missing. Absent means `fresh`, which is how jobs before the mode was carried are read.
  */
@@ -81,10 +79,6 @@ const runtimePromptsSchema = z
   })
   .strict();
 
-/**
- * What the Cell renders the Operator prompt from (PROTOCOL §4, §9): the task id, the order spec body, the Cycle
- * context and the retry budget. The prompt text and the Operator profile are the Cell's, read from `.factory/`.
- */
 const promptInputsSchema = z
   .object({
     taskId: z.string().min(1).max(128),
@@ -131,7 +125,7 @@ const stationSchema = z
   .strict();
 
 /**
- * The placeholder a delivery's PR body keeps for the Cell (v1 PR format): only the Cell sees which
+ * The placeholder a delivery's PR body keeps for the Cell: only the Cell sees which
  * `decisions/` entries the delivery commit adds, so it replaces this with `adrSectionOf`.
  */
 export const PR_ADR_TOKEN = '{{adrSection}}';
@@ -142,7 +136,6 @@ export const adrSectionOf = (addedDecisions: readonly string[]): string =>
     ? '_No decisions/ entry recorded for this change._'
     : addedDecisions.map((path) => `- Path: \`${path}\``).join('\n');
 
-/** One line of a PR body's verification list: an Inspection's commands, or an Operator station and its profile. */
 const verificationSchema = z.discriminatedUnion('kind', [
   z
     .object({
@@ -160,11 +153,9 @@ const verificationSchema = z.discriminatedUnion('kind', [
     .strict(),
 ]);
 
-/**
- * A delivery (PROTOCOL §4): the spec and the artifacts a delivery commits and reports, as blob refs. The commit
- * message, the PR title and the PR body are the Cell's to render from them and `.factory/`.
- * `removeTodo` is gone: an API-created order has no todo file to remove.
- */
+// A delivery: the spec and the artifacts a delivery commits and reports, as blob refs. The commit
+// message, the PR title and the PR body are the Cell's to render from them and `.factory/`.
+// `removeTodo` is gone: an API-created order has no todo file to remove.
 const deliverSchema = z
   .object({
     taskId: z.string().min(1).max(128),
@@ -179,10 +170,6 @@ const deliverSchema = z
   })
   .strict();
 
-/**
- * What a plan job needs (CORE §12.3, PROTOCOL §4): the plan's slug and title, the sub-PR list or the
- * plan PR body as a blob, and the plan PR URL once `plan_pr` reported it.
- */
 const planBlockSchema = z
   .object({
     slug: planSlugSchema,
@@ -192,10 +179,8 @@ const planBlockSchema = z
   })
   .strict();
 
-/**
- * A Mechanic job (CORE §14.4): triages one Andon, names the Andon by its `andon_raised` time and the
- * prompt blob. May carry a `workspace` so the Mechanic can inspect and edit the Work order's worktree.
- */
+// A Mechanic job: triages one Andon, names the Andon by its `andon_raised` time and the
+// prompt blob. May carry a `workspace` so the Mechanic can inspect and edit the Work order's worktree.
 const mechanicSchema = z
   .object({
     andonAt: z.number().int().min(0),
@@ -216,15 +201,11 @@ const mechanicSchema = z
           .optional(),
       })
       .strict(),
-    /** The runner the Mechanic runs with: the Line's first Operator pool (CORE §14.4). */
+    /** The runner the Mechanic runs with: the Line's first Operator pool. */
     operator: operatorSchema,
   })
   .strict();
 
-/**
- * A blocked publish (v1 `publishBlockedWork`): the Andon it publishes for, as the `[BLOCKED]` PR template names it.
- * The Cell renders the title and body from `.factory/templates/pr/blocked.md`.
- */
 const blockedSchema = z
   .object({
     taskId: z.string().min(1).max(128),
@@ -243,7 +224,7 @@ const WORK_KINDS = new Set([
 const PLAN_KINDS = new Set(['plan_branch', 'plan_pr', 'plan_pr_ready']);
 
 /**
- * A job a Cell runs: PROTOCOL §4, the shape the claim and the continuation return. A Work order job
+ * A job a Cell runs: the shape the claim and the continuation return. A Work order job
  * names an OrderId and carries its `workspace`; a plan job names a PlanId, carries a `plan` block and
  * no workspace (plan jobs work on the repo's refs only).
  */

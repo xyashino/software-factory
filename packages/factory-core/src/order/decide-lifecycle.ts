@@ -43,7 +43,7 @@ export const createOrder = (
   return ok(events);
 };
 
-/** The spec may change until a job is first claimed (CORE §5.2). */
+/** The spec may change until a job is first claimed. */
 export const updateSpec = (
   state: WorkOrderState,
   command: CommandOf<'UpdateSpec'>,
@@ -66,7 +66,7 @@ export const updateSpec = (
   return ok(events);
 };
 
-/** Cancelling ends an active job too: its running Cycle fails as lost (CORE §5.2). */
+/** Cancelling ends an active job too: its running Cycle fails as lost. */
 export const cancel = (
   state: WorkOrderState,
   command: CommandOf<'Cancel'>,
@@ -112,7 +112,7 @@ export const reprioritise = (
   return ok([{ type: 'priority_changed', priority: command.priority }]);
 };
 
-/** The claim endpoint: the queue hands the Work order's next job to a Cell (CORE §5.2, §6). */
+/** The claim endpoint: the queue hands the Work order's next job to a Cell. */
 export const claimJob = (
   state: WorkOrderState,
   command: CommandOf<'ClaimJob'>,
@@ -185,7 +185,7 @@ export const reportWorkspaceFailed = (
 };
 
 /**
- * The Cell's job needs a worktree this Cell does not hold (CORE §4.3 rule 13). Only a Work order past
+ * The Cell's job needs a worktree this Cell does not hold. Only a Work order past
  * its first Station can lack one: a Station 0 job creates its worktree from the base, so nothing is reset.
  */
 export const reportWorktreeMissing = (
@@ -216,7 +216,7 @@ export const reportWorktreeMissing = (
   ]);
 };
 
-/** The reaper found the lease expired: the job is lost (CORE §5.2). */
+/** The reaper found the lease expired: the job is lost. */
 export const expireLease = (
   state: WorkOrderState,
   ctx: DecideContext,
@@ -228,7 +228,7 @@ export const expireLease = (
   return ok(loseJob(state, fence.value, 'lease_expired', 'the lease expired'));
 };
 
-/** The Cell leaves its job on purpose; the job is lost as `cell_left` (CORE §5.2). */
+/** The Cell leaves its job on purpose; the job is lost as `cell_left`. */
 export const releaseJob = (
   state: WorkOrderState,
   ctx: DecideContext,
@@ -270,7 +270,7 @@ export const reportDelivery = (
 };
 
 /**
- * The `publish_blocked` job reports what it did for the open Andon (v1 `publishBlockedWork`). The Andon keeps
+ * The `publish_blocked` job reports what it did for the open Andon. The Andon keeps
  * its holder and its phase: the report only records the published PR, an empty worktree, or a failure.
  */
 export const reportBlockedPr = (
@@ -298,7 +298,7 @@ export const reportBlockedPr = (
   ]);
 };
 
-/** The PR state comes from the intake's polling; it is recorded once a PR exists (CORE §5.2). */
+/** The PR state comes from the intake's polling; it is recorded once a PR exists. */
 export const recordPrState = (
   state: WorkOrderState,
   command: CommandOf<'RecordPrState'>,

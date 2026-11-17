@@ -77,7 +77,7 @@ export const isRepoRoot = (dir: string): boolean =>
   existsSync(join(dir, '.factory')) || existsSync(join(dir, '.git'));
 
 /**
- * The Cell's config for a run in a repository (PROTOCOL §2, §10). Three layers, each key by key over the
+ * The Cell's config for a run in a repository. Three layers, each key by key over the
  * one before: `~/.config/factory-cell/config.toml`, then `<repo>/.factory/cell.toml`, then
  * `<repo>/.factory-local/cell.toml`. The repository is `--repo-dir` (which must be a repository root), or
  * else the one the working directory is in. A Cell outside a repository is refused: it has no repository
@@ -118,7 +118,7 @@ export const loadCellConfig = (options: LoadOptions): LoadedConfig => {
   };
 };
 
-/** `<root>/<file>` when the file exists there; undefined otherwise. */
+// `<root>/<file>` when the file exists there; undefined otherwise.
 const existingFile = (root: string, file: string): string | undefined => {
   const candidate = join(root, file);
   return existsSync(candidate) ? candidate : undefined;

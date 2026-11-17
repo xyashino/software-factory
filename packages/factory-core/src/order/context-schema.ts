@@ -2,11 +2,6 @@ import { z } from 'zod';
 import { blobRefSchema, cycleIdSchema, stationIdSchema } from '../ids';
 import { inspectionResultSchema } from './events';
 
-/**
- * The wire form of a Cycle's context (CORE §7): what a Cell needs to render the Operator prompt. It is the
- * `CycleContext` the core resolves, validated at the job boundary. Every path is relative to the worktree.
- */
-
 const relativePathText = z.string().min(1).max(512);
 const keyText = z.string().min(1).max(64);
 
@@ -64,7 +59,7 @@ const cycleFeedbackSchema = z.discriminatedUnion('kind', [
     .strict(),
 ]);
 
-/** The CycleContext a prompt is built from (CORE §7). */
+/** The CycleContext a prompt is built from. */
 export const cycleContextSchema = z
   .object({
     inputs: z.array(cycleInputSchema).max(256),

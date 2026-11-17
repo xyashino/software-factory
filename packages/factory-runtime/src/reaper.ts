@@ -3,14 +3,12 @@ import type { CommandHandler } from './command-handler';
 import { isRuntimeError } from './errors';
 import type { RuntimePorts } from './ports';
 
-/** Refusals that mean the lease no longer names a live job, so the lease row is simply dropped. */
+// Refusals that mean the lease no longer names a live job, so the lease row is simply dropped.
 const STALE_LEASE_CODES = new Set(['stale_epoch', 'not_found', 'precondition']);
 
-/**
- * One reaper pass (PROTOCOL §5.4): every lease whose expiry has passed runs `ExpireLease` through the
- * normal loop, so `cycle_failed{lost}` and `job_lost` are appended and the restart budget is checked
- * (`andon_raised` when it is spent). A lease whose job already ended is only deleted.
- */
+// One reaper pass: every lease whose expiry has passed runs `ExpireLease` through the
+// normal loop, so `cycle_failed{lost}` and `job_lost` are appended and the restart budget is checked
+// (`andon_raised` when it is spent). A lease whose job already ended is only deleted.
 const reapExpired = async (
   ports: RuntimePorts,
   handler: CommandHandler,
@@ -20,7 +18,7 @@ const reapExpired = async (
   for (const lease of expired) {
     try {
       if (isPlanId(lease.orderId)) {
-        // A plan job's lease: the plan stream names the job and epoch it ends (CORE §12.3).
+        // A plan job's lease: the plan stream names the job and epoch it ends.
         await handler.submitPlan({
           planId: lease.orderId as PlanId,
           commandId: `reap:${lease.jobId}`,
@@ -51,10 +49,8 @@ const reapExpired = async (
   return expired.length;
 };
 
-/**
- * Boot grace (PROTOCOL §5.1): on start, every lease gets a full TTL from now, so a Factory that was
- * down does not cost the Cells their jobs before they can heartbeat again.
- */
+// Boot grace: on start, every lease gets a full TTL from now, so a Factory that was
+// down does not cost the Cells their jobs before they can heartbeat again.
 const extendAll = async (ports: RuntimePorts): Promise<void> => {
   ports.writer.assertHeld();
   const expiresAt = ports.clock.now() + ports.config.leaseTtlMs;
@@ -64,7 +60,7 @@ const extendAll = async (ports: RuntimePorts): Promise<void> => {
 };
 
 /**
- * The lazy reaper (PROTOCOL §5.4): no timer. Expired leases are reaped when a read or a write asks for
+ * The lazy reaper: no timer. Expired leases are reaped when a read or a write asks for
  * them (claim, heartbeat, board and order reads), in the same write transaction semantics as a pass.
  * `start` arms boot grace: until one lease TTL has passed since start, nothing is reaped.
  */

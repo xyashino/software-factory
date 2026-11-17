@@ -8,7 +8,7 @@ export interface JobHandle {
 }
 
 /**
- * The jobs this Cell holds right now (PROTOCOL §5.3). The heartbeat reads the ids from here, and an
+ * The jobs this Cell holds right now. The heartbeat reads the ids from here, and an
  * abort from the heartbeat or the self-fence reaches the job through its signal. Signals the Factory
  * sends for a job wait here until the job takes them.
  */

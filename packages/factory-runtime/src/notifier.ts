@@ -2,7 +2,7 @@ import type { Timers } from './ports';
 
 /**
  * Wakes the claims waiting on the queue. A commit calls `wake`; a waiter that is not woken returns
- * after its timer, so a claim never waits longer than the clock says (PROTOCOL §5.2).
+ * after its timer, so a claim never waits longer than the clock says.
  */
 export interface Notifier {
   wake(): void;

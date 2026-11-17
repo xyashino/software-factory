@@ -29,7 +29,6 @@ import { JobStopped, submit, type JobContext } from './send';
 const MAX_DETAIL_CHARS = 500;
 const COMMIT = /^[0-9a-f]{40}$/;
 
-/** The identity of the commits a delivery writes (the staging commit, its rebase and the squash commit). */
 const IDENTITY = [
   '-c',
   'user.name=Software Factory',
@@ -37,12 +36,11 @@ const IDENTITY = [
   'user.email=software-factory@localhost',
 ];
 
-/** The last characters of a run's output, for a failure detail, with machine-local values redacted. */
 const tailOfRun = (run: ShellRun): string =>
   redactDetail(textOf(run).trim(), MAX_DETAIL_CHARS, 'end');
 
 /**
- * Runs one `deliver` job end to end (PROTOCOL §8.3, CORE §4.3 rule 9). The worktree is reused, never
+ * Runs one `deliver` job end to end. The worktree is reused, never
  * checked out over: the uncommitted work of every Station is delivered as it stands. The order is fixed:
  *
  * 1. prepare the workspace in `reuse` mode. A worktree this Cell does not hold reports
@@ -138,7 +136,6 @@ const errorText = (error: unknown): string =>
     MAX_DETAIL_CHARS,
   );
 
-/** Sends `ReportDelivery{failed, detail}` for the job. */
 const reportFailed = async (
   ctx: JobContext,
   job: Job,
@@ -159,7 +156,6 @@ const reportFailed = async (
   );
 };
 
-/** Runs one git command in the worktree. */
 const git = (
   shell: ShellContext,
   cwd: string,
@@ -171,7 +167,7 @@ const git = (
     timeoutMs: GIT_TIMEOUT_MS,
   });
 
-/** A delivery that cannot finish here: the job reports it as failed, and nothing is pushed. */
+// A delivery that cannot finish here: the job reports it as failed, and nothing is pushed.
 class DeliveryFailed extends Error {}
 
 const deliverWorktree = async (
@@ -252,7 +248,7 @@ const deliverWorktree = async (
       return;
     }
 
-    // The commit, the PR title and the PR body come from the repo's own `.factory/` on this worktree (PROTOCOL §4).
+    // The commit, the PR title and the PR body come from the repo's own `.factory/` on this worktree.
     let rendered: RenderedDelivery;
     try {
       rendered = await renderDelivery({
@@ -320,7 +316,7 @@ const deliverWorktree = async (
     }
 
     const lease = `${branchRef}:${remoteTip}`;
-    // The ADR section is the Cell's to fill (v1 PR format): the `decisions/` entries this commit adds.
+    // The ADR section is the Cell's to fill: the `decisions/` entries this commit adds.
     const added = await git(shell, worktree, [
       'diff',
       '--name-only',
@@ -408,7 +404,7 @@ const deliverWorktree = async (
     let prUrl: string;
     if (open?.state === 'open') {
       // The PR of an earlier publish (a `[BLOCKED]` draft, or the branch's own PR) takes this delivery's title
-      // and body, and is marked ready for review (v1: a delivered blocked task's PR is ready, not a draft).
+      // and body, and is marked ready for review.
       prUrl = open.url;
       await github.updateBody(open.url, body, rendered.title);
       await github.markReady(open.url);

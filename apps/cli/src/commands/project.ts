@@ -8,11 +8,9 @@ import {
   withErrors,
 } from '../context';
 
-/** The `--dep-policy` values (PROTOCOL §3.1): when a dependency counts as done. */
 const DEP_POLICIES = ['delivered', 'merged'] as const;
 type DepPolicy = (typeof DEP_POLICIES)[number];
 
-/** A positive whole number, as `--max-running` takes it. */
 const MAX_RUNNING = /^[1-9]\d*$/;
 
 const usageError = (message: string): Error => new Error(message);
@@ -36,11 +34,10 @@ export const parseMaxRunning = (text: string): number => {
   return Number(text);
 };
 
-/** The optional string a flag gives, or undefined when the flag is absent. */
 const stringFlag = (args: Record<string, unknown>, name: string) =>
   args[name] === undefined ? undefined : String(args[name]);
 
-/** The settings the flags name, parsed and checked before any call (PROTOCOL §3.1). */
+// The settings the flags name, parsed and checked before any call.
 const settingsOf = (args: Record<string, unknown>) => {
   const baseBranch = stringFlag(args, 'base-branch');
   const depPolicy = stringFlag(args, 'dep-policy');
@@ -56,7 +53,6 @@ const settingsOf = (args: Record<string, unknown>) => {
   };
 };
 
-/** `factory project ls`: the registry, one row per project (PROTOCOL §3.1). */
 const listProjects = (args: Record<string, unknown>) =>
   withErrors(async () => {
     const ctx = createContext(flagsOf(args));
@@ -156,7 +152,7 @@ export const projectSetCommand = defineCommand({
     }),
 });
 
-/** `factory project rm <id>`: removes a project with no history (PROTOCOL §3.1). */
+/** `factory project rm <id>`: removes a project with no history. */
 export const projectRmCommand = defineCommand({
   meta: { name: 'rm', description: 'Remove a project with no history' },
   args: {

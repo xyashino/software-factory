@@ -8,14 +8,14 @@ import { zodErrors, type DefinitionError } from './errors';
 import type { Line, LineStation, OperatorPool } from './line-schema';
 import type { OperatorProfile } from './operator-profile';
 
-/** Placeholder hash used only while the snapshot body is validated. */
+// Placeholder hash used only while the snapshot body is validated.
 const EMPTY_HASH = `sha256:${'0'.repeat(64)}`;
 
 const isRecord = (value: unknown): value is Record<string, unknown> => {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 };
 
-/** Keys sorted at every depth, no whitespace, `undefined` dropped: one byte form per value. */
+// Keys sorted at every depth, no whitespace, `undefined` dropped: one byte form per value.
 const canonical = (value: unknown): unknown => {
   if (Array.isArray(value)) {
     return value.map(canonical);
@@ -36,10 +36,8 @@ export const canonicalJson = (value: unknown): string => {
   return JSON.stringify(canonical(value));
 };
 
-/**
- * Normalises one Line station into the core Station shape, looking up its
- * operator profile. Plain data: core's schema, not the type, has the last word.
- */
+// Normalises one Line station into the core Station shape, looking up its
+// operator profile. Plain data: core's schema, not the type, has the last word.
 const toStation = (
   station: LineStation,
   line: Line,
@@ -76,7 +74,6 @@ const toStation = (
   };
 };
 
-/** The Operator pool a snapshot carries: everything the Cell needs to start the Operator (CORE §11). */
 const poolOf = (pool: OperatorPool): Record<string, unknown> => ({
   profile: pool.profile,
   runner: pool.runner,

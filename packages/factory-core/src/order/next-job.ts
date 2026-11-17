@@ -5,7 +5,7 @@ import { latestCycle, requireCycle } from './evolve-helpers';
 import { MECHANIC_BUDGET, type JobSpec, type Next } from './next';
 import type { CycleOutcome, CycleState, WorkOrderState } from './state';
 
-/** Outcomes of an infrastructure failure: restarted, never judged (CORE §5.3). */
+// Outcomes of an infrastructure failure: restarted, never judged.
 const INFRA_OUTCOMES: readonly CycleOutcome[] = [
   'timed_out',
   'crashed',
@@ -23,18 +23,15 @@ const requireStation = (state: WorkOrderState, id: StationId): Station => {
 };
 
 /**
- * Missing-worktree resets to Station 0 allowed before the Work order raises an Andon instead of looping
- * (CORE §4.3 rule 13). The counter resets on a delivery or a Supervisor resume.
+ * Missing-worktree resets to Station 0 allowed before the Work order raises an Andon instead of looping.
+ * The counter resets on a delivery or a Supervisor resume.
  */
 export const MAX_WORKTREE_RESETS = 2;
 
-/** The longest workspace Andon detail, in characters: the latest stage and detail, kept concise. */
 const WORKSPACE_DETAIL_CHARS = 512;
 
-/**
- * The workspace Andon (row 4): names the count, then the latest failure's stage and detail, so the
- * Mechanic sees the real cause without reading the log (CORE §4.3 rule 10).
- */
+// The workspace Andon (row 4): names the count, then the latest failure's stage and detail, so the
+// Mechanic sees the real cause without reading the log.
 const workspaceAndon = (state: WorkOrderState): Next => {
   const failures = state.workspaceFailures;
   const count = failures.length;
@@ -51,7 +48,6 @@ const workspaceAndon = (state: WorkOrderState): Next => {
 const usedOf = (counters: Record<StationId, number>, id: StationId): number =>
   counters[id] ?? 0;
 
-/** Cycles already run for a Station; the next one is that count plus one (CORE §3.1 `n`). */
 const cyclesOf = (state: WorkOrderState, id: StationId): number =>
   state.cycles.filter((cycle) => cycle.stationId === id).length;
 
@@ -77,11 +73,9 @@ const stationJob = (
     : { kind: 'run_operator_station', stationId, n, cause, base };
 };
 
-/**
- * An Andon the Supervisor holds gets one `publish_blocked` job for it (v1 `publishBlockedWork`), so the
- * branch and a draft `[BLOCKED]` PR are there for inspection. The job runs once per Andon, whatever it
- * finds (no changes, a failure), so the Supervisor is never looped. Then the Supervisor decides.
- */
+// An Andon the Supervisor holds gets one `publish_blocked` job for it, so the
+// branch and a draft `[BLOCKED]` PR are there for inspection. The job runs once per Andon, whatever it
+// finds (no changes, a failure), so the Supervisor is never looped. Then the Supervisor decides.
 const supervisorRow = (
   state: WorkOrderState,
   open: NonNullable<WorkOrderState['andon']>,
@@ -95,10 +89,8 @@ const supervisorRow = (
   };
 };
 
-/**
- * Row 3: an open Andon. The Mechanic triages it while it has budget and no incident yet; an
- * escalated Andon, or one whose Mechanic already recorded an incident, waits for the Supervisor.
- */
+// Row 3: an open Andon. The Mechanic triages it while it has budget and no incident yet; an
+// escalated Andon, or one whose Mechanic already recorded an incident, waits for the Supervisor.
 const andonRow = (
   state: WorkOrderState,
   open: NonNullable<WorkOrderState['andon']>,
@@ -116,7 +108,7 @@ const andonRow = (
   };
 };
 
-/** Row 5: answer a `resumed` or `reopened` before looking at the old Cycle again. */
+// Row 5: answer a `resumed` or `reopened` before looking at the old Cycle again.
 const resumeRow = (state: WorkOrderState): Next | undefined => {
   const pending = state.pendingResume;
   if (!pending) return undefined;
@@ -135,7 +127,6 @@ const resumeRow = (state: WorkOrderState): Next | undefined => {
   };
 };
 
-/** Rows 7-8: a handed-over Cycle is continued on its WIP commit while the lost budget lasts. */
 const handoverRow = (state: WorkOrderState, last: CycleState): Next => {
   const station = requireStation(state, last.stationId);
   if (
@@ -157,7 +148,6 @@ const handoverRow = (state: WorkOrderState, last: CycleState): Next => {
   };
 };
 
-/** Rows 9-11: a verdict or Inspection failed; the Station's `onFail.retry` fixes it. */
 const judgedRow = (
   state: WorkOrderState,
   last: CycleState,
@@ -187,7 +177,6 @@ const judgedRow = (
   };
 };
 
-/** Rows 12-13: an infrastructure failure restarts the Station from its clean base while budget lasts. */
 const infraRow = (
   state: WorkOrderState,
   last: CycleState,
@@ -214,7 +203,7 @@ const infraRow = (
 };
 
 /**
- * Decides what runs next for a Work order (CORE §6). Rows are checked top to bottom, first match
+ * Decides what runs next for a Work order. Rows are checked top to bottom, first match
  * wins; the numbered comments are the row numbers of the table. Pure: it reads only the state.
  */
 export const nextJob = (state: WorkOrderState): Next => {
@@ -228,7 +217,7 @@ export const nextJob = (state: WorkOrderState): Next => {
   if (state.andon) return andonRow(state, state.andon);
   // 4
   if (state.workspaceFailures.length >= 2) return workspaceAndon(state);
-  // 4b: the worktree keeps going missing on the Cells that pick the Work order up (CORE §4.3 rule 13)
+  // 4b: the worktree keeps going missing on the Cells that pick the Work order up
   if ((state.worktreeResets ?? 0) >= MAX_WORKTREE_RESETS) {
     return andon(
       'workspace_failed',

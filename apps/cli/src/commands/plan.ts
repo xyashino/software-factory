@@ -27,12 +27,11 @@ type PlanRow = RouteResponse<'plans'>['plans'][number];
 
 const usageError = (message: string): Error => new Error(message);
 
-/** The optional string a flag gives, or undefined when the flag is absent. */
 const stringFlag = (args: Record<string, unknown>, name: string) =>
   args[name] === undefined ? undefined : String(args[name]);
 
 /**
- * The plan a slug names (PROTOCOL §10). A slug is unique only within a project: `--project` picks the
+ * The plan a slug names. A slug is unique only within a project: `--project` picks the
  * project, and without it an ambiguous slug is a usage error that names the projects to choose from.
  */
 export const resolvePlan = (
@@ -62,7 +61,7 @@ export const resolvePlan = (
   return match;
 };
 
-/** `factory plan ls`: the plans, one row each. Read-only; `--json` prints `{plans}`. */
+// `factory plan ls`: the plans, one row each. Read-only; `--json` prints `{plans}`.
 const listPlans = (args: Record<string, unknown>) =>
   withErrors(async () => {
     const ctx = createContext(flagsOf(args));
@@ -71,10 +70,6 @@ const listPlans = (args: Record<string, unknown>) =>
     console.log(renderPlanList(plans, ctx.paint));
   });
 
-/**
- * `factory plan status <slug> [--project <id>]`: the chain in order and the plan PR. The slug resolves
- * through the same `plans` list the other modes read, so local, remote and `--once` agree (RULES §6.5).
- */
 const planStatus = (args: Record<string, unknown>) =>
   withErrors(async () => {
     const ctx = createContext(flagsOf(args));
@@ -117,7 +112,7 @@ export const planStatusCommand = defineCommand({
 /**
  * Reads each `--members` file as a todo, in the order given, and checks it can join a chain: a
  * runnable `todo`, a Line the repo's `.factory/` holds, and at most the member before it as a
- * dependency (the server builds the chain from the order, CORE §12.1).
+ * dependency (the server builds the chain from the order).
  */
 export const chainMembers = async (
   project: ProjectId,
@@ -163,7 +158,7 @@ export const chainMembers = async (
 
 /**
  * A runnable todo as one member of a chain (`createPlan`). It must be a `todo`: a done or cancelled
- * member is not part of any chain (CORE §12.1).
+ * member is not part of any chain.
  */
 export const toChainMember = (todo: Todo, line: LineSnapshot) => {
   if (todo.status !== 'todo') {
@@ -203,11 +198,6 @@ export const refuseTakenMembers = async (
   }
 };
 
-/**
- * `factory plan create --project <id> --slug <slug> --members <files…>`: a linear Order Plan whose
- * chain is the members in the order given. Each member is read from its todo file; its Line comes from
- * `--repo-dir`'s `.factory/lines/`.
- */
 const createPlan = (args: Record<string, unknown>) =>
   withErrors(async () => {
     const ctx = createContext(flagsOf(args));

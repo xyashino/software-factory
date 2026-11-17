@@ -7,10 +7,9 @@ import {
 import type { Clock } from '@repo/factory-core/ports/clock';
 import type { Ids } from '@repo/factory-core/ports/ids';
 
-/** Crockford base32, the ULID alphabet (no I, L, O, U). */
+// Crockford base32, the ULID alphabet (no I, L, O, U).
 const ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 
-/** The 10-character time part of a ULID: 48 bits of milliseconds. */
 const encodeTime = (ms: number): string => {
   let text = '';
   let rest = ms;
@@ -21,7 +20,6 @@ const encodeTime = (ms: number): string => {
   return text;
 };
 
-/** The 16-character random part of a ULID: 80 bits. */
 const encodeRandom = (bytes: Uint8Array): string => {
   let bits = 0n;
   for (const byte of bytes) bits = (bits << 8n) | BigInt(byte);

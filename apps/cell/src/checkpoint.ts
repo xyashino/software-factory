@@ -4,7 +4,7 @@ import type { CommandResult } from '@repo/factory-core/contracts/cell';
 import type { CommitSha } from '@repo/factory-core/ids';
 import type { RunGit } from './ports';
 
-/** The Cell's scratch directory, git-excluded from every worktree (PROTOCOL §8.1). */
+/** The Cell's scratch directory, git-excluded from every worktree. */
 export const CELL_DIR = '.cell';
 
 export type Outcome = 'passed' | 'failed' | 'blocked' | 'handed_over';
@@ -43,9 +43,9 @@ const isInside = (root: string, path: string): boolean => {
 };
 
 /**
- * Checks the outputs a Cycle declared (PROTOCOL §8.2 step 1): each exists, is non-empty when it is a
- * file, and resolves inside the worktree once symlinks are followed. Outputs may sit in `.cell/`
- * (PROTOCOL §9); that directory is simply never part of a commit. A required output that is
+ * Checks the outputs a Cycle declared: each exists, is non-empty when it is a
+ * file, and resolves inside the worktree once symlinks are followed. Outputs may sit in `.cell/`;
+ * that directory is simply never part of a commit. A required output that is
  * missing is an issue; an optional one may be absent. Returns the issues, empty when all is well.
  */
 export const validateOutputs = async (
@@ -76,17 +76,17 @@ export const validateOutputs = async (
 };
 
 /**
- * The checkpoint of a Cycle (PROTOCOL §8.2, as amended by the deferred-commit contract): validate, upload,
+ * The checkpoint of a Cycle: validate, upload,
  * read the worktree's HEAD, dry-run the command, then send it for real. No commit is made and nothing is
- * pushed: the uncommitted work stays in the worktree for the next Station, and `deliver` publishes it
- * (PROTOCOL §8.3). A stale epoch at the dry run stops the Cycle before the real command. The commit a
+ * pushed: the uncommitted work stays in the worktree for the next Station, and `deliver` publishes it.
+ * A stale epoch at the dry run stops the Cycle before the real command. The commit a
  * command names is the worktree's HEAD, the commit the Cycle started from.
  */
 export const checkpoint = async (
   input: CheckpointInput,
 ): Promise<CheckpointResult> => {
   // A block or a Handover ends a Cycle before its outputs are finished: they are checked when they
-  // exist, but a missing one is not a refusal (PROTOCOL §3.3, the Handover carries the rest).
+  // exist, but a missing one is not a refusal (the Handover carries the rest).
   const finished = input.outcome === 'passed' || input.outcome === 'failed';
   const outputs = finished
     ? input.outputs

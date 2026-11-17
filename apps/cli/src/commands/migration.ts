@@ -71,17 +71,17 @@ export interface MigrationInput {
   existingOrderIds: ReadonlySet<OrderId>;
   /** plan slugs the server already has in this project */
   existingPlanSlugs: ReadonlySet<PlanSlug>;
-  /** `--all`: migrate every runnable todo; otherwise only `factory: v2` ones (ROADMAP M9) */
+  /** `--all`: migrate every runnable todo; otherwise only `factory: v2` ones. */
   all: boolean;
 }
 
-/** The OrderId a todo file would take, or its path when the file name is not a todo id. */
+// The OrderId a todo file would take, or its path when the file name is not a todo id.
 const targetOf = (projectId: ProjectId, file: string): string => {
   const id = todoIdSchema.safeParse(todoIdOf(file));
   return id.success ? orderIdOf(projectId, id.data) : file;
 };
 
-/** The status of every todo file keyed by OrderId; a file that does not parse is `unparseable`. */
+// The status of every todo file keyed by OrderId; a file that does not parse is `unparseable`.
 const fileStatesOf = (
   projectId: ProjectId,
   sources: readonly TodoSource[],

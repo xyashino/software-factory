@@ -1,4 +1,4 @@
-/** A running Operator station the Cell can ask to hand over when it leaves (PROTOCOL §9). */
+/** A running Operator station the Cell can ask to hand over when it leaves. */
 export interface RunHandle {
   readonly jobId: string;
   /** Types the handover request; the Operator's Handover then ends the Cycle as `handed_over`. */

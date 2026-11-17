@@ -106,7 +106,7 @@ export interface QuestionRecord {
   answer?: { by: string; text: string; at: number };
 }
 
-/** A Mechanic's incident (CORE §14.2). `andonAt` names the Andon it triaged (its `andon_raised` time). */
+/** A Mechanic's incident. `andonAt` names the Andon it triaged (its `andon_raised` time). */
 export type AndonTriage = 'mechanic' | 'supervisor';
 
 export interface IncidentRecord {
@@ -138,8 +138,8 @@ export interface WorkOrderState {
   priority: Priority;
   dependsOn: OrderId[];
   line: LineSnapshot; // pinned, never re-read from disk
-  baseBranch: string; // pinned at creation: the project's base, or the plan's (CORE §12.5)
-  plan?: PlanSlug; // the Order Plan this Work order belongs to (CORE §12.1)
+  baseBranch: string; // pinned at creation: the project's base, or the plan's
+  plan?: PlanSlug; // the Order Plan this Work order belongs to
 
   phase: Phase;
   cycles: CycleState[]; // start order
@@ -148,7 +148,7 @@ export interface WorkOrderState {
   retryGrants: Record<StationId, number>; // extra budget granted by `resumed`
   restartsUsed: Record<StationId, number>; // `restart` Cycles since that Station last passed
   lostRestartsUsed: Record<StationId, number>; // `lost` restarts and handovers since that Station last passed
-  recovered: StationId[]; // Stations passed before an `order_recovered`; their artifacts are not held (CORE §4.3 rule 11)
+  recovered: StationId[]; // Stations passed before an `order_recovered`; their artifacts are not held
   pendingFeedback?: { forStation: StationId; fromCycle: CycleId } | undefined;
   pendingResume?:
     | {
@@ -163,20 +163,20 @@ export interface WorkOrderState {
     { commit: CommitSha; afterStation: StationId | null } | undefined;
   notes: StationNote[];
   questions: QuestionRecord[]; // full history; at most one with status 'open'
-  /** `triage` is who holds the Andon: the Mechanic first, the Supervisor after an escalation (CORE §14.4). */
+  /** `triage` is who holds the Andon: the Mechanic first, the Supervisor after an escalation. */
   andon?:
     | { reason: AndonReason; detail: string; at: number; triage: AndonTriage }
     | undefined;
-  mechanicRuns: number; // Mechanic jobs claimed for this Work order, lost ones included (CORE §14.4)
-  incidents: IncidentRecord[]; // full history; at most one per Andon (CORE §14.2)
+  mechanicRuns: number; // Mechanic jobs claimed for this Work order, lost ones included
+  incidents: IncidentRecord[]; // full history; at most one per Andon
   activeJob?: ActiveJob | undefined;
   epoch: number; // the last issued epoch, 0 before any claim
-  workspaceFailures: WorkspaceFailure[]; // consecutive; see CORE §4.3 rule 10
-  /** Missing-worktree resets to Station 0 since the last delivery or Supervisor resume (CORE §4.3 rule 13). Absent is 0. */
+  workspaceFailures: WorkspaceFailure[]; // consecutive;3 rule 10
+  /** Missing-worktree resets to Station 0 since the last delivery or Supervisor resume. Absent is 0. */
   worktreeResets?: number;
   deliveryFailed?: { jobId: JobId; detail: string } | undefined;
   /**
-   * The last `publish_blocked` report for an Andon (v1 `publishBlockedWork`). `andonAt` names the Andon it
+   * The last `publish_blocked` report for an Andon. `andonAt` names the Andon it
    * was for: one attempt per Andon, so a failed or empty publish never loops. The Andon itself is untouched.
    */
   blockedPr?:

@@ -55,7 +55,7 @@ export type RunShell = (
 /** Starts a headless Operator process. The Cell never waits on it synchronously. */
 export type SpawnHeadless = (spec: LaunchSpec) => HeadlessProcess;
 
-/** What a Herdr pane reports now (CORE §9.1). */
+/** What a Herdr pane reports now. */
 export interface PaneReading {
   operator: 'working' | 'idle' | 'blocked' | 'gone' | 'unknown';
 }
@@ -65,14 +65,14 @@ export interface PaneLocation {
   tabId: string;
 }
 
-/** A Herdr pane the Cell drives: open, type, read, close (PROTOCOL §9, v1 Herdr adapter). */
+/** A Herdr pane the Cell drives: open, type, read, close. */
 export interface PaneDriver {
-  /** `task` is the Work order's todo: one Herdr workspace per task, as in v1, holds its Operator tabs. */
+  /** `task` is the Work order's todo: one Herdr workspace per task, holds its Operator tabs. */
   open(
     spec: LaunchSpec & {
       name: string;
       task: string;
-      /** Run in the task's `logs` tab when the workspace is created (v1 streamed the task log there). */
+      /** Run in the task's `logs` tab when the workspace is created. */
       logCommand?: string;
     },
   ): Promise<PaneLocation>;
@@ -83,7 +83,7 @@ export interface PaneDriver {
   /** The sanitized last lines of the pane, for a stall alert. */
   tail(name: string): Promise<string>;
   close(name: string): Promise<void>;
-  /** Confirms a folder-trust screen if the Operator is stuck on one (v1 `confirmTrustPrompt`). */
+  /** Confirms a folder-trust screen if the Operator is stuck on one. */
   confirmTrust(name: string): Promise<boolean>;
   /** Closes the task's Herdr workspace once its Work order is delivered; a task with none is a no-op. */
   closeTask(task: string): Promise<void>;

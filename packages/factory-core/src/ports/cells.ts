@@ -1,6 +1,6 @@
 import type { CellId } from '../ids';
 
-/** What a Cell told the Factory about itself at `hello` (PROTOCOL §1). */
+/** What a Cell told the Factory about itself at `hello`. */
 export interface CellInfo {
   version: string;
   projects: string[];
@@ -18,7 +18,7 @@ export interface CellRecord {
 }
 
 /**
- * The Cell registry (`cells` in STORAGE §4). Local trust is the operating-system account, so a
+ * The Cell registry (`cells`). Local trust is the operating-system account, so a
  * Cell is identified by the id it sends; revocation is the only thing the Factory can withdraw.
  */
 export interface CellStore {
@@ -35,7 +35,7 @@ export interface CellStore {
   /** Marks the Cell revoked at `at`. A second revoke keeps the first time. */
   revoke(cellId: CellId, at: number): Promise<void>;
   /**
-   * Enrolls a Cell over the network (PROTOCOL §1): stores the hash of its credential and the join
+   * Enrolls a Cell over the network: stores the hash of its credential and the join
    * token that admitted it. The plain credential is never stored.
    */
   join(record: {

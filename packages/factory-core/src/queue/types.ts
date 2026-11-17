@@ -3,7 +3,7 @@ import type { JobSpec, Next } from '../order/next';
 import type { Priority } from '../order/state';
 import type { Holder } from '../order/status';
 
-/** CORE §8: one row of the queue projection (STORAGE §4), read with its dependency overlay. */
+/** One row of the queue projection, read with its dependency overlay. */
 export interface QueueEntry {
   orderId: OrderId;
   projectId: ProjectId;
@@ -21,17 +21,17 @@ export interface QueueEntry {
   avoidCells: { cellId: CellId; until: number }[]; // cooldown after a workspace failure (never permanent)
 }
 
-/** CORE §8: what a Cell offers when it asks for work. */
+/** What a Cell offers when it asks for work. */
 export interface CellView {
   cellId: CellId;
   projects: ProjectId[];
   runners: string[];
   capabilities: string[];
-  /** True while the Cell holds a live lease: it runs one Work order at a time (PROTOCOL §5.2). */
+  /** True while the Cell holds a live lease: it runs one Work order at a time. */
   busy: boolean;
 }
 
-/** CORE §8: the clock and the per-project concurrency limits a selection runs against. */
+/** The clock and the per-project concurrency limits a selection runs against. */
 export interface Limits {
   now: number;
   perProjectRunning: Record<ProjectId, { max: number; running: number }>;

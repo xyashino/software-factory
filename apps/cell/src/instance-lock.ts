@@ -36,7 +36,7 @@ const tryAcquire = (dir: string): (() => void) | undefined => {
  *
  * The first running process takes `baseDir` (`instance: 1`) so single-Cell setups keep using the
  * configured directory and identity. Each additional concurrent process launched with the same
- * `baseDir` automatically claims `${baseDir}-2`, `${baseDir}-3`, ... so it gets its own identity
+ * `baseDir` automatically claims `${baseDir}-2`, `${baseDir}-3`,... so it gets its own identity
  * (`credential`), logs and cycle files instead of colliding with the running Cell.
  */
 export const claimInstanceDir = (baseDir: string): InstanceClaim => {

@@ -42,9 +42,9 @@ export const boardRowSchema = z
     prUrl: z.string().nullable(),
     prState: z.string().nullable(),
     updatedAt: z.number().int(),
-    /** The Order Plan this Work order belongs to (CORE §12.1), or null. */
+    /** The Order Plan this Work order belongs to, or null. */
     plan: z.string().nullable(),
-    /** The base branch the Work order was created on (CORE §12.5). */
+    /** The base branch the Work order was created on. */
     baseBranch: z.string(),
     dependsOn: z.array(orderIdSchema),
   })
@@ -54,7 +54,7 @@ export const boardResponseSchema = z
   .object({ orders: z.array(boardRowSchema) })
   .strict();
 
-/** One Order Plan's row on the board (CORE §12.3, STORAGE §4). */
+/** One Order Plan's row on the board. */
 export const planRowSchema = z
   .object({
     planId: planIdSchema,
@@ -74,7 +74,7 @@ export const planRowSchema = z
   })
   .strict();
 
-/** One member of a plan, in chain order, with its board status and what blocks it (PROTOCOL §10). */
+/** One member of a plan, in chain order, with its board status and what blocks it. */
 export const planMemberSchema = z
   .object({
     orderId: orderIdSchema,
@@ -112,7 +112,6 @@ export const orderDetailResponseSchema = z
   })
   .strict();
 
-/** A Supervisor command. The `commandId` is a ULID per CLI invocation (PROTOCOL §6). */
 const supervisorBase = z.object({
   orderId: orderIdSchema,
   commandId: z.string().min(1).max(128),
@@ -174,11 +173,11 @@ export const cellRevokeResponseSchema = z
 
 export const emptyRequestSchema = z.object({}).strict();
 
-/** The longest a `supervisorEvents` long-poll may hold the request open (PROTOCOL §3.1). */
+/** The longest a `supervisorEvents` long-poll may hold the request open. */
 export const MAX_STREAM_WAIT_MS = 25_000;
 
 /**
- * The event feed (PROTOCOL §3.1, `/v1/stream`): every stored event after `afterGlobalSeq`, oldest
+ * The event feed (`/v1/stream`): every stored event after `afterGlobalSeq`, oldest
  * first. Held open up to `waitMs` when nothing newer exists, so `status --watch` and `log -f` follow
  * the server without polling tight loops.
  */
@@ -209,7 +208,7 @@ export const joinTokenCreateRequestSchema = z
   })
   .strict();
 
-/** The plain token appears only in this answer (PROTOCOL §1). */
+/** The plain token appears only in this answer. */
 export const joinTokenCreateResponseSchema = z
   .object({
     joinTokenId: z.string().min(1),
@@ -243,12 +242,11 @@ export const joinTokenRevokeResponseSchema = z
   .object({ joinTokenId: z.string().min(1), revoked: z.literal(true) })
   .strict();
 
-/** The export archive (STORAGE §7.3), base64 so it crosses the JSON wire. */
+/** The export archive, base64 so it crosses the JSON wire. */
 export const adminExportResponseSchema = z
   .object({ base64: z.string(), bytes: z.number().int().min(0) })
   .strict();
 
-/** Admin operations (PROTOCOL §3.1, STORAGE §7). `file` is an absolute path on the server's host. */
 const absoluteFile = z
   .string()
   .min(1)
@@ -274,10 +272,8 @@ export const adminRebuildResponseSchema = z
   .object({ rows: z.number().int().min(0) })
   .strict();
 
-/**
- * The project registry (PROTOCOL §3.1). A branch name is one token: no whitespace, no leading `-`.
- * `repoUrl` is required on add only; a set body that names it is refused (the schema is strict).
- */
+// The project registry. A branch name is one token: no whitespace, no leading `-`.
+// `repoUrl` is required on add only; a set body that names it is refused (the schema is strict).
 const branchName = z
   .string()
   .min(1)
@@ -346,7 +342,7 @@ export const projectRemoveResponseSchema = z
   .strict();
 
 /**
- * A Cell ensures its repository's project exists (PROTOCOL §3.1). Only the id and the repo url: an
+ * A Cell ensures its repository's project exists. Only the id and the repo url: an
  * existing project keeps its base branch, max running and dependency policy.
  */
 export const cellProjectEnsureRequestSchema = z
@@ -361,10 +357,8 @@ export const cellProjectEnsureResponseSchema = z
   .object({ project: projectRecordSchema, created: z.boolean() })
   .strict();
 
-/**
- * A Work order's spec and its pinned Line, as the task API takes them (PROTOCOL §3.3, CORE §4.4). The
- * body is the markdown spec; the server stores it as a blob and never reads a repo definition for it.
- */
+// A Work order's spec and its pinned Line, as the task API takes them. The
+// body is the markdown spec; the server stores it as a blob and never reads a repo definition for it.
 const taskSpecFields = {
   todoId: todoIdSchema,
   title: z.string().min(1).max(256),
@@ -389,10 +383,8 @@ export const createOrderResponseSchema = commandResultSchema
   .extend({ orderId: orderIdSchema })
   .strict();
 
-/**
- * One member of an Order Plan. Members form a linear chain in the order given: each one depends on the
- * member before it, so a member names no dependencies of its own (CORE §12.1).
- */
+// One member of an Order Plan. Members form a linear chain in the order given: each one depends on the
+// member before it, so a member names no dependencies of its own.
 const chainMemberSchema = z
   .object({
     todoId: todoIdSchema,
@@ -437,7 +429,7 @@ export const createPlanResponseSchema = z
   })
   .strict();
 
-/** A Work order's pull request state, reported by the runtime (CORE §5.2, `RecordPrState`). */
+/** A Work order's pull request state, reported by the runtime (`RecordPrState`). */
 export const recordPrStateRequestSchema = z
   .object({
     orderId: orderIdSchema,
@@ -447,7 +439,7 @@ export const recordPrStateRequestSchema = z
   })
   .strict();
 
-/** An Order Plan's pull request state (CORE §12.3, `RecordPlanPrState`). */
+/** An Order Plan's pull request state (`RecordPlanPrState`). */
 export const recordPlanPrStateRequestSchema = z
   .object({
     planId: planIdSchema,

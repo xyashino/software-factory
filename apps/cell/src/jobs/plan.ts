@@ -19,7 +19,6 @@ import { JobStopped, type JobContext } from './send';
 const MAX_DETAIL_CHARS = 500;
 const COMMIT = /^[0-9a-f]{40}$/;
 
-/** The last characters of a run's output, for a failure detail, with machine-local values redacted. */
 const tailOfRun = (run: ShellRun): string =>
   redactDetail(textOf(run).trim(), MAX_DETAIL_CHARS, 'end');
 
@@ -29,14 +28,12 @@ const errorText = (error: unknown): string =>
     MAX_DETAIL_CHARS,
   );
 
-/** A plan step that cannot finish here: the job reports it as failed, and nothing more is sent. */
+// A plan step that cannot finish here: the job reports it as failed, and nothing more is sent.
 class PlanStepFailed extends Error {}
 
-/**
- * Sends one plan command for the job, under its epoch (RULES §3.2: the epoch rides on every write). The
- * commandId names the job and the step, so a retried report replays the stored response. A dry run runs
- * every check and appends nothing (PROTOCOL §8.2). A stale epoch stops the job: nothing more is sent.
- */
+// Sends one plan command for the job, under its epoch (the epoch rides on every write). The
+// commandId names the job and the step, so a retried report replays the stored response. A dry run runs
+// every check and appends nothing. A stale epoch stops the job: nothing more is sent.
 const submitPlan = async (
   ctx: JobContext,
   job: Job,
@@ -63,7 +60,6 @@ const submitPlan = async (
   }
 };
 
-/** Reports `ReportPlanJobFailed{detail}` for the job. */
 const reportFailed = async (
   ctx: JobContext,
   job: Job,
@@ -82,23 +78,20 @@ const reportFailed = async (
   );
 };
 
-/** Reads a blob as UTF-8 text through the Factory's HTTP API. */
 const blobText = async (ctx: JobContext, ref: BlobRef): Promise<string> => {
   const answer = await ctx.client.call('blobGet', { ref });
   return Buffer.from(answer.base64, 'base64').toString('utf8');
 };
 
-/** Runs one git command in the Cell's repo. Plan jobs never make a worktree (PROTOCOL §4). */
+// Runs one git command in the Cell's repo. Plan jobs never make a worktree.
 const git = (
   shell: ShellContext,
   repoRoot: string,
   args: readonly string[],
 ): Promise<ShellRun> => gitIn(shell, repoRoot, args);
 
-/**
- * Fetches the repo's `origin` under the repo lock, so the remote's branches (the refs plan steps read) are
- * current. Returns the failure detail when the fetch fails.
- */
+// Fetches the repo's `origin` under the repo lock, so the remote's branches (the refs plan steps read) are
+// current. Returns the failure detail when the fetch fails.
 const fetchOrigin = (
   shell: ShellContext,
   repoRoot: string,
@@ -115,7 +108,6 @@ const fetchOrigin = (
       : { ok: false, detail: describeFailure(run, GIT_TIMEOUT_MS) };
   });
 
-/** The sha a ref names in the repo, or undefined when the ref is absent. */
 const shaOf = async (
   shell: ShellContext,
   repoRoot: string,
@@ -131,12 +123,10 @@ const shaOf = async (
   return succeeded(run) && COMMIT.test(sha) ? sha : undefined;
 };
 
-/**
- * `plan_branch` (PROTOCOL §4, CORE §12.5): the plan branch `feat/<slug>` exists at the base, or its tip is
- * reported. Absent: the base must exist, the branch is pushed at the base sha without force, and a push
- * that lost a race is accepted when the branch then stands at a descendant of the base. Present: nothing
- * is pushed. Retried and taken-over runs find the same branch, so they never make a second one.
- */
+// `plan_branch`: the plan branch `feat/<slug>` exists at the base, or its tip is
+// reported. Absent: the base must exist, the branch is pushed at the base sha without force, and a push
+// that lost a race is accepted when the branch then stands at a descendant of the base. Present: nothing
+// is pushed. Retried and taken-over runs find the same branch, so they never make a second one.
 const runPlanBranch = async (
   ctx: JobContext,
   job: Job,
@@ -225,11 +215,9 @@ const runPlanBranch = async (
   );
 };
 
-/**
- * `plan_pr` (PROTOCOL §4, CORE §12.5): the plan PR `feat/<slug> -> <baseBranch>` is found, in any state, or
- * opened as a draft with the sub-PR list as its body. Either way its URL is reported. A retried job finds
- * the PR it opened, so it never opens a second one.
- */
+// `plan_pr`: the plan PR `feat/<slug> -> <baseBranch>` is found, in any state, or
+// opened as a draft with the sub-PR list as its body. Either way its URL is reported. A retried job finds
+// the PR it opened, so it never opens a second one.
 const runPlanPr = async (
   ctx: JobContext,
   job: Job,
@@ -268,11 +256,9 @@ const runPlanPr = async (
   );
 };
 
-/**
- * `plan_pr_ready` (PROTOCOL §4, CORE §12.5): the sub-PR list is written into the plan PR, then the PR is
- * marked ready. The fence is checked first, with a dry run of the report, so a stale Cell touches nothing
- * on GitHub. `markReady` leaves a PR that is already ready alone, so a retry is safe.
- */
+// `plan_pr_ready`: the sub-PR list is written into the plan PR, then the PR is
+// marked ready. The fence is checked first, with a dry run of the report, so a stale Cell touches nothing
+// on GitHub. `markReady` leaves a PR that is already ready alone, so a retry is safe.
 const runPlanPrReady = async (
   ctx: JobContext,
   job: Job,
@@ -292,7 +278,7 @@ const runPlanPrReady = async (
 };
 
 /**
- * Runs one plan job (CORE §12.3, PROTOCOL §4). The repo's `origin` is fetched first, under the repo lock;
+ * Runs one plan job. The repo's `origin` is fetched first, under the repo lock;
  * a failed fetch reports `ReportPlanJobFailed`. The step runs against `<repoRoot>`; a stopped job, a refused
  * wire call or an abort sends nothing more and rethrows. Any other failure reports `ReportPlanJobFailed`
  * best-effort, then rethrows, as a Work order's deliver job does. No worktree is made.

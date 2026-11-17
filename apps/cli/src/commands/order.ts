@@ -21,7 +21,6 @@ import {
 } from '../context';
 import { defaultRepoDir, lineSnapshotOf } from './repo-lines';
 
-/** The optional string a flag gives, or undefined when the flag is absent. */
 const stringFlag = (args: Record<string, unknown>, name: string) =>
   args[name] === undefined ? undefined : String(args[name]);
 
@@ -71,7 +70,7 @@ export const parseDependsOn = (
     });
 };
 
-/** The enum value a flag names, refused with the choices when it is not one of them. */
+// The enum value a flag names, refused with the choices when it is not one of them.
 const choice = <T extends string>(
   name: string,
   value: string,
@@ -81,7 +80,6 @@ const choice = <T extends string>(
   throw new Error(`--${name} must be ${options.join(', ')}, not "${value}"`);
 };
 
-/** `factory order create`: a Work order from a spec, with its Line read from the repo's `.factory/`. */
 const createOrder = (args: Record<string, unknown>) =>
   withErrors(async () => {
     const ctx: Context = createContext(flagsOf(args));
@@ -122,7 +120,6 @@ const createOrder = (args: Record<string, unknown>) =>
     console.log(`created ${response.orderId}`);
   });
 
-/** `factory order pr-state <orderId> <open|merged|closed> --pr-url <url>`: sets a Work order's PR state by hand. */
 const setPrState = (
   orderIdText: string,
   stateText: string,

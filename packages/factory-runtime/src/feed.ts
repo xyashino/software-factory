@@ -2,11 +2,10 @@ import type { StoredEvent } from '@repo/factory-core/order/events';
 import type { Notifier } from './notifier';
 import type { RuntimePorts } from './ports';
 
-/** Events read per page of the feed. */
 const PAGE = 200;
 
 /**
- * The event feed from a global position (PROTOCOL §3.1): every stored event after `afterGlobalSeq`,
+ * The event feed from a global position: every stored event after `afterGlobalSeq`,
  * in order, then each new commit as it lands. A commit wakes the feed at once; otherwise it reads
  * again every `feedPollMs`. The generator ends when `signal` aborts.
  */

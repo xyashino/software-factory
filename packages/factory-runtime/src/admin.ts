@@ -11,7 +11,7 @@ import type { CommandHandler } from './command-handler';
 import type { RuntimePorts } from './ports';
 import { foldHistory } from './state';
 
-/** The projection of a folded Work order, with its next job (STORAGE §6): the rebuild's row function. */
+/** The projection of a folded Work order, with its next job: the rebuild's row function. */
 export const projectionOf: ProjectionOf = {
   order: (state, meta) =>
     toProjection(state, { ...meta, next: nextJob(state) }),
@@ -19,13 +19,13 @@ export const projectionOf: ProjectionOf = {
     toPlanProjection(state, { ...meta, next: planNextJob(state) }),
 };
 
-/** Local admin operations (PROTOCOL §3.1, STORAGE §7). Each one needs the writer lock. */
+/** Local admin operations. Each one needs the writer lock. */
 export interface RuntimeAdmin {
   backup(file: string): Promise<ArchiveCounts>;
   exportTo(file: string): Promise<ArchiveCounts>;
   /**
    * Reads an export into an empty database, rebuilds the projections, then appends `ExpireLease` for
-   * each Work order that had an active job: its lease did not travel, so its job is over (STORAGE §7).
+   * each Work order that had an active job: its lease did not travel, so its job is over.
    */
   importFrom(
     file: string,

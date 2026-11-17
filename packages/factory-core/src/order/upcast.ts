@@ -7,10 +7,8 @@ const CURRENT_SCHEMA_VERSION = 2;
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
-/**
- * Removes `requires` from every station of a pinned Line snapshot. Events stored before the
- * capabilities were removed still carry it; no current Line has it, so the strict schema refuses it.
- */
+// Removes `requires` from every station of a pinned Line snapshot. Events stored before the
+// capabilities were removed still carry it; no current Line has it, so the strict schema refuses it.
 const withoutRequires = (
   raw: Record<string, unknown>,
 ): Record<string, unknown> => {
@@ -33,11 +31,9 @@ const withoutRequires = (
   };
 };
 
-/**
- * Stored schema version to the next one. Version 2 is current; its upcaster only drops the `requires`
- * key that pre-removal events carry. Adding version 3 means adding an entry here that returns a version-3
- * envelope (CORE §11).
- */
+// Stored schema version to the next one. Version 2 is current; its upcaster only drops the `requires`
+// key that pre-removal events carry. Adding version 3 means adding an entry here that returns a version-3
+// envelope.
 const UPCASTERS: Readonly<Record<number, (raw: unknown) => unknown>> = {
   [CURRENT_SCHEMA_VERSION]: (raw) =>
     isRecord(raw) ? withoutRequires(raw) : raw,
@@ -52,7 +48,7 @@ const versionOf = (raw: unknown): number | undefined => {
 
 /**
  * Turns a stored event of any known version into the current envelope, validated with zod.
- * An unknown version or an invalid event is an error: a stored event is never skipped (CORE §3.2).
+ * An unknown version or an invalid event is an error: a stored event is never skipped.
  */
 export const upcastEvent = (raw: unknown): Result<StoredEvent, string> => {
   const version = versionOf(raw);

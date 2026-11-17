@@ -2,7 +2,7 @@ import type { JobId } from '../ids';
 import type { PlanAndonReason, PlanJobKind } from './events';
 import type { PlanState } from './state';
 
-/** CORE §12.3 `nextJob` for a plan. The concrete JobId and epoch are assigned on `ClaimJob`. */
+/** `nextJob` for a plan. The concrete JobId and epoch are assigned on `ClaimJob`. */
 export type PlanNext =
   | { kind: 'done' } // completed or cancelled
   | { kind: 'await_supervisor'; cause: 'andon' }
@@ -19,7 +19,7 @@ const everyMemberMerged = (state: PlanState): boolean =>
   state.members.every((member) => member.state === 'merged');
 
 /**
- * CORE §12.3 table, rows 1 to 9, in order: the first matching row wins. Pure: a function of the
+ * Table, rows 1 to 9, in order: the first matching row wins. Pure: a function of the
  * plan's own state, so the same state always gives the same next step.
  */
 export const planNextJob = (state: PlanState): PlanNext => {

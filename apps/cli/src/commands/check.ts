@@ -8,7 +8,7 @@ import { globalArgs, printJson, withErrors } from '../context';
 
 /**
  * `factory check [--dir <repoRoot>]`: validates `<repoRoot>/.factory/` (Operator profiles, Lines, prompt
- * and PR templates) offline (PROTOCOL §10). When the repository has a catalog (.factory/config.json or .nitpick/),
+ * and PR templates) offline. When the repository has a catalog (.factory/config.json or.nitpick/),
  * declared rules and skills are cross-checked against it. No server, no database. Exits 1 when any definition
  * is wrong, printing one diagnostic per file; `--json` prints `{ok, errors}` instead.
  */

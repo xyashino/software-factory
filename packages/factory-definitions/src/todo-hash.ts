@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 
 /**
- * Normalises a todo file before hashing (ROADMAP M4, spec drift): line endings become `\n`, trailing
+ * Normalises a todo file before hashing: line endings become `\n`, trailing
  * spaces on each line and trailing blank lines go. Whitespace-only edits then keep the hash, so they
  * are not reported as spec drift.
  */

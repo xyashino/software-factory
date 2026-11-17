@@ -50,26 +50,24 @@ export interface CommandRequest {
   dryRun?: boolean;
   /**
    * A Cell whose command ends its job. When this Work order's next job is one that Cell can run,
-   * the runtime claims it in the same transaction and returns it as `next` (PROTOCOL §4).
+   * the runtime claims it in the same transaction and returns it as `next`.
    */
   continueFor?: CellId;
   /** `skip`: a refusal or an exhausted retry returns undefined instead of throwing (a claim's next candidate). */
   onRefusal?: 'throw' | 'skip';
 }
 
-/** What a command stores as its idempotent response: its events, and the job it leads to, if any. */
 interface StoredResponse {
   events: OrderEvent[];
   next: Job | null;
 }
 
-/** Events and the state they fold into. The state is undefined only before the first event of an order. */
+// Events and the state they fold into. The state is undefined only before the first event of an order.
 interface Working {
   events: OrderEvent[];
   state: WorkOrderState | undefined;
 }
 
-/** A command fully decided: what to append, with the lease and signals that follow the append. */
 interface Prepared {
   orderId: OrderId;
   commandId: string;
@@ -86,19 +84,17 @@ interface Prepared {
 
 export interface CommandHandler {
   /**
-   * Runs a command through the loop (CORE §5.2, STORAGE §3). Returns undefined only when the request
+   * Runs a command through the loop. Returns undefined only when the request
    * asks to skip refusals; otherwise a refusal throws RuntimeError.
    */
   submit(request: CommandRequest): Promise<CommandResult | undefined>;
-  /** Runs a command on an Order Plan stream (CORE §12.3). A refusal throws RuntimeError. */
+  /** Runs a command on an Order Plan stream. A refusal throws RuntimeError. */
   submitPlan(request: PlanCommandRequest): Promise<PlanCommandResult>;
 }
 
-/**
- * The projections one attempt of a command reads, each loaded at most once and only when asked for
- * (perf-04). A claim reads the rows and the registry; a continuation also reads the plans. The reads
- * happen before the attempt's append, as they always did, so a conflict reloads through a new attempt.
- */
+// The projections one attempt of a command reads, each loaded at most once and only when asked for
+// (perf-04). A claim reads the rows and the registry; a continuation also reads the plans. The reads
+// happen before the attempt's append, as they always did, so a conflict reloads through a new attempt.
 interface AttemptReads {
   rows(): Promise<OrderProjection[]>;
   plans(): Promise<PlanProjection[]>;
@@ -116,7 +112,6 @@ const attemptReads = (ports: RuntimePorts): AttemptReads => {
   };
 };
 
-/** The state a decided command leaves; a decided command always leaves one. */
 const stateOf = (working: Working): WorkOrderState => {
   if (!working.state)
     throw new Error('a decided command left no Work order state');
@@ -262,7 +257,7 @@ export const createCommandHandler = (
       ]);
     }
     if (pending.kind === 'escalate_andon') {
-      // The Mechanic budget is spent: the factory hands the Andon over with an incident (CORE §14.4).
+      // The Mechanic budget is spent: the factory hands the Andon over with an incident.
       const escalation = decide(
         stateOf(working),
         {
@@ -312,7 +307,7 @@ export const createCommandHandler = (
       stateOf(working).activeJob === undefined &&
       nextJob(stateOf(working)).kind === 'job'
     ) {
-      // A release gives the job up (PROTOCOL §9): the Work order goes back to the queue, not to the Cell
+      // A release gives the job up: the Work order goes back to the queue, not to the Cell
       // that released it, so a release never continues.
       // Continuation: tried on a copy, so a claim that cannot be built leaves the command's own events.
       const cellId = request.continueFor;
@@ -457,7 +452,7 @@ export const createCommandHandler = (
           const outcome = await commit(prepared);
           if (outcome.kind === 'appended') {
             onCommit();
-            // CORE §12.7: a plan member's state change is reported to its plan after the Work order's commit.
+            // A plan member's state change is reported to its plan after the Work order's commit.
             await planCommands.reportMember(
               prepared.projection,
               prepared.events.map((event) => event.type),

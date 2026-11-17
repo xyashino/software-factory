@@ -29,7 +29,7 @@ const errorText = (error: unknown): string =>
   );
 
 /**
- * Runs one `run_inspection` job end to end (PROTOCOL §9, CORE §5.2). The order is fixed:
+ * Runs one `run_inspection` job end to end. The order is fixed:
  *
  * 1. prepare the workspace. A failure uploads the log and reports `ReportWorkspaceFailed`, which needs
  *    no Cycle, so no `StartCycle` is sent before it.
@@ -155,7 +155,6 @@ export const checkStatus = (run: {
   return `failed (exit ${run.exitCode ?? 'without a code'})`;
 };
 
-/** The Cycle a `StartCycle` opened, from its `cycle_started` event. */
 const cycleStartedId = (events: readonly OrderEvent[]): CycleId => {
   const started = events.find(
     (event): event is Extract<OrderEvent, { type: 'cycle_started' }> =>
@@ -165,11 +164,9 @@ const cycleStartedId = (events: readonly OrderEvent[]): CycleId => {
   return started.cycleId;
 };
 
-/**
- * Sends one progress command for the live `logs` view. Only a stale epoch or a stopped signal ends the
- * Inspection: the progress is informational, so any other refusal or transport failure is dropped and
- * the checks keep running.
- */
+// Sends one progress command for the live `logs` view. Only a stale epoch or a stopped signal ends the
+// Inspection: the progress is informational, so any other refusal or transport failure is dropped and
+// the checks keep running.
 const reportProgress = async (
   ctx: JobContext,
   job: Job,

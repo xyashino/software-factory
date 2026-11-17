@@ -41,7 +41,7 @@ export const adminBackupCommand = defineCommand({
 });
 
 /**
- * `factory admin export <file>`: the whole Factory as one archive (STORAGE §7). The server builds it
+ * `factory admin export <file>`: the whole Factory as one archive. The server builds it
  * under its own lock and returns the bytes; the CLI writes them to the file it was given.
  */
 export const adminExportCommand = defineCommand({

@@ -16,7 +16,6 @@ import {
 import { remoteFactoryClient, ServerUnreachable } from './remote';
 import { runOnce } from './once';
 
-/** How long a one-shot waits for a server that is starting to write its discovery file. */
 const STARTUP_TRIES = 15;
 const STARTUP_PAUSE_MS = 200;
 
@@ -30,7 +29,7 @@ const sleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
- * The discovery file a running `factory-server` wrote into the data directory (PROTOCOL §2). Absent,
+ * The discovery file a running `factory-server` wrote into the data directory. Absent,
  * unreadable or damaged reads as undefined: no server is known, and the caller takes its fallback.
  */
 export const readDiscovery = (dataDir: string): Discovery | undefined => {
@@ -44,7 +43,7 @@ export const readDiscovery = (dataDir: string): Discovery | undefined => {
 };
 
 /**
- * The FactoryClient of the Supervisor CLI in local mode (PROTOCOL §2, §10). When the discovery file
+ * The FactoryClient of the Supervisor CLI in local mode. When the discovery file
  * names a server that answers, every call goes over HTTP to it, with the local token it carries, so no
  * `FACTORY_TOKEN` is needed. Otherwise the call is one `--once` run: a subprocess that takes the writer
  * lock, runs the route and exits. Reads and writes both work without a server. A refusal throws

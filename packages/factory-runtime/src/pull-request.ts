@@ -15,10 +15,6 @@ export interface PullRequestChange {
 
 const FACTORY = { kind: 'factory' } as const;
 
-/**
- * The command id of one record. A delivery that names one stream uses the delivery id itself; one
- * that names several (an order and a plan on the same pull request) suffixes the stream's id.
- */
 const commandIdFor = (
   change: PullRequestChange,
   streams: number,
@@ -28,7 +24,7 @@ const commandIdFor = (
 
 /**
  * Records a pull request's state on every Work order and Order Plan whose stored `prUrl` is the given
- * one (CORE §5.2, §12.3). A stream already at that state is left alone, so a repeated delivery never
+ * one. A stream already at that state is left alone, so a repeated delivery never
  * appends a second `pr_state_changed`. Returns how many streams changed.
  */
 export const recordPullRequest = async (

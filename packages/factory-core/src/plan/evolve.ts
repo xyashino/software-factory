@@ -3,7 +3,7 @@ import type { PlanState } from './state';
 
 type Event = StoredPlanEvent['event'];
 
-/** Applies one stored plan event to the state it follows (CORE §12.3 evolve rules). Pure. */
+/** Applies one stored plan event to the state it follows. Pure. */
 export const evolvePlan = (
   state: PlanState | undefined,
   stored: StoredPlanEvent,

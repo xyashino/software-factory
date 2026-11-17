@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
 import type { GitResult, RunGit } from './ports';
 
-/** Git identity of the Cell's own commits: a checkpoint is authored by the Cell, not a person. */
+// Git identity of the Cell's own commits: a checkpoint is authored by the Cell, not a person.
 const IDENTITY = [
   '-c',
   'user.name=factory-cell',

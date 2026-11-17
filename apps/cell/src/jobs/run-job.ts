@@ -27,7 +27,6 @@ import type { JobContext } from './send';
 
 const STATION_TICK_MS = 1_000;
 
-/** The job as a headless Operator station: the Cell runs it through the runner's print mode. */
 const asHeadless = (job: Job): Job =>
   job.station?.operator === undefined
     ? job
@@ -79,7 +78,6 @@ const launcherFor = (
   };
 };
 
-/** What a Work order job's workspace prepare runs with: its shell (logs under the job), the repo, and the worktree limit. */
 const prepareContextOf = (
   ctx: JobContext,
   job: Job,
@@ -127,7 +125,7 @@ export const runJob = async (
   signal: AbortSignal,
   adopted?: AdoptedStation,
 ): Promise<Job | null> => {
-  // The continuation the job's last command hands back, captured by `submit` (PROTOCOL §4).
+  // The continuation the job's last command hands back, captured by `submit`.
   let continuation: Job | null = null;
   const jobCtx: JobContext = {
     ...ctx,
@@ -215,19 +213,19 @@ export const runJob = async (
       }
       case 'deliver':
         await runDeliver(jobCtx, job, signal);
-        // The task is done with its Herdr workspace once it is delivered (v1 closed its tabs the same way).
+        // The task is done with its Herdr workspace once it is delivered.
         await ctx.pane
           ?.closeTask(job.orderId.slice(job.orderId.indexOf(':') + 1))
           .catch(() => undefined);
         return continuation;
       case 'publish_blocked':
-        // v1 `publishBlockedWork`: best-effort, and its report never changes the Andon (the job ends with it).
+        // Publishing the blocked work is best-effort, and its report never changes the Andon (the job ends with it).
         await runPublishBlocked(jobCtx, job, signal);
         return continuation;
       case 'plan_branch':
       case 'plan_pr':
       case 'plan_pr_ready':
-        // A plan job has no continuation: its report ends it, and the next job is the plan's to offer (PROTOCOL §4).
+        // A plan job has no continuation: its report ends it, and the next job is the plan's to offer.
         await runPlanJob(jobCtx, job, signal);
         return null;
       default:

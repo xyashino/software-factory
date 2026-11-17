@@ -14,22 +14,20 @@ export const configPath = (env: NodeJS.ProcessEnv): string =>
 
 /**
  * The Cell's own data directory when `cell_data_dir` is unset: `<repo>/.factory-local/cell`, with the
- * cycles, identity, logs and `cell.lock` of each instance (`cell-2`, ... beside it).
+ * cycles, identity, logs and `cell.lock` of each instance (`cell-2`,... beside it).
  */
 export const repoCellDataDir = (repoRoot: string): string =>
   join(repoRoot, '.factory-local', 'cell');
 
-/** The key cell-single-order removed: one Cell runs one Work order, so the setting has no meaning now. */
+// The key cell-single-order removed: one Cell runs one Work order, so the setting has no meaning now.
 const REMOVED_SLOTS_MESSAGE =
   'config.toml: slots: removed (one Cell runs one Work order at a time); run one Cell per instance directory (hostname-N) for parallel work';
 
-/** Default worktrees kept on disk per repo before the least recently used are evicted. */
+// Default worktrees kept on disk per repo before the least recently used are evicted.
 const DEFAULT_WORKTREE_LIMIT = 8;
 
-/**
- * Every key of a config file, with no defaults: a file (or a repo's `.factory/cell.toml` or `.factory-local/cell.toml`) sets only the
- * keys it names. Unknown keys and wrong types are refused.
- */
+// Every key of a config file, with no defaults: a file (or a repo's `.factory/cell.toml` or `.factory-local/cell.toml`) sets only the
+// keys it names. Unknown keys and wrong types are refused.
 const partialConfigSchema = z
   .object({
     projects: z.array(projectIdSchema).max(64).optional(),
@@ -41,7 +39,7 @@ const partialConfigSchema = z
     cell_data_dir: z.string().min(1).optional(),
     /** Worktrees kept on disk before the least recently used are evicted. */
     worktree_limit: z.number().int().min(1).max(256).optional(),
-    /** The Factory's HTTP address (PROTOCOL §2). Unset, the running local server's address is used. */
+    /** The Factory's HTTP address. Unset, the running local server's address is used. */
     factory_url: z.string().url().optional(),
     /**
      * Runs every Operator station headless (the runner's print mode, no Herdr pane). Off by default:

@@ -4,7 +4,6 @@ import type { Limits, QueueEntry, CellView } from './types';
 
 const PRIORITY_RANK: Record<Priority, number> = { high: 0, medium: 1, low: 2 };
 
-/** `true` sorts first. */
 const trueFirst = (a: boolean, b: boolean): number =>
   a === b ? 0 : a ? -1 : 1;
 
@@ -13,13 +12,12 @@ const inCooldown = (entry: QueueEntry, cellId: CellId, now: number): boolean =>
     (avoid) => avoid.cellId === cellId && avoid.until > now,
   );
 
-/** CORE §8 claimable rule. */
 const isClaimable = (
   entry: QueueEntry,
   cell: CellView,
   limits: Limits,
 ): boolean => {
-  // A Mechanic job is claimable while the Mechanic holds the Andon (CORE §8, §14.4).
+  // A Mechanic job is claimable while the Mechanic holds the Andon.
   if (
     (entry.holder !== 'queue' && entry.holder !== 'mechanic') ||
     entry.next !== 'job'
@@ -36,10 +34,6 @@ const isClaimable = (
   return !cell.busy;
 };
 
-/**
- * CORE §8 ordering for one Cell, first key wins: priority, resumed, progressed, same Cell as
- * the last one (warm worktree), createdAt, orderId. The orderId tie-break makes it total.
- */
 const compareEntries =
   (cell: CellView) =>
   (a: QueueEntry, b: QueueEntry): number => {

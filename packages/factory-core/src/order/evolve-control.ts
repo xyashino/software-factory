@@ -13,7 +13,7 @@ import type { CycleState, WorkOrderState } from './state';
 type ResumedEvent = Extract<OrderEvent, { type: 'resumed' }>;
 type ReopenedEvent = Extract<OrderEvent, { type: 'reopened' }>;
 
-/** The Stations that passed before `index`; everything at or after it is forgotten (rules 8-9). */
+// The Stations that passed before `index`; everything at or after it is forgotten (rules 8-9).
 const passedBefore = (
   state: WorkOrderState,
   index: number,
@@ -26,7 +26,7 @@ const passedBefore = (
   return kept;
 };
 
-/** CORE §4.3 rule 8: the newest commit a Station strictly before `index` checkpointed. */
+// The newest commit a Station strictly before `index` checkpointed.
 const checkpointBefore = (
   state: WorkOrderState,
   index: number,
@@ -64,7 +64,6 @@ const repairCommitOf = (state: WorkOrderState): CommitSha | undefined => {
     ?.commit;
 };
 
-/** CORE §4.3 rule 7: the Supervisor resumes at the Andon's Station. */
 const retryStation = (
   state: WorkOrderState,
   ev: ResumedEvent,
@@ -124,7 +123,6 @@ const retryStation = (
   }
 };
 
-/** CORE §4.3 rule 8: the Supervisor moves the Work order back to an earlier Station. */
 const restartFrom = (
   state: WorkOrderState,
   ev: ResumedEvent,
@@ -153,7 +151,7 @@ const restartFrom = (
   return pendingFor(restarted, ev, stationId, undefined, repairCommit);
 };
 
-/** The Andon is cleared and the Work order may run again (CORE §4.3 rules 7-8). */
+/** The Andon is cleared and the Work order may run again. */
 export const applyResumed = (
   state: WorkOrderState,
   ev: ResumedEvent,
@@ -162,7 +160,7 @@ export const applyResumed = (
     ? restartFrom(state, ev, ev.mode.stationId)
     : retryStation(state, ev);
 
-/** CORE §4.3 rule 9: a delivered Work order is reopened at a Station, on top of the delivered commit. */
+/** A delivered Work order is reopened at a Station, on top of the delivered commit. */
 export const applyReopened = (
   state: WorkOrderState,
   ev: ReopenedEvent,
@@ -196,7 +194,7 @@ export const applyAndonRaised = (
 });
 
 /**
- * v1 `publishBlockedWork`: the report ends the publish job and records its result for the open Andon. The
+ * The `publish_blocked` report ends the publish job and records its result for the open Andon. The
  * Andon, its phase and its holder are untouched, so the Supervisor still decides the next step.
  */
 export const applyBlockedPrReported = (
@@ -213,8 +211,8 @@ export const applyBlockedPrReported = (
     : state;
 
 /**
- * CORE §14.2: the incident joins the history and clears no Andon by itself. It ends the Mechanic job
- * that recorded it (CORE §14.4), and an `escalate` hands the Andon to the Supervisor (§14.4).
+ * The incident joins the history and clears no Andon by itself. It ends the Mechanic job
+ * that recorded it, and an `escalate` hands the Andon to the Supervisor.
  * When the Mechanic repaired the worktree (`commit`), that commit becomes the latest checkpoint.
  */
 export const applyIncidentRecorded = (

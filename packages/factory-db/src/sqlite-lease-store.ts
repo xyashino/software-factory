@@ -18,7 +18,7 @@ const leaseOf = (row: LeaseRecord): Lease => ({
 const selectLeases = (orm: FactoryDatabase) => orm.select().from(leases);
 
 /**
- * The `LeaseStore` over the `leases` table (STORAGE §4). `cell_id` references the `cells` row, which
+ * The `LeaseStore` over the `leases` table. `cell_id` references the `cells` row, which
  * is written at `hello`. Writes assert the writer lock and run through the statement gate, so they
  * queue behind the write mutex unless they are already inside a transaction.
  */

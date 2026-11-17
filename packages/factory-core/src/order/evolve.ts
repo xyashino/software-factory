@@ -14,14 +14,13 @@ import type { WorkOrderState } from './state';
 
 type Created = Extract<OrderEvent, { type: 'order_created' }>;
 
-/** Runs `change` only when the job named by an event is the one holding the Work order. */
+// Runs `change` only when the job named by an event is the one holding the Work order.
 const whenJobActive = (
   state: WorkOrderState,
   jobId: JobId,
   change: (state: WorkOrderState) => WorkOrderState,
 ): WorkOrderState => (state.activeJob?.jobId === jobId ? change(state) : state);
 
-/** A per-Station counter for every Station of the Line, all at zero. */
 const zeroCounters = (line: LineSnapshot): Record<StationId, number> =>
   Object.fromEntries(line.stations.map((station) => [station.id, 0]));
 
@@ -66,7 +65,7 @@ const claimJob = (
   },
   epoch: ev.epoch,
   resumedWaiting: false,
-  // A claimed Mechanic job spends the budget, lost or not (CORE §14.4).
+  // A claimed Mechanic job spends the budget, lost or not.
   mechanicRuns:
     ev.kind === 'mechanic' ? state.mechanicRuns + 1 : state.mechanicRuns,
 });
@@ -95,11 +94,9 @@ const failWorkspace = (
   };
 };
 
-/**
- * CORE §4.3 rule 13: the Cell lacked the worktree, so the Work order starts again from Station 0. The
- * checkpoint, the passed Stations and the per-Station budgets of the attempt go; the lifetime retry
- * budget stays. The reset counter is what bounds the loop.
- */
+// The Cell lacked the worktree, so the Work order starts again from Station 0. The
+// checkpoint, the passed Stations and the per-Station budgets of the attempt go; the lifetime retry
+// budget stays. The reset counter is what bounds the loop.
 const missingWorktree = (
   state: WorkOrderState,
   ev: Extract<OrderEvent, { type: 'worktree_missing' }>,
@@ -151,7 +148,7 @@ const changePrState = (
     : state;
 
 /**
- * Folds one stored event into a Work order's state (CORE §4.3). Pure: the input is never mutated.
+ * Folds one stored event into a Work order's state. Pure: the input is never mutated.
  * A history must start with `order_created`; a second `order_created` is an error. Late facts about
  * a Cycle that is not live are inert (rule 1), so any history folds to a defined state.
  */

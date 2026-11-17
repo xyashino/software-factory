@@ -26,7 +26,7 @@ import { revocations } from './revocations';
  * `client`, `feed`, `admin`, `remote` and `recordPullRequest`.
  */
 export interface Runtime {
-  /** One route, with an already validated request (PROTOCOL §3). */
+  /** One route, with an already validated request. */
   call<K extends RouteName>(
     route: K,
     request: ParsedRequest<K>,
@@ -38,7 +38,7 @@ export interface Runtime {
    */
   client: FactoryClient;
   /**
-   * One reaper pass over the expired leases, unless boot grace still holds (PROTOCOL §5.4). Claim,
+   * One reaper pass over the expired leases, unless boot grace still holds. Claim,
    * heartbeat and the board reads run it lazily; this is the same pass for a caller that wants it now.
    * Returns how many expired leases it looked at.
    */
@@ -49,21 +49,21 @@ export interface Runtime {
    */
   commands: CommandHandler;
   /**
-   * Records a pull request's state on the Work orders and Order Plans holding its URL (PROTOCOL §3.1,
-   * the GitHub webhook). Returns how many streams changed; a repeated delivery changes none.
+   * Records a pull request's state on the Work orders and Order Plans holding its URL (the
+   * GitHub webhook). Returns how many streams changed; a repeated delivery changes none.
    */
   recordPullRequest(change: PullRequestChange): Promise<number>;
-  /** Every stored event after `afterGlobalSeq`, then each new one, until `signal` aborts (PROTOCOL §3.1). */
+  /** Every stored event after `afterGlobalSeq`, then each new one, until `signal` aborts. */
   feed(
     afterGlobalSeq: number,
     signal?: AbortSignal,
   ): AsyncIterable<StoredEvent>;
-  /** Backup, export, import and projection rebuild (STORAGE §7). The writer lock must be held. */
+  /** Backup, export, import and projection rebuild. The writer lock must be held. */
   admin: RuntimeAdmin;
-  /** Credentials for the remote transport: join, token checks, supervisor token creation (PROTOCOL §1). */
+  /** Credentials for the remote transport: join, token checks, supervisor token creation. */
   remote: RemoteAccess;
   /**
-   * Arms boot grace (PROTOCOL §5.1): every lease gets a full TTL from now, and no lease is reaped until
+   * Arms boot grace: every lease gets a full TTL from now, and no lease is reaped until
    * that grace has passed. Arms nothing else: no timer is registered. Idempotent.
    */
   start(): Promise<void>;

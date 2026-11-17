@@ -9,7 +9,7 @@ import {
 export const defaultRepoDir = (): string => resolve(process.cwd());
 
 /**
- * The Lines of `<repoDir>/.factory/`, by name, each with the snapshot a Work order pins (CORE §4.4).
+ * The Lines of `<repoDir>/.factory/`, by name, each with the snapshot a Work order pins.
  * The definitions are loaded whole: a repository whose `.factory/` is wrong is refused, every problem
  * named, so a Line never comes from a half-valid directory.
  */

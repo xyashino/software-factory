@@ -51,7 +51,7 @@ const baseOf = (
 ): CommitSha | { branchBase: string } =>
   base === 'branch_base' ? { branchBase } : base;
 
-/** A pinned Line from before job details were carried: the Work order cannot run, and nothing is guessed. */
+// A pinned Line from before job details were carried: the Work order cannot run, and nothing is guessed.
 const unpinned = (detail: string) =>
   refusal({
     code: 'precondition',
@@ -59,7 +59,7 @@ const unpinned = (detail: string) =>
   });
 
 /**
- * The branch a Work order builds on, resolved when the job is built (CORE §12.5, never stored):
+ * The branch a Work order builds on, resolved when the job is built (never stored):
  * - a plain Work order: its pinned `baseBranch`, not the project's current one;
  * - a plan member with no in-plan predecessor (the root), or whose predecessor's PR is merged: `feat/<slug>`;
  * - a plan member whose predecessor is delivered with its PR not merged: `factory/<predecessorTodoId>`.
@@ -79,7 +79,6 @@ export const resolveBase = (
   return `factory/${predecessor.todoId}`;
 };
 
-/** The workspace preparation of the pinned Line: its sync and setup commands, and the setup timeout. */
 const workspaceOf = (line: LineSnapshot) => {
   const setup = line.workspace?.setup;
   if (setup === undefined) {
@@ -92,7 +91,6 @@ const workspaceOf = (line: LineSnapshot) => {
   };
 };
 
-/** The Operator pool a station runs with, as the snapshot pinned it. */
 const poolOf = (station: Station) => {
   if (station.operator === undefined) {
     throw unpinned(`station ${station.id} carries no operator pool`);
@@ -100,7 +98,6 @@ const poolOf = (station: Station) => {
   return station.operator;
 };
 
-/** The artifacts a delivery commits and reports, from the pinned `deliver` block (`<stationId>.<key>`). */
 const deliverRefsOf = (
   line: LineSnapshot,
 ): { commit: ArtifactRef; report: ArtifactRef } => {
@@ -114,13 +111,12 @@ const deliverRefsOf = (
   };
 };
 
-/** `<stationId>.<artifactKey>` as an artifact reference: the station id is everything before the first dot. */
+// `<stationId>.<artifactKey>` as an artifact reference: the station id is everything before the first dot.
 const artifactRefOf = (text: string): ArtifactRef => {
   const dot = text.indexOf('.');
   return { stationId: text.slice(0, dot), artifactKey: text.slice(dot + 1) };
 };
 
-/** The checklist of a PR body: one entry per Inspection (its commands) and per Operator station (its profile). */
 const verificationOf = (line: LineSnapshot) =>
   line.stations.map((station) =>
     station.kind === 'inspection'
@@ -136,12 +132,10 @@ const verificationOf = (line: LineSnapshot) =>
         },
   );
 
-/**
- * How the Cell gets the job's worktree (PROTOCOL §9, CORE §4.3 rule 13). A job that starts a Work order run
- * from its base, or resumes from a commit the Supervisor or a reopen named, places the worktree fresh. Every
- * other Station job, a delivery and a Mechanic job keep the uncommitted work already in it (`reuse`). A
- * Mechanic that repairs a workspace failure places it fresh, since that failure is the worktree itself.
- */
+// How the Cell gets the job's worktree. A job that starts a Work order run
+// from its base, or resumes from a commit the Supervisor or a reopen named, places the worktree fresh. Every
+// other Station job, a delivery and a Mechanic job keep the uncommitted work already in it (`reuse`). A
+// Mechanic that repairs a workspace failure places it fresh, since that failure is the worktree itself.
 const worktreeModeOf = (
   state: WorkOrderState,
   spec: JobSpec,
@@ -166,7 +160,7 @@ const worktreeModeOf = (
 };
 
 /**
- * The Job a claimed job becomes (PROTOCOL §4). `spec` is the job `nextJob` named before the claim, `state` the
+ * The Job a claimed job becomes. `spec` is the job `nextJob` named before the claim, `state` the
  * state after it. Every path is relative; every text is a blob ref, so the Cell reads the spec, the artifacts and
  * the logs itself. Pure apart from the one prompt-independent read of the delivery artifacts.
  */
@@ -233,7 +227,7 @@ export const buildJob = async (
         detail: 'the mechanic job names no open Andon',
       });
     }
-    // The Mechanic runs with the Line's first Operator pool (CORE §14.4).
+    // The Mechanic runs with the Line's first Operator pool.
     const station = line.stations.find((candidate) => candidate.operator);
     if (!station?.operator) {
       throw refusal({
@@ -269,7 +263,7 @@ export const buildJob = async (
                 },
               }),
         },
-        // A Mechanic always runs in a Herdr pane (PROTOCOL §9) with write permission to edit the worktree, whatever the pool says.
+        // A Mechanic always runs in a Herdr pane with write permission to edit the worktree, whatever the pool says.
         operator: { ...station.operator, permission: 'write', headless: false },
       },
     });
@@ -283,7 +277,7 @@ export const buildJob = async (
         detail: 'the blocked publish names no open Andon',
       });
     }
-    // v1 `publishBlockedWork`: the Andon's reason and detail, for the `[BLOCKED]` PR the Cell renders.
+    // The Andon's reason and detail, for the `[BLOCKED]` PR the Cell renders.
     return jobSchema.parse({
       ...common,
       kind: 'publish_blocked',
@@ -421,7 +415,7 @@ export const renderPlanBody = (
 };
 
 /**
- * The Job a claimed plan job becomes (PROTOCOL §4). A plan job runs on the repo's refs only, so it has no
+ * The Job a claimed plan job becomes. A plan job runs on the repo's refs only, so it has no
  * workspace and no station. `plan_pr` and `plan_pr_ready` carry the sub-PR list as a blob; `plan_pr_ready`
  * names the plan PR it marks ready. Pure apart from the one body blob write.
  */
@@ -467,7 +461,7 @@ export const buildPlanJob = async (
   });
 };
 
-/** A claimed job always carries its Cycle id; a missing one is a bug in the claim, not a refusal. */
+// A claimed job always carries its Cycle id; a missing one is a bug in the claim, not a refusal.
 const stationCycleMissing = (): never => {
   throw new Error('a claimed job has no cycle id');
 };

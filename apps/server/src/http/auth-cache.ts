@@ -1,6 +1,6 @@
 import type { CellId } from '@repo/factory-core/ids';
 
-/** Who holds a verified credential, among the classes the routes accept (PROTOCOL §1). */
+/** Who holds a verified credential, among the classes the routes accept. */
 export type Caller =
   { kind: 'supervisor'; name: string } | { kind: 'cell'; cellId: CellId };
 

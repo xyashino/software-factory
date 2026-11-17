@@ -4,7 +4,7 @@ import type { OperatorVerb } from '@repo/factory-core/contracts/operator';
 import { callCell, OperatorError, URL_ENV, TOKEN_ENV } from './client';
 import { usage } from './usage';
 
-/** Reads a named file the Operator points at; a missing file is a clear error, not a crash. */
+// Reads a named file the Operator points at; a missing file is a clear error, not a crash.
 const readFileArg = (path: string | undefined, flag: string): string => {
   if (path === undefined) throw new OperatorError(`${flag} needs a file`, 2);
   // `-` reads the feedback from stdin (a heredoc), for an Operator that cannot write files.
@@ -24,7 +24,6 @@ const flagValue = (
   return at < 0 ? undefined : args[at + 1];
 };
 
-/** Every value of a repeatable flag, in order. */
 const flagValues = (args: readonly string[], flag: string): string[] =>
   args.flatMap((arg, i) =>
     arg === flag && args[i + 1] !== undefined ? [args[i + 1] as string] : [],
@@ -32,7 +31,6 @@ const flagValues = (args: readonly string[], flag: string): string[] =>
 
 const INCIDENT_ACTIONS = ['resume', 'cancel', 'nudge', 'escalate', 'repair'];
 
-/** `--change file:<path>=<ref>` or `config:<path>=<ref>`: one file or config the repair changed. */
 const changeOf = (text: string) => {
   const match = /^(file|config):([^=]+)=(.+)$/.exec(text);
   if (!match) {

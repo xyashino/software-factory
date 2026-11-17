@@ -2,7 +2,7 @@ import { dlopen, FFIType } from 'bun:ffi';
 import { closeSync, mkdirSync, openSync } from 'node:fs';
 import { join } from 'node:path';
 
-/** The lock file in the data directory (STORAGE §1). Its presence is harmless; the flock is the lock. */
+/** The lock file in the data directory. Its presence is harmless; the flock is the lock. */
 export const LOCK_FILE_NAME = 'factory.lock';
 
 /** Another process holds the writer lock of this data directory. Refused at once, never waited for. */
@@ -42,7 +42,6 @@ type Flock = (fd: number, operation: number) => number;
 
 let flockCache: Flock | undefined;
 
-/** libc `flock` through bun:ffi (Linux and macOS, STORAGE §1). Loaded once per process. */
 const flock = (): Flock => {
   if (!flockCache) {
     const library =

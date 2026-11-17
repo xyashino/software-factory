@@ -1,6 +1,6 @@
 /**
- * Runs the sections of one Work order one at a time, in arrival order, inside this process
- * (STORAGE §3.1). Different orders run in parallel. A key's chain is dropped once it is idle.
+ * Runs the sections of one Work order one at a time, in arrival order, inside this process.
+ * Different orders run in parallel. A key's chain is dropped once it is idle.
  */
 export interface OrderLocks {
   run<T>(key: string, section: () => Promise<T>): Promise<T>;

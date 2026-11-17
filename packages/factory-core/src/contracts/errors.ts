@@ -2,7 +2,7 @@ import { z } from 'zod';
 import type { DomainError } from '../order/commands';
 
 /**
- * The wire form of every refusal (PROTOCOL §3.5). A domain refusal keeps its shape; the transport
+ * The wire form of every refusal. A domain refusal keeps its shape; the transport
  * adds `unavailable` (503, after the retry budget), `unauthorized` (a revoked or unknown Cell) and
  * `not_configured` (503: a feature the server was started without, such as the GitHub webhook secret).
  */
