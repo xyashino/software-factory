@@ -9,6 +9,7 @@ name: PR CI
       - synchronize
       - reopened
       - ready_for_review
+  workflow_dispatch:
 
 concurrency:
   group: pr-ci-${{ github.event.pull_request.number || github.ref }}
@@ -52,11 +53,11 @@ jobs:
         run: pnpm --filter @repo/factory-operator-cli test
 
   # The distributed suite (ROADMAP v2-15): real Factory and Cell processes, a fake runner, a hostile proxy.
-  # Kept out of `verify` so that job stays fast; it runs once per PR here.
+  # Manual only (Actions > PR CI > Run workflow): it is slow and timing-sensitive, so it does not gate PRs.
   distributed:
     name: distributed suite
     timeout-minutes: 30
-    if: github.event.pull_request.draft == false
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     env:
       CI: 'true'
@@ -83,10 +84,11 @@ jobs:
         run: pnpm --filter @repo/factory-cell test:distributed
 
   # The soak: the same suite, 20 times in a row on one runner. One flake fails the job (no retries).
+  # Manual only, like `distributed`.
   distributed-soak:
     name: distributed soak (20 runs)
     timeout-minutes: 240
-    if: github.event.pull_request.draft == false
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     env:
       CI: 'true'
