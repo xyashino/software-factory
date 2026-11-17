@@ -285,9 +285,12 @@ const deliverWorktree = async (
     mkdirSync(logDir, { recursive: true });
     const messageFile = join(logDir, 'commit-message.txt');
     writeFileSync(messageFile, `${rendered.commitMessage}\n`);
+    // `--no-verify`: the quality gate already ran the commit hook's checks (`ci:verify`) on this tree, so the hook
+    // would run the whole suite a second time for nothing. Human commits still run the hook.
     const committed = await git(shell, worktree, [
       ...IDENTITY,
       'commit',
+      '--no-verify',
       '--file',
       messageFile,
     ]);
