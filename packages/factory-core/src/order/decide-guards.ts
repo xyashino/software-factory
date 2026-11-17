@@ -27,7 +27,7 @@ export const precondition = (detail: string): DomainError => ({
 export const invalidIf = (issues: string[]): DomainError | undefined =>
   issues.length > 0 ? { code: 'invalid', issues } : undefined;
 
-/** A delivered or cancelled Work order is terminal (CORE §4.2). */
+/** A delivered or cancelled Work order is terminal. */
 export const refuseIfTerminal = (
   state: WorkOrderState,
 ): DomainError | undefined => {
@@ -58,7 +58,7 @@ export const supervisorName = (
 
 /**
  * The name of the Supervisor or the Mechanic, which the events record as `by`. The Mechanic shares
- * the Supervisor's live-control commands (CORE §5.2). Refuses any other actor.
+ * the Supervisor's live-control commands. Refuses any other actor.
  */
 export const operatorName = (
   ctx: DecideContext,
@@ -69,7 +69,7 @@ export const operatorName = (
         precondition('only a supervisor or the mechanic may run this command'),
       );
 
-/** The Mechanic's name, for the commands only the Mechanic runs (CORE §14.2). */
+/** The Mechanic's name, for the commands only the Mechanic runs. */
 export const mechanicName = (
   ctx: DecideContext,
 ): Result<string, DomainError> =>
@@ -78,7 +78,7 @@ export const mechanicName = (
     : err(precondition('only the mechanic may run this command'));
 
 /**
- * CORE §14.5: an Andon may not be cleared or cancelled without an incident. When the Supervisor acts
+ * An Andon may not be cleared or cancelled without an incident. When the Supervisor acts
  * on an Andon that has none, the decision records one, so the same events hold the rule.
  */
 export const supervisorIncident = (
@@ -106,7 +106,7 @@ export const supervisorIncident = (
   ];
 };
 
-/** Epoch fence (CORE §5.2): the caller must hold the epoch of the active job. */
+/** Epoch fence: the caller must hold the epoch of the active job. */
 export const fenced = (
   state: WorkOrderState,
   ctx: DecideContext,
@@ -123,7 +123,7 @@ export const hasStarted = (state: WorkOrderState, job: ActiveJob): boolean =>
   job.cycleId !== undefined &&
   state.cycles.some((cycle) => cycle.cycleId === job.cycleId);
 
-/** Liveness (CORE §4.3 rule 1): the Cycle is the latest one and still running. */
+/** Liveness: the Cycle is the latest one and still running. */
 export const requireLive = (
   state: WorkOrderState,
   cycleId: CycleId,
@@ -143,7 +143,6 @@ export const stationOfCycle = (
   return station;
 };
 
-/** The question of a Cycle that is still open, if any. */
 const openQuestionOf = (
   state: WorkOrderState,
   cycleId: CycleId,
@@ -153,7 +152,7 @@ const openQuestionOf = (
   );
 
 /**
- * CORE §5.2, the rule for all commands: when the events end a Cycle with an open question, the
+ * The rule for all commands: when the events end a Cycle with an open question, the
  * question is abandoned in the same decision. Returns the abandon event for that case, or nothing.
  */
 export const abandonOpen = (
@@ -175,7 +174,7 @@ export const runningCycleOf = (
 
 /**
  * Ends the active job without an outcome from its Cell: a running Cycle fails as `lost`, then the
- * job is lost (CORE §5.2, `ExpireLease`, `ReleaseJob`, `Cancel`).
+ * job is lost (`ExpireLease`, `ReleaseJob`, `Cancel`).
  */
 export const loseJob = (
   state: WorkOrderState,

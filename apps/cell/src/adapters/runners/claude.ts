@@ -9,11 +9,9 @@ const outputSchema = z.object({
   total_cost_usd: z.number().optional(),
 });
 
-/**
- * Read mode runs in auto mode (the classifier approves safe calls and only
- * prompts for risky ones, as in write mode) with file writes denied outright,
- * so a judge cannot edit files but is not stalled by approval prompts.
- */
+// Read mode runs in auto mode (the classifier approves safe calls and only
+// prompts for risky ones, as in write mode) with file writes denied outright,
+// so a judge cannot edit files but is not stalled by approval prompts.
 const READ_DENIED_TOOLS = 'Write,Edit,MultiEdit,NotebookEdit';
 
 const permissionArgs = (permission: Permission): string[] => {

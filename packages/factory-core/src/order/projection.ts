@@ -13,7 +13,7 @@ import { isStationJob, type Next } from './next';
 import { type BoardStatus, type Holder, boardStatus, holderOf } from './status';
 import type { Priority, WorkOrderState } from './state';
 
-/** A workspace failure keeps its cell out of the queue for this long (CORE §8). A core constant. */
+/** A workspace failure keeps its cell out of the queue for this long. A core constant. */
 export const WORKSPACE_COOLDOWN_MS = 10 * 60 * 1000;
 
 /**
@@ -27,7 +27,7 @@ export interface ProjectionMeta {
   next: Next;
 }
 
-/** One row of the `orders` table (STORAGE §4), with typed values. The adapter serialises JSON columns. */
+/** One row of the `orders` table, with typed values. The adapter serialises JSON columns. */
 export interface OrderProjection {
   orderId: OrderId;
   projectId: ProjectId;
@@ -63,7 +63,6 @@ interface StationRef {
   runner: string | undefined;
 }
 
-/** The Station of the next job; else the Station the phase points at; undefined when there is none. */
 const stationRef = (
   state: WorkOrderState,
   next: Next,
@@ -107,7 +106,7 @@ const lastCellIdOf = (state: WorkOrderState): CellId | null =>
   null;
 
 /**
- * The `orders` row of a Work order (STORAGE §4). Pure and deterministic: rebuilding it from the
+ * The `orders` row of a Work order. Pure and deterministic: rebuilding it from the
  * same events and `meta` gives the same row. Station columns follow the next job's Station, or the
  * Station the phase points at when no job names one.
  */

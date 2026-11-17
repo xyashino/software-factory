@@ -7,15 +7,14 @@ import { openDatabase } from '@repo/factory-db/sqlite-event-store';
 import { loadDefinitions } from '@repo/factory-definitions/load';
 import { DATABASE_FILE_NAME } from './open-runtime';
 
-/** This repository's own `.factory/`: the shipped Lines a test pins into its Work orders. */
 const SHIPPED_FACTORY_ROOT = fileURLToPath(
   new URL('../../../.factory', import.meta.url),
 );
 
 /**
  * Creates a data directory's schema and one `projects` row, before a runtime opens it. A test or a
- * local fixture helper, not the product path: real projects are registered with `factory project add`
- * (PROTOCOL §3.1), which needs no SQLite access. The runtime itself never inserts a project.
+ * local fixture helper, not the product path: real projects are registered with `factory project add`,
+ * which needs no SQLite access. The runtime itself never inserts a project.
  */
 export const seedProject = (
   dataDir: string,

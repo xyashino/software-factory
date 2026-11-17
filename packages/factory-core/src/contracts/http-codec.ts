@@ -3,7 +3,7 @@ import { wireErrorSchema, WireFailure } from './errors';
 import type { RouteName, RouteRequest, RouteResponse } from './routes';
 
 /**
- * The HTTP form of one route call (PROTOCOL §3), and the reading of its answer. Pure: no fetch and
+ * The HTTP form of one route call, and the reading of its answer. Pure: no fetch and
  * no I/O, so the CLI and a Cell send the same bytes through their own transport. The route table
  * decides the method and the path; the shared schemas decide the payload.
  */
@@ -74,7 +74,7 @@ export const encodeHttpCall = <K extends RouteName>(
 };
 
 /**
- * The failure an error answer stands for: its wire error when the body carries one (PROTOCOL §3.5),
+ * The failure an error answer stands for: its wire error when the body carries one,
  * else the code its status means. A proxy or a crash answers without a wire body.
  */
 export const refusalOf = (status: number, bytes: Uint8Array): WireFailure => {
@@ -94,7 +94,7 @@ export const refusalOf = (status: number, bytes: Uint8Array): WireFailure => {
 
 /**
  * Reads the answer of a route call. An error status becomes a `WireFailure` with the shared wire
- * error (PROTOCOL §3.5); `204` is an empty claim; a blob answers its raw bytes, returned as the
+ * error; `204` is an empty claim; a blob answers its raw bytes, returned as the
  * route's base64 response. Anything else is the route's JSON response, parsed by its schema.
  */
 export const decodeHttpAnswer = <K extends RouteName>(

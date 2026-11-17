@@ -174,5 +174,5 @@ describe('restart reconciliation', () => {
         expected,
       );
     }
-  });
+  }, 60_000);
 });

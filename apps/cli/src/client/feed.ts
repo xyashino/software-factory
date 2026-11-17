@@ -1,7 +1,7 @@
 import type { FactoryClient } from '@repo/factory-core/contracts/client';
 import type { StoredEvent } from '@repo/factory-core/order/events';
 
-/** How long one feed request is held when nothing is new (PROTOCOL §3.1, 25 s like claims). */
+/** How long one feed request is held when nothing is new (25 s, like claims). */
 export const FEED_WAIT_MS = 25_000;
 
 /**

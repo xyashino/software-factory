@@ -23,20 +23,15 @@ import { notFound, refusal } from './errors';
 import { storeText } from './job-builder';
 import type { RuntimePorts } from './ports';
 
-/**
- * The task API (PROTOCOL §3.3, CORE §4.4, §12.3): Work orders and Order Plans are created from a body and a
- * pinned `LineSnapshot`, never from a repo definition on the server. Each route appends through the same
- * `CommandHandler` as every other command, so a replayed `commandId` returns its stored response.
- */
+// The task API: Work orders and Order Plans are created from a body and a
+// pinned `LineSnapshot`, never from a repo definition on the server. Each route appends through the same
+// `CommandHandler` as every other command, so a replayed `commandId` returns its stored response.
 
-/**
- * The actor every task-API command records. The route's credential is the Supervisor's, but these commands are
- * the factory's own writes (CORE §5.2, §12.3): intake and PR polling record the same actor. Only a supervisor
- * token reaches these routes (`auth: 'supervisor'`).
- */
+// The actor every task-API command records. The route's credential is the Supervisor's, but these commands are
+// the factory's own writes: intake and PR polling record the same actor. Only a supervisor
+// token reaches these routes (`auth: 'supervisor'`).
 const FACTORY: Actor = { kind: 'factory' };
 
-/** The body-and-Line part of a Work order, shared by a single order and each plan member. */
 interface SpecInput {
   todoId: ParsedRequest<'createOrder'>['todoId'];
   title: string;
@@ -46,10 +41,9 @@ interface SpecInput {
   priority: ParsedRequest<'createOrder'>['priority'];
 }
 
-/** The Line a Work order pins (CORE §4.4): its name, hash, snapshot blob and snapshot. */
 type PinnedLine = CommandOf<'CreateOrder'>['line'];
 
-/** A Line as the order pins it: the snapshot's blob (without its hash, as intake stores it) and the hash. */
+// A Line as the order pins it: the snapshot's blob (without its hash, as intake stores it) and the hash.
 const pinLine = async (
   ports: RuntimePorts,
   line: LineSnapshot,
@@ -76,7 +70,6 @@ const pinLine = async (
   };
 };
 
-/** The spec of a Work order: its markdown body as a blob, and a content hash over the spec's fields. */
 const specOf = async (
   ports: RuntimePorts,
   input: SpecInput,
@@ -104,7 +97,6 @@ const requireResult = (result: CommandResult | undefined): CommandResult => {
   return result;
 };
 
-/** The project's base branch, the default a Work order or plan takes when the request names none. */
 const baseBranchOf = async (
   ports: RuntimePorts,
   projectId: ProjectId,
@@ -124,7 +116,6 @@ interface OrderInput extends SpecInput {
   plan?: ParsedRequest<'createOrder'>['plan'];
 }
 
-/** One Work order, created with its spec and pinned Line (CORE §4.4, `CreateOrder`). */
 const submitOrder = async (
   ports: RuntimePorts,
   handler: CommandHandler,
@@ -153,7 +144,7 @@ const submitOrder = async (
 };
 
 /**
- * A Line snapshot with its content hash, as a caller pins it (CORE §4.4). The hash is `factory-definitions`'s, so a
+ * A Line snapshot with its content hash, as a caller pins it. The hash is `factory-definitions`'s, so a
  * caller that builds its snapshot body outside the definitions gets the same value the runtime verifies.
  */
 export const pinnableLine = (
@@ -172,7 +163,7 @@ export const createOrder = async (
 };
 
 /**
- * `POST /v1/plans`: an Order Plan and its members in chain order (CORE §12.7): `CreatePlan`, then each member's
+ * `POST /v1/plans`: an Order Plan and its members in chain order: `CreatePlan`, then each member's
  * `CreateOrder` with the plan and its predecessor as dependency, then `AddPlanMember` after that predecessor.
  * Each sub-command id derives from the request's `commandId`, so a replay appends nothing.
  */

@@ -35,10 +35,8 @@ const stringFlag = (args: Record<string, unknown>, name: string) =>
 const digest = (text: string): string =>
   createHash('sha256').update(text).digest('hex');
 
-/**
- * A deterministic commandId for one create: the same file text and target always map to the same id,
- * so a repeated create is the same command to the server (PROTOCOL §6). Fixed length: 48 hex digits.
- */
+// A deterministic commandId for one create: the same file text and target always map to the same id,
+// so a repeated create is the same command to the server. Fixed length: 48 hex digits.
 const commandIdOf = (
   kind: 'order' | 'plan',
   target: string,
@@ -72,7 +70,6 @@ const countsOf = (items: readonly MigrationItem[]): Counts => ({
   errors: items.filter((i) => i.outcome === 'error').length,
 });
 
-/** The plain report: one line per file, then a summary line. */
 const printReport = (
   items: readonly MigrationItem[],
   counts: Counts,
@@ -92,11 +89,6 @@ const printReport = (
   if (removed.length > 0) console.log(`removed ${removed.length} file(s)`);
 };
 
-/**
- * Runs the planned creates against the server: each plan first (`createPlan`, members in chain order),
- * then each standalone order (`createOrder`, dependencies already there). A failure marks its file and
- * what depends on it, and the run goes on. Returns the items with their outcomes.
- */
 const execute = async (
   ctx: Context,
   projectId: ProjectId,
@@ -185,12 +177,10 @@ const execute = async (
   return plan.items.map((item) => items.get(item.file) ?? item);
 };
 
-/**
- * `factory todos migrate`: imports the repo's `todos/` into the server, once (PROTOCOL §10). Plans come
- * from `createPlan`, standalone todos from `createOrder`, in dependency order, with deterministic
- * commandIds. A file the server already has is `skipped`; re-running is idempotent. Files are deleted
- * only with `--remove`, and only after the server confirmed them.
- */
+// `factory todos migrate`: imports the repo's `todos/` into the server, once. Plans come
+// from `createPlan`, standalone todos from `createOrder`, in dependency order, with deterministic
+// commandIds. A file the server already has is `skipped`; re-running is idempotent. Files are deleted
+// only with `--remove`, and only after the server confirmed them.
 const migrate = (args: Record<string, unknown>) =>
   withErrors(async () => {
     const ctx = createContext(flagsOf(args));

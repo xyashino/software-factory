@@ -6,7 +6,7 @@ import type { RuntimePorts } from './ports';
 
 /**
  * The Cell must be known and not revoked. Local trust is the operating-system account, so the
- * Cell is identified by the id it sends; only revocation withdraws it (PROTOCOL §1).
+ * Cell is identified by the id it sends; only revocation withdraws it.
  */
 export const assertCell = async (
   ports: Pick<RuntimePorts, 'cells'>,
@@ -18,7 +18,7 @@ export const assertCell = async (
   return { ...record, info: record.info };
 };
 
-/** Registers a Cell and returns the Factory settings it must follow (PROTOCOL §5.1). */
+/** Registers a Cell and returns the Factory settings it must follow. */
 export const hello = async (
   ports: RuntimePorts,
   request: Hello,
@@ -49,7 +49,7 @@ export const hello = async (
 };
 
 /**
- * Revokes a Cell (PROTOCOL §1): its leases expire now, so the next reaper pass runs `ExpireLease`
+ * Revokes a Cell: its leases expire now, so the next reaper pass runs `ExpireLease`
  * on each job. A revoked Cell is refused from then on.
  */
 export const revokeCell = async (

@@ -25,16 +25,14 @@ import { usage } from './usage';
 /** The version the Cell announces at hello. */
 export const CELL_VERSION = '0.0.0';
 
-/** Desktop toasts through the local Herdr CLI (used only when `notificationsEnabled`). */
+// Desktop toasts through the local Herdr CLI (used only when `notificationsEnabled`).
 const herdrNotify = createHerdrAdapter().notify;
 
 const messageOf = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
 
-/**
- * The value of a `--name <value>` or `--name=<value>` flag in the command line, or undefined when the
- * flag is absent. A flag with no value is refused.
- */
+// The value of a `--name <value>` or `--name=<value>` flag in the command line, or undefined when the
+// flag is absent. A flag with no value is refused.
 const flagValue = (
   name: string,
   argv: readonly string[] = process.argv,
@@ -50,13 +48,11 @@ const flagValue = (
   return argv.find((arg) => arg.startsWith(`${name}=`))?.slice(name.length + 1);
 };
 
-/**
- * The Cell's identity and client (PROTOCOL §2). Every Cell talks HTTP with a credential the Factory issued
- * on its join. The join token comes from `FACTORY_JOIN_TOKEN`, or, for a local Cell (no `factory_url`),
- * from the discovery file of the running `factory-server`. The address is `factory_url`, or the discovery
- * file's. A stored credential is reused, so a restart does not join again. Nothing is written down but the
- * credential itself.
- */
+// The Cell's identity and client. Every Cell talks HTTP with a credential the Factory issued
+// on its join. The join token comes from `FACTORY_JOIN_TOKEN`, or, for a local Cell (no `factory_url`),
+// from the discovery file of the running `factory-server`. The address is `factory_url`, or the discovery
+// file's. A stored credential is reused, so a restart does not join again. Nothing is written down but the
+// credential itself.
 const connect = async (
   config: ReturnType<typeof readConfig>,
   cellDataDir: string,
@@ -96,13 +92,11 @@ const connect = async (
   };
 };
 
-/**
- * `factory-cell`: a client of the running `factory-server` over HTTP (PROTOCOL §2). It reads its
- * config for the repository it runs in, registers that repository's project when the Factory lacks
- * it, claims an exclusive instance directory, keeps its credential, says hello, and runs one claim
- * loop with one heartbeat loop. SIGINT stops claims and aborts running jobs immediately; SIGTERM
- * initiates a graceful leave, asking live Operator stations to hand over before stopping.
- */
+// `factory-cell`: a client of the running `factory-server` over HTTP. It reads its
+// config for the repository it runs in, registers that repository's project when the Factory lacks
+// it, claims an exclusive instance directory, keeps its credential, says hello, and runs one claim
+// loop with one heartbeat loop. SIGINT stops claims and aborts running jobs immediately; SIGTERM
+// initiates a graceful leave, asking live Operator stations to hand over before stopping.
 const main = async (): Promise<void> => {
   if (process.argv.includes('--help')) {
     console.log(usage);
@@ -175,7 +169,7 @@ const main = async (): Promise<void> => {
 
   /**
    * The Factory refused the credential (401): the Cell has stopped its jobs; the stored
-   * credential is removed and the Cell joins again with `FACTORY_JOIN_TOKEN`, as a new Cell (PROTOCOL §1).
+   * credential is removed and the Cell joins again with `FACTORY_JOIN_TOKEN`, as a new Cell.
    */
   const rejoin = async (): Promise<void> => {
     if (joining) return;

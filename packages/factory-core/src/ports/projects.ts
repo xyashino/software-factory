@@ -6,12 +6,12 @@ export interface ProjectRecord {
   repoUrl: string;
   baseBranch: string;
   maxRunning: number;
-  /** When a dependency counts as done: its PR delivered, or merged (STORAGE §4). */
+  /** When a dependency counts as done: its PR delivered, or merged. */
   depPolicy: 'delivered' | 'merged';
 }
 
 /**
- * What `set` may change (PROTOCOL §3.1). There is no `repoUrl`: the Cell's origin and worktrees would go
+ * What `set` may change. There is no `repoUrl`: the Cell's origin and worktrees would go
  * stale, so a project with another repository is removed and added again.
  */
 export interface ProjectPatch {
@@ -20,7 +20,7 @@ export interface ProjectPatch {
   depPolicy?: 'delivered' | 'merged';
 }
 
-/** Why a store refused a write. The runtime maps each reason to a refusal (PROTOCOL §3.5). */
+/** Why a store refused a write. The runtime maps each reason to a refusal. */
 export type ProjectRefusal =
   'exists' | 'missing' | 'has_history' | 'base_branch_busy';
 
@@ -29,7 +29,7 @@ export type ProjectStoreResult =
   { ok: true } | { ok: false; reason: ProjectRefusal };
 
 /**
- * The `projects` table (STORAGE §4): mutable configuration, not an event stream. Writes assert the
+ * The `projects` table: mutable configuration, not an event stream. Writes assert the
  * writer lock. `remove` refuses a project with any Work order or event; `set` refuses a
  * `baseBranch` change while a Work order of the project is not terminal.
  */

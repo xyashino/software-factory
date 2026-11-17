@@ -10,7 +10,7 @@ import {
 } from '@repo/factory-runtime/open-runtime';
 import { openForAdmin } from './admin-command';
 
-/** Exit codes of `factory-server --once` (PROTOCOL §10): the CLI tells them apart. */
+/** Exit codes of `factory-server --once`: the CLI tells them apart. */
 export const ONCE_EXIT = {
   ok: 0,
   failed: 1,
@@ -23,7 +23,7 @@ export type OnceOutput =
   { ok: true; response: unknown } | { ok: false; error: WireError };
 
 /**
- * One-shot mode (PROTOCOL §10): takes the writer lock, runs one route of the runtime, prints its
+ * One-shot mode: takes the writer lock, runs one route of the runtime, prints its
  * answer as JSON and releases the lock. No reaper, no boot grace, no socket, no port. Used by the CLI
  * when no `factory-server` runs, so a write still goes through the same command loop.
  */

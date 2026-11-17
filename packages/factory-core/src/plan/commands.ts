@@ -15,7 +15,7 @@ import { memberStateSchema } from './events';
 
 const prStateSchema = z.enum(['open', 'merged', 'closed']);
 
-/** CORE §12.3 commands on an Order Plan. Each is refused by `decide` when its precondition fails. */
+/** Commands on an Order Plan. Each is refused by `decide` when its precondition fails. */
 export const planCommandSchema = z.discriminatedUnion('type', [
   z
     .object({

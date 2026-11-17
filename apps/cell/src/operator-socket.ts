@@ -12,7 +12,7 @@ import {
   type OperatorRequest,
 } from '@repo/factory-core/contracts/operator';
 
-/** The loopback address the Operator endpoint binds: this machine only (PROTOCOL §3.3). */
+/** The loopback address the Operator endpoint binds: this machine only. */
 export const OPERATOR_HOST = '127.0.0.1';
 
 /** The largest request body the endpoint reads; a verb is a few kilobytes at most. */
@@ -40,7 +40,7 @@ export interface OperatorServer {
   close(): Promise<void>;
 }
 
-/** Compares two tokens in constant time; a length mismatch is refused without comparing bytes. */
+// Compares two tokens in constant time; a length mismatch is refused without comparing bytes.
 const tokenMatches = (given: unknown, expected: string): boolean => {
   if (typeof given !== 'string') return false;
   const a = Buffer.from(given);
@@ -48,7 +48,6 @@ const tokenMatches = (given: unknown, expected: string): boolean => {
   return a.length === b.length && timingSafeEqual(a, b);
 };
 
-/** The HTTP status a reply travels under: 200 for success, a status per refusal kind. */
 const statusOf = (reply: OperatorReply): number => {
   if (reply.ok) return 200;
   switch (reply.code) {
@@ -117,7 +116,7 @@ export const readRequest = (
   return { ok: true, request: parsed.data };
 };
 
-/** The bearer token of an `Authorization` header, or undefined when the header is not one. */
+// The bearer token of an `Authorization` header, or undefined when the header is not one.
 const bearerOf = (header: string | undefined): string | undefined => {
   const match = /^Bearer (.+)$/.exec(header ?? '');
   return match?.[1];
@@ -128,7 +127,6 @@ const send = (res: ServerResponse, body: OperatorReply): void => {
   res.end(`${JSON.stringify(body)}\n`);
 };
 
-/** Reads the request body up to the cap. Resolves undefined when the body is too large. */
 const readBody = (req: IncomingMessage): Promise<string | undefined> =>
   new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];

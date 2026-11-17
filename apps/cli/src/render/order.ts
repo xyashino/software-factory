@@ -7,7 +7,7 @@ import { shortId } from './log-view';
 type OrderDetail = RouteResponse<'orderDetail'>;
 
 /**
- * The question a Supervisor may answer: the latest one not yet answered (PROTOCOL §3.1). An abandoned
+ * The question a Supervisor may answer: the latest one not yet answered. An abandoned
  * question that no one answered is still answerable, so only an answer closes it here.
  */
 export const openQuestionOf = (
@@ -28,7 +28,7 @@ export const openQuestionOf = (
 
 /** The Cycles of a Work order, each with the event that ended it, if any. */
 /**
- * The incidents of a Work order (CORE §14.2), oldest first: what the Mechanic or the Supervisor did
+ * The incidents of a Work order, oldest first: what the Mechanic or the Supervisor did
  * about each Andon, with each file or config it changed and the commit or blob that holds it.
  */
 export const incidentsOf = (events: readonly StoredEvent[]): string[] =>
@@ -122,7 +122,7 @@ export const actionsOf = (order: OrderDetail['order']): string[] => {
 };
 
 /**
- * The Work order detail (PROTOCOL §10, `factory show`): the board row, the open question, the Andon
+ * The Work order detail (`factory show`): the board row, the open question, the Andon
  * reason and the Cycles. Stored text is printed as it is; only the labels and the status are coloured.
  */
 export const renderOrder = (

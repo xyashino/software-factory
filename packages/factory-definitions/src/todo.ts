@@ -14,7 +14,6 @@ import { err, ok, type Result } from '@repo/factory-core/result';
 import { zodErrors } from './errors';
 import { parseYaml, splitFrontmatter } from './frontmatter';
 
-/** The Line a todo runs in when its frontmatter names none. */
 const DEFAULT_LINE = 'feature';
 /** A change category: `feat`, `fix`, `chore`, … (the task API's `type`). */
 export type ChangeType = z.infer<typeof changeTypes>;
@@ -32,8 +31,8 @@ export type TodoPriority = (typeof PRIORITIES)[number];
  * - `unknown_line`: names a Line that does not exist;
  * - `reused_id`: its OrderId already exists, e.g. a delivered todo re-added;
  * - `line_conflict`: `line` and `workflow` are both set and differ;
- * - `plan_invalid`: the todo's Order Plan is not a linear chain (CORE §12.2), so no member is created;
- * - `plan_closed`: the todo names a plan that is finished or cancelled (CORE §12.1), set by intake;
+ * - `plan_invalid`: the todo's Order Plan is not a linear chain, so no member is created;
+ * - `plan_closed`: the todo names a plan that is finished or cancelled, set by intake;
  * - `plan_changed`: the `plan` or in-plan `depends_on` of an existing member changed, set by intake.
  */
 export type TodoDiagnosticKind =
@@ -63,11 +62,11 @@ export interface Todo {
   priority: TodoPriority;
   /** OrderIds of the todos this one waits for, same project */
   dependsOn: OrderId[];
-  /** the Order Plan this todo belongs to (CORE §12.1); absent for a plain todo */
+  /** the Order Plan this todo belongs to; absent for a plain todo */
   plan?: PlanSlug;
   /** the Line name the todo selects */
   line: string;
-  /** `factory: v2` marks a todo for the v2 intake during the trial (ROADMAP M9) */
+  /** `factory: v2` marks a todo for intake as a Work order. */
   factory?: 'v2';
   /** the change category: frontmatter `type`, else `feat` */
   type: ChangeType;
@@ -105,7 +104,6 @@ const todoFrontmatter = z.object({
 /** A todo's id is its file name without `.md`, which must be a valid TodoId. */
 export const todoIdOf = (file: string): string => basename(file, '.md');
 
-/** The longest title a Work order takes (the task API's `title`, PROTOCOL §3.3). */
 const TITLE_MAX = 256;
 
 /**

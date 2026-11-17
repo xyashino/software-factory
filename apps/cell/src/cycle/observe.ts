@@ -3,7 +3,7 @@ import type { Observation } from '@repo/factory-core/cycle/watch';
 import type { HeadlessProcess, PaneReading } from '../ports';
 
 /**
- * What a headless Operator looks like now (CORE §9.1): alive is working, exited is gone. Its last
+ * What a headless Operator looks like now: alive is working, exited is gone. Its last
  * output is the modification time of its stdout log, or the Cycle start when nothing was printed.
  */
 export const observeHeadless = (

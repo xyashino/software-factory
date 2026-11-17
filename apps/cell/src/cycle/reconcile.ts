@@ -26,7 +26,6 @@ export interface ReconcileOptions {
   onError?: (error: unknown, context: string) => void;
 }
 
-/** What a session holds, read back as the station the run needs. */
 const adoptedOf = (session: Session): AdoptedStation => ({
   paneName: session.paneName,
   tabId: session.tabId,
@@ -39,10 +38,8 @@ const adoptedOf = (session: Session): AdoptedStation => ({
     : { readOnlyBaseline: session.readOnlyBaseline }),
 });
 
-/**
- * Closes the pane a session names and removes the session. The pane is not this process's, so its tab
- * is re-learned from the session first. A close that fails is not an error: the pane is already gone.
- */
+// Closes the pane a session names and removes the session. The pane is not this process's, so its tab
+// is re-learned from the session first. A close that fails is not an error: the pane is already gone.
 const discard = async (
   options: ReconcileOptions,
   session: Session,
@@ -54,10 +51,6 @@ const discard = async (
   deleteSession(options.cellDataDir, session.cycleId);
 };
 
-/**
- * Runs an adopted station, then any continuation it hands back, the way the claim loop runs one.
- * A station that fails to adopt (its endpoint port is taken, say) discards its pane and session.
- */
 const runChain = async (
   options: ReconcileOptions,
   session: Session,
@@ -82,13 +75,11 @@ const runChain = async (
   }
 };
 
-/**
- * Re-attaches one session, or cleans it up (PROTOCOL §5.4, §9). A pane that is gone is discarded. A
- * pane still running is adopted only if the Factory still holds its job for this Cell: a heartbeat
- * that answers `ok` extends the lease at once, so the adopted job keeps it. A job the Factory no
- * longer holds (stale epoch, lease lost) has its pane closed. A failed heartbeat keeps the session
- * for the next start, so a Factory that is down at boot loses nothing.
- */
+// Re-attaches one session, or cleans it up. A pane that is gone is discarded. A
+// pane still running is adopted only if the Factory still holds its job for this Cell: a heartbeat
+// that answers `ok` extends the lease at once, so the adopted job keeps it. A job the Factory no
+// longer holds (stale epoch, lease lost) has its pane closed. A failed heartbeat keeps the session
+// for the next start, so a Factory that is down at boot loses nothing.
 const reconcileOne = async (
   options: ReconcileOptions,
   session: Session,
@@ -113,7 +104,7 @@ const reconcileOne = async (
 };
 
 /**
- * Re-attaches every live Herdr pane a previous Cell of this machine left running (CORE §9, v1 reconcile).
+ * Re-attaches every live Herdr pane a previous Cell of this machine left running.
  * Runs once, before the claim loop and the heartbeat start. Each session is handled on its own: an error
  * is reported through `onError` and the session is skipped, so no failure here reaches `startCell`.
  */

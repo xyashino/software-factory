@@ -9,7 +9,7 @@ export interface HeartbeatOptions {
   cellId: CellId;
   registry: JobRegistry;
   clock: ClockPort;
-  /** No ok heartbeat for this long fences the Cell: every job is aborted and claims pause (PROTOCOL §5.4). */
+  /** No ok heartbeat for this long fences the Cell: every job is aborted and claims pause. */
   selfFenceMs: number;
   /** Called once when the Cell fences itself, with the time of its last ok heartbeat. */
   onFence?: (lastOkAt: number) => void;
@@ -27,7 +27,7 @@ export interface Heartbeat {
 }
 
 /**
- * The one heartbeat loop of a Cell (PROTOCOL §5.3): every held job id goes out in one call, the
+ * The one heartbeat loop of a Cell: every held job id goes out in one call, the
  * signals acknowledged by the last beat come back as acks, and the answer's `stale` jobs are aborted.
  * A signal the Factory sends is delivered to its job and acked on the next beat, so a beat that fails
  * sends the acks again.

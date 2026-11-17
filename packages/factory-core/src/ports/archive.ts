@@ -3,7 +3,7 @@ import type { OrderProjection } from '../order/projection';
 import type { PlanState } from '../plan/state';
 import type { PlanProjection } from '../plan/projection';
 
-/** The bookkeeping of a row beyond its folded state (STORAGE §6). */
+/** The bookkeeping of a row beyond its folded state. */
 export interface RowMeta {
   lastSeq: number;
   createdAt: number;
@@ -28,7 +28,7 @@ export interface ArchiveCounts {
 }
 
 /**
- * Snapshot, export and import of the Factory's data (STORAGE §7). Every operation needs the writer
+ * Snapshot, export and import of the Factory's data. Every operation needs the writer
  * lock. The SQLite adapter lives in factory-db; tests use a fake.
  */
 export interface ArchivePort {
@@ -45,6 +45,6 @@ export interface ArchivePort {
     project: ProjectionOf,
     importedAt: number,
   ): Promise<ArchiveCounts>;
-  /** Rebuilds every `orders` row from the events (STORAGE §6); returns how many rows it wrote. */
+  /** Rebuilds every `orders` row from the events; returns how many rows it wrote. */
   rebuildProjections(project: ProjectionOf): Promise<number>;
 }

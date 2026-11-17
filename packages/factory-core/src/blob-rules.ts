@@ -1,4 +1,4 @@
-// Blob size rules and the pure helpers around them (STORAGE §5). No I/O and no clock: gzip, hashing
+// Blob size rules and the pure helpers around them. No I/O and no clock: gzip, hashing
 // and the sweep belong to the adapter that owns the bytes.
 import type { BlobRef } from './ids';
 
@@ -31,7 +31,7 @@ export class BlobTooLargeError extends Error {
 
 const encoder = new TextEncoder();
 
-/** Fixed width, so the kept bytes do not depend on how many bytes were dropped. */
+// Fixed width, so the kept bytes do not depend on how many bytes were dropped.
 const markerFor = (dropped: number): Uint8Array =>
   encoder.encode(
     `\n[... ${dropped.toString().padStart(12, '0')} bytes truncated ...]\n`,

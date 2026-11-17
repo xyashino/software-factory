@@ -9,7 +9,7 @@ const turnSchema = z.object({
   }),
 });
 
-/** `--ask-for-approval` is a top-level flag; `codex exec` rejects it, so it goes before `exec`. */
+// `--ask-for-approval` is a top-level flag; `codex exec` rejects it, so it goes before `exec`.
 const readFlags = (permission: Permission): string[] => {
   return permission === 'read'
     ? ['--sandbox', 'read-only', '--ask-for-approval', 'never']

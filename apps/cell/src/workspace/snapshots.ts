@@ -8,15 +8,8 @@ import {
   stationSnapshotNamespaceOf,
 } from '../names';
 
-/**
- * Tree snapshots of a worktree, ported from v1 (`withWorktreeTree` in `adapters/git/git.adapter.ts`). A snapshot
- * captures the whole working tree (tracked and untracked, ignored files and `.cell/` left out) as a commit under a
- * `refs/software-factory/` ref. It is built in a temporary index, so neither `HEAD`, the branch, nor the worktree's
- * own index moves, and nothing reaches origin.
- */
-
 const NAMESPACE = 'refs/software-factory/';
-/** `.cell/` is the Cell's scratch: it is never part of a snapshot (PROTOCOL §4). */
+// `.cell/` is the Cell's scratch: it is never part of a snapshot.
 const CELL_EXCLUDE = [':(exclude).cell'] as const;
 
 const must = (result: GitResult, what: string): string => {
@@ -34,11 +27,9 @@ const requireNamespace = (ref: string): void => {
   }
 };
 
-/**
- * Runs `use` with the tree of the worktree as it stands, read through a temporary index file. The index is
- * seeded from HEAD, so the tree differs from HEAD only by the worktree's changes. `head` is undefined on an
- * unborn branch.
- */
+// Runs `use` with the tree of the worktree as it stands, read through a temporary index file. The index is
+// seeded from HEAD, so the tree differs from HEAD only by the worktree's changes. `head` is undefined on an
+// unborn branch.
 const withWorktreeTree = async <T>(
   git: RunGit,
   worktree: string,

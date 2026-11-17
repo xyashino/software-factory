@@ -26,7 +26,7 @@ import {
 import type { IncidentAction, IncidentChange, OrderEvent } from './events';
 import type { WorkOrderState } from './state';
 
-/** The Operator asks the Supervisor one question; only one may be open at a time (CORE §5.2). */
+/** The Operator asks the Supervisor one question; only one may be open at a time. */
 export const askQuestion = (
   state: WorkOrderState,
   command: CommandOf<'AskQuestion'>,
@@ -54,7 +54,7 @@ export const askQuestion = (
 
 /**
  * The Supervisor answers a question that is open, or abandoned and not yet answered. The answer
- * reaches the next Cycle of the Station through `priorQuestions` (CORE §9.2).
+ * reaches the next Cycle of the Station through `priorQuestions`.
  */
 export const answer = (
   state: WorkOrderState,
@@ -81,7 +81,7 @@ export const answer = (
   return ok(events);
 };
 
-/** A note goes to a later Station or to the Supervisor (CORE §5.2). */
+/** A note goes to a later Station or to the Supervisor. */
 export const leaveNote = (
   state: WorkOrderState,
   command: CommandOf<'LeaveNote'>,
@@ -112,7 +112,7 @@ export const leaveNote = (
   return ok(events);
 };
 
-/** A nudge goes to the Cycle that is running right now (CORE §5.2). */
+/** A nudge goes to the Cycle that is running right now. */
 export const nudge = (
   state: WorkOrderState,
   command: CommandOf<'Nudge'>,
@@ -135,7 +135,7 @@ export const nudge = (
 
 /**
  * The Supervisor resumes an Andon. A retry grant defaults to 1 for `retries_exhausted` and is never
- * 0 (CORE §5.2).
+ * 0.
  */
 export const resume = (
   state: WorkOrderState,
@@ -149,7 +149,7 @@ export const resume = (
   if (terminal) return err(terminal);
   const andon = state.andon;
   if (!andon) return err(precondition('no Andon is raised'));
-  // A mechanic job works on the Andon until its incident ends the job (CORE §14.4).
+  // A mechanic job works on the Andon until its incident ends the job.
   if (ctx.actor.kind !== 'mechanic' && state.activeJob?.kind === 'mechanic') {
     return err(precondition('the mechanic is working on the Andon'));
   }
@@ -157,7 +157,7 @@ export const resume = (
   if (state.activeJob?.kind === 'publish_blocked') {
     return err(precondition('the blocked PR is still being published'));
   }
-  // The Mechanic clears an Andon only after it has recorded the incident for it (CORE §14.3).
+  // The Mechanic clears an Andon only after it has recorded the incident for it.
   if (
     ctx.actor.kind === 'mechanic' &&
     !state.incidents.some((incident) => incident.andonAt === andon.at)
@@ -180,7 +180,7 @@ export const resume = (
     return err(precondition(`${mode.stationId} is not in the Line`));
   }
   // A restart moves the Work order back. Ahead of where it stopped, it would skip Stations that never
-  // passed, and delivery would then have no checkpoint (CORE §4.3 rule 8).
+  // passed, and delivery would then have no checkpoint.
   if (mode.kind === 'restart_from') {
     const target = stationIndex(state.line, mode.stationId) ?? 0;
     const stoppedAt =
@@ -214,7 +214,7 @@ export const resume = (
   return ok(events);
 };
 
-/** Only a repair changes files or config, and a repair names what it changed (CORE §14.2). */
+// Only a repair changes files or config, and a repair names what it changed.
 const incidentShapeIssues = (
   action: IncidentAction,
   changes: IncidentChange[],
@@ -230,7 +230,7 @@ const incidentShapeIssues = (
 
 /**
  * The Mechanic records the incident of the open Andon before it acts on it. Exactly one incident per
- * Andon (CORE §14.2). A change ref is a commit sha or a blob; only a blob must exist in the store.
+ * Andon. A change ref is a commit sha or a blob; only a blob must exist in the store.
  */
 export const recordIncident = (
   state: WorkOrderState,
@@ -277,7 +277,7 @@ export const recordIncident = (
 };
 
 /**
- * The factory escalates an Andon whose Mechanic budget is spent (CORE §14.4). The escalation is an
+ * The factory escalates an Andon whose Mechanic budget is spent. The escalation is an
  * incident with action `escalate`, so the Supervisor gets the Andon with its incident attached.
  */
 export const escalateAndon = (
@@ -316,7 +316,7 @@ export const escalateAndon = (
   return ok(events);
 };
 
-/** Reopens a delivered Work order at a Station, on top of the delivered commit (CORE §5.2). */
+/** Reopens a delivered Work order at a Station, on top of the delivered commit. */
 export const reopen = (
   state: WorkOrderState,
   command: CommandOf<'Reopen'>,

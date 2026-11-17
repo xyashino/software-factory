@@ -1,4 +1,4 @@
-/** Crockford base32, the ULID alphabet (no I, L, O, U). */
+// Crockford base32, the ULID alphabet (no I, L, O, U).
 const ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 
 const encodeTime = (ms: number): string => {
@@ -23,7 +23,7 @@ const encodeRandom = (bytes: Uint8Array): string => {
 };
 
 /**
- * A ULID for one CLI invocation (PROTOCOL §6). It is made once, before the first call, and every
+ * A ULID for one CLI invocation. It is made once, before the first call, and every
  * retry of that call sends the same value, so the server answers a repeat with the stored response.
  */
 export const newCommandId = (now: () => number = Date.now): string => {

@@ -15,20 +15,20 @@ import { actorSchema, freeText, prUrl, shortText } from '../order/events';
 const nonNegativeInt = z.number().int().min(0);
 const positiveInt = z.number().int().min(1);
 
-/** CORE §12.3: the job kinds a plan runs on a Cell. */
+/** The job kinds a plan runs on a Cell. */
 export const planJobKindSchema = z.enum([
   'plan_branch',
   'plan_pr',
   'plan_pr_ready',
 ]);
 
-/** CORE §12.3: why the plan needs the Supervisor. */
+/** Why the plan needs the Supervisor. */
 export const planAndonReasonSchema = z.enum([
   'plan_job_failed',
   'plan_pr_closed',
 ]);
 
-/** CORE §12.3: the state a member reports to its plan. */
+/** The state a member reports to its plan. */
 export const memberStateSchema = z.enum([
   'open',
   'delivered',
@@ -124,7 +124,7 @@ const resumedSchema = z
   })
   .strict();
 
-/** CORE §12.3 events of an Order Plan Traveler, discriminated by `type`. */
+/** Events of an Order Plan Traveler, discriminated by `type`. */
 export const planEventSchema = z.discriminatedUnion('type', [
   planCreatedSchema,
   planMemberAddedSchema,
@@ -142,7 +142,7 @@ export const planEventSchema = z.discriminatedUnion('type', [
   resumedSchema,
 ]);
 
-/** The envelope of a plan event (CORE §3.1). `planId` is the stream id; the events table stores it in `order_id`. */
+/** The envelope of a plan event. `planId` is the stream id; the events table stores it in `order_id`. */
 export const planStoredEventSchema = z
   .object({
     schemaVersion: z.literal(2),

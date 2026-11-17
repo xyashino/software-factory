@@ -1,9 +1,9 @@
 import { createHash } from 'node:crypto';
 
-/** The branch of a Work order: one per order, created from the base branch (PROTOCOL §8.1). */
+/** The branch of a Work order: one per order, created from the base branch. */
 export const branchFor = (todoId: string): string => `factory/${todoId}`;
 
-/** The namespace of every snapshot ref of a Work order (v1: `refs/software-factory/<taskId>/`). */
+/** The namespace of every snapshot ref of a Work order. */
 export const snapshotNamespaceOf = (todoId: string): string =>
   `refs/software-factory/${todoId}/`;
 

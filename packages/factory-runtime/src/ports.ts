@@ -15,7 +15,7 @@ import type { RuntimeIds } from './ids';
 
 /**
  * The write lock as the runtime sees it. Every write use case asks it first; a released or never
- * acquired lock throws, so a second process or a stale handle cannot append (STORAGE §1).
+ * acquired lock throws, so a second process or a stale handle cannot append.
  */
 export interface WriterGuard {
   readonly held: boolean;
@@ -28,22 +28,22 @@ export interface Timers {
   after(ms: number, fn: () => void): () => void;
 }
 
-/** Factory settings returned to Cells at `hello` (PROTOCOL §5.1), plus the runtime's own knobs. */
+/** Factory settings returned to Cells at `hello`, plus the runtime's own knobs. */
 export interface RuntimeConfig {
   leaseTtlMs: number;
   heartbeatMs: number;
   selfFenceMs: number;
   /** How often a waiting claim re-reads the queue when nothing woke it. */
   claimTickMs: number;
-  /** Tries of one command before `unavailable` (STORAGE §3). */
+  /** Tries of one command before `unavailable`. */
   commandAttempts: number;
-  /** Whether a job-ending Cell command also claims the next job of its Work order (PROTOCOL §4). */
+  /** Whether a job-ending Cell command also claims the next job of its Work order. */
   continuation: boolean;
   /** Timeout of an inspection command when its Line does not set one. */
   inspectionTimeoutMs: number;
-  /** The Operator's own CLI, listed in every prompt (PROTOCOL §3.3). */
+  /** The Operator's own CLI, listed in every prompt. */
   operatorCommands: string[];
-  /** Cut-over flag (ROADMAP M9): only todos with `factory: v2` become Work orders. */
+  /** Cut-over flag: only todos with `factory: v2` become Work orders. */
   v2Only: boolean;
   /** How long the event feed waits for a commit before it reads again. */
   feedPollMs: number;
@@ -78,7 +78,7 @@ export interface RuntimePorts {
   leases: LeaseStore;
   cells: CellStore;
   joinTokens: JoinTokenStore;
-  /** Supervisor tokens by hash (PROTOCOL §1): the remote Supervisor credential. */
+  /** Supervisor tokens by hash: the remote Supervisor credential. */
   supervisorTokens: SupervisorTokenStore;
   signals: SignalStore;
   clock: Clock;
@@ -91,10 +91,10 @@ export interface RuntimePorts {
    */
   runtimePrompts: RuntimePrompts;
   config: RuntimeConfig;
-  /** The export archive of the whole Factory (STORAGE §7.3); the database adapter builds it. */
+  /** The export archive of the whole Factory; the database adapter builds it. */
   exportArchive(): Promise<Uint8Array>;
-  /** The event feed behind `GET /v1/stream` (PROTOCOL §3.1). */
+  /** The event feed behind `GET /v1/stream`. */
   feed: EventFeed;
-  /** Backup, export, import and projection rebuild (STORAGE §7). */
+  /** Backup, export, import and projection rebuild. */
   archive: ArchivePort;
 }

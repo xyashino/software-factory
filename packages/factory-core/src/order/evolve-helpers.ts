@@ -25,7 +25,7 @@ export const requireCycle = (
 export const latestCycle = (state: WorkOrderState): CycleState | undefined =>
   state.cycles[state.cycles.length - 1];
 
-/** CORE §4.3 rule 1: the Cycle is the latest one and still running. */
+/** The Cycle is the latest one and still running. */
 export const isLive = (state: WorkOrderState, cycleId: CycleId): boolean => {
   const last = latestCycle(state);
   return (
@@ -44,7 +44,7 @@ export const replaceCycle = (
   ),
 });
 
-/** Stops the question pause of a Cycle and adds its length to `pausedMs` (CORE §4.3 rule 6). */
+/** Stops the question pause of a Cycle and adds its length to `pausedMs`. */
 export const stopPause = (cycle: CycleState, at: number): CycleState => {
   if (cycle.pausedSince === undefined) return cycle;
   return {

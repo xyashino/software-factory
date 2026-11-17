@@ -40,7 +40,7 @@ import {
 import type { WorkOrderState } from './state';
 
 /**
- * Decides the events a command produces on a Work order (CORE §5.2). `state` is undefined before the
+ * Decides the events a command produces on a Work order. `state` is undefined before the
  * Work order exists. Pure: the runtime resolves blobs and ids through `ctx`, and the result is only
  * events, never stored. The first refusal wins: not_found, actor, epoch, liveness, then preconditions.
  */

@@ -58,7 +58,6 @@ export const parseOrderId = (
   return { projectId: match[1] as ProjectId, todoId: match[2] as TodoId };
 };
 
-/** CORE §12.1: a plan slug, the frontmatter `plan:` value and the tail of a PlanId. */
 const PLAN_SLUG = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const PLAN_ID = /^([a-z0-9][a-z0-9-]{0,127}):plan:([a-z0-9][a-z0-9-]{0,63})$/;
 
@@ -72,7 +71,7 @@ export const planIdSchema = z
 export type PlanSlug = z.infer<typeof planSlugSchema>;
 export type PlanId = z.infer<typeof planIdSchema>;
 
-/** `<projectId>:plan:<slug>`, the stream id of an Order Plan (CORE §12.3). */
+/** `<projectId>:plan:<slug>`, the stream id of an Order Plan. */
 export const planIdOf = (projectId: ProjectId, slug: PlanSlug): PlanId =>
   `${projectId}:plan:${slug}` as PlanId;
 
@@ -88,5 +87,5 @@ export const parsePlanId = (
   return { projectId: match[1] as ProjectId, slug: match[2] as PlanSlug };
 };
 
-/** The plan branch name (CORE §12.1). */
+/** The plan branch name. */
 export const planBranchOf = (slug: PlanSlug): string => `feat/${slug}`;

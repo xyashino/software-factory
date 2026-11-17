@@ -66,7 +66,7 @@ export const startCycle = (
   return ok(events);
 };
 
-/** An Operator station passed: its declared artifacts must all be in the workspace (CORE §5.2). */
+/** An Operator station passed: its declared artifacts must all be in the workspace. */
 export const completeCycle = (
   state: WorkOrderState,
   command: CommandOf<'CompleteCycle'>,
@@ -103,7 +103,7 @@ export const completeCycle = (
   return ok(events);
 };
 
-/** A verdict Operator judged its Cycle; a failing verdict says why (CORE §5.2). */
+/** A verdict Operator judged its Cycle; a failing verdict says why. */
 export const submitVerdict = (
   state: WorkOrderState,
   command: CommandOf<'SubmitVerdict'>,
@@ -250,8 +250,8 @@ export const failCycle = (
 };
 
 /**
- * A Cycle stops because it cannot go on: the Operator with a Handover, or the runtime with a reason
- * (CORE §5.2). An operator block must carry its Handover.
+ * A Cycle stops because it cannot go on: the Operator with a Handover, or the runtime with a reason.
+ * An operator block must carry its Handover.
  */
 export const blockCycle = (
   state: WorkOrderState,
@@ -314,7 +314,7 @@ export const handOverCycle = (
 
 /**
  * Usage arrives after the Cycle may have ended, so it has no epoch and no liveness check. Only the
- * Cell that ran the Cycle may record it (CORE §5.2).
+ * Cell that ran the Cycle may record it.
  */
 export const recordUsage = (
   state: WorkOrderState,

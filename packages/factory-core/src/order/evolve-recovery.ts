@@ -4,7 +4,7 @@ import type { WorkOrderState } from './state';
 type Recovered = Extract<OrderEvent, { type: 'order_recovered' }>;
 
 /**
- * Folds `order_recovered` (CORE §4.3 rule 11). The passed Stations are a prefix of the Line, so the
+ * Folds `order_recovered`. The passed Stations are a prefix of the Line, so the
  * next Station is the one at `passedStations.length`. `lastPassed` stays empty on purpose: no Cycle
  * exists for a recovered Station.
  */

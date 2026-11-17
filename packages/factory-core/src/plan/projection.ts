@@ -12,7 +12,7 @@ export interface PlanProjectionMeta {
   next: PlanNext;
 }
 
-/** One row of the `plans` table (STORAGE §4), with typed values. */
+/** One row of the `plans` table, with typed values. */
 export interface PlanProjection {
   planId: PlanId;
   projectId: ProjectId;
@@ -35,7 +35,6 @@ export interface PlanProjection {
   updatedAt: number;
 }
 
-/** Who holds the plan now (CORE §12.3): the same vocabulary as a Work order's holder. */
 const holderOf = (next: PlanNext): PlanProjection['holder'] => {
   switch (next.kind) {
     case 'done':
@@ -53,7 +52,7 @@ const holderOf = (next: PlanNext): PlanProjection['holder'] => {
 };
 
 /**
- * The `plans` row of a plan (STORAGE §4, CORE §12.3). Pure: rebuilding it from the same events and
+ * The `plans` row of a plan. Pure: rebuilding it from the same events and
  * `meta` gives the same row. The row is a function of the plan's own events only.
  */
 export const toPlanProjection = (

@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 /**
- * The migrations generated from `src/schema.ts` by drizzle-kit (STORAGE §9): the baseline, then every
+ * The migrations generated from `src/schema.ts` by drizzle-kit: the baseline, then every
  * later change. Applied in the order of `meta/_journal.json`.
  */
 export const MIGRATIONS_DIR = fileURLToPath(
@@ -12,7 +12,7 @@ export const MIGRATIONS_DIR = fileURLToPath(
 );
 
 /**
- * The hand-written files 0001-0003, frozen (STORAGE §9). A database created before them still needs
+ * The hand-written files 0001-0003, frozen. A database created before them still needs
  * them, in this order, before it adopts the baseline. Never edited, never extended.
  */
 export const LEGACY_MIGRATIONS_DIR = fileURLToPath(
@@ -25,7 +25,6 @@ const LEGACY_NAMES = [
   '0003_order_plan.sql',
 ] as const;
 
-/** drizzle-kit separates the statements of one migration file with this line. */
 const BREAKPOINT = '--> statement-breakpoint';
 
 interface Step {
@@ -38,11 +37,10 @@ interface Journal {
 }
 
 // raw: the migration runner is the one raw-SQL module. `schema_migrations` is its own bookkeeping table,
-// not a domain table, so it stays outside `schema.ts`; the transaction control below is raw too (STORAGE §3.1).
+// not a domain table, so it stays outside `schema.ts`; the transaction control below is raw too.
 const CREATE_HISTORY =
   'CREATE TABLE IF NOT EXISTS schema_migrations (name TEXT PRIMARY KEY, applied_at INTEGER NOT NULL)';
 
-/** The journal's steps in order, each with the statements of its `<tag>.sql` file. */
 const journalSteps = (dir: string): Step[] => {
   const journal = JSON.parse(
     readFileSync(join(dir, 'meta', '_journal.json'), 'utf8'),

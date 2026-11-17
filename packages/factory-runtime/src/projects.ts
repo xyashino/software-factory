@@ -8,7 +8,7 @@ import { notFound, RuntimeError } from './errors';
 import type { RuntimePorts } from './ports';
 
 /**
- * Project registry operations (PROTOCOL §3.1). The store answers with a reason when it refuses; the
+ * Project registry operations. The store answers with a reason when it refuses; the
  * runtime turns each reason into the wire refusal, so every transport answers the same way. Each
  * write asserts the writer lock, and an add or set answers with the record as stored.
  */
@@ -31,7 +31,6 @@ export const PROJECT_DEFAULTS = {
 const precondition = (detail: string): RuntimeError =>
   new RuntimeError({ code: 'precondition', detail });
 
-/** Throws the refusal a store reason stands for; returns when the write was done. */
 const throwUnlessDone = (
   result: ProjectStoreResult,
   projectId: ProjectId,
@@ -53,7 +52,6 @@ const throwUnlessDone = (
   }
 };
 
-/** The record as the store now holds it. A write the store accepted is always readable. */
 const storedRecord = async (
   ports: RuntimePorts,
   projectId: ProjectId,
@@ -72,7 +70,7 @@ export const listProjects = async (
   projects: await ports.projects.list(),
 });
 
-/** Registers a project (PROTOCOL §3.1). An existing id is refused as `precondition`. */
+/** Registers a project. An existing id is refused as `precondition`. */
 export const addProject = async (
   ports: RuntimePorts,
   input: ProjectAddInput,
@@ -84,7 +82,7 @@ export const addProject = async (
 };
 
 /**
- * Makes sure a project is registered (PROTOCOL §3.1). An existing id is left as it is: its record keeps
+ * Makes sure a project is registered. An existing id is left as it is: its record keeps
  * its base branch, max running, dependency policy and repo url. A missing id is added with the given
  * settings. Two Cells that ensure the same id at once both succeed: the loser of the race reads the
  * winner's record.
@@ -113,7 +111,7 @@ export const ensureProject = async (
 };
 
 /**
- * Changes a project's base branch, max running or dependency policy (PROTOCOL §3.1). The patch carries
+ * Changes a project's base branch, max running or dependency policy. The patch carries
  * only the fields the caller sent; `repoUrl` is not part of it.
  */
 export const setProject = async (
@@ -126,7 +124,7 @@ export const setProject = async (
   return { project: await storedRecord(ports, projectId) };
 };
 
-/** Removes a project with no history (PROTOCOL §3.1). */
+/** Removes a project with no history. */
 export const removeProject = async (
   ports: RuntimePorts,
   projectId: ProjectId,

@@ -33,15 +33,12 @@ import { logCommandOf } from './pane-commands';
 import { renderIncidentPrompt } from './render';
 import { tailOf } from './send';
 
-/** What the Mechanic is told to do when its incident says `nudge` (CORE §14.3). */
+/** What the Mechanic is told to do when its incident says `nudge`. */
 export const MECHANIC_NUDGE =
   'Continue the task and finish with the factory-operator command it names.';
 
-/**
- * The bounded tail of a workspace failure's log, read from its blob when the prompt is rendered (CORE
- * §4.3 rule 10). The log never enters events or the Andon. A log that cannot be read is left out, and
- * the prompt says so, rather than failing the Mechanic job.
- */
+// The bounded tail of a workspace failure's log, read from its blob when the prompt is rendered. The log never enters events or the Andon. A log that cannot be read is left out, and
+// the prompt says so, rather than failing the Mechanic job.
 const logTailOf = async (
   client: FactoryClient,
   ref: BlobRef,
@@ -72,7 +69,7 @@ export interface MechanicDeps {
   system?: SystemPort;
   worktreeLimit?: number;
   inUse?: Set<string>;
-  /** The Herdr pane the Mechanic runs in (PROTOCOL §9). A Mechanic job never runs headless. */
+  /** The Herdr pane the Mechanic runs in. A Mechanic job never runs headless. */
   pane: PaneDriver;
   now: () => number;
   sleep: (ms: number) => Promise<void>;
@@ -88,10 +85,8 @@ type Submit = (
   | { ok: false; code: string; message: string }
 >;
 
-/**
- * The repair scratch dir of one Mechanic job: holds the prompt, logs and `bin` shim, named by a hash
- * so the directory name stays short and stable.
- */
+// The repair scratch dir of one Mechanic job: holds the prompt, logs and `bin` shim, named by a hash
+// so the directory name stays short and stable.
 const repairDirOf = (dataDir: string, jobId: string): string =>
   join(
     dataDir,
@@ -99,7 +94,6 @@ const repairDirOf = (dataDir: string, jobId: string): string =>
     createHash('sha256').update(jobId).digest('hex').slice(0, 16),
   );
 
-/** A `factory-operator` shim for the Mechanic's PATH, run by the same runtime as the Cell. */
 const operatorBinOf = (dir: string): string => {
   const binDir = join(dir, 'bin');
   mkdirSync(binDir, { recursive: true });
@@ -116,11 +110,6 @@ type RepairSync =
   | { ok: true; commit?: CommitSha; changedFiles: string[] }
   | { ok: false; detail: string };
 
-/**
- * Commits any uncommitted edits the Mechanic left in the worktree (`--no-verify`, since the next
- * station or delivery runs the authoritative checks), pushes to the Work order branch if `HEAD`
- * moved past `startHead`, and returns the resulting commit + changed paths.
- */
 const commitAndPushRepair = async (input: {
   shell: ShellContext;
   worktree: string;
@@ -234,7 +223,7 @@ const commitAndPushRepair = async (input: {
 };
 
 /**
- * Runs one Mechanic job (CORE §14.4): prepares the Work order's worktree when available (falling back
+ * Runs one Mechanic job: prepares the Work order's worktree when available (falling back
  * to the repair scratch dir if preparation fails), runs the incident prompt in a Herdr pane, and
  * commits & pushes any worktree edits on `repair` / `resume` before recording the incident.
  */
@@ -255,7 +244,7 @@ export const runMechanic = async (
 
   const repairDir = repairDirOf(deps.dataDir, job.jobId);
   mkdirSync(repairDir, { recursive: true });
-  // The Cell renders the incident prompt from the Andon the job carries (CORE §14.4). A workspace
+  // The Cell renders the incident prompt from the Andon the job carries. A workspace
   // failure adds its stage, detail and the bounded tail of its log.
   const { incident } = mechanic;
   const failure = incident.workspaceFailure;
@@ -407,7 +396,7 @@ export const runMechanic = async (
       return { ok: false, code: 'rejected', message: recorded.message };
     }
     let next = recorded.result.next;
-    // A repair puts the workflow right, so the Work order goes on as a resume (CORE §14.3).
+    // A repair puts the workflow right, so the Work order goes on as a resume.
     const follow: OrderCommand | undefined =
       req.op === 'escalate'
         ? undefined

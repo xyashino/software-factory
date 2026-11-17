@@ -14,7 +14,7 @@ import { describeFailure } from './render/failure';
 import { paintFor, type Paint } from './render/paint';
 import { DEFAULT_SERVER_BIN } from './server-bin';
 
-/** The flags every command accepts (PROTOCOL §10). */
+/** The flags every command accepts. */
 export interface GlobalFlags {
   dataDir?: string;
   json?: boolean;
@@ -61,16 +61,14 @@ export interface Context {
   json: boolean;
   paint: Paint;
   client: FactoryClient;
-  /** One ULID per invocation (PROTOCOL §6): call it once, before the first call of the command. */
+  /** One ULID per invocation: call it once, before the first call of the command. */
   commandId(): string;
   now(): number;
 }
 
-/**
- * The client of the settings in force: HTTP to the running server in both modes. Local mode finds the
- * server in the data directory's discovery file and needs no token; remote mode needs `FACTORY_TOKEN`
- * and never reads or writes the local data directory.
- */
+// The client of the settings in force: HTTP to the running server in both modes. Local mode finds the
+// server in the data directory's discovery file and needs no token; remote mode needs `FACTORY_TOKEN`
+// and never reads or writes the local data directory.
 const clientFor = (settings: Settings): FactoryClient => {
   if (settings.remoteUrl === undefined) {
     return factoryClientFor({

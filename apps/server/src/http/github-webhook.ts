@@ -4,19 +4,16 @@ import type { PrState } from '@repo/factory-core/ports/pr-state';
 import type { Runtime } from '@repo/factory-runtime/composition';
 import { failureResponse, jsonResponse, refusedResponse } from '../wire';
 
-/**
- * `POST /v1/webhooks/github` (PROTOCOL §3.6): GitHub reports a pull request's state here, so the server
- * never calls `gh`. The route sits outside bearer auth; the HMAC of the raw body is its credential.
- */
+// `POST /v1/webhooks/github`: GitHub reports a pull request's state here, so the server
+// never calls `gh`. The route sits outside bearer auth; the HMAC of the raw body is its credential.
 
-/** The longest delivery id the runtime takes as a command id (STORAGE §3). */
 const MAX_DELIVERY_ID = 128;
 
 /** The signature GitHub sends: `sha256=<hex HMAC-SHA256 of the raw body>` (X-Hub-Signature-256). */
 export const signatureOf = (secret: string, body: string): string =>
   `sha256=${createHmac('sha256', secret).update(body).digest('hex')}`;
 
-/** Compares two signatures in constant time; a missing or differently sized header never matches. */
+// Compares two signatures in constant time; a missing or differently sized header never matches.
 const sameSignature = (expected: string, actual: string | null): boolean => {
   if (actual === null) return false;
   const left = Buffer.from(expected);

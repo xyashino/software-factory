@@ -3,7 +3,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 /**
- * The keys of the config file (PROTOCOL §10, STORAGE §1). `remoteUrl` selects remote mode; the token
+ * The keys of the config file. `remoteUrl` selects remote mode; the token
  * is never a file key, it comes from `FACTORY_TOKEN` only, so it is not written to disk.
  */
 export interface FileConfig {
@@ -74,7 +74,7 @@ export interface Settings {
   dataDir: string;
   serverBin: string;
   color: boolean;
-  /** Set when the CLI talks to a remote server over HTTP (PROTOCOL §2). Undefined means local mode. */
+  /** Set when the CLI talks to a remote server over HTTP. Undefined means local mode. */
   remoteUrl?: string;
   /** The supervisor token of remote mode, from `FACTORY_TOKEN`. */
   token?: string;
@@ -88,7 +88,7 @@ export interface SettingsInput {
 }
 
 /**
- * The settings in force, by precedence (PROTOCOL §10): a flag, then the environment, then the config
+ * The settings in force, by precedence: a flag, then the environment, then the config
  * file, then the default. Remote mode is on when `FACTORY_URL` or `remoteUrl` names a server; the
  * default is local: the running server the data directory's discovery file names. Colour is off with `--no-color`, with `NO_COLOR` set to a non-empty value,
  * or with `"color": false` in the config file.

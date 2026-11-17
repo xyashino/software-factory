@@ -1,9 +1,8 @@
 import pc from 'picocolors';
 
 /**
- * The colours of the Supervisor's views (ported from v1 `src/paint.ts`). Colour is applied only at
- * this presentation layer: stored events, blobs and `--json` output never pass through a `Paint`
- * (RULES §2.2).
+ * The colours of the Supervisor's views. Colour is applied only at
+ * this presentation layer: stored events, blobs and `--json` output never pass through a `Paint`.
  */
 export interface Paint {
   bold(text: string): string;

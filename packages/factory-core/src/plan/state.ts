@@ -10,7 +10,7 @@ import type {
 } from '../ids';
 import type { MemberState, PlanAndonReason, PlanJobKind } from './events';
 
-/** CORE §12.3 phases. `cancelled` is terminal, as is `completed`. */
+/** Phases. `cancelled` is terminal, as is `completed`. */
 export type PlanPhase =
   | { kind: 'branching' } // plan_created, no branch yet
   | { kind: 'active' } // the branch exists; no plan PR yet

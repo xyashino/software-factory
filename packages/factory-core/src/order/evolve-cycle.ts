@@ -55,7 +55,6 @@ const withQuestion = (
   ),
 });
 
-/** CORE §4.3 rule 3: a Station passed; the phase moves on and the failure counters reset. */
 const applyPass = (
   state: WorkOrderState,
   stationId: StationId,
@@ -81,7 +80,6 @@ const applyPass = (
   };
 };
 
-/** CORE §4.3 rule 4: a judged failure asks the Station's `onFail.retry` for another Cycle. */
 const applyJudgedFailure = (
   state: WorkOrderState,
   stationId: StationId,
@@ -95,7 +93,6 @@ const applyJudgedFailure = (
   };
 };
 
-/** CORE §4.3 rule 5: the budget effect of a Cycle's cause. */
 const applyCause = (
   state: WorkOrderState,
   stationId: StationId,
@@ -175,7 +172,6 @@ type CycleEndEvent = Extract<
   }
 >;
 
-/** A live Cycle ends with a non-pass outcome or a pass; either way its job ends (rule 2). */
 const finishCycle = (
   state: WorkOrderState,
   ev: CycleEndEvent,
@@ -258,7 +254,7 @@ const finishCycle = (
   }
 };
 
-/** A question is asked on a live Cycle: the Cycle pauses until the question is answered or the Cycle ends. */
+// A question is asked on a live Cycle: the Cycle pauses until the question is answered or the Cycle ends.
 const askQuestion = (
   state: WorkOrderState,
   ev: Extract<OrderEvent, { type: 'question_asked' }>,
@@ -279,10 +275,8 @@ const askQuestion = (
   return { ...paused, questions: [...paused.questions, record] };
 };
 
-/**
- * An answer updates the question whatever the asking Cycle's status (rule 1 exception). Only a
- * question still open on a live Cycle stops that Cycle's pause.
- */
+// An answer updates the question whatever the asking Cycle's status (rule 1 exception). Only a
+// question still open on a live Cycle stops that Cycle's pause.
 const answerQuestion = (
   state: WorkOrderState,
   ev: Extract<OrderEvent, { type: 'question_answered' }>,
@@ -313,7 +307,7 @@ const usageOf = (
   costUsd: ev.costUsd,
 });
 
-/** Applies one event about a Cycle or its conversation (CORE §4.3 rules 1, 3-6). */
+/** Applies one event about a Cycle or its conversation. */
 export const evolveCycleEvent = (
   state: WorkOrderState,
   stored: StoredEvent,

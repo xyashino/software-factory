@@ -20,14 +20,12 @@ import { type AuthCache, type Caller, createAuthCache } from './auth-cache';
 import { serveGithubWebhook } from './github-webhook';
 import { streamResponse } from './stream';
 
-/**
- * The HTTP app (PROTOCOL §2, §3): the runtime served over Hono, for local and remote clients alike.
- * Every route comes from the core table `HTTP_ROUTES`, and every payload is parsed by the route's
- * shared zod schema, so the HTTP layer adds no command or scheduling logic of its own. Credentials
- * are checked per route before any body is read (PROTOCOL §1).
- */
+// The HTTP app: the runtime served over Hono, for local and remote clients alike.
+// Every route comes from the core table `HTTP_ROUTES`, and every payload is parsed by the route's
+// shared zod schema, so the HTTP layer adds no command or scheduling logic of its own. Credentials
+// are checked per route before any body is read.
 
-/** Routes whose request schema names the Cell: the identity comes from the credential, never the body. */
+// Routes whose request schema names the Cell: the identity comes from the credential, never the body.
 const CELL_BODY_ROUTES: ReadonlySet<string> = new Set([
   'hello',
   'claim',
@@ -35,13 +33,12 @@ const CELL_BODY_ROUTES: ReadonlySet<string> = new Set([
   'submitCommand',
 ]);
 
-/** A bearer token: the base64url alphabet, bounded in length. Anything else is no token. */
+// A bearer token: the base64url alphabet, bounded in length. Anything else is no token.
 const BEARER = /^Bearer ([A-Za-z0-9_-]{1,512})$/;
 
 const bearerOf = (request: Request): string | undefined =>
   BEARER.exec(request.headers.get('authorization') ?? '')?.[1];
 
-/** Whether a route's credential classes (PROTOCOL §1) admit a caller of this kind. */
 const admits = (auth: HttpAuth, caller: Caller): boolean => {
   if (caller.kind === 'supervisor') {
     return auth === 'local'
@@ -54,18 +51,16 @@ const admits = (auth: HttpAuth, caller: Caller): boolean => {
 /** The name a local client's supervisor token carries: the server's own, not a stored token's. */
 export const LOCAL_SUPERVISOR_NAME = 'local';
 
-/** Constant-time equality of two tokens, so a wrong guess reveals nothing about the right one. */
+// Constant-time equality of two tokens, so a wrong guess reveals nothing about the right one.
 const sameToken = (a: string, b: string): boolean => {
   const left = Buffer.from(a);
   const right = Buffer.from(b);
   return left.length === right.length && timingSafeEqual(left, right);
 };
 
-/**
- * Who holds the token, among the credential classes the route accepts (PROTOCOL §1). The local
- * supervisor token is checked first, in memory: it is never stored, so no revoke is needed when the
- * server stops. Everything else is a runtime lookup.
- */
+// Who holds the token, among the credential classes the route accepts. The local
+// supervisor token is checked first, in memory: it is never stored, so no revoke is needed when the
+// server stops. Everything else is a runtime lookup.
 const lookupCaller = async (
   runtime: Runtime,
   auth: HttpAuth,
@@ -90,11 +85,9 @@ const lookupCaller = async (
   return undefined;
 };
 
-/**
- * Who holds the token (PROTOCOL §1), through the auth cache (perf-04): a verified caller the route
- * admits is served from memory; otherwise the runtime checks the credential and a positive result is
- * cached under the token's digest. A refusal is never cached.
- */
+// Who holds the token, through the auth cache (perf-04): a verified caller the route
+// admits is served from memory; otherwise the runtime checks the credential and a positive result is
+// cached under the token's digest. A refusal is never cached.
 const callerOf = async (
   runtime: Runtime,
   cache: AuthCache,
@@ -113,7 +106,7 @@ const callerOf = async (
 
 const NOT_JSON = Symbol('not json');
 
-/** The JSON body of a request; an empty body is `{}`; NOT_JSON when the text does not parse. */
+// The JSON body of a request; an empty body is `{}`; NOT_JSON when the text does not parse.
 const readJson = async (
   request: Request,
 ): Promise<unknown | typeof NOT_JSON> => {
@@ -129,7 +122,6 @@ const readJson = async (
 const notJson = () =>
   refusedResponse(invalidWire([{ path: [], message: 'the body is not JSON' }]));
 
-/** One route: credential, path and body into the route's request, the runtime, the response. */
 const serveRoute = async (
   runtime: Runtime,
   cache: AuthCache,
@@ -182,7 +174,7 @@ const serveRoute = async (
     if (caller.kind !== 'cell')
       return refusedResponse({ code: 'unauthorized' });
     // The Cell's lease names the Work order of its job. A job whose lease is gone keeps the order the body
-    // names: the runtime's epoch guard then refuses the command with stale_epoch (PROTOCOL §11).
+    // names: the runtime's epoch guard then refuses the command with stale_epoch.
     const held = await runtime.remote
       .orderOfJob(caller.cellId, jobId)
       .catch((error: unknown) => {
@@ -191,7 +183,7 @@ const serveRoute = async (
         }
         throw error;
       });
-    // A plan job's lease names its plan, so the body carries `planId` for that variant (PROTOCOL §4).
+    // A plan job's lease names its plan, so the body carries `planId` for that variant.
     if (held !== undefined) {
       if (isPlanId(held)) input.planId = held;
       else input.orderId = held;
@@ -224,7 +216,7 @@ const serveRoute = async (
 /**
  * The Hono app over one runtime. Every route of `HTTP_ROUTES` is registered; `join`, the SSE stream
  * and the GitHub webhook are registered by hand, since none is a bearer-authed route. An unknown path
- * answers 404 `not_found` (PROTOCOL §3.5).
+ * answers 404 `not_found`.
  */
 export const createHttpApp = (
   runtime: Runtime,

@@ -30,7 +30,7 @@ export const originUrlOf = async (
 };
 
 /**
- * Makes sure the repository's project is registered on the Factory (PROTOCOL §3.1), then returns the
+ * Makes sure the repository's project is registered on the Factory, then returns the
  * projects this Cell serves. Registration is idempotent: a project the Factory already has keeps its
  * settings, and only a missing one is added, with its repo url from origin.
  */

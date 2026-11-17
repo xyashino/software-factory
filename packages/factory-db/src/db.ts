@@ -5,7 +5,7 @@ import * as schema from './schema';
 /**
  * The typed query layer over one `bun:sqlite` connection. Drizzle only builds and runs queries on
  * that connection; `BEGIN IMMEDIATE`, `COMMIT`, `ROLLBACK` and savepoints stay raw on the `Database`
- * (never `orm.transaction`, which would start a plain `BEGIN`). See STORAGE §3.1.
+ * (never `orm.transaction`, which would start a plain `BEGIN`).
  */
 export type FactoryDatabase = BunSQLiteDatabase<typeof schema>;
 

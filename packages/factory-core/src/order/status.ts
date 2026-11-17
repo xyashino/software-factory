@@ -4,13 +4,13 @@ import type { WorkOrderState } from './state';
 export type Holder =
   | { kind: 'none' } // delivered or cancelled
   | { kind: 'cell'; cellId: CellId; epoch: number } // a job is active (including open questions)
-  | { kind: 'mechanic' } // an Andon the Mechanic triages, with no incident yet (CORE §14.4)
+  | { kind: 'mechanic' } // an Andon the Mechanic triages, with no incident yet
   | { kind: 'supervisor'; cause: 'andon' }
   | { kind: 'queue' };
 
 /**
  * Board status without the dependency overlay (`waiting_deps`, `deps_broken` need other Work
- * orders and are computed when the queue is read, STORAGE §4).
+ * orders and are computed when the queue is read).
  */
 export type BoardStatus =
   | 'queued'
@@ -22,7 +22,7 @@ export type BoardStatus =
   | 'merged'
   | 'cancelled';
 
-/** CORE §4.2: who holds the Work order right now. Derived, never stored as truth. */
+/** Who holds the Work order right now. Derived, never stored as truth. */
 export const holderOf = (state: WorkOrderState): Holder => {
   if (state.phase.kind === 'delivered' || state.phase.kind === 'cancelled')
     return { kind: 'none' };
@@ -45,7 +45,7 @@ export const holderOf = (state: WorkOrderState): Holder => {
   return { kind: 'queue' };
 };
 
-/** Board status (CORE §4.2): what a person sees on the board for this Work order. */
+/** Board status: what a person sees on the board for this Work order. */
 export const boardStatus = (state: WorkOrderState): BoardStatus => {
   if (state.phase.kind === 'cancelled') return 'cancelled';
   if (state.phase.kind === 'delivered')

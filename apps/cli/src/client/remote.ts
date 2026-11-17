@@ -25,7 +25,7 @@ export class ServerUnreachable extends WireFailure {
 }
 
 /**
- * The FactoryClient of the Supervisor CLI (PROTOCOL §2, §3.0). Every call goes over HTTP to the
+ * The FactoryClient of the Supervisor CLI. Every call goes over HTTP to the
  * server's routes, encoded and decoded by the shared codec. Local and remote mode both use it: local
  * mode reads the server's address and local token from the discovery file. Refusals keep their wire
  * error (`WireFailure`).
@@ -37,12 +37,10 @@ export interface RemoteClientOptions {
   token: string;
 }
 
-/** The longest a feed read holds when nothing is new; a little more than a claim long-poll. */
 const FEED_HOLD_MS = 25_000;
-/** A feed read with `waitMs: 0` still waits this long for events the server already holds. */
 const MIN_FEED_HOLD_MS = 1_000;
 
-/** Splits complete SSE blocks out of a buffer; the rest stays for the next chunk. */
+// Splits complete SSE blocks out of a buffer; the rest stays for the next chunk.
 const takeBlocks = (buffer: string): { blocks: string[]; rest: string } => {
   const blocks: string[] = [];
   let rest = buffer;
@@ -60,11 +58,9 @@ const eventOf = (block: string): StoredEvent | undefined => {
     : undefined;
 };
 
-/**
- * The event feed as the CLI reads it: the events after `afterGlobalSeq`, from `GET /v1/stream`. It
- * returns at once with what the stream has sent, or after `waitMs` with nothing. The long-poll answers
- * the same question with a long-poll; this is that answer over server-sent events.
- */
+// The event feed as the CLI reads it: the events after `afterGlobalSeq`, from `GET /v1/stream`. It
+// returns at once with what the stream has sent, or after `waitMs` with nothing. The long-poll answers
+// the same question with a long-poll; this is that answer over server-sent events.
 const eventsAfter = async (
   options: RemoteClientOptions,
   afterGlobalSeq: number,

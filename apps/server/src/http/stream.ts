@@ -3,7 +3,7 @@ import { invalidWire } from '@repo/factory-core/contracts/errors';
 import type { Runtime } from '@repo/factory-runtime/composition';
 import { refusedResponse } from '../wire';
 
-/** The event feed's path (PROTOCOL §3.1): `GET /v1/stream?after=<globalSeq>`, server-sent events. */
+/** The event feed's path: `GET /v1/stream?after=<globalSeq>`, server-sent events. */
 export const STREAM_PATH = '/v1/stream';
 
 /**
@@ -16,7 +16,7 @@ export const SSE_KEEPALIVE_MS = 15_000;
 export const SSE_KEEPALIVE = ': keepalive\n\n';
 
 /**
- * The event feed as server-sent events (PROTOCOL §3.1): one `id` (the globalSeq) and one JSON `data`
+ * The event feed as server-sent events: one `id` (the globalSeq) and one JSON `data`
  * line per stored event, from `after` or `Last-Event-ID`. While the feed is quiet, a keepalive comment
  * goes out every `keepaliveMs`. The stream ends when the client aborts. The caller checks the
  * credential first; this function only serves the feed.

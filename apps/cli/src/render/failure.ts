@@ -1,6 +1,6 @@
 import type { WireError } from '@repo/factory-core/contracts/errors';
 
-/** One line for a refusal the Supervisor reads on stderr (PROTOCOL §3.5). */
+/** One line for a refusal the Supervisor reads on stderr. */
 export const describeFailure = (error: WireError): string => {
   switch (error.code) {
     case 'not_found':

@@ -84,7 +84,7 @@ export interface RunnerUsage {
 export interface RunnerLaunch {
   binary: string;
   kickoffArgs: (kickoff: string) => string[];
-  /** Reads the usage from the runner's stdout log, or nothing when it reports none (PROTOCOL §9 step 7). */
+  /** Reads the usage from the runner's stdout log, or nothing when it reports none. */
   usage?: (stdout: string) => RunnerUsage | undefined;
 }
 
@@ -110,11 +110,11 @@ export interface StationDeps {
   notify?: NotifyFn;
   timing: StationTiming;
   registry: StationRegistry;
-  /** Optional abort signal from the Cell's shared JobRegistry (PROTOCOL §5.3–5.4). */
+  /** Optional abort signal from the Cell's shared JobRegistry. */
   signal?: AbortSignal;
   /**
    * Optional signal drain from the Cell's shared heartbeat loop. When provided, this station reads
-   * signals from it instead of running a separate heartbeat call (PROTOCOL §5.3).
+   * signals from it instead of running a separate heartbeat call.
    */
   takeSignals?: () => Signal[];
 }
@@ -148,14 +148,9 @@ type Submitter = (
 
 const encode = (text: string): Uint8Array => new TextEncoder().encode(text);
 
-/** What the idle reminder asks for: the Operator's own instructions name the artifacts. */
 const MISSING_ARTIFACTS =
   'the artifacts your instructions name for this station';
 
-/**
- * A `factory-operator` command for the Operator's PATH: the operator CLI run by the same bun as the Cell.
- * Its directory is the cycle's own, so each Cycle has its own copy.
- */
 const operatorBinOf = (cycleDir: string): string => {
   const binDir = join(cycleDir, 'bin');
   mkdirSync(binDir, { recursive: true });
@@ -173,7 +168,6 @@ const isInside = (root: string, path: string): boolean => {
   return rel !== '' && !rel.startsWith('..') && !isAbsolute(rel);
 };
 
-/** Writes an input blob at a declared path, refusing any path that leaves the worktree. */
 const writeInside = (
   worktree: string,
   path: string,
@@ -188,7 +182,7 @@ const writeInside = (
   writeFileSync(target, bytes);
 };
 
-/** Keeps only the blobs that exist, as the command's artifacts map. */
+// Keeps only the blobs that exist, as the command's artifacts map.
 const present = (blobs: Blobs): Record<string, BlobRef> =>
   Object.fromEntries(
     Object.entries(blobs).filter(
@@ -196,7 +190,6 @@ const present = (blobs: Blobs): Record<string, BlobRef> =>
     ),
   );
 
-/** The usage a runner printed to its stdout log, when the runner reports usage and the log is readable. */
 const readUsage = (
   launch: RunnerLaunch | undefined,
   stdoutPath: string,
@@ -209,7 +202,7 @@ const readUsage = (
   }
 };
 
-/** Submits one command to the runtime for this job, under its epoch. A refusal is an answer, not a throw. */
+// Submits one command to the runtime for this job, under its epoch. A refusal is an answer, not a throw.
 const submitterOf =
   (job: Job, deps: StationDeps): Submitter =>
   async (step, command, dryRun = false) => {
@@ -239,7 +232,6 @@ const submitterOf =
     }
   };
 
-/** A fresh start: the worktree, the prompt, the StartCycle command and the inputs. Ends the job when it fails. */
 type FreshStart =
   | {
       ok: true;
@@ -263,7 +255,7 @@ const startFresh = async (
   if (!ws.ok) {
     if (deps.signal?.aborted) return { ok: false, next: null };
     if (ws.missing) {
-      // The job needs a worktree this Cell does not hold: the Work order restarts from Station 0 (CORE §4.3 rule 13).
+      // The job needs a worktree this Cell does not hold: the Work order restarts from Station 0.
       const reset = await submit('workspace', {
         type: 'ReportWorktreeMissing',
         detail: ws.detail,
@@ -282,7 +274,7 @@ const startFresh = async (
   }
   const worktree = ws.worktree;
 
-  // The Cell renders the prompt from the repo's `.factory/` (PROTOCOL §4); a repo that cannot render it fails the job.
+  // The Cell renders the prompt from the repo's `.factory/`; a repo that cannot render it fails the job.
   let promptText: string;
   try {
     promptText = await renderOperatorPrompt({
@@ -327,7 +319,7 @@ const startFresh = async (
   if (station.cycleId === undefined) {
     throw new Error(`job ${job.jobId} names no cycle`);
   }
-  // A write Cycle that crashed or timed out is rolled back before it reruns on the reused worktree (CORE §4.3).
+  // A write Cycle that crashed or timed out is rolled back before it reruns on the reused worktree.
   // A retry follows a completed Cycle, so its uncommitted work stays (see rollsBackBeforeRerun).
   if (
     operator.permission !== 'read' &&
@@ -358,7 +350,7 @@ const startFresh = async (
 };
 
 /**
- * Runs one Operator station (PROTOCOL §9, `run_operator_station`). With `adopted`, the station is a
+ * Runs one Operator station (`run_operator_station`). With `adopted`, the station is a
  * pane a previous Cell started: its Cycle already runs, so the loop resumes on the same port and token
  * instead of starting the Cycle again.
  */
@@ -476,7 +468,7 @@ export const runOperatorStation = async (
   };
 
   /**
-   * A failed Cycle is not pushed (PROTOCOL §8.3): its work stays in the worktree with the rest of the
+   * A failed Cycle is not pushed: its work stays in the worktree with the rest of the
    * Work order's uncommitted state, and nothing reaches origin before `deliver`.
    */
   const failCycle = async (
@@ -537,7 +529,7 @@ export const runOperatorStation = async (
   };
 
   /**
-   * A read-only station commits nothing (PROTOCOL §8.3): it uploads its blobs and sends its command
+   * A read-only station commits nothing: it uploads its blobs and sends its command
    * with no commit. A tree it changed is a crash of the Cycle, never a checkpoint.
    */
   const readOnlyFinish = async (
@@ -713,7 +705,7 @@ export const runOperatorStation = async (
         };
       case 'incident':
       case 'escalate':
-        // The Mechanic's verbs belong to a Mechanic job, never to a Station Cycle (CORE §14.4).
+        // The Mechanic's verbs belong to a Mechanic job, never to a Station Cycle.
         return {
           ok: false,
           code: 'precondition',
@@ -762,7 +754,7 @@ export const runOperatorStation = async (
   };
 
   /**
-   * A runtime block (PROTOCOL §8.2): the Cycle ends as `blocked`, so the checkpoint runs first and the
+   * A runtime block: the Cycle ends as `blocked`, so the checkpoint runs first and the
    * commit carries `Factory-Outcome: blocked`. A refused checkpoint leaves the Cycle open; the next tick
    * tries again.
    */
@@ -959,7 +951,7 @@ export const runOperatorStation = async (
             });
             // Persisted before the kickoff goes in: a Cell that restarts from here finds the pane it opened.
             saveSession();
-            // An interactive runner starts with no prompt: the kickoff is submitted into its pane (v1 `prompt`).
+            // An interactive runner starts with no prompt: the kickoff is submitted into its pane.
             await deps.pane.type(pane, kickoff);
           } else {
             throw new Error('the Cell has no pane driver for a pane station');
@@ -988,7 +980,7 @@ export const runOperatorStation = async (
     }
     while (ending === undefined && !deps.signal?.aborted) {
       // A failed tick (the runtime briefly unreachable) is retried on the next one; the leases and
-      // the self-fence of the Cell decide when it gives up (PROTOCOL §5.3).
+      // the self-fence of the Cell decide when it gives up.
       await tick().catch(() => undefined);
       saveSession();
       if (ending !== undefined || deps.signal?.aborted) break;
@@ -1020,7 +1012,7 @@ export const runOperatorStation = async (
     waiters.clear();
     await server?.close();
     if (!kept) rmSync(promptDir, { recursive: true, force: true });
-    // The usage arrives after the Cycle may have ended: no epoch, no liveness check (PROTOCOL §9 step 7).
+    // The usage arrives after the Cycle may have ended: no epoch, no liveness check.
     if (!deps.signal?.aborted) {
       const usage = readUsage(deps.runners[operator.runner], stdoutPath);
       if (usage !== undefined) {

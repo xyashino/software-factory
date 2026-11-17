@@ -22,7 +22,7 @@ import { orderLocks } from './order-lock';
 import type { RuntimePorts } from './ports';
 import { decideContext } from './state';
 
-/** One command on a plan stream (CORE §12.3), as the runtime receives it. */
+/** One command on a plan stream, as the runtime receives it. */
 export interface PlanCommandRequest {
   planId: PlanId;
   commandId: string;
@@ -31,12 +31,12 @@ export interface PlanCommandRequest {
   /** The epoch the caller claims to hold; `decidePlan` refuses it unless it is the active job's. */
   epoch?: number;
   /**
-   * `dryRun` runs every check (load, fold, decide, the epoch fence) and appends nothing (PROTOCOL §8.2).
+   * `dryRun` runs every check (load, fold, decide, the epoch fence) and appends nothing.
    */
   dryRun?: boolean;
   /**
    * The lease a `ClaimJob` writes, built from the events the command decided. It is inserted in the same
-   * transaction as the claim's events, so a claim never leaves a plan job without a lease (CORE §5.4).
+   * transaction as the claim's events, so a claim never leaves a plan job without a lease.
    */
   lease?: (events: PlanEvent[]) => Lease | undefined;
 }
@@ -48,10 +48,10 @@ export interface PlanCommandResult {
 }
 
 export interface PlanCommands {
-  /** Runs a plan command through the loop: load, fold, decide, project, append (STORAGE §3). */
+  /** Runs a plan command through the loop: load, fold, decide, project, append. */
   submit(request: PlanCommandRequest): Promise<PlanCommandResult>;
   /**
-   * Reports a Work order's new state to its plan (CORE §12.7). Called after the order's command
+   * Reports a Work order's new state to its plan. Called after the order's command
    * committed. Only the events that change a member's state matter; a refusal (no change, no plan
    * yet) is not an error here: the start-up reconcile repairs what a crash left behind.
    */
@@ -61,14 +61,13 @@ export interface PlanCommands {
   ): Promise<void>;
 }
 
-/** The events that change a member's state as the plan hears it (CORE §12.7). */
 const MEMBER_EVENTS: ReadonlySet<OrderEvent['type']> = new Set([
   'delivery_finished',
   'pr_state_changed',
   'cancelled',
 ]);
 
-/** The member state a Work order row implies (CORE §12.3). A merged PR is merged, whatever the status says. */
+/** The member state a Work order row implies. A merged PR is merged, whatever the status says. */
 export const memberStateOf = (
   row: Pick<OrderProjection, 'status' | 'prState'>,
 ): MemberState => {
@@ -79,7 +78,6 @@ export const memberStateOf = (
   return 'open';
 };
 
-/** A command fully decided: the events to append and the projection they leave. */
 interface Prepared {
   request: PlanCommandRequest;
   expectedSeq: number;
@@ -96,7 +94,7 @@ const fold = (
   stored.reduce<PlanState | undefined>(evolvePlan, state);
 
 /**
- * The plan command loop (CORE §12.3). A replayed command id returns its stored response before any
+ * The plan command loop. A replayed command id returns its stored response before any
  * decision. A conflict reloads and decides again, up to `commandAttempts`. `onCommit` runs after each
  * append, as it does for Work orders.
  */
@@ -150,7 +148,7 @@ export const createPlanCommands = (
       events.push(event);
     };
     for (const event of decision.value) append(event);
-    // `raise_andon` is appended by the runtime, as for Work orders (CORE §12.3, nextJob rows 4 and 5).
+    // `raise_andon` is appended by the runtime, as for Work orders.
     const pending = state ? planNextJob(state) : undefined;
     if (pending?.kind === 'raise_andon') {
       append({
@@ -179,7 +177,7 @@ export const createPlanCommands = (
     };
   };
 
-  /** One append and its lease change in one transaction (the order commit's rule, CORE §5.4). */
+  /** One append and its lease change in one transaction (the order commit's rule). */
   const commit = (prepared: Prepared, request: PlanCommandRequest) =>
     ports.events.transaction(async (tx) => {
       const response: PlanCommandResult = {

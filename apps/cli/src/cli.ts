@@ -20,7 +20,6 @@ import { showCommand } from './commands/show';
 import { statusCommand } from './commands/status';
 import { usage } from './usage';
 
-/** The Supervisor command line (PROTOCOL §10). Every subcommand is a client of `factory-server`. */
 const main = defineCommand({
   meta: {
     name: 'factory',

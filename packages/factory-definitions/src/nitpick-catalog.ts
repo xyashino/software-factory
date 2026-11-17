@@ -23,10 +23,9 @@ export interface FactoryConfig {
   skills?: string;
 }
 
-/** The output directory nitpick writes to when the config names none (`packages/nitpick/src/docs.ts`). */
 const DEFAULT_OUTPUT = '.agents';
 
-/** Where skills live in the repo when nitpick does not sync them into the output directory. */
+// Where skills live in the repo when nitpick does not sync them into the output directory.
 const SKILLS_SOURCE = '.nitpick/skills';
 
 const isRecord = (value: unknown): value is Record<string, unknown> => {
@@ -205,10 +204,8 @@ export const readRuleIds = (config: unknown): Set<string> => {
   return ids;
 };
 
-/**
- * The primary output directory, repo-relative. Null when the config points
- * outside the repo (absolute or `..`): no path is then published for it.
- */
+// The primary output directory, repo-relative. Null when the config points
+// outside the repo (absolute or `..`): no path is then published for it.
 const outputDirOf = (config: Record<string, unknown>): string | null => {
   const output = config['output'];
   const first = Array.isArray(output) ? output[0] : undefined;
@@ -221,11 +218,6 @@ const outputDirOf = (config: Record<string, unknown>): string | null => {
   return dir;
 };
 
-/**
- * Rule id -> `<output>/rules/<file>.md`, as nitpick writes it: a rule whose
- * `doc` is an instruction object gets its own file, every other rule and each
- * group key share the group's file.
- */
 const rulePathsOf = (
   config: Record<string, unknown>,
   outDir: string,
@@ -258,11 +250,9 @@ const isSkillFile = (path: string): boolean => {
   }
 };
 
-/**
- * Skill id -> the `SKILL.md` path: `<output>/skills/<id>/SKILL.md` for a skill
- * nitpick syncs (listed in the config), else `.nitpick/skills/<id>/SKILL.md`.
- * Only ids with a file on disk are included.
- */
+// Skill id -> the `SKILL.md` path: `<output>/skills/<id>/SKILL.md` for a skill
+// nitpick syncs (listed in the config), else `.nitpick/skills/<id>/SKILL.md`.
+// Only ids with a file on disk are included.
 const skillPathsOf = (
   config: Record<string, unknown>,
   root: string,

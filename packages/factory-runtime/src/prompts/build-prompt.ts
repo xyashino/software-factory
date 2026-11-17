@@ -31,7 +31,6 @@ export interface PromptInput {
   operatorCommands: string[];
 }
 
-/** `id: path` when the catalog resolved the path, else the bare id. */
 const unitLine = ({ id, path }: DeclaredUnit): string =>
   path === undefined ? id : `${id}: ${path}`;
 
@@ -58,10 +57,8 @@ const renderInputsList = (input: PromptInput): string => {
   return lines.length > 0 ? lines.join('\n') : '- (no inputs)';
 };
 
-/**
- * Every variable an Operator profile may use: the built-ins (`BUILT_IN_VARIABLES`, relative paths
- * only), each artifact key (`report: report.md`), and one `<key>Path` per artifact the Cycle hands over.
- */
+// Every variable an Operator profile may use: the built-ins (`BUILT_IN_VARIABLES`, relative paths
+// only), each artifact key (`report: report.md`), and one `<key>Path` per artifact the Cycle hands over.
 const variablesOf = (
   input: PromptInput,
   context: string,
@@ -91,7 +88,7 @@ const variablesOf = (
 };
 
 /**
- * Renders the prompt of one Cycle (CORE §7, PROTOCOL §4): the Operator profile body, then the inputs,
+ * Renders the prompt of one Cycle: the Operator profile body, then the inputs,
  * notes, feedback and prior answers of the Cycle, then the declared rules and skills and the CLI guide.
  * Every line comes from a template or from data; no path in it is absolute. Throws on a missing
  * template or variable, never renders an empty placeholder.

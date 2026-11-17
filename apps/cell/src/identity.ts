@@ -13,7 +13,7 @@ import { cellIdSchema, type CellId } from '@repo/factory-core/ids';
 export const IDENTITY_FILE_NAME = 'credential';
 
 /**
- * Who this Cell is: the cellId and the credential the Factory issues when the Cell joins (PROTOCOL §3.2).
+ * Who this Cell is: the cellId and the credential the Factory issues when the Cell joins.
  * The Cell keeps both, so a restart reuses them and does not join again.
  */
 export interface CellIdentity {
@@ -68,7 +68,7 @@ export const deleteIdentity = (dataDir: string): void => {
 };
 
 /**
- * The identity a remote Cell runs as (PROTOCOL §1). A stored credential is reused, so the Cell keeps its
+ * The identity a remote Cell runs as. A stored credential is reused, so the Cell keeps its
  * id and warm worktrees across restarts. Without one, `enroll` joins the Factory, which names the Cell,
  * and the answer is stored at once. A Cell that was rejected with 401 is enrolled again the same way.
  */

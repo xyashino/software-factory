@@ -1,7 +1,7 @@
 import { appendFileSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 
-/** One line of the runtime journal: a pane ready, a reminder, a typed answer (CORE §9.3). */
+/** One line of the runtime journal: a pane ready, a reminder, a typed answer. */
 export interface JournalEntry {
   at: number;
   kind: string;

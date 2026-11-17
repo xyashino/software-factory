@@ -1,7 +1,7 @@
 import { projectIdSchema, type ProjectId } from './ids';
 
 /**
- * The project a repository runs as (PROTOCOL §3.1, §10): the first configured project when the Cell's
+ * The project a repository runs as: the first configured project when the Cell's
  * config names one, otherwise the repository's directory name normalized to a project id. The name is
  * lowercased, every run of characters outside `a-z0-9` becomes one `-`, and the ends are trimmed. A name
  * that normalizes to nothing valid is refused with the name in the message.

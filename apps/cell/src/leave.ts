@@ -1,11 +1,11 @@
 import type { Job } from '@repo/factory-core/contracts/job';
 import type { StationRegistry } from './cycle/registry';
 
-/** The longest a leaving Cell waits for its Operators to hand over (PROTOCOL §9). */
+/** The longest a leaving Cell waits for its Operators to hand over. */
 export const LEAVE_CAP_MS = 5 * 60_000;
 
 /**
- * The plan jobs this Cell holds (PROTOCOL §4, §9). A leaving Cell lets each one finish within the cap;
+ * The plan jobs this Cell holds. A leaving Cell lets each one finish within the cap;
  * the ones still running past it are released and stopped.
  */
 export interface HeldPlanJobs {
@@ -29,7 +29,7 @@ export interface LeaveDeps {
 }
 
 /**
- * Leaves the Cell (PROTOCOL §9): every live station is asked to hand over, and the leave waits until
+ * Leaves the Cell: every live station is asked to hand over, and the leave waits until
  * they have all ended, and until the plan jobs it holds have finished. A station that does not comply is
  * released by its own run after the grace, so the wait is bounded: past the cap, each plan job still
  * running is released (`ReleaseJob`) and stopped, and the leave returns with the stations still running,
@@ -59,7 +59,7 @@ export interface LeaveSignalDeps extends Omit<LeaveDeps, 'capMs'> {
 }
 
 /**
- * Wires the leave to `SIGTERM` (PROTOCOL §9): the signal starts the leave, and the Cell exits when
+ * Wires the leave to `SIGTERM`: the signal starts the leave, and the Cell exits when
  * every station has ended. Exit code 1 when the cap passed with stations still running.
  */
 export const onLeaveSignal = (deps: LeaveSignalDeps): void => {

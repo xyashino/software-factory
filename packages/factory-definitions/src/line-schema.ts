@@ -16,17 +16,13 @@ export const RUNNERS: readonly string[] = [
   'opencode',
 ];
 
-/** Station ids and profile names: kebab-case, like `quality-gate`. */
 const KEBAB_ID = /^[a-z][a-z0-9-]*$/;
-/** Artifact keys: camelCase, like `commit`. */
 const ARTIFACT_KEY = /^[a-z][a-zA-Z0-9]*$/;
-/** `<stationId>.<artifactKey>` or `<stationId>.gate`. */
 const INPUT_REF = /^([a-z][a-z0-9-]*)\.([a-z][a-zA-Z0-9]*)$/;
 const DURATION_HINT = 'must be a duration like 30s, 20m or 1h';
 const MAX_RANGE_HINT = 'must be a whole number from 1 to 5';
 const RESTART_HINT = 'must be a whole number from 0 to 100';
 const RESERVED_STATION_IDS: readonly string[] = ['task', 'operator'];
-/** Reserved artifact key: `<inspectionId>.gate` is the inspection's pass result. */
 const GATE_KEY = 'gate';
 const TOP_LEVEL_OPERATOR_MESSAGE =
   'schema v2 has no top-level operator block; declare the profile under operators: and name it from a station with operator:';
@@ -59,7 +55,6 @@ export interface OperatorPool {
   permission: Permission;
 }
 
-/** Fields every Station shares, schema v2. */
 interface StationBase {
   id: string;
   onFail?: OnFail;
@@ -89,7 +84,7 @@ export interface CommandBlock {
   exec: string[];
 }
 
-/** An assembly line, schema v2, normalised: durations in milliseconds, defaults filled. */
+/** An assembly line, normalised: durations in milliseconds, defaults filled. */
 export interface Line {
   name: string;
   description: string;
@@ -114,7 +109,6 @@ const isRecord = (value: unknown): value is Record<string, unknown> => {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 };
 
-/** `<stationId>.<artifactKey>` or `<stationId>.gate`, or null when neither. */
 const parseRef = (value: string): InputRef | null => {
   const match = INPUT_REF.exec(value);
   if (match?.[1] === undefined || match[2] === undefined) {
@@ -256,7 +250,7 @@ export const deliverSchema = z.strictObject({
 });
 
 /**
- * The YAML shape of a Line, schema v2. `operator:` is not a key of it: the
+ * The YAML shape of a Line. `operator:` is not a key of it: the
  * parser reports that key before this schema runs.
  */
 export const lineFileSchema = z.strictObject({

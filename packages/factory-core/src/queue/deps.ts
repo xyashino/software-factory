@@ -3,7 +3,7 @@ import type { Next } from '../order/next';
 import type { OrderProjection } from '../order/projection';
 import type { BoardStatus } from '../order/status';
 
-/** STORAGE §4 `dep_policy`: a dependency is satisfied when delivered (PR opened) or when merged. */
+/** `dep_policy`: a dependency is satisfied when delivered (PR opened) or when merged. */
 export type DepPolicy = 'delivered' | 'merged';
 
 export type DepState = 'satisfied' | 'waiting' | 'broken';
@@ -13,19 +13,17 @@ export type DepRow = Pick<OrderProjection, 'orderId' | 'status' | 'prState'> & {
   plan?: PlanSlug | null;
 };
 
-/** The dependent entry: its `depends_on` and, when it is a plan member, its plan (CORE §12.4). */
+/** The dependent entry: its `depends_on` and, when it is a plan member, its plan. */
 export interface DepEntry {
   dependsOn: readonly OrderId[];
   plan?: PlanSlug | null;
 }
 
-/** Board status with the dependency overlay (STORAGE §4). Base statuses never carry these. */
+/** Board status with the dependency overlay. Base statuses never carry these. */
 export type OverlayStatus = BoardStatus | 'waiting_deps' | 'deps_broken';
 
-/**
- * CORE §12.4: an in-plan predecessor is satisfied once it is delivered with its PR not closed (or
- * merged); a closed PR and a cancelled predecessor break the dependent. Never silently satisfied.
- */
+// An in-plan predecessor is satisfied once it is delivered with its PR not closed (or
+// merged); a closed PR and a cancelled predecessor break the dependent. Never silently satisfied.
 const stackedOutcomeOf = (row: DepRow): DepState => {
   if (row.status === 'cancelled') return 'broken';
   if (row.status === 'merged') return 'satisfied';
@@ -53,10 +51,10 @@ export const indexDeps = (rows: readonly DepRow[]): DepIndex =>
   new Map(rows.map((row) => [row.orderId, row]));
 
 /**
- * CORE §8 dependency outcome of one Work order. A dependency that names no row in `others` is
- * satisfied (v1 parity). A dependency that is a member of the same plan uses the stacked outcome
- * (CORE §12.4); any other uses `depPolicy`. Any broken dependency makes the whole entry broken; else
- * any waiting one makes it waiting. The CORE §8 rule that a reopened dependency does not stop a
+ * Dependency outcome of one Work order. A dependency that names no row in `others` is
+ * satisfied. A dependency that is a member of the same plan uses the stacked outcome;
+ * any other uses `depPolicy`. Any broken dependency makes the whole entry broken; else
+ * any waiting one makes it waiting. The rule that a reopened dependency does not stop a
  * started dependent is not special-cased here: the outcome reads the rows as given, so the caller
  * decides which rows to pass.
  *
@@ -83,7 +81,7 @@ export const resolveDeps = (
 };
 
 /**
- * Board status with the dependency overlay (STORAGE §4): only a queued Work order whose next step
+ * Board status with the dependency overlay: only a queued Work order whose next step
  * is a job can wait or break on its dependencies. Anything else keeps its base status.
  */
 export const boardStatusWithDeps = (

@@ -6,7 +6,7 @@ import {
 import { isRuntimeError } from '@repo/factory-runtime/errors';
 
 /**
- * The answers both transports share (PROTOCOL §3.5): a JSON body with a status, and the mapping of a
+ * The answers both transports share: a JSON body with a status, and the mapping of a
  * failure to its wire error. The HTTP listener calls these for every route, so an error reads the same
  * whichever client carried it.
  */
@@ -21,7 +21,6 @@ export const jsonResponse = (status: number, body: unknown): Response =>
 export const refusedResponse = (error: WireError): Response =>
   jsonResponse(WIRE_STATUS[error.code], error);
 
-/** A Zod failure raised while the runtime parsed an internal payload, by its shape. */
 const isIssueError = (
   error: unknown,
 ): error is { issues: { path: PropertyKey[]; message: string }[] } =>

@@ -26,7 +26,6 @@ const writeText = (
   block.set(bytes, offset);
 };
 
-/** An octal number, NUL-terminated, in a field of `width` bytes. */
 const writeOctal = (
   block: Uint8Array,
   offset: number,
@@ -41,7 +40,6 @@ const writeOctal = (
   );
 };
 
-/** The header of one regular file. The checksum counts the checksum field as eight spaces. */
 const headerOf = (name: string, size: number): Uint8Array => {
   if (encoder.encode(name).byteLength > NAME_MAX) {
     throw new Error(`tar entry name too long: ${name}`);

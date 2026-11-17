@@ -5,17 +5,9 @@ import type { ArtifactRef } from '@repo/factory-definitions/line-schema';
 import type { Template } from '@repo/factory-definitions/templates';
 import { renderTemplate } from './prompts/render';
 
-/**
- * The PR of a delivery, built the way v1 builds it (`packages/software-factory`, `format-pr-body.ts`):
- * the title and commit come from the builder's own `commit` artifact, and the body is the `body` PR
- * template with the todo's objective, the change list, the ADR, the checklist and the report.
- */
-
 const REPORT_MAX_CHARS = 4000;
-/** The longest commit message a deliver job carries (`deliverSchema`). */
 const COMMIT_MAX_CHARS = 4096;
 
-/** Subject of a monorepo commit: `type(scope): message`, scope required (v1 `delivery-commit.ts`). */
 const SUBJECT =
   /^(feat|fix|refactor|docs|test|chore|build|ci|perf|style|revert)\([^()\s]+\)!?: \S.*$/;
 
@@ -146,7 +138,7 @@ export interface BlockedPrInput {
   logCommand: string;
 }
 
-/** The `[BLOCKED]` draft PR of a Work order that stopped on an Andon (v1 `publishBlockedWork`). */
+/** The `[BLOCKED]` draft PR of a Work order that stopped on an Andon. */
 export const formatBlockedPr = (
   input: BlockedPrInput,
   templates: ReadonlyMap<string, Template>,

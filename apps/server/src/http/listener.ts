@@ -15,7 +15,7 @@ export interface HttpListener {
 }
 
 /**
- * Serves the runtime over HTTP + SSE (PROTOCOL §2): the one transport of `factory-server`, for local
+ * Serves the runtime over HTTP + SSE: the one transport of `factory-server`, for local
  * clients and remote ones alike. The caller holds the writer lock. `localToken`, when given, is the
  * supervisor credential of local clients; it lives in memory only and is never stored by the runtime.
  */

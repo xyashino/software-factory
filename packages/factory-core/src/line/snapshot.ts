@@ -23,7 +23,7 @@ const machineText = (max: number) =>
       'value must not contain machine-local values',
     );
 
-/** The Operator pool an operator Station runs with (CORE §11): its profile, runner, model and limits. */
+/** The Operator pool an operator Station runs with: its profile, runner, model and limits. */
 export const operatorPoolSchema = z
   .object({
     profile: tag,
@@ -35,7 +35,7 @@ export const operatorPoolSchema = z
   })
   .strict();
 
-/** A timed list of shell commands: a workspace's `sync` or `setup` (PROTOCOL §4). */
+/** A timed list of shell commands: a workspace's `sync` or `setup`. */
 export const commandBlockSchema = z
   .object({
     timeoutMs: z.number().int().min(1),
@@ -47,7 +47,7 @@ export const stationSchema = z
   .object({
     id: stationIdSchema,
     kind: z.enum(['operator', 'inspection']),
-    // Execution details the Cell needs to run the Station (PROTOCOL §4). Optional for snapshots pinned before
+    // Execution details the Cell needs to run the Station. Optional for snapshots pinned before
     // they were carried; a job that needs one of them and finds none is refused, never guessed.
     operator: operatorPoolSchema.optional(),
     timeoutMs: z.number().int().min(1).optional(),
@@ -58,7 +58,7 @@ export const stationSchema = z
       .optional(),
     maxRestarts: z.number().int().min(0).max(100),
     maxLostRestarts: z.number().int().min(0).max(100),
-    // Optional and additive (CORE §11). `verdict`: an Operator whose pass is a judgment (PROTOCOL §4).
+    // Optional and additive. `verdict`: an Operator whose pass is a judgment.
     verdict: z.boolean().optional(),
     // Keys of the artifacts the Station must hand over when its Cycle completes.
     artifacts: z
@@ -75,7 +75,7 @@ export const stationSchema = z
       .default([]),
     // Map of artifact key -> relative file name declared in operator profile.
     artifactFiles: z.record(z.string(), z.string()).optional(),
-    // Shell commands of an Inspection, run in order (PROTOCOL §4 `exec`).
+    // Shell commands of an Inspection, run in order (`exec`).
     exec: z
       .array(
         z

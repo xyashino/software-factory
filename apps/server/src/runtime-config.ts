@@ -3,10 +3,8 @@ import {
   type RuntimeConfig,
 } from '@repo/factory-runtime/ports';
 
-/**
- * The timing knobs an operator may set from the environment (PROTOCOL §5). They exist so the
- * distributed tests can run with short timings; production leaves them unset and keeps the defaults.
- */
+// The timing knobs an operator may set from the environment. They exist so the
+// distributed tests can run with short timings; production leaves them unset and keeps the defaults.
 const KNOBS = [
   ['FACTORY_LEASE_TTL_MS', 'leaseTtlMs'],
   ['FACTORY_HEARTBEAT_MS', 'heartbeatMs'],
@@ -14,7 +12,6 @@ const KNOBS = [
   ['FACTORY_CLAIM_TICK_MS', 'claimTickMs'],
 ] as const satisfies readonly (readonly [string, keyof RuntimeConfig])[];
 
-/** One knob's value: a positive whole number of milliseconds, or nothing when it is unset. */
 const millisecondsOf = (
   name: string,
   text: string | undefined,
@@ -28,8 +25,8 @@ const millisecondsOf = (
 
 /**
  * Reads the timing knobs from the environment. Only the knobs that are set are returned, so the
- * runtime keeps its defaults for the rest. A self-fence must stay shorter than the lease TTL
- * (PROTOCOL §5.1), with the default of either one used when it is not set.
+ * runtime keeps its defaults for the rest. A self-fence must stay shorter than the lease TTL,
+ * with the default of either one used when it is not set.
  */
 export const runtimeConfigFrom = (
   env: NodeJS.ProcessEnv,

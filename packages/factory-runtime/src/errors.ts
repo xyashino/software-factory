@@ -22,11 +22,11 @@ export class RuntimeError extends Error {
   }
 }
 
-/** A domain refusal (`decide`, CORE §5.2) as a RuntimeError. Nothing was appended. */
+/** A domain refusal (`decide`) as a RuntimeError. Nothing was appended. */
 export const refusal = (error: DomainError): RuntimeError =>
   new RuntimeError(domainErrorToWire(error));
 
-/** Retries exhausted (STORAGE §3): the caller may send the same command again. */
+/** Retries exhausted: the caller may send the same command again. */
 export const unavailable = (): RuntimeError =>
   new RuntimeError({ code: 'unavailable' });
 
@@ -41,7 +41,6 @@ export const notFound = (): RuntimeError =>
 export const isRuntimeError = (error: unknown): error is RuntimeError =>
   error instanceof RuntimeError;
 
-/** A Zod failure, by its shape: any error that carries a list of issues. */
 const isIssueError = (
   error: unknown,
 ): error is { issues: { path: PropertyKey[]; message: string }[] } =>

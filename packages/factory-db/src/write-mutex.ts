@@ -1,4 +1,4 @@
-/** Runs async sections one at a time, in arrival order (STORAGE §3.1). */
+/** Runs async sections one at a time, in arrival order. */
 export interface WriteMutex {
   run<T>(section: () => Promise<T>): Promise<T>;
 }

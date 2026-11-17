@@ -14,7 +14,7 @@ export const GIT_TIMEOUT_MS = 120_000;
 
 /**
  * The lines the repo's common `info/exclude` must hold, so a repo that does not ignore them still shows a
- * clean status: `.cell/` keeps a Cell's scratch out of every worktree (PROTOCOL §4), `.worktrees/` keeps the
+ * clean status: `.cell/` keeps a Cell's scratch out of every worktree, `.worktrees/` keeps the
  * worktrees out of the checkout, and `.factory-local/` keeps the Cell's data and locks out of it.
  */
 export const CELL_EXCLUDE_LINES = [
@@ -30,7 +30,7 @@ export const CELL_EXCLUDE_LINES = [
 export const worktreesRootOf = (repoRoot: string): string =>
   resolve(repoRoot, '.worktrees');
 
-/** Runs one git command against the repo at `repoRoot` (`git -C <repoRoot> ...`). */
+/** Runs one git command against the repo at `repoRoot` (`git -C <repoRoot>...`). */
 export const gitIn = (
   ctx: ShellContext,
   repoRoot: string,

@@ -11,7 +11,7 @@ import type { OrderEvent } from './events';
 import type { WorkOrderState } from './state';
 
 /**
- * Rebuilds a fresh Work order from git (CORE §5.2, STORAGE §8). Only the factory may run it, and only
+ * Rebuilds a fresh Work order from git. Only the factory may run it, and only
  * before any job was claimed: after that the Work order's progress is in its own events, and a second
  * recovery would overwrite it. `passedStations` must be a prefix of the pinned Line, and a `delivery`
  * means every Station passed, since the PR was opened from the finished Line.

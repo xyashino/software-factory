@@ -25,7 +25,7 @@ const MAX_TAIL_BYTES = 2048;
 const MAX_NAME_CHARS = 256;
 const SHA256 = /^sha256:[0-9a-f]{64}$/;
 const TAG = /^[a-z0-9][a-z0-9_-]{0,63}$/;
-/** `prUrl` is the documented I2 exception: a GitHub https URL, checked for shape only. */
+// `prUrl` is the documented I2 exception: a GitHub https URL, checked for shape only.
 const HTTPS_URL = /^https:\/\/[^\s]{1,500}$/;
 const TEXT_ENCODER = new TextEncoder();
 
@@ -50,7 +50,7 @@ export const freeText = z
     isMachineIndependentText,
     'free text must not contain machine-local values',
   );
-/** An inspection tail: at most 2 KiB of UTF-8, machine independent. */
+// An inspection tail: at most 2 KiB of UTF-8, machine independent.
 const tailText = z
   .string()
   .refine(
@@ -182,11 +182,11 @@ export const actorSchema = z.discriminatedUnion('kind', [
     })
     .strict(),
   z.object({ kind: z.literal('supervisor'), name: shortText }).strict(),
-  /** The Mechanic, the on-call triage role (CORE §14). Auditable apart from the Supervisor (R5). */
+  /** The Mechanic, the on-call triage role. Auditable apart from the Supervisor (R5). */
   z.object({ kind: z.literal('mechanic'), name: shortText }).strict(),
 ]);
 
-/** What the Mechanic did about an Andon (CORE §14.2). */
+/** What the Mechanic did about an Andon. */
 export const incidentActionSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('resume') }).strict(),
   z.object({ kind: z.literal('cancel') }).strict(),
@@ -213,7 +213,7 @@ const orderCreatedSchema = z
     dependsOn: z.array(orderIdSchema).max(64),
     line: pinnedLineSchema,
     baseBranch: shortText,
-    /** The Order Plan this Work order is a member of (CORE §12.1); absent for a plain todo. */
+    /** The Order Plan this Work order is a member of; absent for a plain todo. */
     plan: planSlugSchema.optional(),
   })
   .strict();
@@ -260,10 +260,8 @@ const workspaceFailedSchema = z
     logBlob: blobRefSchema,
   })
   .strict();
-/**
- * The Cell's job is past the first Station, but the worktree it needs is not on that Cell (CORE §4.3 rule 13).
- * The Work order restarts from Station 0, so the next job creates the worktree from the base again.
- */
+// The Cell's job is past the first Station, but the worktree it needs is not on that Cell.
+// The Work order restarts from Station 0, so the next job creates the worktree from the base again.
 const worktreeMissingSchema = z
   .object({
     type: z.literal('worktree_missing'),
@@ -445,7 +443,6 @@ const reopenedSchema = z
   })
   .strict();
 
-/** CORE §14.2: the Mechanic's record of an Andon: what went wrong, what it did, what it changed. */
 const incidentRecordedSchema = z
   .object({
     type: z.literal('incident_recorded'),
@@ -476,7 +473,7 @@ const deliveryFailedSchema = z
   })
   .strict();
 /**
- * What a `publish_blocked` job reports (v1 `publishBlockedWork`): a draft `[BLOCKED]` PR published on the
+ * What a `publish_blocked` job reports: a draft `[BLOCKED]` PR published on the
  * branch, nothing to publish because the worktree has no change against its base, or a best-effort failure
  * that never touches the Andon.
  */
@@ -521,7 +518,6 @@ const recoveredDeliverySchema = z
     state: z.enum(['open', 'merged', 'closed']),
   })
   .strict();
-/** CORE §3.3: a fresh Work order rebuilt from git (STORAGE §8). Additive in schema version 2. */
 const orderRecoveredSchema = z
   .object({
     type: z.literal('order_recovered'),
@@ -531,7 +527,7 @@ const orderRecoveredSchema = z
   })
   .strict();
 
-/** Every event of CORE §3.3, discriminated by `type`. */
+/** Discriminated by `type`. */
 export const orderEventSchema = z.discriminatedUnion('type', [
   orderCreatedSchema,
   specUpdatedSchema,
@@ -566,7 +562,7 @@ export const orderEventSchema = z.discriminatedUnion('type', [
   orderRecoveredSchema,
 ]);
 
-/** The envelope every stored event carries (CORE §3.1). Schema version 2 is the current one. */
+/** The envelope every stored event carries. Schema version 2 is the current one. */
 export const storedEventSchema = z
   .object({
     schemaVersion: z.literal(2),

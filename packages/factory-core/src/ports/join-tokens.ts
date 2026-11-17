@@ -1,4 +1,4 @@
-/** One join token as the Supervisor lists it (PROTOCOL §1). The token itself is never stored. */
+/** One join token as the Supervisor lists it. The token itself is never stored. */
 export interface JoinTokenRecord {
   joinTokenId: string;
   name: string;
@@ -8,7 +8,7 @@ export interface JoinTokenRecord {
 }
 
 /**
- * The `join_tokens` table (STORAGE §4). Only the SHA-256 hash of a token is stored; the plain token
+ * The `join_tokens` table. Only the SHA-256 hash of a token is stored; the plain token
  * is returned once, by the create call, and never again.
  */
 export interface JoinTokenStore {
@@ -28,7 +28,7 @@ export interface JoinTokenStore {
   revoke(joinTokenId: string, at: number): Promise<boolean>;
   /**
    * The token with this hash when it is neither revoked nor expired at `at`; undefined otherwise. A
-   * join token is checked by hash only (PROTOCOL §1); the caller compares the stored hash in constant time.
+   * join token is checked by hash only; the caller compares the stored hash in constant time.
    */
   findActive(
     tokenHash: string,

@@ -23,7 +23,7 @@ export const fillPrompt = (
     Object.hasOwn(vars, name) ? (vars[name] ?? match) : match,
   );
 
-/** The text a signal types into the Operator (PROTOCOL §7); nothing else is ever typed. */
+/** The text a signal types into the Operator; nothing else is ever typed. */
 export const typedFor = (signal: Signal, prompts: RuntimePromptSet): string => {
   switch (signal.kind) {
     case 'answer':

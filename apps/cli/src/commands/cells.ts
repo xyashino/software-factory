@@ -18,7 +18,6 @@ export const parseTtl = (text: string): number => {
   return ms / 1_000;
 };
 
-/** `factory cells`: the registry, one row per Cell with its last heartbeat (PROTOCOL §3.1). */
 const listCells = (args: Record<string, unknown>) =>
   withErrors(async () => {
     const ctx = createContext(flagsOf(args));
@@ -48,7 +47,7 @@ export const cellsListCommand = defineCommand({
   run: ({ args }) => listCells(args),
 });
 
-/** `factory cells rm <id>`: revokes a Cell; its leases expire at the next reaper pass (PROTOCOL §1). */
+/** `factory cells rm <id>`: revokes a Cell; its leases expire at the next reaper pass. */
 export const cellsRmCommand = defineCommand({
   meta: { name: 'rm', description: 'Revoke a Cell' },
   args: {
@@ -66,7 +65,7 @@ export const cellsRmCommand = defineCommand({
     }),
 });
 
-/** `factory cells token create [--ttl <d>] [--name <n>]`: the token is printed once (PROTOCOL §1). */
+/** `factory cells token create [--ttl <d>] [--name <n>]`: the token is printed once. */
 export const tokenCreateCommand = defineCommand({
   meta: {
     name: 'create',
@@ -105,7 +104,7 @@ export const tokenCreateCommand = defineCommand({
     }),
 });
 
-/** `factory cells token ls`: the tokens, without their values (PROTOCOL §1). */
+/** `factory cells token ls`: the tokens, without their values. */
 export const tokenLsCommand = defineCommand({
   meta: { name: 'ls', description: 'List join tokens' },
   args: { ...globalArgs },
@@ -127,7 +126,7 @@ export const tokenLsCommand = defineCommand({
     }),
 });
 
-/** `factory cells token rm <id>`: revokes a join token (PROTOCOL §1). */
+/** `factory cells token rm <id>`: revokes a join token. */
 export const tokenRmCommand = defineCommand({
   meta: { name: 'rm', description: 'Revoke a join token' },
   args: {

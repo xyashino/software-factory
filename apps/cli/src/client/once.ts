@@ -4,7 +4,7 @@ import {
 } from '@repo/factory-core/contracts/errors';
 import { ROUTES, type RouteName } from '@repo/factory-core/contracts/routes';
 
-/** Exit codes of `factory-server --once` (PROTOCOL §10, apps/server/src/once.ts). */
+/** Exit codes of `factory-server --once` (see apps/server/src/once.ts). */
 export const ONCE_EXIT = {
   ok: 0,
   failed: 1,
@@ -44,9 +44,9 @@ const spawnProcess = async (
 };
 
 /**
- * Runs one route through `factory-server --once` (PROTOCOL §10): a subprocess that takes the writer
+ * Runs one route through `factory-server --once`: a subprocess that takes the writer
  * lock, runs the command, prints the answer and exits, so the lock is released with the process.
- * The CLI itself never opens the database (STRUCTURE §3).
+ * The CLI itself never opens the database.
  */
 export const runOnce = async (
   options: OnceOptions,

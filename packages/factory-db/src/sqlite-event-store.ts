@@ -29,10 +29,10 @@ import { upsertPlan } from './plans-table';
 import { commands, type EventRecord, events, orders, plans } from './schema';
 import { writeMutex } from './write-mutex';
 
-/** The envelope version this store writes (CORE §11). */
+/** The envelope version this store writes. */
 export const SCHEMA_VERSION = 2;
 
-/** The columns a stored event is read back as. `type` is not needed: the payload carries it. */
+// The columns a stored event is read back as. `type` is not needed: the payload carries it.
 const EVENT_SELECT = {
   globalSeq: events.globalSeq,
   orderId: events.orderId,
@@ -64,7 +64,7 @@ export interface SqliteEventStore extends EventStore {
  * Runs one synchronous section of statements on the connection (see `SqliteEventStore.gate`).
  * `run` is for writes and for any section that must not see a half-written state. `read` is for
  * reads: outside a transaction it runs on the read-only WAL connection, without the write mutex, so
- * a long write or sweep never holds a read behind it (STORAGE §3.1). Inside a transaction it runs on
+ * a long write or sweep never holds a read behind it. Inside a transaction it runs on
  * the writer, so the transaction sees its own writes.
  */
 export interface StatementGate {
@@ -72,7 +72,6 @@ export interface StatementGate {
   read<T>(section: (db: FactoryDatabase) => T): Promise<T>;
 }
 
-/** One stored event row, as `EVENT_SELECT` reads it. */
 type EventRow = Pick<EventRecord, keyof typeof EVENT_SELECT>;
 
 /** Opens (or creates) a database file in WAL mode with foreign keys and a busy timeout. */
@@ -96,7 +95,7 @@ export const openReadDatabase = (file: string): Database => {
   return db;
 };
 
-/** A stored plan row back to the plan envelope. Plan events are written at the current schema only. */
+// A stored plan row back to the plan envelope. Plan events are written at the current schema only.
 const storedPlanOf = (row: EventRow): StoredPlanEvent => {
   const parsed = planStoredEventSchema.safeParse({
     schemaVersion: row.schemaVersion,
@@ -115,7 +114,7 @@ const storedPlanOf = (row: EventRow): StoredPlanEvent => {
   return parsed.data;
 };
 
-/** A stored row back to the current envelope. A row that does not upcast is an error, never skipped. */
+// A stored row back to the current envelope. A row that does not upcast is an error, never skipped.
 const storedOf = (row: EventRow): StoredEvent | StoredPlanEvent => {
   if (isPlanId(row.orderId)) return storedPlanOf(row);
   const raw = {
@@ -156,7 +155,7 @@ const loadPlanRows = (db: FactoryDatabase, planId: PlanId): StoredPlanEvent[] =>
     .all()
     .map(storedPlanOf);
 
-/** The `order_id` of a plan stream always has the `:plan:` infix; a Work order id never does (CORE §2). */
+// The `order_id` of a plan stream always has the `:plan:` infix; a Work order id never does.
 const PLAN_STREAM = '%:plan:%';
 
 /**
@@ -186,7 +185,7 @@ export const feedRows = (
     .all()
     .map(storedOf);
 
-/** The response a command stored, if the command ran before. */
+// The response a command stored, if the command ran before.
 const storedResponse = (
   db: FactoryDatabase,
   commandId: string,
@@ -197,11 +196,9 @@ const storedResponse = (
     .where(eq(commands.commandId, commandId))
     .get();
 
-/**
- * One append inside an open write transaction (STORAGE §3 steps 1-5). Idempotency and concurrency
- * are checked first; a refusal writes nothing. The event is zod-checked before the insert and the
- * stored envelope after it, so a bad write throws and the transaction rolls back.
- */
+// One append inside an open write transaction. Idempotency and concurrency
+// are checked first; a refusal writes nothing. The event is zod-checked before the insert and the
+// stored envelope after it, so a bad write throws and the transaction rolls back.
 const appendOn = (db: FactoryDatabase, input: AppendInput): AppendResult => {
   const replay = storedResponse(db, input.commandId);
   if (replay) {
@@ -273,10 +270,6 @@ const appendOn = (db: FactoryDatabase, input: AppendInput): AppendResult => {
   return { kind: 'appended', events: stored };
 };
 
-/**
- * One append to a plan stream inside an open write transaction (CORE §12.3, STORAGE §3). The same
- * steps as `appendOn`: replay, then the plan's own seq, then the facts, the `plans` row and the command.
- */
 const appendPlanOn = (
   db: FactoryDatabase,
   input: PlanAppendInput,
@@ -348,12 +341,10 @@ const appendPlanOn = (
   return { kind: 'appended', events: stored };
 };
 
-/**
- * Runs one `tx.append` in a savepoint, so a failing append leaves the outer transaction usable.
- * Savepoints are raw SQL on the connection; Drizzle runs the statements inside them.
- */
+// Runs one `tx.append` in a savepoint, so a failing append leaves the outer transaction usable.
+// Savepoints are raw SQL on the connection; Drizzle runs the statements inside them.
 const appendInSavepoint = <R>(raw: Database, run: () => R): R => {
-  // raw: savepoint control, the transaction-control counterpart of BEGIN/COMMIT (STORAGE §3.1).
+  // raw: savepoint control, the transaction-control counterpart of BEGIN/COMMIT.
   raw.exec('SAVEPOINT append');
   try {
     const result = run();
@@ -369,7 +360,7 @@ const appendInSavepoint = <R>(raw: Database, run: () => R): R => {
 /**
  * The SQLite `EventStore` over the writer connection and, when the database is a file, a read-only
  * connection on the same file (`openReadDatabase`). Writes and transactions run under one in-process
- * write mutex, and every write runs inside `BEGIN IMMEDIATE` (STORAGE §3.1). Reads outside a
+ * write mutex, and every write runs inside `BEGIN IMMEDIATE`. Reads outside a
  * transaction run on the read connection without the mutex, so they are not queued behind a write or
  * a sweep. Without a read connection (`:memory:`) reads queue on the mutex as before. The schema must
  * already be migrated (`migrate`).
@@ -401,7 +392,7 @@ export const openSqliteEventStore = (
   const inWriteTransaction = <T>(body: () => Promise<T>): Promise<T> =>
     writes.run(() =>
       inTransaction.run(true, async () => {
-        // raw: transaction control stays raw; `orm.transaction` would issue a plain BEGIN (STORAGE §3.1).
+        // raw: transaction control stays raw; `orm.transaction` would issue a plain BEGIN.
         db.exec('BEGIN IMMEDIATE');
         try {
           const value = await body();

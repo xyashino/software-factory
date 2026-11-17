@@ -16,14 +16,12 @@ export interface ClaimDeps {
   ports: RuntimePorts;
   handler: CommandHandler;
   notifier: Notifier;
-  /** The lazy reaper: expired leases return to the queue before a claim is offered (PROTOCOL §5.4). */
+  /** The lazy reaper: expired leases return to the queue before a claim is offered. */
   reap: () => Promise<number>;
 }
 
-/**
- * The plans this Cell may take a job of (PROTOCOL §4): a plan whose next step is a job, in a project the
- * Cell serves, not in cooldown here. The Cell that ran the plan's last job comes first (a warm mirror).
- */
+// The plans this Cell may take a job of: a plan whose next step is a job, in a project the
+// Cell serves, not in cooldown here. The Cell that ran the plan's last job comes first (a warm mirror).
 const claimablePlans = (
   plans: readonly PlanProjection[],
   view: CellView,
@@ -49,11 +47,9 @@ const claimablePlans = (
       return a.planId < b.planId ? -1 : a.planId > b.planId ? 1 : 0;
     });
 
-/**
- * Claims one plan job for the Cell (PROTOCOL §4). The `ClaimJob` and the job's lease are written in one
- * transaction, so a claimed plan job always has a lease the reaper can expire. A refused candidate is
- * skipped, as a Work order's is.
- */
+// Claims one plan job for the Cell. The `ClaimJob` and the job's lease are written in one
+// transaction, so a claimed plan job always has a lease the reaper can expire. A refused candidate is
+// skipped, as a Work order's is.
 const claimPlanOnce = async (
   deps: ClaimDeps,
   cellId: CellId,
@@ -112,7 +108,7 @@ const claimPlanOnce = async (
 };
 
 /**
- * Offers the Cell the best job it can run, if any (PROTOCOL §5.2). Plan jobs come first: they are short
+ * Offers the Cell the best job it can run, if any. Plan jobs come first: they are short
  * and unblock their plan's members. Then the queue, best first. Each candidate is claimed through the
  * command loop as `ClaimJob`. A candidate refused by a conflict or a rule is skipped, so the next one is
  * tried.
@@ -144,7 +140,7 @@ export const claimOnce = async (
 };
 
 /**
- * The long-poll of `claim` (PROTOCOL §5.2): answers at once when a job is on offer, otherwise waits
+ * The long-poll of `claim`: answers at once when a job is on offer, otherwise waits
  * until a commit wakes it, the tick passes, or the wait or the request ends. Never longer than
  * `min(waitMs, 25 s)`, measured on the Factory clock.
  */

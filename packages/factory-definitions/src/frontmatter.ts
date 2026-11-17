@@ -9,7 +9,7 @@ export interface SplitMarkdown {
   body: string;
 }
 
-/** The first line of a yaml error, without the position it already reports. */
+// The first line of a yaml error, without the position it already reports.
 const summary = (message: string): string => {
   const first = message.split('\n')[0] ?? '';
   return first.replace(/ at line \d+, column \d+:$/, '');

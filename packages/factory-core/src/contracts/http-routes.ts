@@ -1,17 +1,17 @@
 import type { RouteName } from './routes';
 
 /**
- * The HTTP surface (PROTOCOL §3.1, §3.2), the one transport of the Factory. `ROUTES` keeps the route names; this table is the
+ * The HTTP surface, the one transport of the Factory. `ROUTES` keeps the route names; this table is the
  * one place that maps each route to its HTTP method, path and credential. The server registers its
  * Hono routes from it, and the remote clients build their URLs from it, so every path is written once.
  */
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE';
 
 /**
- * Who may call a route (PROTOCOL §1): a supervisor token, a Cell credential, or either; `local` is the
+ * Who may call a route: a supervisor token, a Cell credential, or either; `local` is the
  * server's own local supervisor token only (it writes to the server's filesystem, so no remote token may
  * call it); `join` takes the join token in its body; `webhook` takes no bearer token, its credential is
- * the HMAC of the body (§3.6).
+ * the HMAC of the body.
  */
 export type HttpAuth =
   'supervisor' | 'local' | 'cell' | 'supervisor_or_cell' | 'join' | 'webhook';
@@ -27,7 +27,7 @@ export interface HttpRoute {
 
 /**
  * Routes with no `ROUTES` entry: the join call, the SSE stream that replaces `supervisorEvents`, and the
- * GitHub webhook that reports pull request state (PROTOCOL §3.6).
+ * GitHub webhook that reports pull request state.
  */
 export const HTTP_EXTRA_ROUTES = {
   join: { method: 'POST', path: '/v1/cell/join', auth: 'join' },
@@ -52,7 +52,7 @@ export type UnmappedRoute = keyof typeof HTTP_UNMAPPED;
 export type MappedRoute = Exclude<RouteName, UnmappedRoute>;
 export type HttpRouteName = MappedRoute | keyof typeof HTTP_EXTRA_ROUTES;
 
-/** The HTTP route of every mapped route, and the extra ones (PROTOCOL §3.1, §3.2). */
+/** The HTTP route of every mapped route, and the extra ones. */
 export const HTTP_ROUTES = {
   board: { method: 'GET', path: '/v1/board', auth: 'supervisor' },
   plans: { method: 'GET', path: '/v1/plans', auth: 'supervisor' },

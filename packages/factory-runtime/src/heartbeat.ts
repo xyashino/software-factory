@@ -8,7 +8,7 @@ import type { RuntimePorts } from './ports';
 import { assertCell } from './cells';
 
 /**
- * A Cell's heartbeat (PROTOCOL §5, §7): every job it names that it still holds gets its lease
+ * A Cell's heartbeat: every job it names that it still holds gets its lease
  * extended and reports `ok`; any other job reports `stale`, the cue to stop it. Acknowledged signals
  * are dropped; the unacknowledged signals of the live jobs come back in the response.
  */

@@ -25,7 +25,7 @@ import {
   worktreePresent,
 } from './worktree';
 
-/** The steps of a workspace prepare, in the order `ReportWorkspaceFailed` names them (STORAGE, PROTOCOL §9). */
+/** The steps of a workspace prepare, in the order `ReportWorkspaceFailed` names them (STORAGE). */
 export type WorkspaceStage = 'fetch' | 'sync' | 'worktree' | 'setup';
 
 export interface PrepareContext {
@@ -52,7 +52,7 @@ export type PrepareResult =
       detail: string;
       log: Uint8Array;
       /**
-       * A `reuse` job found no worktree on this Cell (PROTOCOL §9): the Cell reports `worktree_missing`
+       * A `reuse` job found no worktree on this Cell: the Cell reports `worktree_missing`
        * instead of a workspace failure, and nothing was created or set up.
        */
       missing?: boolean;
@@ -76,11 +76,9 @@ type Placed =
   | { ok: true; worktree: string; head: string; lease: Lease }
   | { ok: false; stage: WorkspaceStage; detail: string; missing?: boolean };
 
-/**
- * Removes the least recently used worktrees over the limit. A worktree this Cell is using is kept, and so
- * is one another Cell instance holds (its in-use lease cannot be taken). Housekeeping: a failure leaves a
- * worktree too many, and the job goes on.
- */
+// Removes the least recently used worktrees over the limit. A worktree this Cell is using is kept, and so
+// is one another Cell instance holds (its in-use lease cannot be taken). Housekeeping: a failure leaves a
+// worktree too many, and the job goes on.
 const evictLeastRecentlyUsed = async (ctx: PrepareContext): Promise<void> => {
   try {
     const plan = evictionPlan({
@@ -107,7 +105,6 @@ const evictLeastRecentlyUsed = async (ctx: PrepareContext): Promise<void> => {
 
 type Base = { ok: true; commit: string } | { ok: false; detail: string };
 
-/** The commit a `fresh` worktree is placed at: the job's commit, or the tip of the base branch on origin. */
 const resolveBase = async (
   ctx: PrepareContext,
   job: Job,
@@ -132,11 +129,6 @@ const resolveBase = async (
   return { ok: true, commit };
 };
 
-/**
- * The git steps that write to the repo, run under the repo lock: fetch `origin`, then place the worktree
- * (`fresh`: at its base, discarding what was there; `reuse`: as it is, or missing), then evict. The worktree
- * is leased on success; the caller releases it.
- */
 const placeWorktree = async (
   ctx: PrepareContext,
   job: Job,
@@ -204,7 +196,7 @@ const placeWorktree = async (
 
   if (mode === 'reuse') {
     // The uncommitted work of earlier Stations lives in this worktree: it is never reset, and a missing one
-    // is not created here (the Work order restarts from Station 0 instead, CORE §4.3 rule 13).
+    // is not created here (the Work order restarts from Station 0 instead).
     if (!worktreePresent(worktree)) {
       lease.release();
       return fail(
@@ -272,7 +264,7 @@ const placeWorktree = async (
 };
 
 /**
- * Prepares a job's workspace (PROTOCOL §9 step 1). The repo's `origin` is fetched, then the job's worktree
+ * Prepares a job's workspace. The repo's `origin` is fetched, then the job's worktree
  * under `<repoRoot>/.worktrees/` is placed by its mode: `fresh` at its base (`checkout --force`, `clean`,
  * with the `.cell/worktree.json` marker), `reuse` as it is, never reset, and missing when it is not on this
  * Cell. `sync` runs for a fresh placement only (it may touch the tree); `setup` runs once per commit. The

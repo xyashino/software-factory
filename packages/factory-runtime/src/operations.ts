@@ -59,7 +59,6 @@ type Handlers = {
   ) => Promise<RouteResponse<K>>;
 };
 
-/** The board's summary of one Order Plan (CORE §12.3, PROTOCOL §10). */
 const planRow = (plan: PlanProjection) => ({
   planId: plan.planId as PlanId,
   projectId: plan.projectId,
@@ -77,10 +76,6 @@ const planRow = (plan: PlanProjection) => ({
   updatedAt: plan.updatedAt,
 });
 
-/**
- * What blocks a Work order on the board: its dependencies (`waiting_deps`, `deps_broken`) or an
- * Andon. Null when nothing does. The dependency overlay is the queue's own (CORE §8, §12.4).
- */
 const blockerOf = (
   row: OrderProjection,
   rows: readonly OrderProjection[],
@@ -118,10 +113,6 @@ const boardRow = (row: OrderProjection) => ({
   updatedAt: row.updatedAt,
 });
 
-/**
- * Commands an Operator sends through its Cell (PROTOCOL §3.3). The Cell forwards them with the
- * Operator's actor and Cycle, so `decide` sees the actor the command requires (CORE §5.2).
- */
 const OPERATOR_COMMANDS = new Set([
   'CompleteCycle',
   'SubmitVerdict',
@@ -129,10 +120,8 @@ const OPERATOR_COMMANDS = new Set([
   'LeaveNote',
 ]);
 
-/**
- * Commands a Mechanic job sends through its Cell (CORE §14.3): the incident it records, and the
- * Resume or Cancel that follows it. The Cell sends them only for its Mechanic job.
- */
+// Commands a Mechanic job sends through its Cell: the incident it records, and the
+// Resume or Cancel that follows it. The Cell sends them only for its Mechanic job.
 const MECHANIC_COMMANDS = new Set([
   'RecordIncident',
   'Resume',
@@ -171,7 +160,7 @@ export interface OperationExtras {
 }
 
 /**
- * Every route the runtime serves, in one table (PROTOCOL §3). The HTTP listener and the in-process
+ * Every route the runtime serves, in one table. The HTTP listener and the in-process
  * client both call this, so a route behaves the same whichever transport reaches it.
  */
 export const createOperations = (
@@ -196,7 +185,7 @@ export const createOperations = (
       .then(requireResult);
   };
 
-  // The board and order reads reap lazily too (PROTOCOL §5.4): an expired lease shows as its reaped state.
+  // The board and order reads reap lazily too: an expired lease shows as its reaped state.
   const reaped = async <T>(read: () => Promise<T>): Promise<T> => {
     await claimDeps.reap();
     return read();

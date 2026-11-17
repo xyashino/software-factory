@@ -17,7 +17,7 @@ import { blobs, events } from './schema';
 import type { StatementGate } from './sqlite-event-store';
 import type { WriterLock } from './writer-lock';
 
-/** `sha256:<hex>` of the bytes: the content address of a blob (STORAGE §4, `blobs`). */
+/** `sha256:<hex>` of the bytes: the content address of a blob (`blobs`). */
 export const blobRefOf = (bytes: Uint8Array): BlobRef =>
   `sha256:${createHash('sha256').update(bytes).digest('hex')}` as BlobRef;
 
@@ -70,7 +70,7 @@ export const readBlobOn = (
   );
 };
 
-/** Every blob ref cited by any stored event payload. The sweep keeps these (STORAGE §5). */
+/** Every blob ref cited by any stored event payload. The sweep keeps these. */
 export const referencedBlobs = (orm: FactoryDatabase): Set<BlobRef> => {
   const cited = new Set<BlobRef>();
   for (const row of orm
@@ -83,7 +83,7 @@ export const referencedBlobs = (orm: FactoryDatabase): Set<BlobRef> => {
 };
 
 /**
- * The `BlobStore` over the `blobs` table (STORAGE §4, §5). `created_at` is read from `clock`, so the
+ * The `BlobStore` over the `blobs` table. `created_at` is read from `clock`, so the
  * sweep's 24 h age is the Factory's clock, not the machine's, when a clock is given.
  */
 export const sqliteBlobStore = (
@@ -116,7 +116,7 @@ export const sqliteBlobStore = (
       gate.run(() => {
         writer.assertHeld();
         // A blob some stored event cites is never swept, whatever the caller passed: the event scan is
-        // the authority, and `referenced` can only protect more (STORAGE §5).
+        // the authority, and `referenced` can only protect more.
         const protectedRefs = new Set<BlobRef>([
           ...referencedBlobs(orm),
           ...referenced,

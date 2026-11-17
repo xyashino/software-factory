@@ -17,9 +17,9 @@ import {
 } from '@repo/factory-core/contracts/routes';
 
 /**
- * The Cell's client in remote mode (PROTOCOL §2, §3.2): the Cell's routes over TCP HTTP, with the Cell
+ * The Cell's client in remote mode: the Cell's routes over TCP HTTP, with the Cell
  * credential as the bearer. Encoding and decoding are the shared codec's; this file adds the transport:
- * the fetch, and the retries of PROTOCOL §3.5 (a network failure or a 5xx is retried with the same body,
+ * the fetch, and the retries (a network failure or a 5xx is retried with the same body,
  * so the same commandId, until the attempts run out). A 401 is final here: the caller decides to join again.
  */
 
@@ -41,7 +41,7 @@ export interface RemoteCellOptions {
 const wait = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
-/** The Cell's routes only: a supervisor route is not for a Cell, so it is refused before any call. */
+// The Cell's routes only: a supervisor route is not for a Cell, so it is refused before any call.
 const CELL_ROUTES: ReadonlySet<string> = new Set([
   'hello',
   'cellProjectEnsure',
@@ -56,12 +56,11 @@ const unavailable = (): WireFailure => new WireFailure({ code: 'unavailable' });
 
 /**
  * True when the Factory refused the Cell's credential (401): the Cell was revoked, or its credential
- * was never issued. The loops report it, and the Cell stops its jobs and joins again (PROTOCOL §1).
+ * was never issued. The loops report it, and the Cell stops its jobs and joins again.
  */
 export const isUnauthorized = (error: unknown): boolean =>
   error instanceof WireFailure && error.error.code === 'unauthorized';
 
-/** One HTTP exchange: the answer's status and bytes, or undefined when nothing answered. */
 const exchange = async (
   fetchImpl: typeof fetch,
   url: string,
@@ -139,7 +138,7 @@ export const remoteFactoryClient = (
 };
 
 /**
- * Enrolls this Cell with a join token (PROTOCOL §3.2, §1). The Factory names the Cell and returns its
+ * Enrolls this Cell with a join token. The Factory names the Cell and returns its
  * credential once; the caller keeps both. A refused token is a `WireFailure` with status 401.
  */
 export const joinRemote = async (options: {

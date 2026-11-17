@@ -1,4 +1,4 @@
-/** The Factory clock, in milliseconds. The core never reads time itself (RULES §1.1). */
+/** The Factory clock, in milliseconds. The core never reads time itself. */
 export interface Clock {
   now(): number;
 }

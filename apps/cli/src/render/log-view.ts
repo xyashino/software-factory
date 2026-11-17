@@ -1,7 +1,7 @@
 import type { StoredEvent } from '@repo/factory-core/order/events';
 import type { Paint } from './paint';
 
-/** The event families the Traveler colours (PROTOCOL §10): one colour each. */
+/** The event families the Traveler colours: one colour each. */
 export type EventFamily =
   'lifecycle' | 'cycle' | 'andon' | 'question' | 'delivery';
 
@@ -68,7 +68,6 @@ export const shortId = (id: string): string =>
 export const formatClock = (ms: number): string =>
   new Date(ms).toISOString().slice(11, 19);
 
-/** A check's duration for a line: `<1s`, `12s`, or `1m05s`. */
 const formatDuration = (ms: number): string => {
   if (ms < 1000) return '<1s';
   const seconds = Math.floor(ms / 1000);
@@ -76,7 +75,7 @@ const formatDuration = (ms: number): string => {
   return `${Math.floor(seconds / 60)}m${String(seconds % 60).padStart(2, '0')}s`;
 };
 
-/** A summary head, with its detail after a colon when there is one. */
+// A summary head, with its detail after a colon when there is one.
 const withDetail = (head: string, detail: string): string =>
   detail ? `${head}: ${detail}` : head;
 

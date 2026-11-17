@@ -8,7 +8,6 @@ import { evolve } from '@repo/factory-core/order/evolve';
 import type { DecideContext } from '@repo/factory-core/order/commands';
 import type { WorkOrderState } from '@repo/factory-core/order/state';
 
-/** The envelope version the store writes (CORE §11). */
 const SCHEMA_VERSION = 2;
 
 /** Folds a Traveler into the Work order state it describes. An empty history has no state. */
@@ -70,7 +69,7 @@ export const blobRefsIn = (value: unknown): BlobRef[] => {
 
 /**
  * The `DecideContext` of one command: the clock, the ids, the actor and the epoch it claims, and the
- * sizes of the blobs it names, read from the store before `decide` runs (CORE §5.1).
+ * sizes of the blobs it names, read from the store before `decide` runs.
  */
 export const decideContext = (
   input: {
