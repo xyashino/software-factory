@@ -975,7 +975,7 @@ export const runOperatorStation = async (
       // The pane runs with the env it was launched with: same port, same token, the same Cycle.
       pane = adopted.paneName;
       paneLocation = { tabId: adopted.tabId };
-      deps.pane.adopt(pane, paneLocation);
+      deps.pane.adopt(pane, paneLocation, todo);
       journal({ at: deps.clock.now(), kind: 'pane_adopted' });
     }
     while (ending === undefined && !deps.signal?.aborted) {

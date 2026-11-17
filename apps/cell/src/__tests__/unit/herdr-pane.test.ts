@@ -61,7 +61,7 @@ describe('herdr pane driver', () => {
     expect(opened).toEqual({ tabId: 't1' });
 
     const later = createHerdrPane({ exec });
-    later.adopt('build_1', opened);
+    later.adopt('build_1', opened, 'todo-a');
     await later.close('build_1');
 
     expect(calls.at(-1)).toEqual(['tab', 'close', 't1']);
@@ -192,6 +192,40 @@ describe('herdr pane driver', () => {
     await pane.open({ name: 'build_1', task: 'todo-b', ...launch });
 
     expect(calls.some((c) => c[0] === 'tab' && c[1] === 'close')).toBe(false);
+  });
+
+  it('closes the operator tab of the same task that a restarted Cell adopted', async () => {
+    const { calls, exec } = recording(answers);
+    const restarted = createHerdrPane({ exec });
+    restarted.adopt('build_1', { tabId: 't1' }, 'todo-a');
+
+    await restarted.open({ name: 'audit_1', task: 'todo-a', ...launch });
+
+    expect(calls).toContainEqual(['tab', 'close', 't1']);
+  });
+
+  it('keeps the adopted operator tab of another task open', async () => {
+    const { calls, exec } = recording(answers);
+    const restarted = createHerdrPane({ exec });
+    restarted.adopt('build_1', { tabId: 't1' }, 'todo-b');
+
+    await restarted.open({ name: 'audit_1', task: 'todo-a', ...launch });
+
+    expect(calls.some((c) => c[0] === 'tab' && c[1] === 'close')).toBe(false);
+  });
+
+  it('closes the mechanic tab of the same task that a restarted Cell adopted', async () => {
+    const { calls, exec } = recording(answers);
+    const restarted = createHerdrPane({ exec });
+    restarted.adopt('mechanic_abc123_1', { tabId: 't1' }, 'todo-a');
+
+    await restarted.open({
+      name: 'mechanic_abc123_2',
+      task: 'todo-a',
+      ...launch,
+    });
+
+    expect(calls).toContainEqual(['tab', 'close', 't1']);
   });
 
   it('fails the open when Herdr returns no pane', async () => {

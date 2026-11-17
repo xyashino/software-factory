@@ -76,8 +76,8 @@ export interface PaneDriver {
       logCommand?: string;
     },
   ): Promise<PaneLocation>;
-  /** Re-learns a pane an earlier Cell opened, from its session file, so `close` reaches its tab. */
-  adopt(name: string, location: PaneLocation): void;
+  /** Re-learns a pane an earlier Cell opened, from its session file, so `close` reaches its tab. `task` lets the lane rule of `open` see it. */
+  adopt(name: string, location: PaneLocation, task: string): void;
   type(name: string, text: string): Promise<void>;
   read(name: string): Promise<PaneReading>;
   /** The sanitized last lines of the pane, for a stall alert. */

@@ -245,8 +245,8 @@ export const createHerdrPane = (
       }
       return { tabId };
     },
-    adopt: (name, location) => {
-      tabs.set(name, { tabId: location.tabId, lane: laneOf(name) });
+    adopt: (name, location, task) => {
+      tabs.set(name, { tabId: location.tabId, task, lane: laneOf(name) });
     },
     type: async (name, text) => {
       // Waits until the agent starts working, or stops on a prompt, so the text is not lost while the TUI

@@ -45,7 +45,11 @@ const discard = async (
   session: Session,
 ): Promise<void> => {
   if (options.pane !== undefined) {
-    options.pane.adopt(session.paneName, { tabId: session.tabId });
+    options.pane.adopt(
+      session.paneName,
+      { tabId: session.tabId },
+      session.taskName,
+    );
     await options.pane.close(session.paneName).catch(() => undefined);
   }
   deleteSession(options.cellDataDir, session.cycleId);
