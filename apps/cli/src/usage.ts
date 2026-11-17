@@ -28,8 +28,9 @@ with no server running, a write or a read runs one command under the writer lock
                        [--repo-dir <path>] [--priority high|medium|low] [--plan <slug>]
                        [--depends-on <id,…>] [--base-branch <b>] (--file <path> | --body <text> | --file -)
   factory order pr-state <order> open|merged|closed --pr-url <url>  set a PR state by hand
-  factory todos migrate [--dir <todos>] [--repo-dir <path>] --project <id> [--dry-run] [--all] [--remove]
-                                            import todos/ into the server once (idempotent)
+  factory todos import [--project <id>] [--apply] [--remove] [--register]
+                                            import <repo>/todos/ into the server (dry run unless --apply)
+  factory todos export [--project <id>]     write server orders with no todos/ file back to todos/
   factory admin backup <file>               write an online SQLite backup (STORAGE §7)
   factory admin export <file>               write the Factory export (STORAGE §7)
   factory admin rebuild-projections         rebuild projections from the event log (STORAGE §7)

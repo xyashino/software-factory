@@ -1,4 +1,10 @@
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  unlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import { removeScratch, runCli, scratchDir } from './helpers/run-cli';
@@ -16,7 +22,9 @@ interface Scenario {
  * `demo` added. Every test gets its own, so no test sees another's orders.
  */
 const scenario = async (): Promise<Scenario> => {
-  const repo = scratchDir('factory-tasks-repo-');
+  // The directory is named `demo`: the project id is the repository's directory name by default.
+  const repo = join(scratchDir('factory-tasks-'), 'demo');
+  mkdirSync(repo, { recursive: true });
   const data = scratchDir('factory-tasks-data-');
   const todos = join(repo, 'todos');
   mkdirSync(todos);
@@ -318,7 +326,113 @@ describe('factory plan create', () => {
   });
 });
 
-describe('factory todos migrate', () => {
+describe('factory todos import', () => {
+  const importTodos = (s: Scenario, extra: string[] = []) =>
+    runCli(s.data, ['todos', 'import', ...extra], { cwd: s.repo });
+
+  it('dry-runs with no flag inside the repo, and makes no change', async () => {
+    const s = await scenario();
+    writeTodo(s, 'alpha', '');
+    const run = await importTodos(s);
+
+    expect(run.code).toBe(0);
+    expect(run.stdout).toContain('dry run');
+    expect(run.stdout).toContain('would-create');
+    expect(await boardOf(s)).toEqual([]);
+  });
+
+  it('creates the orders with --apply, and a second run creates nothing', async () => {
+    const s = await scenario();
+    writeTodo(s, 'a-one', 'plan: pl\n');
+    writeTodo(s, 'a-two', 'plan: pl\ndepends_on: [a-one]\n');
+    writeTodo(s, 'b-main', 'depends_on: [b-dep]\n');
+    writeTodo(s, 'b-dep', '');
+
+    expect((await importTodos(s, ['--apply'])).code).toBe(0);
+    expect(await boardOf(s)).toEqual([
+      'demo:a-one',
+      'demo:a-two',
+      'demo:b-dep',
+      'demo:b-main',
+    ]);
+
+    const again = await importTodos(s, ['--apply']);
+    expect(again.code).toBe(0);
+    expect(again.stdout).toContain('0 created');
+    expect(await boardOf(s)).toHaveLength(4);
+  });
+
+  it('refuses a project the server does not have', async () => {
+    const s = await scenario();
+    writeTodo(s, 'alpha', '');
+    const run = await importTodos(s, ['--project', 'nobody']);
+
+    expect(run.code).toBe(1);
+    expect(run.stderr).toContain('project nobody is not registered');
+  });
+
+  it('with --apply --remove, deletes only what the server confirmed', async () => {
+    const s = await scenario();
+    writeTodo(s, 'keep-done', '', 'done');
+    writeTodo(s, 'go', '');
+
+    expect((await importTodos(s, ['--apply', '--remove'])).code).toBe(0);
+    expect(existsSync(join(s.todos, 'go.md'))).toBe(false);
+    expect(existsSync(join(s.todos, 'keep-done.md'))).toBe(true);
+  });
+});
+
+describe('factory todos export', () => {
+  const exportTodos = (s: Scenario) =>
+    runCli(s.data, ['todos', 'export'], { cwd: s.repo });
+  const importTodos = (s: Scenario, extra: string[] = []) =>
+    runCli(s.data, ['todos', 'import', ...extra], { cwd: s.repo });
+
+  it('writes a file for each order with none, and lists the ones it skips', async () => {
+    const s = await scenario();
+    writeTodo(s, 'alpha', '');
+    writeTodo(s, 'beta', 'priority: high\n');
+    expect(
+      (await runCli(s.data, ['todos', 'import', '--apply'], { cwd: s.repo }))
+        .code,
+    ).toBe(0);
+    unlinkSync(join(s.todos, 'alpha.md'));
+    const betaBefore = readFileSync(join(s.todos, 'beta.md'), 'utf8');
+
+    const run = await exportTodos(s);
+
+    expect(run.code).toBe(0);
+    expect(run.stdout).toContain('written  todos/alpha.md');
+    expect(run.stdout).toContain('skipped  todos/beta.md  file exists');
+    expect(existsSync(join(s.todos, 'alpha.md'))).toBe(true);
+    expect(readFileSync(join(s.todos, 'beta.md'), 'utf8')).toBe(betaBefore);
+  });
+
+  it('a clean server imports the exported todos back as the same orders', async () => {
+    const s = await scenario();
+    writeTodo(s, 'a-one', 'plan: pl\n');
+    writeTodo(s, 'a-two', 'plan: pl\ndepends_on: [a-one]\n');
+    writeTodo(s, 'b-main', 'depends_on: [b-dep]\npriority: high\n');
+    writeTodo(s, 'b-dep', '');
+    expect((await importTodos(s, ['--apply'])).code).toBe(0);
+    const original = await boardOf(s);
+    const names = ['a-one', 'a-two', 'b-main', 'b-dep'].map((id) => `${id}.md`);
+    for (const name of names) unlinkSync(join(s.todos, name));
+    expect((await exportTodos(s)).code).toBe(0);
+
+    const clean = await scenario();
+    for (const name of names) {
+      writeFileSync(
+        join(clean.todos, name),
+        readFileSync(join(s.todos, name), 'utf8'),
+      );
+    }
+    expect((await importTodos(clean, ['--apply'])).code).toBe(0);
+    expect(await boardOf(clean)).toEqual(original);
+  });
+});
+
+describe('factory todos migrate (deprecated alias)', () => {
   const migrate = (s: Scenario, extra: string[] = []) =>
     runCli(s.data, [
       'todos',
@@ -329,6 +443,16 @@ describe('factory todos migrate', () => {
       s.repo,
       ...extra,
     ]);
+
+  it('still imports, and prints the deprecation line', async () => {
+    const s = await scenario();
+    writeTodo(s, 'alpha', '');
+    const run = await migrate(s);
+
+    expect(run.code).toBe(0);
+    expect(run.stderr).toContain('deprecated: use factory todos import');
+    expect(await boardOf(s)).toEqual(['demo:alpha']);
+  });
 
   it('refuses a project the server does not have, before any line is printed', async () => {
     const s = await scenario();

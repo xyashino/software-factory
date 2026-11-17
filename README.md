@@ -59,12 +59,15 @@ factory project add my-project --repo <url>
 factory order create --project my-project --todo-id add-login --title "Add login" \
   --type feat --line feature --body "Add a login form."
 factory plan create --project my-project --slug auth --members todos/a.md todos/b.md
-factory todos migrate --project my-project --dry-run    # then without --dry-run, once
+factory todos import                 # dry run; add --apply to create the orders, once
 ```
 
-`factory todos migrate` imports an existing `todos/` folder into the server once: plans, then standalone
-todos in dependency order. Re-running is safe: files the server already has are skipped. `--remove` deletes
-each file only after the server confirmed it. Remote servers work the same way with `FACTORY_URL` and
+`factory todos import` imports the repo's `todos/` folder into the server: plans, then standalone todos in
+dependency order. It is a dry run unless `--apply` is given. Re-running is safe: files the server already has
+are skipped. `--remove` deletes each file only after the server confirmed it. `factory todos export` writes
+each server order that has no `todos/` file back to `todos/` and lists the orders it skipped. The project is
+the repository's directory name unless `--project` says otherwise. `factory todos migrate` still works, with a
+deprecation line, for one release. Remote servers work the same way with `FACTORY_URL` and
 `FACTORY_TOKEN`. Every command accepts `--json`. The full CLI table is in [docs/PROTOCOL.md](docs/PROTOCOL.md) §10.
 
 ## Credits
