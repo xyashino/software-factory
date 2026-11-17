@@ -25,7 +25,7 @@ import {
   worktreePresent,
 } from './worktree';
 
-/** The steps of a workspace prepare, in the order `ReportWorkspaceFailed` names them (STORAGE). */
+/** The steps of a workspace prepare, in the order `ReportWorkspaceFailed` names them. */
 export type WorkspaceStage = 'fetch' | 'sync' | 'worktree' | 'setup';
 
 export interface PrepareContext {

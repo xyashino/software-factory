@@ -98,7 +98,7 @@ export interface Line {
     commit: ArtifactRef;
     report: ArtifactRef;
     to: 'new-pr';
-    /** refuse delivery unless the squashed diff adds exactly one `decisions/*.md` entry */
+    /** refuse delivery unless the squashed diff adds exactly one decision-log entry */
     requireAdr?: boolean;
   };
   /** absolute path of the Line file */

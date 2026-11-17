@@ -332,7 +332,7 @@ const deliverWorktree = async (
     }
 
     const lease = `${branchRef}:${remoteTip}`;
-    // The ADR section is the Cell's to fill: the `decisions/` entries this commit adds.
+    // The ADR section is the Cell's to fill: the decision-log entries this commit adds.
     const added = await git(shell, worktree, [
       'diff',
       '--name-only',

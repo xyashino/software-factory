@@ -126,11 +126,11 @@ const stationSchema = z
 
 /**
  * The placeholder a delivery's PR body keeps for the Cell: only the Cell sees which
- * `decisions/` entries the delivery commit adds, so it replaces this with `adrSectionOf`.
+ * decision-log entries the delivery commit adds, so it replaces this with `adrSectionOf`.
  */
 export const PR_ADR_TOKEN = '{{adrSection}}';
 
-/** The PR body's ADR section for the `decisions/` entries a delivery commit adds. */
+/** The PR body's ADR section for the decision-log entries a delivery commit adds. */
 export const adrSectionOf = (addedDecisions: readonly string[]): string =>
   addedDecisions.length === 0
     ? '_No decisions/ entry recorded for this change._'

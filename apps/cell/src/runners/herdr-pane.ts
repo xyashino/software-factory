@@ -54,7 +54,6 @@ const laneOf = (name: string): Lane =>
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null;
 
-/** The id of the workspace labelled `label` in a `workspace list` answer, if Herdr lists one. */
 const workspaceIdOf = (answer: string, label: string): string | undefined => {
   let parsed: unknown;
   try {
