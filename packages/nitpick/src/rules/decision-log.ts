@@ -432,7 +432,9 @@ export const decisionLog = (options: Options): RuleUnit => ({
         `${file}: decisions live in "${DIR}" at repo root, not in "__log__/"`,
       );
     const decisions = files.filter((file) => file.startsWith(DIR));
-    const entries = git.stagedAddedFiles.filter((file) => file.startsWith(DIR));
+    const entries = [
+      ...new Set([...git.stagedAddedFiles, ...(git.committedAddedFiles ?? [])]),
+    ].filter((file) => file.startsWith(DIR));
     const decisionsOnly =
       git.stagedFiles.length > 0 &&
       git.stagedFiles.every(
