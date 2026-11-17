@@ -59,10 +59,10 @@ const schemaCases: Case[] = [
     /no top-level operator block/,
   ],
   [
-    'requires schemaVersion',
-    ['schemaVersion: 2\n', ''],
+    'refuses schemaVersion as an unknown key',
+    ['name: ', 'schemaVersion: 2\nname: '],
     'schemaVersion',
-    /must be 2|is required/,
+    /unknown key/,
   ],
   [
     'rejects a duration with a decimal',

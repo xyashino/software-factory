@@ -29,8 +29,7 @@ const SHIPPED_FACTORY = fileURLToPath(
 );
 
 /** The line the fixture serves: the quality gate first, then a builder the tests never claim. */
-const lineYaml = (checks: string[]): string => `schemaVersion: 2
-name: inspect
+const lineYaml = (checks: string[]): string => `name: inspect
 description: Quality gate first (integration fixture)
 workspace:
   setup:

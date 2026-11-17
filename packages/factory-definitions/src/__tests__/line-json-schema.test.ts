@@ -91,7 +91,7 @@ describe('line JSON schema', () => {
     expect(errorsOf(readYaml(VALID))).toEqual([]);
   });
 
-  it('rejects schemaVersion 1', () => {
+  it('rejects schemaVersion as an unknown key', () => {
     const doc = { ...readYaml(VALID), schemaVersion: 1 };
     expect(errorsOf(doc).length).toBeGreaterThan(0);
   });

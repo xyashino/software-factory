@@ -254,7 +254,6 @@ export const deliverSchema = z.strictObject({
  * parser reports that key before this schema runs.
  */
 export const lineFileSchema = z.strictObject({
-  schemaVersion: z.literal(2, { error: 'must be 2' }),
   name: z.string().regex(KEBAB_ID, 'must be kebab-case, like "feature"'),
   description: z.string().min(1, 'must not be empty'),
   workspace: workspaceSchema,

@@ -1,5 +1,4 @@
 # yaml-language-server: $schema=../schemas/line.schema.json
-schemaVersion: 2
 name: standard
 description: Direct builder build with quality gate and doctor audit (bypasses planning)
 
@@ -40,9 +39,9 @@ stations:
     kind: inspection
     timeout: 15m
     exec:
-      # The dry run of the commit hook: the same `ci:verify` husky runs, so the tests run once here and not again at delivery.
+      # The commit hook's own check (`ci:verify`, the same one husky pre-commit runs), so the tests run once here.
+      # The decision-log ADR is checked at delivery (`requireAdr`), not here: it needs a staged file this gate does not make.
       - pnpm ci:verify
-      - pnpm nitpick:check
     onFail:
       retry: build
       max: 3

@@ -6,7 +6,6 @@
   "type": "object",
   "additionalProperties": false,
   "required": [
-    "schemaVersion",
     "name",
     "description",
     "workspace",
@@ -15,7 +14,6 @@
     "deliver"
   ],
   "properties": {
-    "schemaVersion": { "const": 2 },
     "name": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
     "description": { "type": "string", "minLength": 1 },
     "workspace": { "$ref": "#/definitions/workspace" },

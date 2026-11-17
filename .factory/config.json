@@ -1,4 +1,5 @@
 {
+  "project": "software-factory",
   "rules": "./.nitpick/rules",
   "skills": "./.nitpick/skills",
   "herdr": {

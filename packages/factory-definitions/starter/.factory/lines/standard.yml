@@ -1,5 +1,4 @@
 # yaml-language-server: $schema=../schemas/line.schema.json
-schemaVersion: 2
 name: standard
 description: Direct builder build with quality gate and doctor audit (bypasses planning)
 

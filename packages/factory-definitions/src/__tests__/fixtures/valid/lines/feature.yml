@@ -1,5 +1,4 @@
 # yaml-language-server: $schema=../../../../../schemas/line.schema.json
-schemaVersion: 2
 name: feature
 description: Plan, build behind a quality gate, then audit
 
