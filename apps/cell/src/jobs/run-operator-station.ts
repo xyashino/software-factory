@@ -62,6 +62,7 @@ import type { WorkspaceStage } from '../workspace/prepare';
 import {
   differsFromSnapshot,
   restoreStationSnapshot,
+  rollsBackBeforeRerun,
   snapshot,
 } from '../workspace/snapshots';
 import { getBlob, putBlob } from './blobs';
@@ -327,12 +328,18 @@ const startFresh = async (
     throw new Error(`job ${job.jobId} names no cycle`);
   }
   // A write Cycle that crashed or timed out is rolled back before it reruns on the reused worktree (CORE §4.3).
-  if (operator.permission !== 'read' && job.workspace?.mode === 'reuse') {
+  // A retry follows a completed Cycle, so its uncommitted work stays (see rollsBackBeforeRerun).
+  if (
+    operator.permission !== 'read' &&
+    job.workspace?.mode === 'reuse' &&
+    rollsBackBeforeRerun(station.cause)
+  ) {
     await restoreStationSnapshot({
       git: deps.git,
       worktree,
       todoId: todo,
       stationId: station.stationId,
+      cycleId: station.cycleId,
     });
   }
   for (const input of station.inputs ?? []) {

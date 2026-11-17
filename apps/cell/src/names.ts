@@ -17,6 +17,13 @@ export const snapshotRefFor = (
   cycleId: string,
 ): string => `${snapshotNamespaceOf(todoId)}${stationId}/${cycleId}`;
 
+/**
+ * The ref that keeps the uncommitted work a rollback is about to discard: `refs/software-factory/<todoId>/
+ * preserved/<cycleId>`. It sits outside every station namespace, so no rollback picks it up as a snapshot.
+ */
+export const preservedRefFor = (todoId: string, cycleId: string): string =>
+  `${snapshotNamespaceOf(todoId)}preserved/${cycleId}`;
+
 /** The namespace of one station's snapshot refs within a Work order. */
 export const stationSnapshotNamespaceOf = (
   todoId: string,

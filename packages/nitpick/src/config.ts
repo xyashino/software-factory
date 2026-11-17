@@ -6,6 +6,8 @@ export type CheckContext = {
   git: {
     commitMessages: string[];
     stagedAddedFiles: string[];
+    /** Files the commits of the checked range add (`origin/main..HEAD` by default); empty when none. */
+    committedAddedFiles?: string[];
     stagedFiles: string[];
     lastCommitMessages: (count: number) => Promise<string[]>;
   };

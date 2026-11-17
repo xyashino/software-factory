@@ -194,6 +194,7 @@ describe('restoreStationSnapshot (a restart rolls back its own station)', () => 
       worktree,
       todoId: TODO,
       stationId: 'build',
+      cycleId: CYCLE,
     });
 
     expect(restored).toBe(
@@ -216,6 +217,7 @@ describe('restoreStationSnapshot (a restart rolls back its own station)', () => 
       worktree,
       todoId: TODO,
       stationId: 'build',
+      cycleId: CYCLE,
     });
 
     expect(restored).toBeUndefined();
@@ -230,6 +232,7 @@ describe('restoreStationSnapshot (a restart rolls back its own station)', () => 
       worktree,
       todoId: TODO,
       stationId: 'build',
+      cycleId: CYCLE,
     });
 
     expect(restored).toBeUndefined();

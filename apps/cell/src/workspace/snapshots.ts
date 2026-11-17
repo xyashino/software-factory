@@ -2,7 +2,11 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { RunGit, GitResult } from '../ports';
-import { snapshotNamespaceOf, stationSnapshotNamespaceOf } from '../names';
+import {
+  preservedRefFor,
+  snapshotNamespaceOf,
+  stationSnapshotNamespaceOf,
+} from '../names';
 
 /**
  * Tree snapshots of a worktree, ported from v1 (`withWorktreeTree` in `adapters/git/git.adapter.ts`). A snapshot
@@ -155,13 +159,24 @@ export const restore = async (input: {
  * from: the snapshot's parent must be the current HEAD (no commit has landed since). Returns the ref restored,
  * or undefined when there is nothing safe to restore. A restart uses this to rerun a crashed write Cycle clean.
  */
+/**
+ * Whether a write Cycle's rerun rolls the worktree back to its pre-cycle snapshot. Only a rerun that takes over a
+ * Cycle which did not finish does: a restart (the Cycle crashed or timed out) or a resume. A retry after a verdict
+ * or a gate failure follows a Cycle that completed, so its uncommitted work is what the next Station builds on.
+ */
+export const rollsBackBeforeRerun = (cause: {
+  kind: 'first' | 'retry' | 'restart' | 'handover' | 'resume';
+}): boolean => cause.kind === 'restart' || cause.kind === 'resume';
+
 export const restoreStationSnapshot = async (input: {
   git: RunGit;
   worktree: string;
   todoId: string;
   stationId: string;
+  /** The Cycle that is about to rerun: its uncommitted work is preserved under its own ref first. */
+  cycleId: string;
 }): Promise<string | undefined> => {
-  const { git, worktree, todoId, stationId } = input;
+  const { git, worktree, todoId, stationId, cycleId } = input;
   const listed = must(
     await git(worktree, [
       'for-each-ref',
@@ -190,6 +205,12 @@ export const restoreStationSnapshot = async (input: {
   if (parent.code !== 0 || head.code !== 0) return undefined;
   if (parent.stdout.trim() !== head.stdout.trim()) return undefined;
 
+  // Whatever is in the worktree now is kept under its own ref before the rollback discards it.
+  await snapshot({
+    git,
+    worktree,
+    ref: preservedRefFor(todoId, cycleId),
+  });
   await restore({ git, worktree, ref });
   return ref;
 };

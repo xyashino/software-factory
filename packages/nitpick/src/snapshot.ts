@@ -11,6 +11,12 @@ const exec = promisify(execFile);
 const git = async (cwd: string, args: string[]): Promise<string> =>
   (await exec('git', args, { cwd, maxBuffer: 64 * 1024 * 1024 })).stdout;
 
+const hasRef = (cwd: string, ref: string): Promise<boolean> =>
+  git(cwd, ['rev-parse', '--verify', '--quiet', ref]).then(
+    () => true,
+    () => false,
+  );
+
 const SEPARATOR = '\u001e';
 const SCISSORS = '# ------------------------ >8 ------------------------';
 
@@ -74,15 +80,35 @@ export const createSnapshot = async (
       .split(SEPARATOR)
       .map((message) => message.replace(/^\n/, ''))
       .filter((message) => message.trim() !== '');
+  const commitRange =
+    range ??
+    ((await hasRef(projectRoot, 'origin/main'))
+      ? 'origin/main..HEAD'
+      : undefined);
   const commitMessages = commitMsgFile
     ? [
         stripComments(
           await readFile(resolve(projectRoot, commitMsgFile), 'utf8'),
         ),
       ]
-    : range
-      ? await readLog([range], true)
+    : commitRange
+      ? await readLog([commitRange], range !== undefined)
       : await readLog(['-1']);
+  const committedAdded =
+    commitRange === undefined
+      ? []
+      : (
+          await git(projectRoot, [
+            'diff',
+            '--name-only',
+            '--diff-filter=A',
+            '-z',
+            commitRange,
+          ]).catch(() => '')
+        )
+          .split('\0')
+          .filter(Boolean)
+          .sort();
 
   return {
     contextFor: (
@@ -103,6 +129,7 @@ export const createSnapshot = async (
           commitMessages,
           stagedAddedFiles: scoped(stagedAdded),
           stagedFiles: scoped(stagedChanged),
+          committedAddedFiles: scoped(committedAdded),
           lastCommitMessages: (count) => readLog([`-${count}`]),
         },
         report,

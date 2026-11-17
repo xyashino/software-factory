@@ -53,6 +53,17 @@ export const createFixtureRepo = async (
   for (const [name, text] of Object.entries(todos)) {
     await Bun.write(join(dir, 'todos', `${name}.md`), text);
   }
+  // The Line's setup runs `pnpm install --frozen-lockfile` here. Outside the repo, the pnpm mise shim has no
+  // version to run, so pin it, and give the fixture an empty lockfile for the frozen install.
+  await Bun.write(join(dir, '.tool-versions'), 'pnpm 12.15.0\n');
+  await Bun.write(
+    join(dir, 'package.json'),
+    '{"name":"fixture","private":true}\n',
+  );
+  await Bun.write(
+    join(dir, 'pnpm-lock.yaml'),
+    "lockfileVersion: '9.0'\n\nimporters:\n\n  .: {}\n",
+  );
   await runGit(['git', '-C', dir, 'init', '--quiet', '-b', 'main']);
   await runGit(['git', '-C', dir, 'add', '.']);
   await runGit([
