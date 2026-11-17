@@ -16,7 +16,7 @@ type Docs = {
 type Output = {
   path: string;
   root: string;
-  toc?: { agents?: boolean; skills?: boolean };
+  toc?: { agents?: boolean; skills?: boolean; rules?: boolean };
   triggers?: boolean;
   copy?: boolean;
 };
@@ -49,6 +49,28 @@ const readSource = (configDir: string, file: string): string =>
   readFileSync(resolve(configDir, file), 'utf8').replaceAll('\r\n', '\n');
 
 const FENCE = /^\s*(```|~~~)/;
+
+/** First prose line of a rule, skipping fenced code, comments, headings and intro lines. */
+const summaryOf = (text: string | undefined): string => {
+  let fenced = false;
+  for (const raw of (text ?? '').split('\n')) {
+    const line = raw.trim();
+    if (FENCE.test(line)) {
+      fenced = !fenced;
+      continue;
+    }
+    if (
+      fenced ||
+      line === '' ||
+      /^(#|---|<!--|\[|\|)/.test(line) ||
+      line.endsWith(':')
+    )
+      continue;
+    return line.replace(/^[-*]\s+/, '').replace(/\[([^\]]+)\]\([^)]*\)/g, '$1');
+  }
+  return '';
+};
+
 const HEADING = /^(#{1,5})(\s)/;
 
 const shiftHeadings = (text: string): string => {
@@ -297,18 +319,30 @@ export const buildDocs = (
   }
 
   const instructionFiles = new Map<string, string>();
-  for (const { id, doc, run, fix, importance } of rules) {
+  const ruleTexts = new Map<string, string>();
+  for (const { id, group, doc, run, fix, importance } of rules) {
     if (run && !fix) {
       problems.push(`Rule "${id}": fix is required when run is defined`);
     }
-    if (!ownsFile(doc)) continue;
+    if (!ownsFile(doc)) {
+      const inline = resolveDoc(doc, `Rule "${id}"`, groupPath(group));
+      if (inline !== undefined) ruleTexts.set(id, inline.trim());
+      continue;
+    }
     const text = resolveDoc(doc, `Rule "${id}"`, instructionPath(id));
     if (text === undefined) continue;
+    ruleTexts.set(id, text.trim());
     instructionFiles.set(
       instructionPath(id),
       primary.triggers ? withTrigger(text, [importance], `${id} rule`) : text,
     );
   }
+
+  const titleOf = (group: string): string =>
+    group
+      .split('-')
+      .map((word) => `${word[0]?.toUpperCase()}${word.slice(1)}`)
+      .join(' ');
 
   const list = (group: string, from: string): string =>
     rules
@@ -318,7 +352,7 @@ export const buildDocs = (
           `${index + 1}. (${rule.importance}) ${
             ownsFile(rule.doc)
               ? link(from, instructionPath(rule.id), rule.id)
-              : resolveDoc(rule.doc, `Rule "${rule.id}"`, from)?.trim()
+              : ruleTexts.get(rule.id)
           }`,
       )
       .join('\n');
@@ -329,13 +363,34 @@ export const buildDocs = (
     : undefined;
   const sections: string[] = config.entry ? [(entry ?? '').trim()] : [header];
 
+  const indexShown = rules.length > 0 && (primary.toc?.rules ?? true);
+  if (indexShown) {
+    const index = Object.keys(config.rules).flatMap((group) => {
+      const listed = rules.filter((rule) => rule.group === group);
+      if (listed.length === 0) return [];
+      return [
+        `### ${titleOf(group)}`,
+        '',
+        ...listed.map((rule) => {
+          const to = ownsFile(rule.doc)
+            ? instructionPath(rule.id)
+            : groupPath(group);
+          const summary = summaryOf(ruleTexts.get(rule.id));
+          const label = `(${rule.importance}) ${link('root.md', to, rule.id)}`;
+          return summary ? `- ${label}: ${summary}` : `- ${label}`;
+        }),
+        '',
+      ];
+    });
+    sections.push(
+      ['## Rules', '', AODI_LEGEND, '', ...index].join('\n').trimEnd(),
+    );
+  }
+
   const groupFiles = new Map<string, string>();
   for (const group of Object.keys(config.rules)) {
     const file = groupPath(group);
-    const title = group
-      .split('-')
-      .map((word) => `${word[0]?.toUpperCase()}${word.slice(1)}`)
-      .join(' ');
+    const title = titleOf(group);
     const text = `## ${title}\n\n${list(group, file)}\n`;
     groupFiles.set(
       file,
@@ -350,7 +405,7 @@ export const buildDocs = (
         : text,
     );
   }
-  if (groupFiles.size > 0) {
+  if (groupFiles.size > 0 && !indexShown) {
     sections.push(
       '## Rule files',
       AODI_LEGEND,

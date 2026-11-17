@@ -1,5 +1,10 @@
 import { createHash } from 'node:crypto';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  catalogFromConfig,
+  readFactoryConfig,
+} from '@repo/factory-definitions/nitpick-catalog';
 import {
   fakeClock,
   fakeBlobStore,
@@ -61,7 +66,12 @@ let definitionsCache: Definitions | undefined;
 /** The shipped definitions, read once per test process. */
 export const shippedDefinitions = (): Definitions => {
   if (!definitionsCache) {
-    const result = loadDefinitions(SHIPPED_FACTORY_ROOT);
+    const repoRoot = fileURLToPath(new URL('../../../../', import.meta.url));
+    const catalog = catalogFromConfig(
+      repoRoot,
+      readFactoryConfig(join(repoRoot, '.factory')) ?? {},
+    );
+    const result = loadDefinitions(SHIPPED_FACTORY_ROOT, catalog);
     if (!result.ok) throw new Error(JSON.stringify(result.error));
     definitionsCache = result.value;
   }

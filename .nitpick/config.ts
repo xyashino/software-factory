@@ -18,6 +18,7 @@ export default config({
       toc: { agents: false, skills: false },
       triggers: true,
     },
+    { path: '.', root: 'AGENTS.md', copy: true },
     { path: '.', root: 'CLAUDE.md', copy: true },
   ],
   entry: { doc: { file: './entry.md' } },
@@ -68,11 +69,17 @@ export default config({
   },
   rules: {
     git: {
-      'rich-commit': richCommit,
+      'rich-commit': {
+        ...richCommit,
+        doc: { file: './rules/git/rich-commit.md' },
+      },
       'git-no-artifacts': md('A', 'git/git-no-artifacts'),
     },
     testing: {
-      'msw-backend-mocks': mswBackendMocks,
+      'msw-backend-mocks': {
+        ...mswBackendMocks,
+        doc: { file: './rules/testing/msw-backend-mocks.md' },
+      },
       'testing-black-box-aaa': md('A', 'testing/testing-black-box-aaa'),
       'testing-no-implementation-details': md(
         'I',
@@ -89,11 +96,14 @@ export default config({
       'testing-pyramid': md('A', 'testing/testing-pyramid'),
     },
     general: {
-      'decision-log': decisionLog({
-        scopes: [
-          /^(repo|claude|nitpick|factory|software-factory|eslint-config|typescript-config|docs|ci)(\/[a-z][a-z0-9-]*)?$/,
-        ],
-      }),
+      'decision-log': {
+        ...decisionLog({
+          scopes: [
+            /^(repo|claude|nitpick|factory|software-factory|eslint-config|typescript-config|docs|ci)(\/[a-z][a-z0-9-]*)?$/,
+          ],
+        }),
+        doc: { file: './rules/general/decision-log.md' },
+      },
       'general-minimal-text': md('A', 'general/general-minimal-text'),
       'general-prefer-ascii': md('I', 'general/general-prefer-ascii'),
       'general-caveman-markdown': md('A', 'general/general-caveman-markdown'),

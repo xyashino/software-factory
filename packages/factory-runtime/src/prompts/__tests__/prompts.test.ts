@@ -62,8 +62,14 @@ const firstCycleInput = async (
     blobTexts: blobs,
     budget: { retry: 0, max: 0 },
     declared: {
-      rules: profile.rules.map((id) => ({ id })),
-      skills: profile.skills.map((id) => ({ id })),
+      rules: profile.rules.map((id) => ({
+        id,
+        path: definitions.rulePaths.get(id),
+      })),
+      skills: profile.skills.map((id) => ({
+        id,
+        path: definitions.skillPaths.get(id),
+      })),
     },
     operatorCommands: ['factory-operator done'],
   };

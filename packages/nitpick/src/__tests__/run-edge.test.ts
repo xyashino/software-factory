@@ -678,9 +678,9 @@ describe('Rich commit through the CLI works when', () => {
   it('writes the rule instruction file and a group heading on sync', async () => {
     const root = await synced(rich);
     expect(await readFile(join(root, '.ai', 'AGENTS.md'), 'utf8')).toBe(
-      '# Information for AI\n\n## Rule files\n\n' +
+      '# Information for AI\n\n## Rules\n\n' +
         AODI_LEGEND +
-        '\n\n- [rules/git.md](rules/git.md)\n',
+        '\n\n### Git\n\n- (A) [rich-commit](rules/rich-commit.md): Subject `type(scope): title`, scope required, `!` before `:` for breaking change.\n',
     );
     expect(await readFile(join(root, '.ai', 'rules', 'git.md'), 'utf8')).toBe(
       '## Git\n\n1. (A) [rich-commit](rich-commit.md)\n',
