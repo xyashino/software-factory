@@ -46,6 +46,37 @@ export const findJsonString = (
   return match?.[1];
 };
 
+/** The Mechanic's panes are named `mechanic_<hash>_<n>`; every other pane is an Operator's. */
+type Lane = 'operator' | 'mechanic';
+const laneOf = (name: string): Lane =>
+  name.split('_')[0] === 'mechanic' ? 'mechanic' : 'operator';
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null;
+
+/** The id of the workspace labelled `label` in a `workspace list` answer, if Herdr lists one. */
+const workspaceIdOf = (answer: string, label: string): string | undefined => {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(answer);
+  } catch {
+    return undefined;
+  }
+  if (!isRecord(parsed) || !isRecord(parsed.result)) return undefined;
+  const listed = parsed.result.workspaces;
+  if (!Array.isArray(listed)) return undefined;
+  const items: unknown[] = listed;
+  for (const item of items) {
+    if (
+      isRecord(item) &&
+      item.label === label &&
+      typeof item.workspace_id === 'string'
+    )
+      return item.workspace_id;
+  }
+  return undefined;
+};
+
 const toOperator = (status: string | undefined): PaneReading['operator'] => {
   switch (status) {
     case 'working':
@@ -82,8 +113,16 @@ export const createHerdrPane = (
     }
     return outcome;
   };
-  const tabs = new Map<string, string>();
+  const tabs = new Map<string, { tabId: string; task?: string; lane: Lane }>();
   const workspaces = new Map<string, string>();
+
+  /** The task's workspace as Herdr lists it by label: it survives a Cell restart, the cache does not. */
+  const listedWorkspaceOf = async (
+    task: string,
+  ): Promise<string | undefined> => {
+    const listed = await exec(['workspace', 'list']);
+    return listed.code === 0 ? workspaceIdOf(listed.stdout, task) : undefined;
+  };
 
   /** Presses Enter on the folder-trust screen of an agent, if that is what it shows. */
   const confirmTrustOf = async (name: string): Promise<boolean> => {
@@ -101,6 +140,11 @@ export const createHerdrPane = (
   ): Promise<string> => {
     const known = workspaces.get(task);
     if (known !== undefined) return known;
+    const listed = await listedWorkspaceOf(task);
+    if (listed !== undefined) {
+      workspaces.set(task, listed);
+      return listed;
+    }
     const created = await ok([
       'workspace',
       'create',
@@ -149,6 +193,14 @@ export const createHerdrPane = (
         spec.cwd,
         spec.logCommand,
       );
+      // At most one tab per lane of a task: the earlier one of this lane makes way for the new one.
+      const lane = laneOf(spec.name);
+      for (const [name, tab] of tabs) {
+        if (tab.task === spec.task && tab.lane === lane) {
+          tabs.delete(name);
+          await exec(['tab', 'close', tab.tabId]);
+        }
+      }
       const created = await ok([
         'tab',
         'create',
@@ -166,7 +218,7 @@ export const createHerdrPane = (
       if (tabId === undefined || paneId === undefined) {
         throw new Error('herdr tab create returned no tab_id or pane_id');
       }
-      tabs.set(spec.name, tabId);
+      tabs.set(spec.name, { tabId, task: spec.task, lane });
       const [binary, ...args] = spec.command;
       if (binary === undefined) throw new Error('pane launch names no command');
       try {
@@ -194,7 +246,7 @@ export const createHerdrPane = (
       return { tabId };
     },
     adopt: (name, location) => {
-      tabs.set(name, location.tabId);
+      tabs.set(name, { tabId: location.tabId, lane: laneOf(name) });
     },
     type: async (name, text) => {
       // Waits until the agent starts working, or stops on a prompt, so the text is not lost while the TUI
@@ -231,7 +283,8 @@ export const createHerdrPane = (
     },
     confirmTrust: confirmTrustOf,
     closeTask: async (task) => {
-      const workspaceId = workspaces.get(task);
+      const workspaceId =
+        workspaces.get(task) ?? (await listedWorkspaceOf(task));
       workspaces.delete(task);
       if (workspaceId !== undefined)
         await exec(['workspace', 'close', workspaceId]);
@@ -239,7 +292,7 @@ export const createHerdrPane = (
     close: async (name) => {
       const tab = tabs.get(name);
       tabs.delete(name);
-      if (tab !== undefined) await exec(['tab', 'close', tab]);
+      if (tab !== undefined) await exec(['tab', 'close', tab.tabId]);
     },
   };
 };

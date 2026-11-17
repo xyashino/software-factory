@@ -6,12 +6,16 @@ import {
   type HerdrOutcome,
 } from '../../runners/herdr-pane';
 
-/** Answers by the first argument of a call: `workspace`, `tab` or `agent`. */
+/** Answers by the first two arguments of a call (`workspace list`), or else by the first (`tab`). */
 const recording = (answers: Record<string, HerdrOutcome>) => {
   const calls: string[][] = [];
   const exec: HerdrExec = async (args) => {
     calls.push([...args]);
-    return answers[args[0] ?? ''] ?? { code: 0, stdout: '', stderr: '' };
+    const key = `${args[0] ?? ''} ${args[1] ?? ''}`;
+    return (
+      answers[key] ??
+      answers[args[0] ?? ''] ?? { code: 0, stdout: '', stderr: '' }
+    );
   };
   return { calls, exec };
 };
@@ -31,7 +35,20 @@ const answers = {
     stderr: '',
   },
   tab: { code: 0, stdout: '{"tab_id":"t1","pane_id":"p1"}', stderr: '' },
+  'workspace list': {
+    code: 0,
+    stdout: '{"result":{"workspaces":[]}}',
+    stderr: '',
+  },
 };
+
+const listingOf = (label: string, workspaceId: string): HerdrOutcome => ({
+  code: 0,
+  stdout: JSON.stringify({
+    result: { workspaces: [{ label, workspace_id: workspaceId }] },
+  }),
+  stderr: '',
+});
 
 describe('herdr pane driver', () => {
   it('returns the tab it opened, and closes that tab once a later Cell adopts the pane', async () => {
@@ -56,7 +73,7 @@ describe('herdr pane driver', () => {
 
     await pane.open({ name: 'build_1', task: 'todo-a', ...launch });
 
-    expect(calls[0]).toEqual([
+    expect(calls[1]).toEqual([
       'workspace',
       'create',
       '--cwd',
@@ -65,7 +82,7 @@ describe('herdr pane driver', () => {
       'todo-a',
       '--no-focus',
     ]);
-    expect(calls[1]).toEqual(
+    expect(calls[2]).toEqual(
       expect.arrayContaining([
         'tab',
         'create',
@@ -75,8 +92,8 @@ describe('herdr pane driver', () => {
         '/work',
       ]),
     );
-    expect(calls[1]).toContain('FACTORY_OPERATOR_URL=http://127.0.0.1:4321');
-    expect(calls[2]).toEqual([
+    expect(calls[2]).toContain('FACTORY_OPERATOR_URL=http://127.0.0.1:4321');
+    expect(calls[3]).toEqual([
       'agent',
       'start',
       'build_1',
@@ -100,14 +117,81 @@ describe('herdr pane driver', () => {
     await pane.open({ name: 'audit_1', task: 'todo-a', ...launch });
     await pane.open({ name: 'build_1', task: 'todo-b', ...launch });
 
-    const workspaceCreates = calls.filter((c) => c[0] === 'workspace');
+    const workspaceCreates = calls.filter(
+      (c) => c[0] === 'workspace' && c[1] === 'create',
+    );
     expect(workspaceCreates).toHaveLength(2);
-    const tabCreates = calls.filter((c) => c[0] === 'tab');
+    const tabCreates = calls.filter((c) => c[0] === 'tab' && c[1] === 'create');
     expect(tabCreates.map((c) => c[c.indexOf('--workspace') + 1])).toEqual([
       'w1',
       'w1',
       'w1',
     ]);
+  });
+
+  it('reuses the workspace Herdr lists for a task after a restart, creating none', async () => {
+    const { calls, exec } = recording({
+      ...answers,
+      'workspace list': listingOf('todo-a', 'w9'),
+    });
+    const pane = createHerdrPane({ exec });
+
+    await pane.open({ name: 'build_1', task: 'todo-a', ...launch });
+
+    expect(calls.some((c) => c[0] === 'workspace' && c[1] === 'create')).toBe(
+      false,
+    );
+    expect(calls.find((c) => c[0] === 'tab' && c[1] === 'create')).toContain(
+      'w9',
+    );
+  });
+
+  it('closes the listed workspace of a task after a restart', async () => {
+    const { calls, exec } = recording({
+      ...answers,
+      'workspace list': listingOf('todo-a', 'w9'),
+    });
+
+    await createHerdrPane({ exec }).closeTask('todo-a');
+
+    expect(calls.at(-1)).toEqual(['workspace', 'close', 'w9']);
+  });
+
+  it('closes the earlier operator tab of the same task before it opens a new one', async () => {
+    const { calls, exec } = recording(answers);
+    const pane = createHerdrPane({ exec });
+
+    await pane.open({ name: 'build_1', task: 'todo-a', ...launch });
+    await pane.open({ name: 'audit_1', task: 'todo-a', ...launch });
+
+    const closeAt = calls.findIndex((c) => c[0] === 'tab' && c[1] === 'close');
+    const secondTabAt = calls.reduce(
+      (last, c, i) => (c[0] === 'tab' && c[1] === 'create' ? i : last),
+      -1,
+    );
+    expect(closeAt).toBeGreaterThan(-1);
+    expect(closeAt).toBeLessThan(secondTabAt);
+    expect(calls[closeAt]).toEqual(['tab', 'close', 't1']);
+  });
+
+  it('keeps the operator tab open when the mechanic of the same task opens its own', async () => {
+    const { calls, exec } = recording(answers);
+    const pane = createHerdrPane({ exec });
+
+    await pane.open({ name: 'build_1', task: 'todo-a', ...launch });
+    await pane.open({ name: 'mechanic_abc123_1', task: 'todo-a', ...launch });
+
+    expect(calls.some((c) => c[0] === 'tab' && c[1] === 'close')).toBe(false);
+  });
+
+  it('keeps the operator tab of another task open', async () => {
+    const { calls, exec } = recording(answers);
+    const pane = createHerdrPane({ exec });
+
+    await pane.open({ name: 'build_1', task: 'todo-a', ...launch });
+    await pane.open({ name: 'build_1', task: 'todo-b', ...launch });
+
+    expect(calls.some((c) => c[0] === 'tab' && c[1] === 'close')).toBe(false);
   });
 
   it('fails the open when Herdr returns no pane', async () => {
