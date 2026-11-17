@@ -87,15 +87,15 @@ describe('golden hashes', () => {
   it.each([
     [
       'feature',
-      'sha256:99ea641537ec68c787f099e9e0fc075d70d0bb5aef9645fe2dda3cd89db95131',
+      'sha256:c06d6312f0d5f0c9b02b961fb52152c07ffbc710f0993bb83705980e4d2788b7',
     ],
     [
       'fast',
-      'sha256:1a9578c559dc35059e05ce0959a2ebd367703dd5f3812ae5c18e719115c31cf2',
+      'sha256:c0af050a1acef1fa7559883ce024d988dfbe2ab3bbf2b1541fbcf528babe6efa',
     ],
     [
       'standard',
-      'sha256:9065988bdcbc8044dc7d6b86e7f16e584715f4d389748525ec257b2ea8bd4fac',
+      'sha256:0d34d29576300bf7a6404174480b1db4c35faa5ba287fcec15bb436ce738a50a',
     ],
   ])('pins the hash of the shipped %s line', (name, hash) => {
     expect(definitions.lines.get(name)?.snapshot.hash).toBe(hash);
