@@ -25,6 +25,10 @@ const ALLOWLIST: Record<string, { calls: number; why: string }> = {
     calls: 8,
     why: 'migration runner: its own schema_migrations table and BEGIN/COMMIT/ROLLBACK',
   },
+  'migrate-log-blobs.ts': {
+    calls: 3,
+    why: 'one transaction per moved log: BEGIN IMMEDIATE / COMMIT / ROLLBACK, on the writer before the store is served (STORAGE §5)',
+  },
   'sqlite-event-store.ts': {
     calls: 11,
     why: 'connection pragmas, BEGIN IMMEDIATE / COMMIT / ROLLBACK and savepoints (STORAGE §3.1)',

@@ -1,4 +1,7 @@
 import type { Database } from 'bun:sqlite';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import {
   commitShaSchema,
   orderIdOf,
@@ -52,6 +55,10 @@ export const seedProject = (db: Database): void => {
     [PROJECT_ID, 'https://example.test/software-factory.git', 0],
   );
 };
+
+/** An empty directory for the log files of a test store. */
+export const scratchBlobDir = (): string =>
+  mkdtempSync(join(tmpdir(), 'factory-blobs-'));
 
 /** A fresh store over a migrated, seeded in-memory database. */
 export const openSeededStore = () => {

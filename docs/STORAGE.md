@@ -317,12 +317,20 @@ CREATE TABLE signals (
   acked_at    INTEGER
 );
 
-CREATE TABLE blobs (
+CREATE TABLE blobs (                                    -- text blobs: prompts, artifacts, Handovers, feedback
   ref         TEXT PRIMARY KEY,                         -- sha256:<hex> of the uncompressed bytes
   size        INTEGER NOT NULL,
   encoding    TEXT NOT NULL,                            -- 'identity' | 'gzip'
   content     BLOB NOT NULL,
   media_type  TEXT NOT NULL,                            -- 'text/markdown', 'text/plain', 'application/json'
+  created_at  INTEGER NOT NULL
+);
+
+CREATE TABLE blob_files (                               -- log blobs: the bytes are the file blobs/<hex>
+  ref         TEXT PRIMARY KEY,                         -- sha256:<hex>; the file is `blobs/<hex>`
+  size        INTEGER NOT NULL,
+  encoding    TEXT NOT NULL,                            -- 'identity' | 'gzip', as the file is encoded
+  media_type  TEXT NOT NULL,
   created_at  INTEGER NOT NULL
 );
 
@@ -360,17 +368,27 @@ There is no `archived` flag: the board hides terminal Work orders by `updated_at
 
 | Rule                                         | Value                                                               |
 | :------------------------------------------- | :------------------------------------------------------------------ |
-| Text artifacts, prompts, Handovers, feedback | ≤ 2 MiB each                                                        |
-| Inspection and setup logs                    | ≤ 20 MiB, gzip; larger logs are truncated head + tail with a marker |
-| Compression                                  | gzip above 4 KiB                                                    |
+| Text artifacts, prompts, Handovers, feedback | ≤ 2 MiB each, in `blobs`                                            |
+| Inspection and setup logs                    | ≤ 20 MiB, in `blobs/<hex>` files; larger logs are truncated head + tail with a marker |
+| Compression                                  | gzip above 4 KiB, text rows and log files alike                     |
 | Referenced by any event                      | never deleted                                                       |
 | Uploaded but unreferenced after 24 h         | deleted by a daily sweep                                            |
 
 Binary artifacts are out of scope: artifacts are text by contract (as in v1).
 
-Logs dominate the size of the database, and referenced blobs are kept forever. This is accepted for
-v2.0; moving log blobs to a directory or object store behind the same `BlobStore` port is
-OPEN-QUESTIONS Q17.
+A log is a file, not a row (OPEN-QUESTIONS Q17). `blobs/<hex>` sits beside `factory.db`, and
+`blob_files` holds its metadata: the file without a row is not a blob. The `BlobStore` port is the
+same for both kinds; the adapter routes `kind: 'log'` to the file store.
+
+- **Write:** the bytes go to a temp file `blobs/.tmp-<hex>-<rand>`, which is fsynced and renamed to
+  `blobs/<hex>`. The `blob_files` row is inserted after the rename, in the same write section. A crash
+  leaves a `.tmp-` file or an orphan file that no row names; neither is readable through `get`.
+- **Sweep:** removes the unreferenced rows created at or before `now - 24 h`, then their files, and any
+  orphan or `.tmp-` file. Unlinks follow the commit.
+- **Migration:** on the first start with this code, each stored log moves to a file in its own
+  transaction. A log is a row an event names as `logBlob`, or a row over the text limit. A row whose
+  bytes do not hash to its ref stays in `blobs` untouched.
+- **Backup and export:** see §7; both read the log files too.
 
 ## 6. Projections
 
@@ -394,7 +412,8 @@ Three tools, from cheapest to most portable:
 1. **Continuous replication (recommended):** Litestream replicating `factory.db` to S3-compatible
    storage. A new machine restores the latest state with one command. No code needed in v2.
 2. **Snapshot:** runtime admin operation `backup <file>` uses SQLite `VACUUM INTO` (consistent while
-   running).
+   running), then copies the log files to `<file>.blobs/`. A backup is the database file plus that
+   directory; a failed copy removes both.
 3. **Export / import:** a portable, engine-independent format, also the path to Postgres:
 
    ```text
@@ -402,14 +421,16 @@ Three tools, from cheapest to most portable:
    ├── manifest.json        { format: "factory-export", version: 1, exportedAt, globalSeq, schemaVersion }
    ├── projects.jsonl
    ├── events.jsonl         # in global_seq order, envelopes as stored
-   └── blobs/<sha256>       # every referenced blob
+   └── blobs/<sha256>       # every referenced blob, text and log alike (logs are read from their files)
    ```
 
    Export: `factory admin export <file>` (available through the selected client) or
    `factory-server admin export <file>` on a remote host.
 
    Import: runtime admin operation `import <file>`, run against the target local or remote runtime,
-   into an **empty database only**: insert projects, blobs and events unchanged, rebuild projections,
+   into an **empty database and an empty `blobs/` directory only**: insert projects, blobs and events
+   unchanged, write each log back as a file (the events name the logs, so no manifest field is needed),
+   rebuild projections,
    then append `ExpireLease` as the importing runtime for each Work order **and each plan** that had an
    active job.
    Leases, tokens, Cells, signals and the idempotency table are not exported. In remote mode, create a

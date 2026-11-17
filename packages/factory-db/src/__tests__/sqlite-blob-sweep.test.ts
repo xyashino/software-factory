@@ -9,11 +9,13 @@ import { drizzleOf } from '../db';
 import { blobs } from '../schema';
 import {
   blobRefOf,
+  hexOf,
   referencedBlobs,
   sqliteBlobStore,
 } from '../sqlite-blob-store';
 import { acquireWriter, type WriterLock } from '../writer-lock';
-import { appendHistory, openSeededStore } from './helpers';
+import { listBlobFiles } from '../file-blob-store';
+import { appendHistory, openSeededStore, scratchBlobDir } from './helpers';
 
 const DAY = 24 * 60 * 60 * 1000;
 const dirs: string[] = [];
@@ -58,7 +60,15 @@ describe('the SQLite blob sweep', () => {
     expect(fixture).toBeDefined();
     await appendHistory(store, citing(fixtureEvents(fixture!), ref));
 
-    const blobStore = sqliteBlobStore(db, writer, store.gate, { now: () => 0 });
+    const blobStore = sqliteBlobStore(
+      db,
+      writer,
+      store.gate,
+      scratchBlobDir(),
+      {
+        now: () => 0,
+      },
+    );
     await blobStore.put(ref, bytes, 'text/markdown');
     expect(referencedBlobs(drizzleOf(db))).toContain(ref as BlobRef);
 
@@ -67,5 +77,28 @@ describe('the SQLite blob sweep', () => {
     expect(removed).toEqual([]);
     expect(await blobStore.get(ref)).toEqual(bytes);
     expect(drizzleOf(db).select().from(blobs).all()).toHaveLength(1);
+  });
+
+  it('deletes an unreferenced log file once it is a day old, and keeps a referenced one', async () => {
+    const writer = writerIn();
+    const { db, store } = openSeededStore();
+    const blobDir = scratchBlobDir();
+    const blobStore = sqliteBlobStore(db, writer, store.gate, blobDir, {
+      now: () => 0,
+    });
+    const kept = new TextEncoder().encode('a log an event still names');
+    const dropped = new TextEncoder().encode('a log nothing names');
+    const keptRef = blobRefOf(kept);
+    const droppedRef = blobRefOf(dropped);
+    await blobStore.put(keptRef, kept, 'text/plain', 'log');
+    await blobStore.put(droppedRef, dropped, 'text/plain', 'log');
+
+    expect(await blobStore.sweep(DAY - 1, new Set())).toEqual([]);
+    const removed = await blobStore.sweep(DAY, new Set([keptRef]));
+
+    expect(removed).toEqual([droppedRef]);
+    expect(listBlobFiles(blobDir)).toEqual([hexOf(keptRef)]);
+    expect(await blobStore.get(keptRef)).toEqual(kept);
+    expect(await blobStore.get(droppedRef)).toBeUndefined();
   });
 });

@@ -213,6 +213,20 @@ export const blobs = sqliteTable('blobs', {
   createdAt: integer('created_at').notNull(),
 });
 
+/**
+ * A log blob kept as the file `blobs/<hex>` beside the database. The row is its metadata and the only
+ * proof the file is a stored blob: a file without a row is an orphan the sweep removes.
+ */
+export const blobFiles = sqliteTable('blob_files', {
+  /** sha256:<hex> of the uncompressed bytes; the file is `blobs/<hex>`. */
+  ref: text('ref').primaryKey(),
+  size: integer('size').notNull(),
+  /** 'identity' | 'gzip', as the file's bytes are encoded. */
+  encoding: text('encoding').notNull(),
+  mediaType: text('media_type').notNull(),
+  createdAt: integer('created_at').notNull(),
+});
+
 export const supervisorTokens = sqliteTable('supervisor_tokens', {
   tokenHash: text('token_hash').primaryKey(),
   name: text('name').notNull(),
@@ -239,5 +253,7 @@ export type SignalRecord = typeof signals.$inferSelect;
 export type NewSignalRecord = typeof signals.$inferInsert;
 export type BlobRecord = typeof blobs.$inferSelect;
 export type NewBlobRecord = typeof blobs.$inferInsert;
+export type BlobFileRecord = typeof blobFiles.$inferSelect;
+export type NewBlobFileRecord = typeof blobFiles.$inferInsert;
 export type SupervisorTokenRecord = typeof supervisorTokens.$inferSelect;
 export type NewSupervisorTokenRecord = typeof supervisorTokens.$inferInsert;

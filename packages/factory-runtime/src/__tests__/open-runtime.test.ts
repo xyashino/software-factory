@@ -62,7 +62,7 @@ describe('openRuntime', () => {
     expect(second.writer.held).toBe(true);
   });
 
-  it('opens a database from before migration 0003: it runs 0003 and adopts the baseline', () => {
+  it('opens a database from before migration 0003: it runs 0003 and the later ones, and adopts the baseline', () => {
     rmSync(dataDir, { recursive: true, force: true });
     dataDir = mkdtempSync(join(tmpdir(), 'factory-runtime-legacy-'));
     const legacy = openDatabase(join(dataDir, DATABASE_FILE_NAME));
@@ -98,6 +98,7 @@ describe('openRuntime', () => {
       '0001_init.sql',
       '0002_drop_required_capabilities',
       '0002_join_token_command_id.sql',
+      '0003_log_blob_files',
       '0003_order_plan.sql',
     ]);
   });

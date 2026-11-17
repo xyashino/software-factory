@@ -13,7 +13,7 @@ import {
   openSqliteEventStore,
 } from '../sqlite-event-store';
 import { acquireWriter, type WriterLock } from '../writer-lock';
-import { openSeededStore, seedProject } from './helpers';
+import { openSeededStore, scratchBlobDir, seedProject } from './helpers';
 
 const ORDER = 'software-factory:todo-a' as OrderId;
 const LATER = 'later-project';
@@ -94,7 +94,7 @@ describe('reads outside a transaction, file database (WAL)', () => {
 
   it('serves the projections, the event reads and the blob store while a transaction is open', async () => {
     const { db, store, writer } = openFileStore();
-    const blobs = sqliteBlobStore(db, writer, store.gate);
+    const blobs = sqliteBlobStore(db, writer, store.gate, scratchBlobDir());
     const bytes = new TextEncoder().encode('plan body');
     const ref = blobRefOf(bytes);
     await blobs.put(ref, bytes);

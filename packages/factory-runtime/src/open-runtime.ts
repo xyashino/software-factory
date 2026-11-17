@@ -8,6 +8,7 @@ import { sqliteSupervisorTokenStore } from '@repo/factory-db/supervisor-tokens-t
 import { exportFactory } from '@repo/factory-db/export-import';
 import { sqliteJoinTokenStore } from '@repo/factory-db/join-tokens-table';
 import { MIGRATIONS_DIR, migrate } from '@repo/factory-db/migrate';
+import { migrateLogBlobs } from '@repo/factory-db/migrate-log-blobs';
 import { rebuildOn } from '@repo/factory-db/rebuild-projections';
 import {
   sqliteProjectStore,
@@ -39,6 +40,8 @@ import {
 
 /** The database file inside the data directory (`factory.db`). */
 export const DATABASE_FILE_NAME = 'factory.db';
+/** The directory beside the database that holds the log files (`blobs/<hex>`). */
+export const BLOB_DIR_NAME = 'blobs';
 
 /** Re-exported so a caller of `openRuntime` can tell a held directory apart without the db package. */
 export { WriterHeldError } from '@repo/factory-db/writer-lock';
@@ -87,6 +90,9 @@ export const openRuntime = (options: OpenRuntimeOptions): OpenedRuntime => {
     const file = join(options.dataDir, DATABASE_FILE_NAME);
     database = openDatabase(file);
     const applied = migrate(database, MIGRATIONS_DIR);
+    // Logs live in `blobs/` beside the database; the first start after this code moves the old ones there.
+    const blobDir = join(options.dataDir, BLOB_DIR_NAME);
+    migrateLogBlobs(database, blobDir);
     // Legacy migration 0003 adds `orders.plan` and `orders.base_branch`: a rebuild fills them for existing rows.
     if (applied.includes(ORDER_PLAN_MIGRATION)) {
       rebuildOn(drizzleOf(database), projectionOf);
@@ -103,7 +109,7 @@ export const openRuntime = (options: OpenRuntimeOptions): OpenedRuntime => {
       events: store,
       projections: sqliteProjectionReader(gate),
       projects: sqliteProjectStore(database, writer, gate),
-      blobs: sqliteBlobStore(database, writer, gate),
+      blobs: sqliteBlobStore(database, writer, gate, blobDir, clock),
       leases: sqliteLeaseStore(database, writer, gate),
       cells: sqliteCellStore(database, writer, gate),
       joinTokens: sqliteJoinTokenStore(database, writer, gate),
@@ -115,9 +121,9 @@ export const openRuntime = (options: OpenRuntimeOptions): OpenedRuntime => {
       writer,
       runtimePrompts,
       config: { ...DEFAULT_CONFIG, ...options.config },
-      exportArchive: () => exportFactory(store, clock.now()),
+      exportArchive: () => exportFactory(store, clock.now(), blobDir),
       feed: store,
-      archive: sqliteArchive(database, store, writer),
+      archive: sqliteArchive(database, store, writer, blobDir),
     };
     const runtime = createRuntime(ports);
     const opened = database;

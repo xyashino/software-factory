@@ -12,6 +12,7 @@ const fixtureDir = (name: string): string =>
 const BASELINE = '0000_baseline';
 const DROP_INTAKE = '0001_drop_intake';
 const DROP_REQUIRED = '0002_drop_required_capabilities';
+const LOG_BLOB_FILES = '0003_log_blob_files';
 
 const LEGACY_FILES = [
   '0001_init.sql',
@@ -20,6 +21,7 @@ const LEGACY_FILES = [
 ];
 
 const STORAGE_TABLES = [
+  'blob_files',
   'blobs',
   'cells',
   'commands',
@@ -87,14 +89,24 @@ const workOrders = (db: Database): string =>
   JSON.stringify(db.query('SELECT * FROM orders ORDER BY order_id').all());
 
 describe('the migration runner on a fresh database', () => {
-  it('creates the eleven STORAGE tables and records the baseline', () => {
+  it('creates the twelve STORAGE tables and records the baseline', () => {
     const db = openDatabase(':memory:');
 
     const applied = migrate(db, MIGRATIONS_DIR);
 
-    expect(applied).toEqual([BASELINE, DROP_INTAKE, DROP_REQUIRED]);
+    expect(applied).toEqual([
+      BASELINE,
+      DROP_INTAKE,
+      DROP_REQUIRED,
+      LOG_BLOB_FILES,
+    ]);
     expect(tableNames(db)).toEqual(STORAGE_TABLES);
-    expect(appliedNames(db)).toEqual([BASELINE, DROP_INTAKE, DROP_REQUIRED]);
+    expect(appliedNames(db)).toEqual([
+      BASELINE,
+      DROP_INTAKE,
+      DROP_REQUIRED,
+      LOG_BLOB_FILES,
+    ]);
   });
 
   it('applies nothing on a second run', () => {
@@ -102,7 +114,12 @@ describe('the migration runner on a fresh database', () => {
     migrate(db, MIGRATIONS_DIR);
 
     expect(migrate(db, MIGRATIONS_DIR)).toEqual([]);
-    expect(appliedNames(db)).toEqual([BASELINE, DROP_INTAKE, DROP_REQUIRED]);
+    expect(appliedNames(db)).toEqual([
+      BASELINE,
+      DROP_INTAKE,
+      DROP_REQUIRED,
+      LOG_BLOB_FILES,
+    ]);
   });
 
   it('applies only the migrations that are new', () => {
@@ -150,9 +167,15 @@ describe('adopting the baseline on a legacy database', () => {
 
     const applied = migrate(db, MIGRATIONS_DIR);
 
-    expect(applied).toEqual([DROP_INTAKE, DROP_REQUIRED]);
+    expect(applied).toEqual([DROP_INTAKE, DROP_REQUIRED, LOG_BLOB_FILES]);
     expect(appliedNames(db)).toEqual(
-      [...LEGACY_FILES, BASELINE, DROP_INTAKE, DROP_REQUIRED].sort(),
+      [
+        ...LEGACY_FILES,
+        BASELINE,
+        DROP_INTAKE,
+        DROP_REQUIRED,
+        LOG_BLOB_FILES,
+      ].sort(),
     );
     expect(tableNames(db)).not.toContain('intake');
     const [expectedOrder] = JSON.parse(orders);
@@ -178,9 +201,16 @@ describe('adopting the baseline on a legacy database', () => {
       '0003_order_plan.sql',
       DROP_INTAKE,
       DROP_REQUIRED,
+      LOG_BLOB_FILES,
     ]);
     expect(appliedNames(db)).toEqual(
-      [...LEGACY_FILES, BASELINE, DROP_INTAKE, DROP_REQUIRED].sort(),
+      [
+        ...LEGACY_FILES,
+        BASELINE,
+        DROP_INTAKE,
+        DROP_REQUIRED,
+        LOG_BLOB_FILES,
+      ].sort(),
     );
     expect(
       db

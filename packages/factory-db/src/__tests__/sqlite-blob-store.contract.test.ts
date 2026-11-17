@@ -27,7 +27,13 @@ const sqliteUnderTest =
     const store = openSqliteEventStore(db);
     const writer: WriterLock = acquireWriter(mkdtempSync(join(dir, 'writer-')));
     return {
-      store: sqliteBlobStore(db, writer, store.gate, clock),
+      store: sqliteBlobStore(
+        db,
+        writer,
+        store.gate,
+        mkdtempSync(join(dir, 'logs-')),
+        clock,
+      ),
       close: async () => {
         writer.release();
         db.close();

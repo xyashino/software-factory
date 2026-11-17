@@ -7,6 +7,7 @@ import type { BlobRef } from '@repo/factory-core/ids';
 import type { StoredEvent } from '@repo/factory-core/order/events';
 import { SCENARIO_FIXTURES, fixtureEvents } from '@repo/factory-core/testing';
 import { sqliteArchive } from '../archive';
+import { listBlobFiles } from '../file-blob-store';
 import { sqliteBlobStore, blobRefOf } from '../sqlite-blob-store';
 import { openDatabase, openSqliteEventStore } from '../sqlite-event-store';
 import { acquireWriter, type WriterLock } from '../writer-lock';
@@ -47,7 +48,12 @@ const storeCitedBlobs = async (
   writer: WriterLock,
   events: readonly StoredEvent[],
 ) => {
-  const blobStore = sqliteBlobStore(source.db, writer, source.store.gate);
+  const blobStore = sqliteBlobStore(
+    source.db,
+    writer,
+    source.store.gate,
+    workDir(),
+  );
   const refs = new Map<string, BlobRef>();
   for (const placeholder of citedRefsOf(events)) {
     const bytes = new TextEncoder().encode(`blob:${placeholder}`);
@@ -79,6 +85,7 @@ describe('export and import', () => {
         source.db,
         source.store,
         sourceWriter,
+        workDir(),
       );
       await sourceArchive.exportTo(file, 1_700_000_000_000);
 
@@ -88,6 +95,7 @@ describe('export and import', () => {
         target,
         targetStore,
         lockedIn(workDir()),
+        workDir(),
       );
       const counts = await targetArchive.importFrom(file, projectRow, 99);
 
@@ -107,7 +115,7 @@ describe('export and import', () => {
       fixtureEvents(SCENARIO_FIXTURES[0]!),
     );
     await appendHistory(source.store, events);
-    const archive = sqliteArchive(source.db, source.store, writer);
+    const archive = sqliteArchive(source.db, source.store, writer, workDir());
 
     const counts = await archive.exportTo(join(workDir(), 'export.tar'), 1);
 
@@ -124,9 +132,17 @@ describe('export and import', () => {
     );
     await appendHistory(source.store, events);
     const file = join(workDir(), 'export.tar');
-    await sqliteArchive(source.db, source.store, writer).exportTo(file, 1);
+    await sqliteArchive(source.db, source.store, writer, workDir()).exportTo(
+      file,
+      1,
+    );
     const busy = openSeededStore();
-    const busyArchive = sqliteArchive(busy.db, busy.store, lockedIn(workDir()));
+    const busyArchive = sqliteArchive(
+      busy.db,
+      busy.store,
+      lockedIn(workDir()),
+      workDir(),
+    );
 
     await expect(busyArchive.importFrom(file, projectRow, 2)).rejects.toThrow(
       /needs an empty database/,
@@ -136,7 +152,12 @@ describe('export and import', () => {
   it('refuses to overwrite an existing export file', async () => {
     const source = openSeededStore();
     const file = join(workDir(), 'export.tar');
-    const archive = sqliteArchive(source.db, source.store, lockedIn(workDir()));
+    const archive = sqliteArchive(
+      source.db,
+      source.store,
+      lockedIn(workDir()),
+      workDir(),
+    );
     await archive.exportTo(file, 1);
 
     await expect(archive.exportTo(file, 2)).rejects.toThrow(
@@ -150,7 +171,12 @@ describe('backup', () => {
     const source = openSeededStore();
     await appendHistory(source.store, fixtureEvents(SCENARIO_FIXTURES[0]!));
     const file = join(workDir(), 'backup.db');
-    const archive = sqliteArchive(source.db, source.store, lockedIn(workDir()));
+    const archive = sqliteArchive(
+      source.db,
+      source.store,
+      lockedIn(workDir()),
+      workDir(),
+    );
 
     const counts = await archive.backup(file);
     const copy = openDatabase(file);
@@ -160,5 +186,25 @@ describe('backup', () => {
     } finally {
       copy.close();
     }
+  });
+
+  it('copies the log files into a directory beside the backup', async () => {
+    const source = openSeededStore();
+    const writer = lockedIn(workDir());
+    const blobDir = workDir();
+    const log = new TextEncoder().encode('inspection log, kept as a file');
+    const ref = blobRefOf(log);
+    await sqliteBlobStore(source.db, writer, source.store.gate, blobDir).put(
+      ref,
+      log,
+      'text/plain',
+      'log',
+    );
+    const file = join(workDir(), 'backup.db');
+    await sqliteArchive(source.db, source.store, writer, blobDir).backup(file);
+
+    expect(listBlobFiles(`${file}.blobs`)).toEqual([
+      ref.slice('sha256:'.length),
+    ]);
   });
 });

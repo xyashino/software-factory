@@ -1,5 +1,5 @@
 import { asc } from 'drizzle-orm';
-import { TEXT_MAX_BYTES, blobRefsIn } from '@repo/factory-core/blob-rules';
+import { blobRefsIn } from '@repo/factory-core/blob-rules';
 import type { BlobRef } from '@repo/factory-core/ids';
 import {
   type StoredEvent,
@@ -11,9 +11,22 @@ import {
 } from '@repo/factory-core/plan/events';
 import type { ProjectionOf } from '@repo/factory-core/ports/archive';
 import type { FactoryDatabase } from './db';
+import { listBlobFiles, removeBlobFile } from './file-blob-store';
 import { rebuildOn } from './rebuild-projections';
-import { blobs, type ProjectRecord, events, projects } from './schema';
-import { putBlobOn, readBlobOn } from './sqlite-blob-store';
+import {
+  blobFiles,
+  blobs,
+  type ProjectRecord,
+  events,
+  projects,
+} from './schema';
+import {
+  hexOf,
+  logRefsIn,
+  putBlobOn,
+  putLogFileOn,
+  readBlobOn,
+} from './sqlite-blob-store';
 import {
   SCHEMA_VERSION,
   type SqliteEventStore,
@@ -88,7 +101,11 @@ const allEvents = (orm: FactoryDatabase): (StoredEvent | StoredPlanEvent)[] => {
   }
 };
 
-const archiveOn = (orm: FactoryDatabase, exportedAt: number): Uint8Array => {
+const archiveOn = (
+  orm: FactoryDatabase,
+  blobDir: string,
+  exportedAt: number,
+): Uint8Array => {
   const projectRows = orm
     .select()
     .from(projects)
@@ -101,7 +118,7 @@ const archiveOn = (orm: FactoryDatabase, exportedAt: number): Uint8Array => {
   for (const ref of blobRefsIn(decoder.decode(eventBytes))) cited.add(ref);
   const blobEntries: TarEntry[] = [];
   for (const ref of [...cited].sort()) {
-    const bytes = readBlobOn(orm, ref);
+    const bytes = readBlobOn(orm, blobDir, ref);
     // A cited blob that is not stored is a broken Factory: an archive without it would import cleanly
     // and leave events pointing at nothing, so the export refuses instead.
     if (!bytes) {
@@ -129,12 +146,14 @@ const archiveOn = (orm: FactoryDatabase, exportedAt: number): Uint8Array => {
 
 /**
  * Writes the whole Factory as one archive, read in one write transaction so the parts agree with each
- * other. `exportedAt` is the Factory clock, in milliseconds.
+ * other. `exportedAt` is the Factory clock, in milliseconds. `blobDir` is where the log files are.
  */
 export const exportFactory = (
   store: SqliteEventStore,
   exportedAt: number,
-): Promise<Uint8Array> => store.exclusive((orm) => archiveOn(orm, exportedAt));
+  blobDir: string,
+): Promise<Uint8Array> =>
+  store.exclusive((orm) => archiveOn(orm, blobDir, exportedAt));
 
 const parseManifest = (bytes: Uint8Array): Manifest => {
   let value: unknown;
@@ -194,12 +213,14 @@ const requireEntry = (
   return bytes;
 };
 
-// Refuses an import unless the database holds no project, event or blob yet.
-const ensureEmpty = (orm: FactoryDatabase): void => {
+// Refuses an import unless the database and the blob directory hold no project, event or blob yet.
+const ensureEmpty = (orm: FactoryDatabase, blobDir: string): void => {
   const occupied =
     orm.select().from(projects).limit(1).all().length > 0 ||
     orm.select().from(events).limit(1).all().length > 0 ||
-    orm.select().from(blobs).limit(1).all().length > 0;
+    orm.select().from(blobs).limit(1).all().length > 0 ||
+    orm.select().from(blobFiles).limit(1).all().length > 0 ||
+    listBlobFiles(blobDir).length > 0;
   if (occupied) {
     throw new Error(
       'import needs an empty database: projects, events or blobs exist',
@@ -212,6 +233,8 @@ const importOn = (
   archive: Uint8Array,
   project: ProjectionOf,
   importedAt: number,
+  blobDir: string,
+  written: string[],
 ): ImportResult => {
   const files = new Map<string, Uint8Array>();
   for (const entry of readTar(archive)) {
@@ -238,7 +261,7 @@ const importOn = (
     }),
   );
 
-  ensureEmpty(orm);
+  ensureEmpty(orm, blobDir);
 
   let previous = 0;
   for (const { envelope } of stored) {
@@ -257,12 +280,35 @@ const importOn = (
 
   for (const row of projectValues) orm.insert(projects).values(row).run();
 
+  // A log is the one kind the events name (`logBlob`): it is written as a file, every other blob as a row.
+  const logs = new Set<BlobRef>();
+  for (const { payload } of stored) {
+    for (const ref of logRefsIn(JSON.stringify(payload))) logs.add(ref);
+  }
   for (const [name, bytes] of files) {
     const match = BLOB_ENTRY.exec(name);
     if (!match) continue;
     const ref = `sha256:${match[1]}` as BlobRef;
-    const kind = bytes.byteLength > TEXT_MAX_BYTES ? 'log' : 'text';
-    putBlobOn(orm, ref, bytes, 'application/octet-stream', kind, importedAt);
+    if (logs.has(ref)) {
+      putLogFileOn(
+        orm,
+        blobDir,
+        ref,
+        bytes,
+        'application/octet-stream',
+        importedAt,
+      );
+      written.push(hexOf(ref));
+    } else {
+      putBlobOn(
+        orm,
+        ref,
+        bytes,
+        'application/octet-stream',
+        'text',
+        importedAt,
+      );
+    }
   }
 
   for (const { envelope, payload } of stored) {
@@ -293,15 +339,27 @@ const importOn = (
 };
 
 /**
- * Loads an export into an empty database, in one write transaction: projects, blobs
- * and events unchanged (events keep their `global_seq`), then the `orders` projection rebuilt by
- * `project`. Refuses a non-empty database, a bad manifest, an unsafe or truncated archive, a blob that
- * does not hash to its name, and events out of order. `ExpireLease` is appended by the runtime, not here.
+ * Loads an export into an empty database and an empty blob directory, in one write transaction:
+ * projects, blobs and events unchanged (events keep their `global_seq`), logs written as files under
+ * `blobDir`, then the `orders` projection rebuilt by `project`. Refuses a non-empty database or blob
+ * directory, a bad manifest, an unsafe or truncated archive, a blob that does not hash to its name, and
+ * events out of order. A failed import removes the log files it wrote. `ExpireLease` is appended by the
+ * runtime, not here.
  */
-export const importFactory = (
+export const importFactory = async (
   store: SqliteEventStore,
   archive: Uint8Array,
   project: ProjectionOf,
   importedAt: number,
-): Promise<ImportResult> =>
-  store.exclusive((orm) => importOn(orm, archive, project, importedAt));
+  blobDir: string,
+): Promise<ImportResult> => {
+  const written: string[] = [];
+  try {
+    return await store.exclusive((orm) =>
+      importOn(orm, archive, project, importedAt, blobDir, written),
+    );
+  } catch (error) {
+    for (const hex of written) removeBlobFile(blobDir, hex);
+    throw error;
+  }
+};

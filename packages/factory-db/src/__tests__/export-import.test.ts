@@ -29,7 +29,13 @@ import {
 } from './helpers';
 import { drizzleOf } from '../db';
 import { blobs, projects } from '../schema';
-import { blobRefOf, sqliteBlobStore } from '../sqlite-blob-store';
+import { listBlobFiles } from '../file-blob-store';
+import {
+  blobRefOf,
+  hexOf,
+  logRefsIn,
+  sqliteBlobStore,
+} from '../sqlite-blob-store';
 import { openSqliteEventStore } from '../sqlite-event-store';
 import { readTar, writeTar } from '../tar';
 import { acquireWriter, type WriterLock } from '../writer-lock';
@@ -50,6 +56,12 @@ const writerIn = (): WriterLock => {
   const lock = acquireWriter(dir);
   locks.push(lock);
   return lock;
+};
+
+const blobDirIn = (): string => {
+  const dir = mkdtempSync(join(tmpdir(), 'factory-export-blobs-'));
+  dirs.push(dir);
+  return dir;
 };
 
 type EventFeed = Pick<EventStore, 'feed'>;
@@ -85,42 +97,68 @@ const renamed = (
 const seededWith = async (fixture: ScenarioFixture) => {
   const writer = writerIn();
   const source = openSeededStore();
-  const blobStore = sqliteBlobStore(source.db, writer, source.store.gate);
+  const blobDir = blobDirIn();
+  const blobStore = sqliteBlobStore(
+    source.db,
+    writer,
+    source.store.gate,
+    blobDir,
+  );
+  const logPlaceholders = logRefsIn(JSON.stringify(fixtureEvents(fixture)));
   const refs = new Map<string, BlobRef>();
   const contents = new Map<BlobRef, Uint8Array>();
+  const logs = new Set<BlobRef>();
   for (const placeholder of citedRefsOf(fixtureEvents(fixture))) {
     const bytes = new TextEncoder().encode(
       `${placeholder}\n${'x'.repeat(8192)}`,
     );
     const ref = blobRefOf(bytes);
-    await blobStore.put(ref, bytes, 'text/plain');
+    const isLog = logPlaceholders.has(placeholder as BlobRef);
+    await blobStore.put(ref, bytes, 'text/plain', isLog ? 'log' : 'text');
     refs.set(placeholder, ref);
     contents.set(ref, bytes);
+    if (isLog) logs.add(ref);
   }
   const events = renamed(fixtureEvents(fixture), (ref) => refs.get(ref) ?? ref);
   await appendHistory(source.store, events);
-  return { writer, source, events, contents };
+  return { writer, source, blobDir, events, contents, logs };
 };
 
 describe('export and import', () => {
   it.each(SCENARIO_FIXTURES.map((fixture) => [fixture.name, fixture] as const))(
     'round-trips %s: identical events, blobs and rebuilt orders',
     async (_name, fixture) => {
-      const { writer, source, events, contents } = await seededWith(fixture);
-      const exported = await exportFactory(source.store, 42);
+      const { writer, source, blobDir, events, contents, logs } =
+        await seededWith(fixture);
+      const exported = await exportFactory(source.store, 42, blobDir);
 
       const target = openMigratedDatabase();
       const targetStore = openSqliteEventStore(target);
-      const result = await importFactory(targetStore, exported, projectRow, 99);
+      const targetDir = blobDirIn();
+      const result = await importFactory(
+        targetStore,
+        exported,
+        projectRow,
+        99,
+        targetDir,
+      );
 
       expect(await everyEvent(targetStore)).toEqual(
         await everyEvent(source.store),
       );
       expect(rawOrders(target)).toBe(rawOrders(source.db));
-      const imported = sqliteBlobStore(target, writer, targetStore.gate);
+      const imported = sqliteBlobStore(
+        target,
+        writer,
+        targetStore.gate,
+        targetDir,
+      );
       for (const [ref, bytes] of contents) {
         expect(await imported.get(ref)).toEqual(bytes);
       }
+      expect(listBlobFiles(targetDir).sort()).toEqual(
+        [...logs].map(hexOf).sort(),
+      );
       expect(result.events).toBe(events.length);
       expect(result.blobs).toBe(contents.size);
       expect(result.projects).toBe(1);
@@ -128,11 +166,11 @@ describe('export and import', () => {
   );
 
   it('keeps the global_seq of every imported event', async () => {
-    const { source } = await seededWith(SCENARIO_FIXTURES[0]!);
-    const exported = await exportFactory(source.store, 1);
+    const { source, blobDir } = await seededWith(SCENARIO_FIXTURES[0]!);
+    const exported = await exportFactory(source.store, 1, blobDir);
 
     const target = openSqliteEventStore(openMigratedDatabase());
-    await importFactory(target, exported, projectRow, 2);
+    await importFactory(target, exported, projectRow, 2, blobDirIn());
 
     const seqs = (await everyEvent(target)).map((stored) => stored.globalSeq);
     expect(seqs).toEqual(
@@ -141,23 +179,23 @@ describe('export and import', () => {
   });
 
   it('refuses to import into a database that already has events', async () => {
-    const { source } = await seededWith(SCENARIO_FIXTURES[0]!);
-    const exported = await exportFactory(source.store, 1);
+    const { source, blobDir } = await seededWith(SCENARIO_FIXTURES[0]!);
+    const exported = await exportFactory(source.store, 1, blobDir);
 
     await expect(
-      importFactory(source.store, exported, projectRow, 2),
+      importFactory(source.store, exported, projectRow, 2, blobDirIn()),
     ).rejects.toThrow(/empty database/);
   });
 
   it('leaves the target empty when the archive is refused', async () => {
-    const { source } = await seededWith(SCENARIO_FIXTURES[0]!);
-    const exported = await exportFactory(source.store, 1);
+    const { source, blobDir } = await seededWith(SCENARIO_FIXTURES[0]!);
+    const exported = await exportFactory(source.store, 1, blobDir);
     const corrupt = exported.slice(0, exported.byteLength - 2048);
 
     const target = openMigratedDatabase();
     const targetStore = openSqliteEventStore(target);
     await expect(
-      importFactory(targetStore, corrupt, projectRow, 2),
+      importFactory(targetStore, corrupt, projectRow, 2, blobDirIn()),
     ).rejects.toThrow(/truncated/);
 
     expect(drizzleOf(target).select().from(projects).all()).toEqual([]);
@@ -171,7 +209,7 @@ describe('export and import', () => {
     expect(citedRefsOf(events).length).toBeGreaterThan(0);
     await appendHistory(source.store, events);
 
-    await expect(exportFactory(source.store, 1)).rejects.toThrow(
+    await expect(exportFactory(source.store, 1, blobDirIn())).rejects.toThrow(
       /cites blob .* not stored/,
     );
   });
@@ -198,9 +236,9 @@ describe('export and import', () => {
     const db = openMigratedDatabase();
     const target = openSqliteEventStore(db);
 
-    await expect(importFactory(target, archive, projectRow, 2)).rejects.toThrow(
-      /does not hash/,
-    );
+    await expect(
+      importFactory(target, archive, projectRow, 2, blobDirIn()),
+    ).rejects.toThrow(/does not hash/);
     expect(drizzleOf(db).select().from(blobs).all()).toEqual([]);
   });
 
@@ -223,9 +261,9 @@ describe('export and import', () => {
     ]);
     const target = openSqliteEventStore(openMigratedDatabase());
 
-    await expect(importFactory(target, archive, projectRow, 2)).rejects.toThrow(
-      /unsupported export version 2/,
-    );
+    await expect(
+      importFactory(target, archive, projectRow, 2, blobDirIn()),
+    ).rejects.toThrow(/unsupported export version 2/);
   });
 
   it('refuses an entry outside the export layout', async () => {
@@ -234,14 +272,14 @@ describe('export and import', () => {
     ]);
     const target = openSqliteEventStore(openMigratedDatabase());
 
-    await expect(importFactory(target, archive, projectRow, 2)).rejects.toThrow(
-      /unexpected export entry/,
-    );
+    await expect(
+      importFactory(target, archive, projectRow, 2, blobDirIn()),
+    ).rejects.toThrow(/unexpected export entry/);
   });
 
   it('refuses a manifest whose globalSeq disagrees with the events', async () => {
-    const { source } = await seededWith(SCENARIO_FIXTURES[0]!);
-    const exported = await exportFactory(source.store, 1);
+    const { source, blobDir } = await seededWith(SCENARIO_FIXTURES[0]!);
+    const exported = await exportFactory(source.store, 1, blobDir);
     const tampered = writeTar(
       readTar(exported).map((entry) =>
         entry.name === 'manifest.json'
@@ -263,17 +301,17 @@ describe('export and import', () => {
     const target = openSqliteEventStore(openMigratedDatabase());
 
     await expect(
-      importFactory(target, tampered, projectRow, 2),
+      importFactory(target, tampered, projectRow, 2, blobDirIn()),
     ).rejects.toThrow(/does not match the last event/);
   });
   it('round-trips a plan stream: identical plan events and plans table', async () => {
     const { db, store } = openSeededStore();
     await appendPlanHistory(store, planEvents());
-    const exported = await exportFactory(store, 42);
+    const exported = await exportFactory(store, 42, blobDirIn());
 
     const target = openMigratedDatabase();
     const targetStore = openSqliteEventStore(target);
-    await importFactory(targetStore, exported, projectRow, 99);
+    await importFactory(targetStore, exported, projectRow, 99, blobDirIn());
 
     expect(await targetStore.loadPlan(PLAN_ID)).toEqual(
       await store.loadPlan(PLAN_ID),

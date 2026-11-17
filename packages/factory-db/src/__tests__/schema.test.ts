@@ -5,8 +5,9 @@ import { describe, expect, it } from 'vitest';
 import { LEGACY_MIGRATIONS_DIR, MIGRATIONS_DIR, migrate } from '../migrate';
 import { openDatabase } from '../sqlite-event-store';
 
-/** The eleven tables of STORAGE §4, by their SQL names. */
+/** The twelve tables of STORAGE §4, by their SQL names. */
 const STORAGE_TABLES = [
+  'blob_files',
   'blobs',
   'cells',
   'commands',
@@ -142,6 +143,9 @@ const legacySchema = (): Database => {
       join(MIGRATIONS_DIR, '0002_drop_required_capabilities.sql'),
       'utf8',
     ),
+  );
+  db.exec(
+    readFileSync(join(MIGRATIONS_DIR, '0003_log_blob_files.sql'), 'utf8'),
   );
   return db;
 };

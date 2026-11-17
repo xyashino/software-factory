@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { BlobRef, JobId, OrderId, CellId } from '@repo/factory-core/ids';
-import { openSeededStore } from './helpers';
+import { openSeededStore, scratchBlobDir } from './helpers';
 import { blobRefOf, sqliteBlobStore } from '../sqlite-blob-store';
 import { sqliteLeaseStore } from '../sqlite-lease-store';
 import { sqliteSignalStore } from '../signals-table';
@@ -44,7 +44,7 @@ const setup = () => {
 describe('blob store', () => {
   it('stores bytes under their hash and reads them back', async () => {
     const { db, store, writer } = setup();
-    const blobs = sqliteBlobStore(db, writer, store.gate);
+    const blobs = sqliteBlobStore(db, writer, store.gate, scratchBlobDir());
     const bytes = new TextEncoder().encode('plan body');
     const ref = blobRefOf(bytes);
 
@@ -56,7 +56,7 @@ describe('blob store', () => {
 
   it('refuses bytes that do not hash to the ref it was given', async () => {
     const { db, store, writer } = setup();
-    const blobs = sqliteBlobStore(db, writer, store.gate);
+    const blobs = sqliteBlobStore(db, writer, store.gate, scratchBlobDir());
     const wrong = blobRefOf(new Uint8Array([1])) as BlobRef;
 
     await expect(blobs.put(wrong, new Uint8Array([2]))).rejects.toThrow(
@@ -66,7 +66,7 @@ describe('blob store', () => {
 
   it('treats a repeated put of the same ref as a no-op', async () => {
     const { db, store, writer } = setup();
-    const blobs = sqliteBlobStore(db, writer, store.gate);
+    const blobs = sqliteBlobStore(db, writer, store.gate, scratchBlobDir());
     const bytes = new Uint8Array([9, 9]);
     const ref = blobRefOf(bytes);
 
@@ -81,7 +81,7 @@ describe('blob store', () => {
 
   it('refuses a write once the writer lock is released', async () => {
     const { db, store, writer } = setup();
-    const blobs = sqliteBlobStore(db, writer, store.gate);
+    const blobs = sqliteBlobStore(db, writer, store.gate, scratchBlobDir());
     writer.release();
     const bytes = new Uint8Array([1]);
 
