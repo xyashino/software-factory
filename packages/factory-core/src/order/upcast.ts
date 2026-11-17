@@ -4,12 +4,43 @@ import { type StoredEvent, storedEventSchema } from './events';
 
 const CURRENT_SCHEMA_VERSION = 2;
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
 /**
- * Stored schema version to the next one. Version 2 is current, so its upcaster is the identity.
- * Adding version 3 means adding an entry here that returns a version-3 envelope (CORE §11).
+ * Removes `requires` from every station of a pinned Line snapshot. Events stored before the
+ * capabilities were removed still carry it; no current Line has it, so the strict schema refuses it.
+ */
+const withoutRequires = (
+  raw: Record<string, unknown>,
+): Record<string, unknown> => {
+  const { event } = raw;
+  if (!isRecord(event) || !isRecord(event.line)) return raw;
+  const { snapshot } = event.line;
+  if (!isRecord(snapshot) || !Array.isArray(snapshot.stations)) return raw;
+  const stations = snapshot.stations.map((station: unknown) => {
+    if (!isRecord(station) || !('requires' in station)) return station;
+    const copy = { ...station };
+    delete copy.requires;
+    return copy;
+  });
+  return {
+    ...raw,
+    event: {
+      ...event,
+      line: { ...event.line, snapshot: { ...snapshot, stations } },
+    },
+  };
+};
+
+/**
+ * Stored schema version to the next one. Version 2 is current; its upcaster only drops the `requires`
+ * key that pre-removal events carry. Adding version 3 means adding an entry here that returns a version-3
+ * envelope (CORE §11).
  */
 const UPCASTERS: Readonly<Record<number, (raw: unknown) => unknown>> = {
-  [CURRENT_SCHEMA_VERSION]: (raw) => raw,
+  [CURRENT_SCHEMA_VERSION]: (raw) =>
+    isRecord(raw) ? withoutRequires(raw) : raw,
 };
 
 const versionOf = (raw: unknown): number | undefined => {

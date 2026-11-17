@@ -16,6 +16,7 @@ import {
   flush,
   helloCell,
   sha256Ref,
+  shippedDefinitions,
   world,
   type World,
 } from './test-kit';
@@ -98,7 +99,9 @@ describe('command loop', () => {
     });
 
     expect(first.next?.kind).toBe('run_operator_station');
-    expect(first.next?.station?.stationId).toBe('plan-review');
+    const [, nextStation] =
+      shippedDefinitions().lines.get('feature')!.line.stations;
+    expect(first.next?.station?.stationId).toBe(nextStation?.id);
     expect(again).toEqual(first);
   });
 
@@ -356,26 +359,6 @@ describe('claims', () => {
 });
 
 describe('continuation', () => {
-  it('returns no next job when the Cell cannot run the next station', async () => {
-    const w = world();
-    // The plan Station runs on `claude`; the plan review runs on `cursor`, which this Cell lacks.
-    await helloCell(w, CELL, ['claude']);
-    const orderId = await createOrder(w, { todoId: 'todo-a' });
-    const job = await claim(w);
-
-    const result = await runPlanStation(w, job, {
-      start: 's-cont',
-      complete: 'c-cont',
-    });
-
-    expect(
-      result.events.some((event) => event.type === 'cycle_completed'),
-    ).toBe(true);
-    expect(result.next).toBeNull();
-    expect(await w.leases.forCell(CELL)).toEqual([]);
-    expect(orderId).toBe('software-factory:todo-a');
-  });
-
   it('hands no next job back when the Cell releases its job (PROTOCOL §9)', async () => {
     const w = world();
     // The Cell could run the next station (the plan review runs on `cursor`): only the release keeps it

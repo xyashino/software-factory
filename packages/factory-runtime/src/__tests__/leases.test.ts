@@ -172,7 +172,8 @@ describe('revocation', () => {
 
 describe('completing a job', () => {
   it('releases the lease when the Cycle ends the job', async () => {
-    const w = world();
+    // Without continuation the Cell gets no next job back, so the lease must be released.
+    const w = world({ continuation: false });
     running = w;
     await helloCell(w, CELL, ['claude']);
     const orderId = await createOrder(w, { todoId: 'todo-a' });

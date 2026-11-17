@@ -8,6 +8,32 @@ describe('upcastEvent', () => {
     expect(upcastEvent(stored)).toEqual({ ok: true, value: stored });
   });
 
+  it('drops the retired requires key from stored Line stations', () => {
+    const [stored] = history(created());
+    if (stored === undefined) throw new Error('the history has no event');
+    const event = stored.event as {
+      line: { snapshot: { stations: Record<string, unknown>[] } };
+    };
+    const legacy = {
+      ...stored,
+      event: {
+        ...event,
+        line: {
+          ...event.line,
+          snapshot: {
+            ...event.line.snapshot,
+            stations: event.line.snapshot.stations.map((station) => ({
+              ...station,
+              requires: ['docker'],
+            })),
+          },
+        },
+      },
+    };
+    const result = upcastEvent(legacy);
+    expect(result).toEqual({ ok: true, value: stored });
+  });
+
   it('refuses a version 1 event, which has no upcaster', () => {
     const [stored] = history(created());
     const result = upcastEvent({ ...stored, schemaVersion: 1 });

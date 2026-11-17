@@ -305,38 +305,6 @@ describe('Operator station against the runtime', () => {
     expect(hasEvent(events, 'cycle_completed')).toBe(true);
   });
 
-  it('records a failed verdict with its feedback and the failed outcome', async () => {
-    const client = await serve();
-    const plan = await claim(client);
-    const next = await runOperatorStation(plan, depsFor(client, plan, 'done'));
-    if (next === null)
-      throw new Error('expected the plan to hand on the review job');
-    const review = asHeadless(next);
-    expect(review.station?.verdict).toBe(true);
-
-    await runOperatorStation(review, depsFor(client, review, 'verdict-fail'));
-
-    const events = await eventsOf(client, review);
-    expect(hasEvent(events, 'verdict_recorded')).toBe(true);
-    await expectNothingPushed();
-  });
-
-  it('records a passing verdict and the passed outcome on the commit', async () => {
-    const client = await serve();
-    const plan = await claim(client);
-    const next = await runOperatorStation(plan, depsFor(client, plan, 'done'));
-    if (next === null)
-      throw new Error('expected the plan to hand on the review job');
-    const review = asHeadless(next);
-
-    await runOperatorStation(review, depsFor(client, review, 'verdict-pass'));
-
-    expect(hasEvent(await eventsOf(client, review), 'verdict_recorded')).toBe(
-      true,
-    );
-    await expectNothingPushed();
-  });
-
   it('blocks the Cycle with its Handover when the Operator reports a block', async () => {
     const client = await serve();
     const job = await claim(client);

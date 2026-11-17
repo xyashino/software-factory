@@ -171,7 +171,7 @@ describe('shipped definitions', () => {
     expect(check(root)).toContainEqual(
       expect.objectContaining({
         file: 'lines/feature.yml',
-        field: 'stations[3].onFail.max',
+        field: 'stations[2].onFail.max',
       }),
     );
   });
