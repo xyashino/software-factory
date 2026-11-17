@@ -1,7 +1,7 @@
 import { fileURLToPath } from 'node:url';
 import type { RuleUnit } from '../config.js';
 
-const COMMIT_TYPES = [
+export const COMMIT_TYPES = [
   'feat',
   'fix',
   'docs',
@@ -25,7 +25,7 @@ fix(repo): prevent racing of requests
 - Introduce a request id and a reference to latest request
   - Nested detail`;
 
-const validateRichCommit = (
+export const validateRichCommit = (
   message: string,
   { types }: { types: string[] },
 ): string[] => {

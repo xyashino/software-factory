@@ -7,6 +7,10 @@ import {
 } from '@repo/factory-core/contracts/job';
 import { WireFailure } from '@repo/factory-core/contracts/errors';
 import type { CommitSha } from '@repo/factory-core/ids';
+import {
+  COMMIT_TYPES,
+  validateRichCommit,
+} from '@repo/nitpick/rules/rich-commit';
 import { runGit } from '../git';
 import { GIT_TIMEOUT_MS } from '../workspace/repo';
 import { prepareWorkspace } from '../workspace/prepare';
@@ -283,6 +287,15 @@ const deliverWorktree = async (
     writeFileSync(messageFile, `${rendered.commitMessage}\n`);
     // `--no-verify`: the quality gate already ran the commit hook's checks (`ci:verify`) on this tree, so the hook
     // would run the whole suite a second time for nothing. Human commits still run the hook.
+    // The rich-commit check the commit-msg hook would run: the gate verified the tree, not this message.
+    const messageProblems = validateRichCommit(rendered.commitMessage, {
+      types: COMMIT_TYPES,
+    });
+    if (messageProblems.length > 0) {
+      throw new DeliveryFailed(
+        `commit message refused: ${messageProblems.join('; ')}`,
+      );
+    }
     const committed = await git(shell, worktree, [
       ...IDENTITY,
       'commit',
@@ -348,6 +361,7 @@ const deliverWorktree = async (
     const dryPush = await git(shell, worktree, [
       'push',
       '--dry-run',
+      '--no-verify',
       `--force-with-lease=${lease}`,
       job.repo.url,
       `HEAD:${branchRef}`,
@@ -387,6 +401,7 @@ const deliverWorktree = async (
     if (signal.aborted) throw new JobStopped(String(signal.reason));
     const pushed = await git(shell, worktree, [
       'push',
+      '--no-verify',
       `--force-with-lease=${lease}`,
       job.repo.url,
       `HEAD:${branchRef}`,
