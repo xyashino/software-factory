@@ -277,6 +277,9 @@ importers:
       '@repo/factory-runtime':
         specifier: workspace:*
         version: link:../../packages/factory-runtime
+      '@repo/nitpick':
+        specifier: workspace:*
+        version: link:../../packages/nitpick
       zod:
         specifier: 'catalog:'
         version: 4.6.7

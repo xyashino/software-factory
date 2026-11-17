@@ -19,6 +19,7 @@
     "@repo/factory-core": "workspace:*",
     "@repo/factory-definitions": "workspace:*",
     "@repo/factory-runtime": "workspace:*",
+    "@repo/nitpick": "workspace:*",
     "zod": "catalog:"
   },
   "devDependencies": {
