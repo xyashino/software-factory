@@ -8,6 +8,9 @@ import {
   requestId,
   transportMiddleware,
 } from './adapters/hono/middlewares';
+import { orderPlansRoute } from './adapters/hono/routes/order-plans.route';
+import { queueRoute } from './adapters/hono/routes/queue.route';
+import { workOrdersRoute } from './adapters/hono/routes/work-orders.route';
 
 export const createApp = (createTransport: CreateTransport) => {
   const app = new Hono<AppEnv>();
@@ -18,6 +21,9 @@ export const createApp = (createTransport: CreateTransport) => {
     payloadLimit(MAX_BODY_BYTES),
     transportMiddleware(createTransport),
   );
+  app.route('/api/v1/order-plans', orderPlansRoute);
+  app.route('/api/v1/work-orders', workOrdersRoute);
+  app.route('/api/v1/queue', queueRoute);
   app.onError(errorHandler);
   app.notFound(notFoundHandler);
   return app;

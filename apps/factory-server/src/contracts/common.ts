@@ -15,6 +15,21 @@ export const errorResponse = <C extends number, T extends string>(
     message: z.string(),
   });
 
+export const projectIdSchema = z.string().trim().min(1);
+
+export const slugSchema = z
+  .string()
+  .trim()
+  .regex(/^[a-z0-9][a-z0-9-]*$/, 'must be a lowercase slug');
+
+export const titleSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .regex(/^[^\r\n]+$/, 'must be a single line');
+
+export const idParams = z.object({ id: z.string().trim().min(1) });
+
 export const idSchema = <T extends string>(brand: (value: string) => T) =>
   z
     .string()

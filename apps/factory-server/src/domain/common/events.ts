@@ -1,3 +1,5 @@
+import type { CommandId, ProjectId } from './brand';
+
 export const ENTITY_TYPES = [
   'order_plan',
   'work_order',
@@ -19,14 +21,14 @@ export type EntityType = (typeof ENTITY_TYPES)[number];
 export type ActorKind = (typeof ACTOR_KINDS)[number];
 
 export interface StateTransitionInput {
-  projectId: string;
+  projectId: ProjectId;
   entityType: EntityType;
   entityId: string;
   fromState: string | null;
   toState: string;
   actorKind: ActorKind;
   actorId: string | null;
-  commandId: string | null;
+  commandId: CommandId | null;
   meta: Record<string, unknown> | null;
   at: number;
 }
