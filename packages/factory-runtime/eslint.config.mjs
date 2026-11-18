@@ -21,11 +21,6 @@ export default [
         {
           patterns: [
             {
-              group: ['@repo/software-factory', '@repo/software-factory/*'],
-              message:
-                'v2 packages must not import the v1 package (STRUCTURE §4).',
-            },
-            {
               group: ['hono', 'hono/*', 'node:http', 'node:https', 'node:net'],
               message:
                 'factory-runtime is transport-free: no HTTP or TCP code (STRUCTURE §2).',

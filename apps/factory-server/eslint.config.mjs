@@ -1,7 +1,7 @@
 import { config } from '@repo/eslint-config/base';
 
 const LEGACY = {
-  group: ['@repo/factory-*', '@repo/factory-*/*', '@repo/software-factory'],
+  group: ['@repo/factory-*', '@repo/factory-*/*'],
   message:
     'factory-server-v2 owns its domain, schema and contracts; it must not import legacy or Cell packages (BE_RULES §1.2).',
 };

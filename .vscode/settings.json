@@ -1,5 +1,0 @@
-{
-  "yaml.schemas": {
-    "./packages/software-factory/schemas/workflow.schema.json": "packages/software-factory/workflows/*.yml"
-  }
-}

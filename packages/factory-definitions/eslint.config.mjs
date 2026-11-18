@@ -20,11 +20,6 @@ export default [
         {
           patterns: [
             {
-              group: ['@repo/software-factory', '@repo/software-factory/*'],
-              message:
-                'v2 packages must not import the v1 package (STRUCTURE §4).',
-            },
-            {
               group: ['@repo/factory-db', '@repo/factory-db/*'],
               message:
                 'factory-definitions does not depend on factory-db (STRUCTURE §3).',

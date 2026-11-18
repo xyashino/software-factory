@@ -20,11 +20,6 @@ export default [
         {
           patterns: [
             {
-              group: ['@repo/software-factory', '@repo/software-factory/*'],
-              message:
-                'v2 packages must not import the v1 package (STRUCTURE §4).',
-            },
-            {
               group: ['@repo/factory-db', '@repo/factory-db/*'],
               message: 'apps/cell does not import factory-db (RULES §4.2).',
             },
@@ -62,11 +57,6 @@ export default [
         {
           patterns: [
             {
-              group: ['@repo/software-factory', '@repo/software-factory/*'],
-              message:
-                'v2 packages must not import the v1 package (STRUCTURE §4).',
-            },
-            {
               group: ['@repo/factory-db', '@repo/factory-db/*'],
               message: 'apps/cell does not import factory-db (RULES §4.2).',
             },
@@ -90,11 +80,6 @@ export default [
         'error',
         {
           patterns: [
-            {
-              group: ['@repo/software-factory', '@repo/software-factory/*'],
-              message:
-                'v2 packages must not import the v1 package (STRUCTURE §4).',
-            },
             {
               group: ['@repo/factory-db', '@repo/factory-db/*'],
               message: 'apps/cell does not import factory-db (RULES §4.2).',

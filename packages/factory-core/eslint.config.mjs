@@ -1,9 +1,5 @@
 import { config } from '@repo/eslint-config/base';
 
-const V1_PACKAGE = {
-  group: ['@repo/software-factory', '@repo/software-factory/*'],
-  message: 'v2 packages must not import the v1 package (STRUCTURE §4).',
-};
 const DB_PACKAGE = {
   group: ['@repo/factory-db', '@repo/factory-db/*'],
   message: 'factory-core is below factory-db (STRUCTURE §3).',
@@ -33,7 +29,6 @@ export default [
         'error',
         {
           patterns: [
-            V1_PACKAGE,
             DB_PACKAGE,
             DEFINITIONS_PACKAGE,
             {
@@ -51,7 +46,7 @@ export default [
     rules: {
       'no-restricted-imports': [
         'error',
-        { patterns: [V1_PACKAGE, DB_PACKAGE, DEFINITIONS_PACKAGE] },
+        { patterns: [DB_PACKAGE, DEFINITIONS_PACKAGE] },
       ],
     },
   },
