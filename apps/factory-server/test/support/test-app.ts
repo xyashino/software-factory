@@ -1,10 +1,12 @@
 import { createApp } from '../../src/app';
+import { createSafeTokenAuth } from '../../src/adapters/auth/safe-token-auth.adapter';
 import { createClaimWaiters } from '../../src/adapters/memory/claim-waiters.adapter';
 import { createTransitionBus } from '../../src/adapters/memory/transition-bus.adapter';
 import type {
   AuthPort,
   TokenScope,
 } from '../../src/application/ports/auth.port';
+import type { TransitionBusPort } from '../../src/application/ports/transition-bus.port';
 import { createTransport } from '../../src/bootstrap/transport';
 import { asTokenId } from '../../src/domain/common/brand';
 import { createTestDb } from './test-db';
@@ -25,25 +27,38 @@ export const grantingAuth = (scopes: readonly TokenScope[]): AuthPort => ({
     ),
 });
 
-type TestAppOptions = { auth?: AuthPort };
+type TestAppOptions = {
+  auth?: AuthPort;
+  safeTokenAuth?: boolean;
+  transitionBus?: TransitionBusPort;
+};
 
 export type TestApp = ReturnType<typeof createApp>;
 
 export const createTestApp = (
   options: TestAppOptions = {},
-): { app: TestApp; clock: FakeClock; db: ReturnType<typeof createTestDb> } => {
+): {
+  app: TestApp;
+  clock: FakeClock;
+  db: ReturnType<typeof createTestDb>;
+  transitionBus: TransitionBusPort;
+} => {
   const db = createTestDb();
   const clock = createFakeClock();
+  const auth = options.safeTokenAuth
+    ? createSafeTokenAuth(db, clock)
+    : (options.auth ?? rejectAllAuth);
+  const transitionBus = options.transitionBus ?? createTransitionBus();
   const app = createApp(
     createTransport({
       db,
       clock,
-      auth: options.auth ?? rejectAllAuth,
+      auth,
       claimWaiters: createClaimWaiters(),
-      transitionBus: createTransitionBus(),
+      transitionBus,
     }),
   );
-  return { app, clock, db };
+  return { app, clock, db, transitionBus };
 };
 
 export const postJson = (
@@ -59,6 +74,13 @@ export const postJson = (
       body: JSON.stringify(body),
     }),
   );
+
+export const deleteJson = (
+  app: TestApp,
+  path: string,
+  headers: Record<string, string> = {},
+): Promise<Response> =>
+  Promise.resolve(app.request(path, { method: 'DELETE', headers }));
 
 export const getJson = (
   app: TestApp,
