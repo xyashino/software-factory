@@ -13,6 +13,7 @@ import { incidentsRoute } from './adapters/hono/routes/incidents.route';
 import { jobsRoute } from './adapters/hono/routes/jobs.route';
 import { orderPlansRoute } from './adapters/hono/routes/order-plans.route';
 import { queueRoute } from './adapters/hono/routes/queue.route';
+import { streamRoute } from './adapters/hono/routes/stream.route';
 import { workOrdersRoute } from './adapters/hono/routes/work-orders.route';
 
 export const createApp = (createTransport: CreateTransport) => {
@@ -30,6 +31,7 @@ export const createApp = (createTransport: CreateTransport) => {
   app.route('/api/v1/cells', cellsRoute);
   app.route('/api/v1/jobs', jobsRoute);
   app.route('/api/v1/incidents', incidentsRoute);
+  app.route('/api/v1/stream', streamRoute);
   app.onError(errorHandler);
   app.notFound(notFoundHandler);
   return app;
