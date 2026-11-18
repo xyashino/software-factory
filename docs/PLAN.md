@@ -1,9 +1,9 @@
-# Software Factory v2: architecture plan
+# Software Factory: architecture plan
 
 ## Goal
 
 Turn a todo into a verified pull request by sending it down a declarative production Line, as in
-v1. **The server over HTTP + SSE is the core of v2.0**: one `factory-server` process owns the
+The old factory. **The server over HTTP + SSE is the core**: one `factory-server` process owns the
 local database through the writer lock, runs the queue, and serves the CLI and Cells over one HTTP
 listener, `127.0.0.1:7878` by default. Local clients find it through the discovery file
 `$FACTORY_DATA_DIR/server.json`, so no token is set by hand. The same listener serves other machines,
@@ -20,10 +20,10 @@ protected against duplicate processing, and resumable from the Station where it 
 | **R4** | **Deterministic control.** No LLM decides what runs next.                                                                                                                                                  | Pure `decide` / `nextJob` (CORE §5–6)                                                                                       |
 | **R5** | **Auditable.** Every decision can be explained from the Traveler.                                                                                                                                          | Append-only event log; rendered prompts and nudges stored                                                                   |
 | **R6** | **Runner-agnostic.** Any supported runner can fill any Operator station.                                                                                                                                   | Runner adapters live only in the Cell                                                                                       |
-| **R7** | **Declarative Lines.** New Operator profiles and Lines need no TypeScript.                                                                                                                                 | `factory-definitions` (carried over from v1)                                                                                |
+| **R7** | **Declarative Lines.** New Operator profiles and Lines need no TypeScript.                                                                                                                                 | `factory-definitions` (carried over from the old factory)                                                                                |
 | **R8** | **Replaceable Cells.** A Cell can join with a join token and leave at any time; leaving on purpose loses no work.                                                                                          | Pool enrollment, Handover on leave (PROTOCOL §1, §9)                                                                        |
 
-## Non-goals (v2.0)
+## Non-goals
 
 - **A highly available distributed control plane.** Distributed mode has one active `factory-server`.
   If it is down briefly, remote Cells keep going; if it is down past the self-fence window, in-flight
@@ -34,7 +34,7 @@ protected against duplicate processing, and resumable from the Station where it 
 - **A web UI.** The HTTP API and the event stream are designed so one can be added (`apps/web`).
 - **Parallel Stations inside one Work order.** One Work order runs one Station at a time.
   Parallelism is across Work orders.
-- **Editing v1.** v1 keeps working unchanged until cut-over (ROADMAP M9).
+- **Editing the old factory.** The old factory keeps working unchanged until cut-over (ROADMAP M9).
 - **A Mechanic that edits the worktree.** The Mechanic triages every Andon, but it resolves them only
   through runtime commands and escalates the rest to the Supervisor (decision 20261113-230000).
 
@@ -307,4 +307,4 @@ sequenceDiagram
 | **Handover**        | What an Operator writes when it blocks or when its Cell leaves: what it did, what is missing, how to continue.                                                                      |
 | **Traveler**        | The append-only event log of one Work order.                                                                                                                                        |
 | **Supervisor**      | The person operating the `factory` CLI. Takes the Andons the Mechanic escalates.                                                                                                    |
-| **Mechanic**        | The AI responder (v1's on-call operator) that triages every Andon, resolves what it can and escalates the rest to the Supervisor.                                                    |
+| **Mechanic**        | The AI responder (the old factory's on-call operator) that triages every Andon, resolves what it can and escalates the rest to the Supervisor.                                                    |

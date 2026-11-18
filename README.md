@@ -1,6 +1,6 @@
 # software-factory
 
-Monorepo hosting **SoftwareFactory** (`packages/software-factory` v1, and [v2 design docs](docs/README.md)): an autonomous AI harness that turns
+Monorepo hosting **SoftwareFactory**: the new factory ([design docs](docs/README.md)) and the old `packages/software-factory`, an autonomous AI harness that turns
 `todos/*.md` work orders into verified Pull Requests via declarative production lines.
 See [packages/software-factory/README.md](packages/software-factory/README.md).
 
@@ -38,9 +38,9 @@ pnpm sf:run       # run the supervisor over todos/
 pnpm ci:verify    # format, lint, typecheck, test, build
 ```
 
-## Setup in a repository (v2)
+## Setup in a repository
 
-The v2 Factory runs from `factory` (Supervisor CLI), `factory-server` (state) and `factory-cell` (execution).
+The Factory runs from `factory` (Supervisor CLI), `factory-server` (state) and `factory-cell` (execution).
 In any repository you want the Factory to run:
 
 ```bash

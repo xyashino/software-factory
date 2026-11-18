@@ -46,8 +46,7 @@ Tokens are opaque random strings. The runtime stores only their hashes.
   No `FACTORY_TOKEN` is needed. Trust is the operating-system account that can read the file.
 - **Remote mode:** the same listener serves other machines. Remote clients set `FACTORY_URL` and
   `FACTORY_TOKEN`; remote Cells set `factory_url` and the join token. Remote Cells SHOULD reach it over a
-  private network (WireGuard / Tailscale) or a TLS reverse proxy. The server does not terminate TLS itself
-  in v2.0. WebSocket is not used in v2.0.
+  private network (WireGuard / Tailscale) or a TLS reverse proxy. The server does not terminate TLS itself. WebSocket is not used.
 - Remote Cells open **no inbound port**. Everything the Factory needs to tell a Cell arrives in
   responses to requests the Cell makes (claim long-poll and heartbeat).
 - `factory-operator` talks to its Cell over a localhost HTTP endpoint (`$FACTORY_OPERATOR_URL`, §3.3).
@@ -389,8 +388,8 @@ self-fence that is not below the TTL is refused at start (`apps/server/src/runti
 
 **Cut-over flag.** `FACTORY_V2_ONLY` (`1` or `0`, `RuntimeConfig.v2Only`) is a Factory setting, not a
 timing knob. Unset means `1`: the Supervisor's todo intake turns only todos with `factory: v2` in their frontmatter into Work
-orders and skips the rest silently, because v1 owns them (ROADMAP M9; v1's `pick-todo.ts` skips the
-same todos). `0` makes v2 take every todo, and is for after the trial only, once v1 is frozen. Any other
+orders and skips the rest silently, because the old factory owns them (ROADMAP M9; the old factory's `pick-todo.ts` skips the
+same todos). `0` makes take every todo, and is for after the trial only, once the old factory is frozen. Any other
 value is refused at start. Trial runbook: [TRIAL.md](TRIAL.md).
 
 ### 5.2 Claim
@@ -594,7 +593,7 @@ Executing `run_operator_station`:
 7. `RecordUsage` if the runner reports usage.
 
 `run_inspection`: steps 1–2, run each command with the timeout, upload the full log as a blob, keep
-a cleaned 2 KiB tail (ANSI stripped, v1 logic), `ReportInspection`.
+a cleaned 2 KiB tail (ANSI stripped, the old factory logic), `ReportInspection`.
 
 `deliver`: §8.3 delivery.
 

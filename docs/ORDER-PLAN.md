@@ -88,9 +88,9 @@ Station jobs start from the tip of the base. `deliver` rebases onto it and opens
 | A predecessor is merged and its branch is deleted mid-delivery | `delivery_failed` (base missing). `factory resume <order>` rebuilds the job on `feat/<slug>`.                              |
 | A plan job fails twice                                         | Plan Andon `plan_job_failed`. Run `factory resume <projectId>:plan:<slug>`.                                                |
 | The plan PR is closed without merging                          | Plan Andon `plan_pr_closed`. Run `factory resume <planId>` to open a new draft PR, or `factory cancel <planId>`.           |
-| A member is cancelled                                          | Its dependents are `deps_broken`. The only repair in v2.0 is `factory cancel <planId>`, which cancels undelivered members. |
+| A member is cancelled                                          | Its dependents are `deps_broken`. The only repair is `factory cancel <planId>`, which cancels undelivered members. |
 
-There is **no automatic restack** in v2.0: after rework of a predecessor, the Supervisor decides how
+There is **no automatic restack**: after rework of a predecessor, the Supervisor decides how
 to fix the stack (OPEN-QUESTIONS Q24).
 
 ## 5. GitHub settings

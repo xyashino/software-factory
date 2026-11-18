@@ -1,13 +1,13 @@
 # Roadmap
 
-v1 builds v2. The milestone tables below list **work items** (`factory-<milestone>-<slug>`). Items
-are grouped into larger todos in `todos/` (v1 format: `status`, `priority`, `depends_on`,
-`workflow`), each a complete, testable slice targeting only v2 paths (see [Todo files](#todo-files)).
-v1's quality gate (`pnpm check-types`, `pnpm lint`, `pnpm test`) runs on the whole repo, so v1
+The old factory builds the new factory. The milestone tables below list **work items** (`factory-<milestone>-<slug>`). Items
+are grouped into larger todos in `todos/` (the old factory format: `status`, `priority`, `depends_on`,
+`workflow`), each a complete, testable slice targeting only paths (see [Todo files](#todo-files)).
+The old factory's quality gate (`pnpm check-types`, `pnpm lint`, `pnpm test`) runs on the whole repo, so the old factory
 stays green throughout.
 
-v1 treats a `depends_on` entry whose todo file is absent as satisfied, so all todo files must exist
-before v1 starts picking them, and a dependency is named by its exact file name.
+The old factory treats a `depends_on` entry whose todo file is absent as satisfied, so all todo files must exist
+before the old factory starts picking them, and a dependency is named by its exact file name.
 
 ## Todo files
 
@@ -30,15 +30,15 @@ before v1 starts picking them, and a dependency is named by its exact file name.
 | `v2-15-distributed-hardening`             | 13, 14, 18 | all of M7                                                                                              |
 | `v2-18-remote-http-adapter`               | 14         | M4R: optional TCP HTTP/SSE listener on the same server, remote Cells and CLI, remote admin, remote e2e |
 | `v2-16-portability`                       | 15         | all of M8                                                                                              |
-| `v2-17-cut-over`                          | 16         | M9 preparation (the v1/v2 todo split); the trial itself is run by the Supervisor                       |
+| `v2-17-cut-over`                          | 16         | M9 preparation (the old/new factory todo split); the trial itself is run by the Supervisor                       |
 
 M10 gets its todos when it is specified.
 
-The server over a local Unix socket is the core of v2.0: `factory-server` owns the database and listens
+The server over a local Unix socket is the core: `factory-server` owns the database and listens
 on `factory.sock`. No milestone before M7 needs a network listener. The optional TCP HTTP/SSE listener on
 the same server (M4R) comes after the local CLI and Cell are proven, before the distributed hardening of M7.
 
-**Implementation order** (the todo dependencies enforce it; v1 picks todos in this order):
+**Implementation order** (the todo dependencies enforce it; the old factory picks todos in this order):
 
 1. v2-09 server core: runtime, writer lock, Unix socket
 2. v2-10 server intake, feed, admin, and an end-to-end run through the socket with a fake Cell
@@ -71,13 +71,13 @@ flowchart LR
 
 | Todo                    | Depends on             | Scope                                                                                                                                                                                                           |
 | :---------------------- | :--------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `factory-m0-adr`        | —                      | `decisions/` entry: v2 architecture, link to `docs/`                                                                                                                                                            |
+| `factory-m0-adr`        | —                      | `decisions/` entry: architecture, link to `docs/`                                                                                                                                                            |
 | `factory-m0-workspace`  | `factory-m0-adr`       | `apps/*` in the workspace; empty `factory-core`, `factory-runtime`, `factory-db`, `factory-definitions`, `apps/{server,cell,cli,operator-cli}` with `check-types`, `lint`, `test` scripts and a smoke test each |
 | `factory-m0-boundaries` | `factory-m0-workspace` | Dependency rules of STRUCTURE §3–4, purity test, `no-restricted-imports`                                                                                                                                        |
 | `factory-m0-catalog`    | `factory-m0-workspace` | Add `hono`, `fast-check` to the catalog with decision entries                                                                                                                                                   |
 
 **Done when:** `pnpm turbo check-types lint test` is green; a test import of `@repo/software-factory`
-from a v2 package fails lint; `bun:sqlite` imported in core fails lint.
+from a package fails lint; `bun:sqlite` imported in core fails lint.
 
 ## M1. Core domain
 
@@ -91,20 +91,20 @@ from a v2 package fails lint; `bun:sqlite` imported in core fails lint.
 | `factory-m1-next-job`     | `factory-m1-state-evolve`                   | `next-job.ts`, every row of CORE §6                                                                                                                        |
 | `factory-m1-context`      | `factory-m1-next-job`                       | `context.ts` (CORE §7)                                                                                                                                     |
 | `factory-m1-harness`      | `factory-m1-decide`, `factory-m1-ports`     | `testing/`: given/when/then harness, Line builder, fakes                                                                                                   |
-| `factory-m1-scenarios`    | `factory-m1-harness`, `factory-m1-next-job` | Rewrite every v1 scenario; add Andon → resume for each `AndonReason`, `restart_from`, `reopen`, lost → restart, handover, question abandoned then answered |
+| `factory-m1-scenarios`    | `factory-m1-harness`, `factory-m1-next-job` | Rewrite every old factory scenario; add Andon → resume for each `AndonReason`, `restart_from`, `reopen`, lost → restart, handover, question abandoned then answered |
 | `factory-m1-properties`   | `factory-m1-scenarios`                      | fast-check generators; I1, I3–I9, I11                                                                                                                      |
 
-**Done when:** all invariants green with ≥ 10 000 generated runs; every v1 scenario name has a v2
+**Done when:** all invariants green with ≥ 10 000 generated runs; every old factory scenario name has a counterpart in the new factory
 counterpart or a written reason it no longer applies.
 
 ## M2. Definitions and queue
 
 | Todo                          | Depends on                    | Scope                                                                                                                                                                         |
 | :---------------------------- | :---------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `factory-m2-definitions-port` | M0                            | Copy v1 definitions, roles → `operators/`, templates, workflows → `lines/` into `factory-definitions`; tests pass                                                             |
-| `factory-m2-line-v2`          | `factory-m2-definitions-port` | Schema v2 (`sync`/`setup` become per-job workspace preparation, not a phase; Station `requires`; `maxRestarts`, `maxLostRestarts`), runtime prompt templates, snapshot + hash |
+| `factory-m2-definitions-port` | M0                            | Copy the old factory definitions, roles → `operators/`, templates, workflows → `lines/` into `factory-definitions`; tests pass                                                             |
+| `factory-m2-line-v2`          | `factory-m2-definitions-port` | Schema of the new factory (`sync`/`setup` become per-job workspace preparation, not a phase; Station `requires`; `maxRestarts`, `maxLostRestarts`), runtime prompt templates, snapshot + hash |
 | `factory-m2-queue`            | M1                            | `core/queue/select.ts` (CORE §8) with ordering, capability and dependency tests                                                                                               |
-| `factory-m2-todo-parse`       | `factory-m2-definitions-port` | Todo frontmatter parsing ported from v1 `pick-todo.ts` into `factory-definitions`, `OrderId` derivation, the missing-dependency rule, diagnostics                             |
+| `factory-m2-todo-parse`       | `factory-m2-definitions-port` | Todo frontmatter parsing ported from the old factory `pick-todo.ts` into `factory-definitions`, `OrderId` derivation, the missing-dependency rule, diagnostics                             |
 
 **Done when:** `factory check` logic (as a function) validates the shipped definitions; snapshot hash
 is stable across machines (fixture test).
@@ -128,8 +128,8 @@ is stable across machines (fixture test).
 | :------------------------ | :---------------------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `factory-m4-runtime`      | M2, M3                                    | `factory-runtime`: compose stores and definitions; application API and command loop over core ports; writer-lock requirement                          |
 | `factory-m4-claim-reaper` | `factory-m4-runtime`, M2                  | Runtime claim, lease, heartbeat, reaper and boot-grace use cases and lifecycle loops                                                                  |
-| `factory-m4-prompts`      | `factory-m4-runtime`, M2                  | Port v1 prompt rendering to runtime; relative paths, blobs and runtime prompts into the `Job`                                                         |
-| `factory-m4-intake`       | `factory-m4-runtime`, M2                  | Runtime intake: git mirror, todos → `CreateOrder` / `UpdateSpec` / `Cancel`, PR state polling, v2 todo filter (M9)                                    |
+| `factory-m4-prompts`      | `factory-m4-runtime`, M2                  | Port the old factory prompt rendering to runtime; relative paths, blobs and runtime prompts into the `Job`                                                         |
+| `factory-m4-intake`       | `factory-m4-runtime`, M2                  | Runtime intake: git mirror, todos → `CreateOrder` / `UpdateSpec` / `Cancel`, PR state polling, todo filter (M9)                                    |
 | `factory-m4-socket`       | `factory-m4-runtime`                      | `apps/server` Unix socket listener at `$FACTORY_DATA_DIR/factory.sock` (0600), contract-typed routes, and the socket client used by tests and the CLI |
 | `factory-m4-feed`         | `factory-m4-runtime`                      | Runtime event feed from `global_seq`, consumed by `status --watch` and `log -f` over the socket                                                       |
 | `factory-m4-admin`        | `factory-m4-runtime`, `factory-m3-export` | Local admin operations: `backup \| export \| import \| rebuild-projections`                                                                           |
@@ -156,7 +156,7 @@ Delivered in `v2-18`, after M6. Nothing in M5 to M6 depends on it.
 
 | Todo                          | Depends on                    | Scope                                                                                                                        |
 | :---------------------------- | :---------------------------- | :--------------------------------------------------------------------------------------------------------------------------- |
-| `factory-m5-adapters-port`    | M0                            | Port v1 adapters (herdr, git, github, process, runners) with tests                                                           |
+| `factory-m5-adapters-port`    | M0                            | Port the old factory adapters (herdr, git, github, process, runners) with tests                                                           |
 | `factory-m5-client-loops`     | M4                            | Cell socket client to `factory-server`; hello, claim/heartbeat loops, idempotency ids, self-fence (remote TCP client in M4R) |
 | `factory-m5-workspace`        | `factory-m5-adapters-port`    | Mirror, worktree at base, sync/setup cache, LRU, `.cell/` excluded                                                           |
 | `factory-m5-inspection`       | `factory-m5-workspace`        | `run-inspection.ts`                                                                                                          |
@@ -201,17 +201,17 @@ opens the database and no network listener is needed.
 
 ## M9. Cut-over
 
-- v1 and v2 never take the same todo. During the trial, v2's intake only takes todos with
-  `factory: v2` in their frontmatter; v1 skips those (a one-line filter in v1's `pick-todo.ts`,
-  the only v1 edit this plan makes, with its own `decisions/` entry).
-- Run v2 against this repository in parallel with v1 for one week on non-critical todos.
+- The old factory and the new factory never take the same todo. During the trial, the new factory's intake only takes todos with
+  `factory: v2` in their frontmatter; the old factory skips those (a one-line filter in the old factory's `pick-todo.ts`,
+  the only edit to the old factory this plan makes, with its own `decisions/` entry).
+- Run the new factory against this repository in parallel with the old factory for one week on non-critical todos.
 - Exit criteria: no lost or duplicated Work order; every Andon resumed successfully; board parity
-  with v1.
-- Then: v2 takes every todo, v1 is frozen (kept for reference), `sf` scripts point at `factory`.
+  with the old factory.
+- Then: the new factory takes every todo, the old factory is frozen (kept for reference), `sf` scripts point at `factory`.
 
 ## M10. Mechanic (triage and live intervention)
 
-Reintroduce v1's on-call operator as the **Mechanic**, a separate module: handles Andon triage
+Reintroduce the old factory's on-call operator as the **Mechanic**, a separate module: handles Andon triage
 (`incident` sub-entity with its own budget, deciding whether to `Resume`, `Cancel` or escalate to
 the Supervisor), answers `question_asked` when it can, and can intervene mid-Cycle on repeated stall
 alerts (`Nudge` with sanitized pane-tail context, or `Cancel` / escalation) without editing the

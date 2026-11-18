@@ -1,9 +1,9 @@
-# Software Factory v2: design docs
+# Software Factory: design docs
 
 > **Status: draft, nothing implemented (2026-11-13).**
-> v1 lives in `packages/software-factory`. It is **not modified** by this work (one exception: the
+> The old factory lives in `packages/software-factory`. It is **not modified** by this work (one exception: the
 > M9 todo filter, ROADMAP M9). It is the reference implementation, the source of carried-over code,
-> and the tool that builds v2.
+> and the tool that builds the new factory.
 
 ## Docs map
 
@@ -15,10 +15,10 @@
 | [PROTOCOL.md](PROTOCOL.md)             | How local/remote clients, the runtime, Cells, `factory-operator` and `factory` communicate: jobs, leases, fencing, idempotency, git checkpoints, failure matrix |
 | [ORDER-PLAN.md](ORDER-PLAN.md)         | Order Plan guide: a chain of Work orders as stacked PRs on `feat/<slug>`, the end-to-end flow and the GitHub settings it needs                                  |
 | [STORAGE.md](STORAGE.md)               | Database schema, the append transaction, projections, blobs, export/import, rebuild from git                                                                    |
-| [STRUCTURE.md](STRUCTURE.md)           | Repo layout, package responsibilities, dependency rules, what is carried over from v1                                                                           |
-| [RULES.md](RULES.md)                   | Hard implementation rules for every v2 change                                                                                                                   |
-| [ROADMAP.md](ROADMAP.md)               | Milestones, acceptance criteria, the todo breakdown v1 executes                                                                                                 |
-| [TRIAL.md](TRIAL.md)                   | Runbook of the M9 trial: v1 and v2 side by side, `factory: v2` todos, what to watch, exit criteria                                                              |
+| [STRUCTURE.md](STRUCTURE.md)           | Repo layout, package responsibilities, dependency rules, what is carried over from the old factory                                                                           |
+| [RULES.md](RULES.md)                   | Hard implementation rules for every change                                                                                                                   |
+| [ROADMAP.md](ROADMAP.md)               | Milestones, acceptance criteria, the todo breakdown the old factory executes                                                                                                 |
+| [TRIAL.md](TRIAL.md)                   | Runbook of the M9 trial: the old factory and the new factory, side by side, `factory: v2` todos, what to watch, exit criteria                                                              |
 | [OPEN-QUESTIONS.md](OPEN-QUESTIONS.md) | Decisions not yet taken, each with a recommended default                                                                                                        |
 
 Reading order: WORKFLOW, PLAN, CORE, PROTOCOL, STORAGE, STRUCTURE, RULES, ROADMAP.
@@ -33,7 +33,7 @@ A disagreement is a bug in the docs; fix it in the same change that notices it.
 
 - **MUST / MUST NOT**: a hard rule. Code that breaks it is wrong even if tests pass.
 - **SHOULD**: the default; deviating needs a reason written in `decisions/`.
-- **v1**: `packages/software-factory`. **v2**: everything described here.
+- **The old factory**: `packages/software-factory`. **The new factory**: everything described here.
 
 ## Names used throughout
 
@@ -60,4 +60,4 @@ whole system. PLAN's glossary has the full list.
 | **core**               | `packages/factory-core`                                      | Pure domain code and transport-neutral contracts shared by all of the above.                                                                    |
 | **`factory-server`**   | `apps/server`                                                | The core process: owns the database, runs the runtime, serves HTTP + SSE on loopback and, when exposed, to remote CLIs and Cells.               |
 
-"Operator" always means the AI specialist that works a Station. v1's on-call operator becomes the **Mechanic**, which triages every Andon and escalates to the **Supervisor** (decision 20261113-230000).
+"Operator" always means the AI specialist that works a Station. The old factory's on-call operator becomes the **Mechanic**, which triages every Andon and escalates to the **Supervisor** (decision 20261113-230000).

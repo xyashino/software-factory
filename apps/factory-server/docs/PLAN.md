@@ -331,7 +331,7 @@ For up to **5 Cells and 1 web server (`Bun.serve` + Hono + `bun:sqlite`)**, the 
    - A Cell runs `Step 0 → Step 1 → ... → deliver` without calling `/claims` again.
 4. **Single TCP Socket per Cell (`Connection: keep-alive`) + Zero Reconnect State Machine**:
    - Bun's HTTP keep-alive reuses 1 TCP connection per Cell (same wire cost as a WebSocket).
-   - If the web server restarts during a 15-minute LLM build step, the Cell's next HTTP heartbeat/transition simply retries (`200ms → 400ms → 800ms`) with the same `commandId` and `epoch`—nothing drops or desyncs.
+   - If the web server restarts during a 15-minute LLM build step, the Cell's next HTTP heartbeat/transition simply retries (`200ms → 400ms → 800ms`) with the same `epoch`—nothing drops or desyncs. A step the server already applied answers `already_applied` (§11.4).
 
 | Parameter                 | Value                              | Why                                                                                                                   |
 | :------------------------ | :--------------------------------- | :-------------------------------------------------------------------------------------------------------------------- |
@@ -339,7 +339,7 @@ For up to **5 Cells and 1 web server (`Bun.serve` + Hono + `bun:sqlite`)**, the 
 | **`heartbeatIntervalMs`** | `10_000` (10s)                     | Max `0.5 req/sec` total load on the server; fast enough for abort signals                                             |
 | **`selfFenceMs` (Cell)**  | `45_000` (45s)                     | Cell aborts its local runner only if 4 consecutive heartbeats fail                                                    |
 | **`leaseTtlMs` (Server)** | `60_000` (60s)                     | Server guarantees `leaseTtlMs > selfFenceMs` (15s safety margin) before another Cell can take over an abandoned task  |
-| **HTTP Retry**            | 3 attempts (`200ms, 400ms, 800ms`) | Idempotent via `commandId` (`sha256(cellId + orderId + epoch + command)`)                                             |
+| **HTTP Retry**            | 3 attempts (`200ms, 400ms, 800ms`) | Idempotent by state: same `epoch`, outcome already applied answers `already_applied` (§11.4)                                             |
 
 ---
 
@@ -707,7 +707,6 @@ erDiagram
     text to_state
     text actor_kind "supervisor | mechanic | cell | system"
     text actor_id
-    text command_id UK
     text meta_json
     integer at
   }
@@ -803,3 +802,108 @@ flowchart LR
   S04 & S05 --> S06["06 Incidents, SSE & Server"]
 ```
 
+---
+
+## 11. Agent Reporting (Operator & Mechanic via the Cell)
+
+### 11.1 Scope
+
+An LLM agent running inside a Job reports back through a localhost endpoint of its Cell. The server never sees the agent's token or its HTTP calls. The Cell turns each agent verb into a server call from §9: `POST /api/v1/jobs/{id}/transitions` for station jobs, `POST /api/v1/incidents/{id}/resolve` for Mechanic jobs.
+
+Two roles use the endpoint:
+
+- **Operator:** the agent of a `run_operator` job (`plan`, `build`, `plan-review`, ...).
+- **Mechanic:** the agent of a `mechanic` job, dispatched for an open incident.
+
+Other job kinds (`plan_branch`, `run_inspection`, `deliver`) run Cell commands, not agents. They get no token and no endpoint.
+
+### 11.2 Endpoint and per-job token
+
+- **Lifecycle.** The Cell opens a listener on `127.0.0.1` with an OS-assigned port when it claims a job, and closes it when the job reaches any end state: `complete` with no `nextJob` for this Cell, `fail`, `block`, `line_unavailable`, `worktree_missing` (reset), lease loss, or revoke. A `stale_epoch` or `not_live` reply from the server also closes it.
+- **Environment.** The runner receives `FACTORY_OPERATOR_URL` (base URL) and `FACTORY_CYCLE_TOKEN` (one token per job). Names are provisional (§11.6).
+- **Token.** 256-bit random, lives only in Cell memory, never sent to the server, never written to disk. The Cell compares it in constant time. A missing or wrong token answers `401` before the verb is read.
+- **Token map.** The Cell maps each token to `{ jobId, role, epoch, incidentId? }`. `epoch` is the value the claim returned. The map is dropped with the listener.
+- **Not a Safe Token.** The per-job token is not a §8 Safe Token and is not stored in the server DB. The server authenticates the Cell with its `cell:worker` credential, as for every other Cell call.
+- **HTTP shape.** Request: `POST /` with JSON `{ verb, ...fields }` plus the token. Any other method answers `405`; any other path answers `404`; a body over 1 MiB answers `413`.
+
+#### Role mapping
+
+| `job.kind`          | Role       | Verbs the Cell accepts              |
+| :------------------ | :--------- | :---------------------------------- |
+| `run_operator`      | `operator` | `done`, `verdict`, `block`, `context` |
+| `mechanic`          | `mechanic` | `read`, `incident`                  |
+| `plan_branch`, `run_inspection`, `deliver` | none | no token, no endpoint |
+
+A verb sent with the wrong role, or in a state where the server would refuse it, answers `409 rejected`. The Cell checks the role locally; the server still checks the transition itself (§3, §4).
+
+### 11.3 Verb to server call
+
+Contract references are to `apps/factory-server/src/contracts/`. A mismatch with a contract is a gap, listed in the last column.
+
+| Role | Verb | Cell does locally | Server call | Gap |
+| :--- | :--- | :--- | :--- | :--- |
+| Operator | `done` | Checks `requiredFiles` in `.cell/<step-id>/`; commits and pushes the checkpoint | `POST /jobs/{id}/transitions` `action: complete` with `epoch`, `producedFiles`, `commitSha` | none |
+| Operator | `verdict pass` | Same as `done` | `complete` with `output: { verdict: 'pass' }` | Server does not yet refuse a verdict on a non-review station (§11.6 q1) |
+| Operator | `verdict fail --feedback <file>` | Copies the feedback to `.cell/<step-id>/feedback.md` | `fail` with `detail` (first line of feedback), `output: { verdict: 'fail', feedbackFile }` | `fail` has no `reason`, so `verdict_failed` cannot be sent (§11.6 q1) |
+| Operator | `block --reason <why> --handover <file>` | Writes `.cell/<step-id>/handover.md` | `block` with `detail: <why>`, `handoverFile` | contract field is `detail`, not `reason` (the doc name) |
+| Operator | `context` | Prints the job's inputs and outputs | none | none |
+| Mechanic | `read` | Prints the incident, step states, `.cell/` files and logs | none | Mechanic reads the incident locally (§11.6 q2) |
+| Mechanic | `incident --action retry_step` | Attaches the report | `POST /incidents/{id}/resolve` `action: retry_step`, `stepIndex`, `epoch` | report fields missing (below) |
+| Mechanic | `incident --action restart_from_step --step <step-id>` | Maps `step-id` to `stepIndex` from the job's expected steps | same, `action: restart_from_step`, `stepIndex` | as above |
+| Mechanic | `incident --action restart_from_scratch \| cancel` | Attaches the report | same, no extra fields | as above |
+| Mechanic | `incident --action escalate` | Attaches the report | same, `action: escalate` | as above |
+
+Gaps the server must close before the Mechanic path is complete:
+
+- **`resolveIncidentContract` does not require `epoch`.** Make it required on this path, so a stale Mechanic cannot resolve a newer incident. A repeat of a resolved incident with the same action answers `200 already_applied` (§11.4).
+- **No report fields.** The contract has no `report`, `diagnosis` or `outcome`. §11.5 requires them, so the contract must accept them and store them with the incident.
+
+The Cell never decides which transition follows. It checks local facts and forwards the verb (§3.3, §3.4, §4.3).
+
+### 11.4 Idempotency and retries
+
+- **No command ids and no replay table.** The server keeps only current state: job status, epoch, owning Cell, step index, order steps and incident status. `state_transitions` stays as history for the SSE stream and is never read to answer a retry.
+- **Fence first, then state.** A transition applies only if the job is live (`claimed` or `running`), belongs to the calling Cell and carries the job's current `epoch`. Every claim bumps `epoch`, so a matching epoch proves no other Cell has taken the job since.
+- **Repeat of an applied command.** If the job already reflects the command's outcome at the same `epoch`, the server answers `200` with `already_applied: true` and changes nothing. Outcomes: `start` leaves the job running; `complete` completed; `fail` failed; `block` blocked; `worktree_missing` and `line_unavailable` released the lease.
+- **Incident resolve.** The same rule: an incident already resolved with the same action answers `200 already_applied`.
+- **Recovery is state, not history.** After a lost response or `already_applied`, the Cell calls `POST /api/v1/cells/hello`. A `resumedJob` in the reply gives the job id, `stepId`, `epoch` and lease, and the Cell continues from that step. The Cell keeps no retry log. If the Cell holds no unexpired job, `hello` returns none and the Cell waits for a claim.
+- **Retry matrix.**
+
+| Who | Retries when | Safe because |
+| :-- | :-- | :-- |
+| CLI | Never on its own | n/a |
+| Agent | Exit `3` (endpoint unreachable), or exit `1` with `code: internal` | Re-running the same verb hits the state check and gets `already_applied` or applies once |
+| Cell to server | `5xx` or network error: `200ms`, `400ms`, `800ms` (§3.7) | Same state check |
+| Cell to server | `409` (`stale_epoch`, `not_live`, `rejected`, `precondition`) | Never retried; the Cell reports and stops |
+
+### 11.5 Replies
+
+The Cell's reply codes are the ones `apps/cell/src/operator-socket.ts` already sends: `200 ok`, `400 invalid`, `401 unauthorized`, `409 rejected | stale_epoch | not_live | precondition`, `500 internal`. The server errors map to them as follows:
+
+| Server error (`application/core/error-handling.ts`) | HTTP | Cell reply `code` |
+| :--- | :--- | :--- |
+| `StaleLeaseEpoch` | `409` | `stale_epoch` |
+| `Conflict`, `Forbidden` | `409`, `403` | `rejected` |
+| `UnprocessableEntity` | `422` | `precondition` |
+| `NotFound` (job or incident gone) | `404` | `not_live` |
+| `BadRequest` | `400` | `invalid` |
+| anything else | `500` | `internal` |
+
+`incident` requires a report. The server rejects a missing or empty report with `400 invalid` and stores it with the incident (§11.3 gap). The report has three sections:
+
+```markdown
+## What happened
+## What he tried
+## Potential fix
+```
+
+### 11.6 Open questions
+
+1. **No question entity in the new core.** Operators block, and the Mechanic escalates; neither asks. So `answer` (Mechanic) and `factory answer` (Supervisor) have no target. Add a question entity, or drop both verbs.
+2. **Verdict and reason fields.** `verdict` has no transition action. Either add a `verdict` action or model it as `complete`/`fail` with `output.verdict`, and add a `reason` field to `fail` and `block` so the server can tell `verdict_failed` from other failures. Also decide where the server refuses a verdict on a non-review station.
+3. **How the Mechanic reads the incident.** The dispatch payload carries the incident and step states, or the Cell gets a read scope on `GET /api/v1/incidents/{id}`. The first keeps the Cell's scope smaller.
+4. **Whether the Operator keeps `context`.** It only reads local files.
+5. **Whether `tell` exists.** It is not in the current list.
+6. **Transport.** Loopback TCP works on every OS. A Unix socket with `0600` is tighter on Linux and macOS.
+7. **Environment names.** `FACTORY_OPERATOR_URL` and `FACTORY_CYCLE_TOKEN` are provisional.
+8. **Token length.** This section says 256 bits, but `newCycleToken()` in `apps/cell/src/operator-socket.ts` uses `randomBytes(24)`, which is 192 bits. Change the code to 32 bytes or change this text.

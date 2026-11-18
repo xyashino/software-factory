@@ -1,6 +1,6 @@
-# Rules (v2)
+# Rules
 
-Hard rules for every change to v2, by people or Operators. A change that breaks one is rejected in
+Hard rules for every change to the new factory, by people or Operators. A change that breaks one is rejected in
 review. Changing a rule needs a `decisions/` entry and an edit to this file in the same PR.
 Repo-wide rules in `.nitpick/config.ts` still apply.
 
@@ -53,7 +53,7 @@ Repo-wide rules in `.nitpick/config.ts` still apply.
    in the `Job`, including the text of runtime prompts.
 3. `factory-operator` **MUST** talk only to its Cell's localhost endpoint and **MUST NOT** know the Factory
    address.
-4. v2 packages **MUST NOT** import `@repo/software-factory`.
+4. packages **MUST NOT** import `@repo/software-factory`.
 5. Runner-specific code **MUST** live only in `apps/cell/src/adapters/runners/<runner>.ts`.
 6. `factory-db` **MUST NOT** call `decide`, `nextJob` or `toProjection`; it stores what it is given.
 7. Local and remote `FactoryClient` adapters **MUST** implement the same transport-neutral contracts.

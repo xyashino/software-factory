@@ -6,10 +6,10 @@
 software-factory/
 ├── pnpm-workspace.yaml            # packages: [apps/*, packages/*]
 ├── turbo.json
-├── docs/                          # this design (v2)
-├── decisions/                     # ADRs, shared by v1 and v2
-├── todos/                         # the queue v1 executes (it builds v2)
-├── deploy/                        # systemd units, Litestream config example (v2)
+├── docs/                          # this design
+├── decisions/                     # ADRs, shared by the old factory and the new factory
+├── todos/                         # the queue the old factory executes (it builds the new factory)
+├── deploy/                        # systemd units, Litestream config example
 │
 ├── apps/
 │   ├── server/                    # @repo/factory-server        bin: factory-server   (the core process; socket, optional TCP HTTP)
@@ -35,7 +35,7 @@ software-factory/
 │   │       ├── cycle/             # runtime loop: observe → core/cycle.watch → act; signals; handover on leave
 │   │       ├── operator-socket.ts # localhost HTTP endpoint for factory-operator; Cycle tokens
 │   │       ├── checkpoint.ts      # PROTOCOL §8.2: validate + upload + dry run + send (no commit, no push)
-│   │       └── adapters/          # carried over from v1: herdr, git, github, process, runners/*
+│   │       └── adapters/          # carried over from the old factory: herdr, git, github, process, runners/*
 │   │
 │   ├── cli/                       # @repo/factory-cli           bin: factory          (the Supervisor CLI)
 │   │   └── src/
@@ -51,7 +51,7 @@ software-factory/
 │           └── commands/          # done, verdict, ask, tell, block, context
 │
 └── packages/
-    ├── software-factory/          # v1 — frozen, not edited by v2
+    ├── software-factory/          # the old factory — frozen, not edited by the new factory
     ├── factory-core/              # @repo/factory-core       (CORE.md)
     ├── factory-runtime/           # @repo/factory-runtime    application use cases, scheduling (run inside factory-server)
     │   └── src/                   # composition, commands, claims, intake, prompts, admin, event feed
@@ -60,8 +60,8 @@ software-factory/
     │   ├── migrations/            # legacy 0001-0003, frozen (STORAGE §9)
     │   └── src/                   # schema.ts (source of truth), migrate, sqlite event store, blob store, lease store, export/import
     ├── factory-definitions/       # @repo/factory-definitions
-    │   ├── operators/             # Operator profiles, copied from v1 roles/, then evolved
-    │   ├── lines/                 # Line definitions, copied from v1 workflows/, schema v2
+    │   ├── operators/             # Operator profiles, copied from the old factory roles/, then evolved
+    │   ├── lines/                 # Line definitions, copied from the old factory workflows/, schema the new factory
     │   ├── templates/             # prompts, runtime prompts, PR templates
     │   ├── schemas/line.schema.json
     │   └── src/                   # load, validate, todo frontmatter, snapshot + hash
@@ -70,7 +70,7 @@ software-factory/
     └── typescript-config/
 ```
 
-Conventions inherited from the repo and v1: `kebab-case.ts`, arrow functions only, no `index.ts`
+Conventions inherited from the repo and the old factory: `kebab-case.ts`, arrow functions only, no `index.ts`
 barrels (packages expose subpaths through `exports`), tests in `__tests__/` next to the code,
 versions from the pnpm catalog.
 
@@ -111,7 +111,7 @@ flowchart BT
 
 Allowed imports (row imports column):
 
-|                       |      core      | core/cycle | definitions |        runtime         |  db   | v1  |
+|                       |      core      | core/cycle | definitions |        runtime         |  db   | The old factory  |
 | :-------------------- | :------------: | :--------: | :---------: | :--------------------: | :---: | :-: |
 | `factory-core`        |       ✓        |     ✓      |      ✗      |           ✗            |   ✗   |  ✗  |
 | `factory-definitions` |       ✓        |     ✗      |      ✓      |           ✗            |   ✗   |  ✗  |
@@ -132,34 +132,34 @@ separate from the server socket.
 - Each package lists only its allowed workspace dependencies in `package.json`; pnpm strict
   resolution then makes a forbidden import fail to resolve.
 - ESLint `no-restricted-imports` per package for subpaths (`@repo/factory-core/cycle/*` in the
-  server, `bun:*` / `node:*` in core, `@repo/software-factory` everywhere in v2).
-- A purity test in `factory-core` (as v1's `purity.test.ts`) scans sources for `Date.now`,
+  server, `bun:*` / `node:*` in core, `@repo/software-factory` everywhere in the new factory).
+- A purity test in `factory-core` (as the old factory's `purity.test.ts`) scans sources for `Date.now`,
   `Math.random`, `process.`, `fetch(`, `crypto`.
 
 ## 5. Workspace changes (M0)
 
 - `pnpm-workspace.yaml`: add `apps/*`.
-- Catalog additions (each with a `decisions/` entry, per the v1 rule on dependencies):
+- Catalog additions (each with a `decisions/` entry, per the old factory rule on dependencies):
   `hono` (optional TCP HTTP listener, M4R), `fast-check` (dev, property tests).
   ULIDs are generated by a 20-line helper behind the `Ids` port, no dependency.
 - Add `packages/factory-runtime` to the workspace; root scripts include `factory`, `factory-server`, and `factory-cell` next to the existing `sf`.
 
-## 6. Carried over from v1
+## 6. Carried over from the old factory
 
-v2 **copies** code from v1 and adapts it. It never imports v1. Paths are relative to
+The new factory **copies** code from the old factory and adapts it. It never imports the old factory. Paths are relative to
 `packages/software-factory/`.
 
-| v1 source                                                                                                                   | v2 destination                                    | Treatment                                                                                            |
+| The old factory source                                                                                                                   | destination                                    | Treatment                                                                                            |
 | :-------------------------------------------------------------------------------------------------------------------------- | :------------------------------------------------ | :--------------------------------------------------------------------------------------------------- |
 | `src/engine/next-action.ts`                                                                                                 | `core/order/next-job.ts`                          | Same decision-table style; new rows (CORE §6)                                                        |
-| `src/engine/reduce.ts`                                                                                                      | `core/order/evolve.ts`                            | Rewrite against the v2 state; keep the liveness guard                                                |
+| `src/engine/reduce.ts`                                                                                                      | `core/order/evolve.ts`                            | Rewrite against the state; keep the liveness guard                                                |
 | `src/engine/events.ts`, `state.ts`, `actions.ts`                                                                            | `core/order/events.ts`, `state.ts`, `commands.ts` | Rewrite (CORE §3–5)                                                                                  |
 | `src/engine/context.ts`                                                                                                     | `core/order/context.ts`                           | Port; blobs and relative paths instead of absolute paths; add resume, restart, handover, Q&A         |
 | `src/engine/watch.ts`                                                                                                       | `core/cycle/watch.ts`                             | Port 1:1                                                                                             |
-| `src/engine/__tests__/scenarios.test.ts`, `harness.ts`                                                                      | `core/order/__tests__/`, `core/testing/`          | Each scenario rewritten on v2 events; the list of names is the checklist                             |
+| `src/engine/__tests__/scenarios.test.ts`, `harness.ts`                                                                      | `core/order/__tests__/`, `core/testing/`          | Each scenario rewritten on events; the list of names is the checklist                             |
 | `src/definitions/*`                                                                                                         | `factory-definitions/src/`                        | Port; add snapshot + hash, `schemaVersion: 2`, Station `requires`                                    |
-| `roles/`                                                                                                                    | `factory-definitions/operators/`                  | Copy. `operator.md` (v1's on-call role) stays behind until M10; `cell.md` is renamed `builder.md`    |
-| `workflows/`                                                                                                                | `factory-definitions/lines/`                      | Copy; move to schema v2                                                                              |
+| `roles/`                                                                                                                    | `factory-definitions/operators/`                  | Copy. `operator.md` (the old factory's on-call role) stays behind until M10; `cell.md` is renamed `builder.md`    |
+| `workflows/`                                                                                                                | `factory-definitions/lines/`                      | Copy; move to schema the new factory                                                                              |
 | `templates/`                                                                                                                | `factory-definitions/templates/`                  | Copy; add runtime prompts (answer, nudge, reminders, Handover request)                               |
 | `src/prompts/*`                                                                                                             | `packages/factory-runtime/src/prompts/`           | Port; relative paths, blob inputs                                                                    |
 | `src/adapters/herdr`, `git`, `github`, `system`, `runners/*`                                                                | `apps/cell/src/adapters/`                         | Port with their tests                                                                                |

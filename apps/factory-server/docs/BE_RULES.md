@@ -183,9 +183,11 @@ apps/factory-server/
      - `idx_jobs_one_active_per_order ON jobs(order_id) WHERE order_id IS NOT NULL AND status IN ('claimed', 'running')`
      - `idx_jobs_one_active_per_cell ON jobs(cell_id) WHERE cell_id IS NOT NULL AND status IN ('claimed', 'running')`
      - `idx_work_orders_one_active_per_cell ON work_orders(active_cell_id) WHERE active_cell_id IS NOT NULL`
-4. **Monotonic `epoch` fencing & Command idempotency**:
+4. **Monotonic `epoch` fencing & state-based idempotency**:
    - Every Cell mutation (`start`, `complete`, `fail`, `block`, `line_unavailable`, `worktree_missing`, `heartbeats`) verifies `job.cell_id === principal.cellId` and `job.epoch === body.epoch`. Mismatch throws `StaleLeaseEpoch` (`409`, `type: 'stale-lease-epoch'`).
-   - Every mutating transition logs a row in `state_transitions` with `command_id` (unique when present). Duplicate `command_id` returns the prior transition result idempotently without re-mutating state.
+   - The server stores no command ids and no replay results. A transition is applied only if the job is live, owned by the caller and at the current `epoch`.
+   - If the job already reflects the command's outcome at the same `epoch`, the server answers `200 already_applied` and changes nothing (PLAN §11.4).
+   - `state_transitions` is history only, written for the SSE stream. It is never read to answer a retry.
 5. **Post-commit side effects (`claimWaiters` & `transitionBus`)**:
    - Only after `immediateTx` commits successfully may a procedure call `ctx.claimWaiters.wakeAll()` (when work becomes `queued`/`ready`) or `ctx.transitionBus.publish(transitions)`.
 

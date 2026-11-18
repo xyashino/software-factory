@@ -109,7 +109,7 @@ interface LeaseStore {
 ```
 
 `factory-core/testing` ships in-memory fakes of all three and a **contract suite** both the fake and
-the SQLite implementation must pass (as v1's `store.contract.ts`). Size limits, the log truncation
+the SQLite implementation must pass (as the old factory's `store.contract.ts`). Size limits, the log truncation
 and the ref scan live in `factory-core/blob-rules`; gzip, hashing and the sweep query live in
 `factory-db`.
 
@@ -366,15 +366,14 @@ There is no `archived` flag: the board hides terminal Work orders by `updated_at
 | Referenced by any event                      | never deleted                                                       |
 | Uploaded but unreferenced after 24 h         | deleted by a daily sweep                                            |
 
-Binary artifacts are out of scope: artifacts are text by contract (as in v1).
+Binary artifacts are out of scope: artifacts are text by contract (as in old factory).
 
-Logs dominate the size of the database, and referenced blobs are kept forever. This is accepted for
-v2.0; moving log blobs to a directory or object store behind the same `BlobStore` port is
+Logs dominate the size of the database, and referenced blobs are kept forever. This is accepted; moving log blobs to a directory or object store behind the same `BlobStore` port is
 OPEN-QUESTIONS Q17.
 
 ## 6. Projections
 
-- `orders` and `plans` are the projections in v2.0. Each is updated inside the append transaction (§3)
+- `orders` and `plans` are the projections. Each is updated inside the append transaction (§3)
   of its own stream.
 - The fold is `toProjection` in `factory-core` (pure; one for Work orders, one for plans). `factory-db`
   only stores the row.
@@ -392,7 +391,7 @@ OPEN-QUESTIONS Q17.
 Three tools, from cheapest to most portable:
 
 1. **Continuous replication (recommended):** Litestream replicating `factory.db` to S3-compatible
-   storage. A new machine restores the latest state with one command. No code needed in v2.
+   storage. A new machine restores the latest state with one command. No code needed in the new factory.
 2. **Snapshot:** runtime admin operation `backup <file>` uses SQLite `VACUUM INTO` (consistent while
    running).
 3. **Export / import:** a portable, engine-independent format, also the path to Postgres:

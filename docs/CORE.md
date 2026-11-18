@@ -1,4 +1,4 @@
-# Core: the domain of Software Factory v2
+# Core: the domain of Software Factory
 
 `packages/factory-core`. Everything in this document is **pure**: no I/O, no clock, no randomness,
 no environment. Ids and timestamps arrive as inputs. The same inputs always give the same outputs,
@@ -175,7 +175,7 @@ type CycleCause =
 
 | Event                | Payload                                        | Notes                                                                                                                                           |
 | :------------------- | :--------------------------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------- |
-| `question_asked`     | `cycleId, questionId, text`                    | Addressed to the Mechanic in v2.0; it answers or escalates to the Supervisor. At most one open question per Work order.                         |
+| `question_asked`     | `cycleId, questionId, text`                    | Addressed to the Mechanic; it answers or escalates to the Supervisor. At most one open question per Work order.                         |
 | `question_answered`  | `questionId, by, text`                         | Also accepted for an abandoned question (§5.2 `Answer`).                                                                                        |
 | `question_abandoned` | `questionId`                                   | Appended by `decide` with **every** event that ends the asking Cycle. The Q&A still reaches the next Cycle of that Station as context.          |
 | `note_left`          | `cycleId, to: StationId \| 'supervisor', text` |                                                                                                                                                 |
@@ -320,9 +320,9 @@ interface CycleState {
 `status` follows `outcome`: `done`, `verdict_pass`, `inspection_pass` → `passed`; `verdict_fail`,
 `inspection_fail` and the infrastructure reasons → `failed`.
 
-Compared to v1, the flags `parked`, `blockedPr`, `escalation`, `operatorRan`, `operatorChecked`,
-`extraRetry` and `pendingPrompts` are gone. Pane-level prompts are a Cell concern (§9). v1's on-call
-operator is the **Mechanic**, which triages every Andon and can intervene mid-Cycle in v2.0
+Compared to the old factory, the flags `parked`, `blockedPr`, `escalation`, `operatorRan`, `operatorChecked`,
+`extraRetry` and `pendingPrompts` are gone. Pane-level prompts are a Cell concern (§9). The old factory's on-call
+operator is the **Mechanic**, which triages every Andon and can intervene mid-Cycle
 (decisions 20261113-230000, 20261114-112011).
 
 ### 4.2 Derived: holder and board status
@@ -441,7 +441,7 @@ stations/0`, `checkpoint`, `lastPassed`, `pendingFeedback`, `pendingResume`, `wo
 
 `order_created.line.snapshotBlob` holds the parsed, normalised Line (JSON); `line.hash` is its hash,
 computed by `factory-definitions`. `evolve` and `nextJob` read **only** the snapshot. Changing a
-YAML file affects new Work orders only. Moving a Work order to a newer Line is out of scope for v2.0
+YAML file affects new Work orders only. Moving a Work order to a newer Line is out of scope
 (OPEN-QUESTIONS Q6).
 
 ## 5. Commands and `decide`
@@ -627,7 +627,7 @@ Paths in the context are **relative to the worktree**. The Cell writes input blo
 before the Operator starts. No absolute path is ever rendered into a stored prompt.
 
 Inspection feedback in a prompt is rendered by the runtime from `logBlobs`: ANSI stripped, the last
-12,000 characters of each log (v1 logic). The event itself only carries the 2 KiB `tail`.
+12,000 characters of each log (the old factory logic). The event itself only carries the 2 KiB `tail`.
 
 ## 8. Queue selection
 
@@ -685,7 +685,7 @@ Dependency policy:
 
 - A dependency is **satisfied** when its Work order is `delivered` (PR opened). A project can require
   `merged` instead (OPEN-QUESTIONS Q4).
-- A dependency that names no Work order and no todo file is satisfied (v1 parity,
+- A dependency that names no Work order and no todo file is satisfied (the old factory parity,
   `decisions/20261113-083516-software-factory-clarify-missing-dependency-rule.md`).
 - A dependency is **broken** when its Work order is `cancelled`, or when the project requires
   `merged` and its PR was closed unmerged. The dependent shows as `deps_broken` on the board and is
@@ -703,7 +703,7 @@ Dependency policy:
 
 ## 9. Cycle runtime (Cell side)
 
-`core/cycle/` is pure, but **only the Cell imports it** (lint rule, STRUCTURE §4). It is v1's
+`core/cycle/` is pure, but **only the Cell imports it** (lint rule, STRUCTURE §4). It is the old factory's
 `watch.ts` moved out of the Work order domain.
 
 ### 9.1 Watch
@@ -719,7 +719,7 @@ watch(cycle: RuntimeCycle, obs: Observation, now: number, policy: WatchPolicy):
   | { type: 'block'; reason: 'runner_prompt' }                       // → BlockCycle{source: runtime}
 ```
 
-Order: timeout, gone, (paused → none), blocked prompt, idle, silence. Same as v1.
+Order: timeout, gone, (paused → none), blocked prompt, idle, silence. Same as the old factory.
 
 When repeated `idle` / `silent` reminders cross a stall-alert threshold before `timeoutMs`, the Cell
 may upload a sanitized pane-tail blob and notify the runtime so the Mechanic (M10) can inspect the
@@ -923,7 +923,7 @@ never goes back: later reports for it are inert). `plan_pr_state_changed` sets `
 `Cancel` of a plan does not delete `feat/<slug>` or close any PR. The runtime then issues `Cancel` for
 every member that is not yet `delivered`; members already delivered stay as they are and the Supervisor
 closes their PRs on GitHub. A member that was cancelled leaves its dependents `deps_broken`
-(§8), so the only repair in v2.0 for a plan with a cancelled member is to cancel the plan.
+(§8), so the only repair for a plan with a cancelled member is to cancel the plan.
 
 **`nextJob` for a plan.** A pure function of `PlanState`:
 
@@ -1025,7 +1025,7 @@ The runtime keeps the two kinds of stream consistent. All of it is idempotent an
 §8 stands: a reopened predecessor does not stop a dependent that has started. If the rewritten
 predecessor (a new delivery commit, force-pushed to `factory/<predecessorTodoId>`) makes the
 dependent's delivery rebase conflict, the deliver job reports `delivery_failed` and the Andon goes to
-the Supervisor (via the Mechanic, §4.3). There is **no automatic restack in v2.0**
+the Supervisor (via the Mechanic, §4.3). There is **no automatic restack**
 (OPEN-QUESTIONS Q24). A deliver job whose base branch no longer exists on the remote (for example,
 the predecessor was merged and its branch deleted in between) also reports `delivery_failed`; a
 `Resume` rebuilds the job with the now-correct base (`feat/<slug>`).
@@ -1059,7 +1059,7 @@ member rows.
 | Level    | What                                                                                                                            | Tool                               |
 | :------- | :------------------------------------------------------------------------------------------------------------------------------ | :--------------------------------- |
 | Unit     | `evolve` per event, `decide` per command and per error, `nextJob` per table row (§6 and §12.3), `select` ordering               | vitest                             |
-| Scenario | `given(events).when(command).then(events)` and `given(events).nextJob(expected)`; every v1 scenario rewritten here (ROADMAP M1) | vitest + harness in `core/testing` |
+| Scenario | `given(events).when(command).then(events)` and `given(events).nextJob(expected)`; every old factory scenario rewritten here (ROADMAP M1) | vitest + harness in `core/testing` |
 | Property | I1–I9, I11 and P1–P7 over generated command sequences against a generated Line (and generated plans)                            | fast-check                         |
 | Contract | One suite run against the fake and the SQLite `EventStore` (I10, concurrency)                                                   | vitest                             |
 
