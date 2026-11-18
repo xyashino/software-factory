@@ -29,14 +29,19 @@ export type Procedure = (
   ctx: TransportContext,
 ) => Promise<ProcedureResponse>;
 
-const authorize = async (
-  ctx: TransportContext,
-  requiredScopes: readonly TokenScope[],
-): Promise<AuthenticatedContext> => {
+const authenticate = async (ctx: TransportContext): Promise<Principal> => {
   const principal =
     ctx.bearer === null ? null : await ctx.auth.verify(ctx.bearer);
   if (principal === null)
     throw new Unauthorized('Missing or invalid bearer token');
+  return principal;
+};
+
+const authorize = async (
+  ctx: TransportContext,
+  requiredScopes: readonly TokenScope[],
+): Promise<AuthenticatedContext> => {
+  const principal = await authenticate(ctx);
   const missing = requiredScopes.filter(
     (scope) => !principal.scopes.includes(scope),
   );
@@ -63,6 +68,24 @@ export const scopedProcedure =
   ): Procedure => {
     const run = withZodSchema(contract)(handler);
     return async (raw, ctx) => run(raw, await authorize(ctx, requiredScopes));
+  };
+
+export const anyScopedProcedure =
+  (allowedScopes: readonly TokenScope[]) =>
+  <C extends ZodContract>(contract: C) =>
+  <R extends ProcedureResponse>(
+    handler: (
+      input: ContractInput<C>,
+      ctx: AuthenticatedContext,
+    ) => R | Promise<R>,
+  ): Procedure => {
+    const run = withZodSchema(contract)(handler);
+    return async (raw, ctx) => {
+      const principal = await authenticate(ctx);
+      if (!allowedScopes.some((scope) => principal.scopes.includes(scope)))
+        throw new Forbidden(`Token needs one of: ${allowedScopes.join(', ')}`);
+      return run(raw, { ...ctx, principal });
+    };
   };
 
 export const authenticatedProcedure = <C extends ZodContract>(contract: C) =>

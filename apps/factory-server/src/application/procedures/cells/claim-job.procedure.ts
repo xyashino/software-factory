@@ -110,6 +110,40 @@ const claimPlanBranch = (
   return undefined;
 };
 
+const claimMechanicJob = (
+  tx: DbTx,
+  cell: CellRow,
+  leaseExpiresAt: number,
+  now: number,
+): JobRow | undefined => {
+  const job = tx
+    .select()
+    .from(jobs)
+    .where(
+      and(
+        eq(jobs.kind, 'mechanic'),
+        eq(jobs.status, 'ready'),
+        eq(jobs.cellId, cell.cellId),
+      ),
+    )
+    .orderBy(asc(jobs.createdAt), asc(jobs.jobId))
+    .get();
+  if (job === undefined) return undefined;
+  const claimed = tx
+    .update(jobs)
+    .set({
+      status: 'claimed',
+      epoch: job.epoch + 1,
+      leaseExpiresAt,
+      startedAt: now,
+    })
+    .where(eq(jobs.jobId, job.jobId))
+    .returning()
+    .get();
+  occupyCell(tx, cell.cellId, claimed.jobId);
+  return claimed;
+};
+
 const toClaimCandidate = (
   row: WorkOrderRow,
   statusByCell: Map<CellId, CellStatus>,
@@ -264,6 +298,8 @@ export const claimNext = (
 ): JobRow | undefined => {
   const plan = claimPlanBranch(tx, cell, leaseExpiresAt, now);
   if (plan !== undefined) return plan;
+  const mechanic = claimMechanicJob(tx, cell, leaseExpiresAt, now);
+  if (mechanic !== undefined) return mechanic;
   const project = requireProject(tx, cell.projectId);
   return claimWorkOrder(tx, cell, project, leaseExpiresAt, now, log);
 };
