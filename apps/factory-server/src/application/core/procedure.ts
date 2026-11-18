@@ -37,7 +37,7 @@ const authenticate = async (ctx: TransportContext): Promise<Principal> => {
   return principal;
 };
 
-const authorize = async (
+export const authorize = async (
   ctx: TransportContext,
   requiredScopes: readonly TokenScope[],
 ): Promise<AuthenticatedContext> => {
