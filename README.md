@@ -1,8 +1,7 @@
 # software-factory
 
-Monorepo hosting **SoftwareFactory**: the new factory ([design docs](docs/README.md)) and the old `packages/software-factory`, an autonomous AI harness that turns
+Monorepo hosting **SoftwareFactory** ([design docs](docs/README.md)), an autonomous AI harness that turns
 `todos/*.md` work orders into verified Pull Requests via declarative production lines.
-See [packages/software-factory/README.md](packages/software-factory/README.md).
 
 ## Main idea
 
@@ -17,7 +16,9 @@ Extracted from the omino monorepo with only the packages the factory needs:
 
 | Package                      | Purpose                                                    |
 | ---------------------------- | ---------------------------------------------------------- |
-| `packages/software-factory`  | The factory CLI (`sf`), roles, workflows, templates        |
+| `apps/cli`                   | The `factory` Supervisor CLI                               |
+| `apps/server`                | `factory-server`: state and scheduling                     |
+| `apps/cell`                  | `factory-cell`: execution                                  |
 | `packages/nitpick`           | Rules/skills engine; generates `.agents/` from `.nitpick/` |
 | `packages/eslint-config`     | Shared ESLint config                                       |
 | `packages/typescript-config` | Shared tsconfig presets                                    |
@@ -26,15 +27,14 @@ Extracted from the omino monorepo with only the packages the factory needs:
 
 - [mise](https://mise.jdx.dev/): `mise install` (Node 24, pnpm 12.15.0)
 - [Bun](https://bun.sh/) (the factory runs on Bun)
-- `herdr`, `gh` and the agent CLIs used in `packages/software-factory/workflows/*.yml`
+- `herdr`, `gh` and the agent CLIs used in `.factory/lines/*.yml`
 
 ## Usage
 
 ```bash
 pnpm install
-pnpm sf check     # validate roles, workflows and templates
-pnpm sf:status    # list tasks
-pnpm sf:run       # run the supervisor over todos/
+pnpm factory check --dir .   # validate .factory/ definitions
+pnpm factory-server          # start the server
 pnpm ci:verify    # format, lint, typecheck, test, build
 ```
 

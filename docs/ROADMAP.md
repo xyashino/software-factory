@@ -76,8 +76,7 @@ flowchart LR
 | `factory-m0-boundaries` | `factory-m0-workspace` | Dependency rules of STRUCTURE §3–4, purity test, `no-restricted-imports`                                                                                                                                        |
 | `factory-m0-catalog`    | `factory-m0-workspace` | Add `hono`, `fast-check` to the catalog with decision entries                                                                                                                                                   |
 
-**Done when:** `pnpm turbo check-types lint test` is green; a test import of `@repo/software-factory`
-from a package fails lint; `bun:sqlite` imported in core fails lint.
+**Done when:** `pnpm turbo check-types lint test` is green; `bun:sqlite` imported in core fails lint.
 
 ## M1. Core domain
 
@@ -207,7 +206,7 @@ opens the database and no network listener is needed.
 - Run the new factory against this repository in parallel with the old factory for one week on non-critical todos.
 - Exit criteria: no lost or duplicated Work order; every Andon resumed successfully; board parity
   with the old factory.
-- Then: the new factory takes every todo, the old factory is frozen (kept for reference), `sf` scripts point at `factory`.
+- Then: the new factory takes every todo, the old factory is deleted (git history keeps it) and the `sf` scripts are gone.
 
 ## M10. Mechanic (triage and live intervention)
 

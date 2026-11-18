@@ -1,9 +1,8 @@
 # Software Factory: design docs
 
 > **Status: draft, nothing implemented (2026-11-13).**
-> The old factory lives in `packages/software-factory`. It is **not modified** by this work (one exception: the
-> M9 todo filter, ROADMAP M9). It is the reference implementation, the source of carried-over code,
-> and the tool that builds the new factory.
+> The old factory (v1) is deleted; git history keeps it. It was the reference implementation and the source
+> of carried-over code.
 
 ## Docs map
 
@@ -33,7 +32,7 @@ A disagreement is a bug in the docs; fix it in the same change that notices it.
 
 - **MUST / MUST NOT**: a hard rule. Code that breaks it is wrong even if tests pass.
 - **SHOULD**: the default; deviating needs a reason written in `decisions/`.
-- **The old factory**: `packages/software-factory`. **The new factory**: everything described here.
+- **The old factory**: v1, deleted (git history). **The new factory**: everything described here.
 
 ## Names used throughout
 

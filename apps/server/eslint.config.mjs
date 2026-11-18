@@ -20,11 +20,6 @@ export default [
         {
           patterns: [
             {
-              group: ['@repo/software-factory', '@repo/software-factory/*'],
-              message:
-                'v2 packages must not import the v1 package (STRUCTURE §4).',
-            },
-            {
               group: ['@repo/factory-core/cycle', '@repo/factory-core/cycle/*'],
               message:
                 'apps/server does not import core/cycle (STRUCTURE §3, RULES §4.1).',

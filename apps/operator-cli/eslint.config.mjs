@@ -20,11 +20,6 @@ export default [
         {
           patterns: [
             {
-              group: ['@repo/software-factory', '@repo/software-factory/*'],
-              message:
-                'v2 packages must not import the v1 package (STRUCTURE §4).',
-            },
-            {
               group: ['@repo/factory-db', '@repo/factory-db/*'],
               message:
                 'apps/operator-cli does not import factory-db (STRUCTURE §3).',

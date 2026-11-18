@@ -14,13 +14,6 @@ const reportedRules = async (code: string): Promise<string[]> => {
 };
 
 describe('factory-server boundaries', () => {
-  it('rejects an import of the v1 package', async () => {
-    const rules = await reportedRules(
-      `import { x } from '@repo/software-factory/engine';`,
-    );
-    expect(rules).toContain('no-restricted-imports');
-  });
-
   it('rejects an import of core/cycle/watch', async () => {
     const rules = await reportedRules(
       `import { watch } from '@repo/factory-core/cycle/watch';`,

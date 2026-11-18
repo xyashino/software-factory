@@ -26,13 +26,6 @@ describe('factory-core boundaries', () => {
     expect(rules).toContain('no-restricted-imports');
   });
 
-  it('rejects an import of the v1 package', async () => {
-    const rules = await reportedRules(
-      `import { x } from '@repo/software-factory/engine';`,
-    );
-    expect(rules).toContain('no-restricted-imports');
-  });
-
   it('rejects an import of factory-db', async () => {
     const rules = await reportedRules(`import { x } from '@repo/factory-db';`);
     expect(rules).toContain('no-restricted-imports');
