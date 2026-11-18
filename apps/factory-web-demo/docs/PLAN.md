@@ -79,11 +79,11 @@ apps/factory-web-demo/
 | 01 | [`web-demo-01-skeleton`](../../../todos/web-demo-01-skeleton.md): package, Astro SSR, config, layout, `/` placeholder | none |
 | 02 | [`web-demo-02-factory-client`](../../../todos/web-demo-02-factory-client.md): schemas and HTTP client with bearer token | 01 |
 | 03 | [`web-demo-03-read-pages`](../../../todos/web-demo-03-read-pages.md): overview, cells preview, work orders, incidents | 02 |
-| 04 | [`web-demo-04-server-web-join`](../../../todos/web-demo-04-server-web-join.md): factory-server join secret and `POST /api/v1/tokens/join` for the web client | none (server) |
-| 05 | [`web-demo-05-auto-register`](../../../todos/web-demo-05-auto-register.md): loopback auto-registration and session rotation | 02, 04 |
-| 06 | [`web-demo-06-write-actions`](../../../todos/web-demo-06-write-actions.md): resume and delete-as-cancel with Origin guard | 03, 05 |
+| 04 | [`web-demo-04-server-web-join`](../../../todos/web-demo-04-server-web-join.md): factory-server join secret and `POST /api/v1/tokens/join` for the web client | 03 |
+| 05 | [`web-demo-05-auto-register`](../../../todos/web-demo-05-auto-register.md): loopback auto-registration and session rotation | 04 |
+| 06 | [`web-demo-06-write-actions`](../../../todos/web-demo-06-write-actions.md): resume and delete-as-cancel with Origin guard | 05 |
 
-Order: 01 → 02 → (03 ∥ 04) → 05 → 06.
+Order (linear, one dependency per task, as the plan validator requires): 01 → 02 → 03 → 04 → 05 → 06.
 
 ## 7. Out of scope
 

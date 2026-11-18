@@ -2,7 +2,7 @@
 status: todo
 factory: v2
 plan: web-demo
-depends_on: [web-demo-03-read-pages, web-demo-05-auto-register]
+depends_on: [web-demo-05-auto-register]
 priority: medium
 line: feature
 type: feat

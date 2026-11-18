@@ -11,6 +11,7 @@ tags: [factory, web-demo, astro, plan]
 - Write actions limited to `resume` and `cancel` via `POST /api/v1/work-orders/{id}/transitions`. Delete is cancel; hard delete is an open question.
 - Localhost auto-registration: only on loopback, join secret file readable by the server's OS user, exchanged at `POST /api/v1/tokens/join` for a 24 h `web_session` with read and write scopes but no admin scope. Remote servers still require `FACTORY_TOKEN`.
 - Server gains one route and one token kind (task 04). This is the only factory-server change in the plan.
+- Task dependencies are linear (one plan member per `depends_on`), as the todo migration validator requires.
 - Writes need Origin checks because a local demo is reachable by cross-site forms.
 - Astro and `@astrojs/node` versions from npm at planning time; to be pinned in `catalog:` at implementation.
 - No code written.

@@ -2,7 +2,7 @@
 status: todo
 factory: v2
 plan: web-demo
-depends_on: [web-demo-02-factory-client, web-demo-04-server-web-join]
+depends_on: [web-demo-04-server-web-join]
 priority: medium
 line: feature
 type: feat
