@@ -2,7 +2,7 @@
 status: todo
 factory: v2
 plan: factory-cli
-depends_on: [cli-10-worktree-checkpoint-deliver, server-drain-endpoint]
+depends_on: [server-drain-endpoint]
 priority: high
 line: feature
 type: feat

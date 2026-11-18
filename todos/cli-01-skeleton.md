@@ -42,7 +42,7 @@ Create `apps/factory` as a buildable, testable package with one `factory` entryp
 
 1. **Package files**
    - `apps/factory/package.json`: name `@repo/factory`, `type: module`, `private: true`, `bin: { "factory-2": "./src/cli.ts" }`, scripts `check-types`, `lint` (`eslint src test --max-warnings 0`), `test` (`vitest run`), `build` (`bun build src/cli.ts --outfile dist/factory.js --target bun`).
-   - `tsconfig.json`, `eslint.config.mjs`, `vitest.config.ts` copied from `apps/operator-cli` pattern (no operator-specific rules).
+   - `tsconfig.json`, `eslint.config.mjs`, `vitest.config.ts` copied from `apps/operator` pattern (no operator-specific rules).
 2. **`src/config.ts`** (exported constants, one block):
    - `DEFAULT_FACTORY_URL = 'http://127.0.0.1:7070'`
    - `CLAIM_WAIT_MS = 25_000`

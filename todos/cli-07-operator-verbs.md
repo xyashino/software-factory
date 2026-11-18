@@ -2,7 +2,7 @@
 status: todo
 factory: v2
 plan: factory-cli
-depends_on: [cli-02-contracts, cli-03-procedure-core]
+depends_on: [cli-06-incidents-orders-watch]
 priority: high
 line: feature
 type: feat
@@ -12,7 +12,7 @@ type: feat
 
 ## 🎯 Objective
 
-Give agents running inside a job one command, `factory operator <verb>`, that reports to their own Cell and nothing else. It replaces the separate `apps/operator-cli` binary.
+Give agents running inside a job one command, `factory operator <verb>`, that reports to their own Cell and nothing else. It replaces the separate `apps/operator` binary.
 
 ---
 

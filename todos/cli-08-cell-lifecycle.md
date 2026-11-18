@@ -2,7 +2,7 @@
 status: todo
 factory: v2
 plan: factory-cli
-depends_on: [cli-02-contracts, cli-03-procedure-core, cli-04-server-client-and-server-commands, cli-07-operator-verbs]
+depends_on: [cli-07-operator-verbs]
 priority: high
 line: feature
 type: feat

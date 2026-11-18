@@ -2,7 +2,7 @@
 status: todo
 factory: v2
 plan: factory-cli
-depends_on: [cli-01-skeleton]
+depends_on: [cli-02-contracts]
 priority: high
 line: feature
 type: feat

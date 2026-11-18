@@ -2,7 +2,7 @@
 status: todo
 factory: v2
 plan: factory-cli
-depends_on: [cli-04-server-client-and-server-commands]
+depends_on: [cli-05-todos-and-queue]
 priority: medium
 line: feature
 type: feat

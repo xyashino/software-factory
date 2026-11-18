@@ -2,13 +2,15 @@
 status: todo
 factory: v2
 plan: factory-cli
-depends_on: [step-02-adapter-declared-sections]
+depends_on: [cli-10-worktree-checkpoint-deliver]
 priority: high
 line: feature
 type: feat
 ---
 
 # Todo: `server-drain-endpoint` — Drain and Leave for Cells
+
+> Prerequisite: `step-02-adapter-declared-sections` (plan `factory-procedure-core`) must be done first. It is not in `depends_on` because plan dependencies across plans are invalid.
 
 ## 🎯 Objective
 
