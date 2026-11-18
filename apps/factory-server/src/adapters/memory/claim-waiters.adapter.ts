@@ -2,20 +2,28 @@ import { MAX_CLAIM_WAITERS } from '../../config';
 import type { ClaimWaitersPort } from '../../application/ports/claim-waiters.port';
 
 export const createClaimWaiters = (): ClaimWaitersPort => {
-  const resolvers = new Set<() => void>();
+  const wakers = new Set<() => void>();
   return {
-    park: () =>
-      new Promise<void>((resolve, reject) => {
-        if (resolvers.size >= MAX_CLAIM_WAITERS) {
-          reject(new Error('Claim waiter capacity exceeded'));
+    waitForWake: (ms, signal) =>
+      new Promise<void>((resolve) => {
+        if (wakers.size >= MAX_CLAIM_WAITERS || signal.aborted) {
+          resolve();
           return;
         }
-        resolvers.add(resolve);
+        const done = () => {
+          clearTimeout(timer);
+          signal.removeEventListener('abort', done);
+          wakers.delete(done);
+          resolve();
+        };
+        const timer = setTimeout(done, ms);
+        wakers.add(done);
+        signal.addEventListener('abort', done, { once: true });
       }),
     wakeAll: () => {
-      const pending = [...resolvers];
-      resolvers.clear();
-      for (const resolve of pending) resolve();
+      const pending = [...wakers];
+      wakers.clear();
+      for (const wake of pending) wake();
     },
   };
 };

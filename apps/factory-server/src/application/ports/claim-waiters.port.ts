@@ -1,4 +1,4 @@
 export type ClaimWaitersPort = {
-  park(): Promise<void>;
+  waitForWake(ms: number, signal: AbortSignal): Promise<void>;
   wakeAll(): void;
 };
