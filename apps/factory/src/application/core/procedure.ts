@@ -3,6 +3,7 @@ import type { ClockPort } from '../ports/clock.port';
 import type { FsPort } from '../ports/fs.port';
 import type { GitPort } from '../ports/git.port';
 import type { OperatorEndpointPort } from '../ports/operator-endpoint.port';
+import type { PidFilePort } from '../ports/pid-file.port';
 import type { ProcessPort } from '../ports/process.port';
 import type { RunnerPort } from '../ports/runner.port';
 import type { ServerPort } from '../ports/server.port';
@@ -19,6 +20,7 @@ export interface Ports {
   runner: RunnerPort;
   git: GitPort;
   process: ProcessPort;
+  pidFile: PidFilePort;
   clock: ClockPort;
 }
 
