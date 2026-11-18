@@ -255,7 +255,7 @@ const claimWorkOrder = (
   return job;
 };
 
-const claimNext = (
+export const claimNext = (
   tx: DbTx,
   cell: CellRow,
   leaseExpiresAt: number,
