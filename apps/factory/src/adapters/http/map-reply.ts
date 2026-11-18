@@ -23,7 +23,7 @@ export const mapReply = (status: number, text: string): unknown => {
   }
   const error = ErrorBodySchema.safeParse(body);
   if (error.success) {
-    throw new Refused(`${error.data.code}: ${error.data.message}`);
+    throw new Refused(`${error.data.code}: ${error.data.message}`, body);
   }
   throw new Refused(`HTTP ${status}`);
 };

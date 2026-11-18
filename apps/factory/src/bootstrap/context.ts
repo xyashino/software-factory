@@ -1,6 +1,8 @@
+import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { createPidFile } from '../adapters/fs/pid-file';
+import { createTodoFiles } from '../adapters/fs/todo-files';
 import { createTokenFile } from '../adapters/fs/token-file';
 import { createServerClient } from '../adapters/http/server-client';
 import { createProcessAdapter } from '../adapters/process/spawn-server';
@@ -21,11 +23,12 @@ export const buildContext = (): Ports => ({
     baseUrl: process.env.FACTORY_URL ?? DEFAULT_FACTORY_URL,
   }),
   fs: {
-    readText: notWired,
+    readText: async (path) => readFileSync(path, 'utf8'),
     writeText: notWired,
-    exists: notWired,
+    exists: async (path) => existsSync(path),
     readStdin: notWired,
   },
+  todoFiles: createTodoFiles(),
   tokens: createTokenFile(TOKEN_PATH),
   operator: { open: notWired, close: notWired },
   runner: { start: notWired, abort: notWired, wait: notWired },

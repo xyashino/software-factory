@@ -28,6 +28,7 @@ const readSecret = (path: string): string | null => {
 export const createTokenFile = (path: string): TokenStorePort => ({
   read: async (): Promise<Access | null> =>
     readSecret(path) === null ? null : { kind: 'supervisor' },
+  secret: async () => readSecret(path),
   write: async (secret) => {
     mkdirSync(dirname(path), { recursive: true });
     writeFileSync(path, `${secret}\n`, { mode: TOKEN_MODE });

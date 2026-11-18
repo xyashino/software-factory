@@ -45,6 +45,17 @@ export const createServerClient = ({
       });
       return mapReply(response.status, await readBody(response));
     },
+    get: async (route, query, token) => {
+      const search = new URLSearchParams(query).toString();
+      const response = await send(
+        `${baseUrl}${route}${search.length > 0 ? `?${search}` : ''}`,
+        {
+          method: 'GET',
+          headers: { authorization: `Bearer ${token}` },
+        },
+      );
+      return mapReply(response.status, await readBody(response));
+    },
     stream: () => {
       throw new Error('stream is not wired in this step');
     },

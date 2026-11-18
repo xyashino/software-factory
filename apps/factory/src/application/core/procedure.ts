@@ -7,6 +7,7 @@ import type { PidFilePort } from '../ports/pid-file.port';
 import type { ProcessPort } from '../ports/process.port';
 import type { RunnerPort } from '../ports/runner.port';
 import type { ServerPort } from '../ports/server.port';
+import type { TodoFilesPort } from '../ports/todo-files.port';
 import type { TokenStorePort } from '../ports/token-store.port';
 import { ArgumentError, Refused } from './errors';
 
@@ -15,6 +16,7 @@ const REFUSAL_MESSAGE = 'Token cannot run this procedure';
 export interface Ports {
   server: ServerPort;
   fs: FsPort;
+  todoFiles: TodoFilesPort;
   tokens: TokenStorePort;
   operator: OperatorEndpointPort;
   runner: RunnerPort;
