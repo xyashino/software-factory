@@ -64,6 +64,13 @@ export const postJson = (
     }),
   );
 
+export const deleteJson = (
+  app: TestApp,
+  path: string,
+  headers: Record<string, string> = {},
+): Promise<Response> =>
+  Promise.resolve(app.request(path, { method: 'DELETE', headers }));
+
 export const getJson = (
   app: TestApp,
   path: string,
