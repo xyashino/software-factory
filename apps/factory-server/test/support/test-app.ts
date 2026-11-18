@@ -1,4 +1,5 @@
 import { createApp } from '../../src/app';
+import { createSafeTokenAuth } from '../../src/adapters/auth/safe-token-auth.adapter';
 import { createClaimWaiters } from '../../src/adapters/memory/claim-waiters.adapter';
 import { createTransitionBus } from '../../src/adapters/memory/transition-bus.adapter';
 import type {
@@ -25,7 +26,7 @@ export const grantingAuth = (scopes: readonly TokenScope[]): AuthPort => ({
     ),
 });
 
-type TestAppOptions = { auth?: AuthPort };
+type TestAppOptions = { auth?: AuthPort; safeTokenAuth?: boolean };
 
 export type TestApp = ReturnType<typeof createApp>;
 
@@ -34,11 +35,14 @@ export const createTestApp = (
 ): { app: TestApp; clock: FakeClock; db: ReturnType<typeof createTestDb> } => {
   const db = createTestDb();
   const clock = createFakeClock();
+  const auth = options.safeTokenAuth
+    ? createSafeTokenAuth(db, clock)
+    : (options.auth ?? rejectAllAuth);
   const app = createApp(
     createTransport({
       db,
       clock,
-      auth: options.auth ?? rejectAllAuth,
+      auth,
       claimWaiters: createClaimWaiters(),
       transitionBus: createTransitionBus(),
     }),
