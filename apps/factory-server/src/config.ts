@@ -8,3 +8,6 @@ export const TOKEN_ROTATE_GRACE_MS = 60_000;
 export const CELL_SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1_000;
 export const MAX_CLAIM_WAITERS = 5;
 export const MAX_BODY_BYTES = 1_048_576;
+export const DEFAULT_PORT = 7070;
+export const DEFAULT_HOST = '127.0.0.1';
+export const DEFAULT_DB_PATH = './.factory-local/factory.db';
