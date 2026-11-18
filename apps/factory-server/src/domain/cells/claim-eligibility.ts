@@ -29,8 +29,10 @@ export type ClaimContext = {
   maxRunning: number;
 };
 
-const allowsLine = (cell: ClaimCell, lineName: string): boolean =>
-  cell.allowedLines.includes('*') || cell.allowedLines.includes(lineName);
+export const allowsLine = (
+  allowedLines: readonly string[],
+  lineName: string,
+): boolean => allowedLines.includes('*') || allowedLines.includes(lineName);
 
 const isPinnable = (candidate: ClaimCandidate, cellId: CellId): boolean =>
   candidate.pinnedCellId === null ||
@@ -60,7 +62,7 @@ export const isEligible = (
   candidate.activeCellId === null &&
   candidate.activeJobId === null &&
   candidate.projectId === cell.projectId &&
-  allowsLine(cell, candidate.lineName) &&
+  allowsLine(cell.allowedLines, candidate.lineName) &&
   !candidate.unavailableLineCells.includes(cell.cellId) &&
   isPinnable(candidate, cell.cellId) &&
   context.runningCount < context.maxRunning;
