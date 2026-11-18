@@ -1,14 +1,14 @@
 ---
 status: todo
 factory: v2
-plan: cells-jobs-incidents
-depends_on: [09-incidents-triage-domain]
+plan: factory-backend
+depends_on: [step-09-incidents-triage-domain]
 priority: high
 line: feature
 type: feat
 ---
 
-# Todo: `10-incidents-resolve-procedure` — Incident Endpoints and Mechanic Dispatch
+# Todo: `step-10-incidents-resolve-procedure` — Incident Endpoints and Mechanic Dispatch
 
 ## 🎯 Objective
 

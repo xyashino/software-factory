@@ -1,14 +1,14 @@
 ---
 status: todo
 factory: v2
-plan: cells-jobs-incidents
-depends_on: [11-sse-transition-stream]
+plan: factory-backend
+depends_on: [step-11-sse-transition-stream]
 priority: medium
 line: feature
 type: feat
 ---
 
-# Todo: `12-server-entrypoint-and-endpoint-index` — `Bun.serve` Entrypoint and Route Completeness
+# Todo: `step-12-server-entrypoint-and-endpoint-index` — `Bun.serve` Entrypoint and Route Completeness
 
 ## 🎯 Objective
 

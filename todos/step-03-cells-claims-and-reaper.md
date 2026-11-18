@@ -1,14 +1,14 @@
 ---
 status: todo
 factory: v2
-plan: cells-jobs-incidents
-depends_on: [02-cells-enroll-and-hello]
+plan: factory-backend
+depends_on: [step-02-cells-enroll-and-hello]
 priority: high
 line: feature
 type: feat
 ---
 
-# Todo: `03-cells-claims-and-reaper` — Long-Poll Claims and Lazy Lease Reaper
+# Todo: `step-03-cells-claims-and-reaper` — Long-Poll Claims and Lazy Lease Reaper
 
 ## 🎯 Objective
 

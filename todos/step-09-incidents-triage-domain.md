@@ -1,14 +1,14 @@
 ---
 status: todo
 factory: v2
-plan: cells-jobs-incidents
-depends_on: [08-jobs-line-unavailable]
+plan: factory-backend
+depends_on: [step-08-jobs-line-unavailable]
 priority: high
 line: feature
 type: feat
 ---
 
-# Todo: `09-incidents-triage-domain` — Pure Incident Triage and Resolution Rules
+# Todo: `step-09-incidents-triage-domain` — Pure Incident Triage and Resolution Rules
 
 ## 🎯 Objective
 

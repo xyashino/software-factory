@@ -1,14 +1,14 @@
 ---
 status: todo
 factory: v2
-plan: cells-jobs-incidents
-depends_on: [03-cells-claims-and-reaper]
+plan: factory-backend
+depends_on: [step-03-cells-claims-and-reaper]
 priority: high
 line: feature
 type: feat
 ---
 
-# Todo: `04-cells-heartbeat-list-revoke` — Heartbeats, Cell List, Revoke and Stale-Epoch Fencing
+# Todo: `step-04-cells-heartbeat-list-revoke` — Heartbeats, Cell List, Revoke and Stale-Epoch Fencing
 
 ## 🎯 Objective
 

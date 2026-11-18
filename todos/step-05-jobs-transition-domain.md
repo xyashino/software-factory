@@ -1,14 +1,14 @@
 ---
 status: todo
 factory: v2
-plan: cells-jobs-incidents
-depends_on: [04-cells-heartbeat-list-revoke]
+plan: factory-backend
+depends_on: [step-04-cells-heartbeat-list-revoke]
 priority: high
 line: feature
 type: feat
 ---
 
-# Todo: `05-jobs-transition-domain` — Pure Job Transition Rules
+# Todo: `step-05-jobs-transition-domain` — Pure Job Transition Rules
 
 ## 🎯 Objective
 

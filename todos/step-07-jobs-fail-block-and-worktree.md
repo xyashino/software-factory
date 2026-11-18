@@ -1,14 +1,14 @@
 ---
 status: todo
 factory: v2
-plan: cells-jobs-incidents
-depends_on: [06-jobs-start-and-complete]
+plan: factory-backend
+depends_on: [step-06-jobs-start-and-complete]
 priority: high
 line: feature
 type: feat
 ---
 
-# Todo: `07-jobs-fail-block-and-worktree` — Job `fail`, `block` and `worktree_missing`
+# Todo: `step-07-jobs-fail-block-and-worktree` — Job `fail`, `block` and `worktree_missing`
 
 ## 🎯 Objective
 

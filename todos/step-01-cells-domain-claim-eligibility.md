@@ -1,13 +1,13 @@
 ---
 status: todo
 factory: v2
-plan: cells-jobs-incidents
+plan: factory-backend
 priority: high
 line: feature
 type: feat
 ---
 
-# Todo: `01-cells-domain-claim-eligibility` — Pure Claim Eligibility Domain
+# Todo: `step-01-cells-domain-claim-eligibility` — Pure Claim Eligibility Domain
 
 ## 🎯 Objective
 

@@ -1,14 +1,14 @@
 ---
 status: todo
 factory: v2
-plan: cells-jobs-incidents
-depends_on: [05-jobs-transition-domain]
+plan: factory-backend
+depends_on: [step-05-jobs-transition-domain]
 priority: high
 line: feature
 type: feat
 ---
 
-# Todo: `06-jobs-start-and-complete` — Job `start` and `complete` Transitions
+# Todo: `step-06-jobs-start-and-complete` — Job `start` and `complete` Transitions
 
 ## 🎯 Objective
 

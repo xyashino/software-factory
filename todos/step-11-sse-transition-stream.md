@@ -1,14 +1,14 @@
 ---
 status: todo
 factory: v2
-plan: cells-jobs-incidents
-depends_on: [10-incidents-resolve-procedure]
+plan: factory-backend
+depends_on: [step-10-incidents-resolve-procedure]
 priority: medium
 line: feature
 type: feat
 ---
 
-# Todo: `11-sse-transition-stream` — Real-Time SSE Transition Stream
+# Todo: `step-11-sse-transition-stream` — Real-Time SSE Transition Stream
 
 ## 🎯 Objective
 

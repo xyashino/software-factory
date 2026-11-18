@@ -1,14 +1,14 @@
 ---
 status: todo
 factory: v2
-plan: cells-jobs-incidents
-depends_on: [01-cells-domain-claim-eligibility]
+plan: factory-backend
+depends_on: [step-01-cells-domain-claim-eligibility]
 priority: high
 line: feature
 type: feat
 ---
 
-# Todo: `02-cells-enroll-and-hello` — Cell Enrollment and Fast Reconnect
+# Todo: `step-02-cells-enroll-and-hello` — Cell Enrollment and Fast Reconnect
 
 ## 🎯 Objective
 
@@ -35,7 +35,7 @@ Implement `POST /api/v1/cells/enroll` and `POST /api/v1/cells/hello` per `PLAN.m
 2. **Hello** (`POST /api/v1/cells/hello`, scope `cell:worker`):
    - Update `projectId`, `allowedLines`, `runners`, `localWorktrees`, `last_heartbeat_at = now`.
    - If the Cell holds an unexpired `active_job_id`: bump `epoch += 1`, set `lease_expires_at = now + LEASE_TTL_MS`, return `resumedJob` inline.
-3. Hello reads expired-lease state without reaping. Reaping belongs to `03-cells-claims-and-reaper`.
+3. Hello reads expired-lease state without reaping. Reaping belongs to `step-03-cells-claims-and-reaper`.
 
 ---
 
