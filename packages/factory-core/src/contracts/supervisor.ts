@@ -17,6 +17,7 @@ import {
   resumeModeSchema,
   storedEventSchema,
 } from '../order/events';
+import { planStoredEventSchema } from '../plan/events';
 import { commandResultSchema } from './cell';
 
 /** One row of the board: the `orders` projection as the Supervisor reads it. */
@@ -190,7 +191,7 @@ export const streamEventsRequestSchema = z
 
 export const streamEventsResponseSchema = z
   .object({
-    events: z.array(storedEventSchema),
+    events: z.array(z.union([storedEventSchema, planStoredEventSchema])),
     nextSeq: z.number().int().min(0),
   })
   .strict();

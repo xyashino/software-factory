@@ -16,7 +16,7 @@ describe('supervisor event feed', () => {
       afterGlobalSeq: 0,
     });
 
-    expect(response.events.map((stored) => stored.orderId)).toEqual([orderId]);
+    expect(response.events).toMatchObject([{ orderId }]);
     expect(response.nextSeq).toBe(response.events[0]?.globalSeq);
   });
 

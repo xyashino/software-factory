@@ -1,5 +1,6 @@
 import type { FactoryClient } from '@repo/factory-core/contracts/client';
 import type { StoredEvent } from '@repo/factory-core/order/events';
+import type { StoredPlanEvent } from '@repo/factory-core/plan/events';
 
 /** How long one feed request is held when nothing is new (25 s, like claims). */
 export const FEED_WAIT_MS = 25_000;
@@ -26,6 +27,10 @@ export const FEED_IDLE_PAUSE_MS = 1_000;
 const sleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
+const isOrderEvent = (
+  event: StoredEvent | StoredPlanEvent,
+): event is StoredEvent => 'orderId' in event;
+
 /**
  * Waits for the next stored events after `cursor` (a long-poll of up to 25 s per call, repeated until
  * something arrives). Returns the events and the new cursor. The caller decides what to print.
@@ -43,8 +48,9 @@ export const nextEvents = async (
       afterGlobalSeq: cursor,
       waitMs: FEED_WAIT_MS,
     });
-    if (batch.events.length > 0) {
-      return { events: batch.events, cursor: batch.nextSeq };
+    const events = batch.events.filter(isOrderEvent);
+    if (events.length > 0) {
+      return { events, cursor: batch.nextSeq };
     }
     cursor = batch.nextSeq;
     if (Date.now() - startedAt < FEED_WAIT_MS / 2) {
