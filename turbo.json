@@ -2,7 +2,14 @@
   "$schema": "https://turborepo.com/schema.json",
   "ui": "tui",
   "agentGuidance": false,
-  "globalEnv": ["CI", "NO_COLOR", "FACTORY_DATA_DIR"],
+  "globalEnv": [
+    "CI",
+    "NO_COLOR",
+    "FACTORY_DATA_DIR",
+    "FACTORY_DB_PATH",
+    "FACTORY_PORT",
+    "FACTORY_HOST"
+  ],
   "tasks": {
     "//#format:check": {
       "inputs": [
