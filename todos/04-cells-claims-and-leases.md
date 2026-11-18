@@ -1,9 +1,7 @@
 ---
 status: todo
 priority: high
-depends_on:
-  - 02-safe-tokens-and-projects
-  - 03-plans-orders-and-queue
+depends_on: [03-plans-orders-and-queue]
 line: feature
 type: feat
 ---

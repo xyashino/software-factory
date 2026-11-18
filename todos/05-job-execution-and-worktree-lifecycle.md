@@ -1,9 +1,7 @@
 ---
 status: todo
 priority: high
-depends_on:
-  - 03-plans-orders-and-queue
-  - 04-cells-claims-and-leases
+depends_on: [04-cells-claims-and-leases]
 line: feature
 type: feat
 ---

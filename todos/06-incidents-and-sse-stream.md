@@ -1,9 +1,7 @@
 ---
 status: todo
 priority: high
-depends_on:
-  - 04-cells-claims-and-leases
-  - 05-job-execution-and-worktree-lifecycle
+depends_on: [05-job-execution-and-worktree-lifecycle]
 line: feature
 type: feat
 ---
