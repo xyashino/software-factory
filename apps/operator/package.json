@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@repo/operator-protocol": "workspace:*",
+    "citty": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {
