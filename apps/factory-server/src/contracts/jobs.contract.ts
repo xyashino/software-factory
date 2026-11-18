@@ -38,6 +38,12 @@ const worktreeMissingSchema = commandSchema.extend({
   missingFiles: z.array(z.string().trim().min(1)),
 });
 
+const lineUnavailableSchema = commandSchema.extend({
+  action: z.literal('line_unavailable'),
+  lineName: z.string().trim().min(1),
+  detail: z.string().trim().min(1),
+});
+
 const startedDto = z.object({
   code: z.literal(200),
   action: z.literal('start'),
@@ -71,6 +77,13 @@ const resetDto = z.object({
   nextJob: claimedJobDto,
 });
 
+const lineUnavailableDto = z.object({
+  code: z.literal(200),
+  action: z.literal('line_unavailable'),
+  markedLineUnavailable: z.literal(true),
+  nextJob: claimedJobDto.nullable(),
+});
+
 export const transitionJobContract = {
   in: {
     params: idParams,
@@ -80,9 +93,17 @@ export const transitionJobContract = {
       failSchema,
       blockSchema,
       worktreeMissingSchema,
+      lineUnavailableSchema,
     ]),
   },
   out: {
-    200: z.union([startedDto, completedDto, failedDto, blockedDto, resetDto]),
+    200: z.union([
+      startedDto,
+      completedDto,
+      failedDto,
+      blockedDto,
+      resetDto,
+      lineUnavailableDto,
+    ]),
   },
 };

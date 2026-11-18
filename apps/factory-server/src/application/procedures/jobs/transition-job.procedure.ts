@@ -19,6 +19,7 @@ import {
   type StepId,
 } from '../../../domain/common/brand';
 import { addMs } from '../../../domain/common/time';
+import { allowsLine } from '../../../domain/cells/claim-eligibility';
 import {
   assertArtifactsProduced,
   materializeLineSnapshot,
@@ -48,13 +49,14 @@ import {
   type WorkOrderInsert,
 } from '../../orders/order-writes';
 import { openIncident, type OpenIncident } from '../../orders/incident-writes';
-import { toClaimedJob } from '../cells/claim-job.procedure';
+import { claimNext, toClaimedJob } from '../cells/claim-job.procedure';
 
 const JOB_KIND_BY_STEP_KIND = {
   operator: 'run_operator',
   inspection: 'run_inspection',
   deliver: 'deliver',
 } as const;
+const SERVING_CELL_STATUSES = ['online', 'busy', 'draining'] as const;
 
 type JobRow = typeof jobs.$inferSelect;
 type StepRow = typeof orderSteps.$inferSelect;
@@ -85,6 +87,7 @@ type FailInput = {
 };
 type BlockInput = { detail: string; handoverFile?: string };
 type WorktreeMissingInput = { missingStepId: string; missingFiles: string[] };
+type LineUnavailableInput = { lineName: string; detail: string };
 type IssueInput = {
   cellId: CellId;
   workspaceMode: JobRow['workspaceMode'];
@@ -126,6 +129,15 @@ const resetResponse = (nextJob: ClaimedJob): TransitionResponse => ({
   code: 200,
   action: 'worktree_missing',
   resetToScratch: true,
+  nextJob,
+});
+
+const lineUnavailableResponse = (
+  nextJob: ClaimedJob | null,
+): TransitionResponse => ({
+  code: 200,
+  action: 'line_unavailable',
+  markedLineUnavailable: true,
   nextJob,
 });
 
@@ -662,7 +674,7 @@ const stepWithId = (steps: readonly StepRow[], stepId: string): StepRow => {
 const endJob = (
   tx: DbTx,
   job: JobRow,
-  status: 'failed' | 'blocked',
+  status: 'failed' | 'blocked' | 'line_unavailable',
   cellId: CellId,
   resultJson: Record<string, unknown>,
   now: number,
@@ -934,6 +946,102 @@ const resetWorktree = (
   return resetResponse(nextJob);
 };
 
+const hasServingCell = (
+  tx: DbTx,
+  order: WorkOrderRow,
+  excludedCellIds: readonly string[],
+): boolean =>
+  tx
+    .select()
+    .from(cells)
+    .where(eq(cells.projectId, order.projectId))
+    .all()
+    .some(
+      (cell) =>
+        SERVING_CELL_STATUSES.some((status) => status === cell.status) &&
+        !excludedCellIds.includes(cell.cellId) &&
+        allowsLine(cell.allowedLinesJson, order.lineName),
+    );
+
+const claimNextFor = (
+  tx: DbTx,
+  cellId: CellId,
+  now: number,
+  log: TransitionLog,
+): ClaimedJob | null => {
+  const cell = tx.select().from(cells).where(eq(cells.cellId, cellId)).get();
+  if (cell === undefined) throw new NotFound(`Cell ${cellId} not found`);
+  const leaseExpiresAt = addMs(now, LEASE_TTL_MS);
+  const claimed = claimNext(tx, cell, leaseExpiresAt, now, log);
+  return claimed === undefined ? null : toClaimedJob(claimed, leaseExpiresAt);
+};
+
+const lineUnavailable = (
+  tx: DbTx,
+  job: JobRow,
+  cellId: CellId,
+  input: LineUnavailableInput,
+  now: number,
+  log: TransitionLog,
+): TransitionResponse => {
+  if (job.status !== 'claimed' && job.status !== 'running')
+    throw new Conflict(`Job ${job.jobId} cannot transition from ${job.status}`);
+  const order = requireOrder(tx, orderIdOf(job));
+  const unavailableLineCells = [...order.unavailableLineCellsJson, cellId];
+  const servable = hasServingCell(tx, order, unavailableLineCells);
+  const state = servable ? 'queued' : 'line_unavailable';
+
+  endJob(
+    tx,
+    job,
+    'line_unavailable',
+    cellId,
+    { lineName: input.lineName, detail: input.detail },
+    now,
+    log,
+  );
+  if (job.stepId !== null)
+    setStepState(tx, job, boundStep(tx, job), 'pending', cellId, now, log);
+  releaseCell(tx, cellId);
+  updateWorkOrder(
+    tx,
+    order,
+    {
+      state,
+      unavailableLineCellsJson: unavailableLineCells,
+      activeJobId: null,
+      activeCellId: null,
+      pinnedCellId: null,
+    },
+    now,
+  );
+  log.push(
+    orderTransition({
+      projectId: order.projectId,
+      entityType: 'work_order',
+      entityId: order.orderId,
+      fromState: order.state,
+      toState: state,
+      actor: cellActor(cellId),
+      at: now,
+    }),
+  );
+  if (!servable)
+    openIncident(
+      tx,
+      {
+        projectId: order.projectId,
+        orderId: order.orderId,
+        failedStepId: job.stepId,
+        failedJobId: job.jobId,
+        reason: 'line_unavailable',
+        detail: input.detail,
+      },
+      now,
+    );
+  return lineUnavailableResponse(claimNextFor(tx, cellId, now, log));
+};
+
 const dispatch = (
   tx: DbTx,
   job: JobRow,
@@ -943,6 +1051,8 @@ const dispatch = (
   log: TransitionLog,
 ): TransitionResponse => {
   switch (body.action) {
+    case 'line_unavailable':
+      return lineUnavailable(tx, job, cellId, body, now, log);
     case 'start':
       return startJob(tx, job, cellId, body, now, log);
     case 'complete':
