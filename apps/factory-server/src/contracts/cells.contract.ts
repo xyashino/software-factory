@@ -58,3 +58,43 @@ export const helloCellContract = {
     }),
   },
 };
+
+const claimedJobDto = z.object({
+  jobId: z.string(),
+  kind: z.string(),
+  orderId: z.string().nullable(),
+  planId: z.string().nullable(),
+  stepId: z.string().nullable(),
+  workspaceMode: z.enum(['fresh', 'reuse']),
+  epoch: z.number().int(),
+  leaseExpiresAt: z.number().int(),
+  repoUrl: z.string(),
+  baseBranch: z.string(),
+  baseCommitSha: z.string().nullable(),
+  targetBranch: z.string(),
+  expectedPriorSteps: z.array(
+    z.object({
+      stepId: z.string(),
+      stationId: z.string(),
+      stepIndex: z.number().int(),
+      requiredFiles: z.array(z.string()),
+    }),
+  ),
+  payload: z.record(z.string(), z.unknown()),
+});
+
+export const claimJobContract = {
+  in: {
+    body: z
+      .object({
+        waitMs: z.number().int().min(0).default(0),
+      })
+      .optional(),
+  },
+  out: {
+    200: z.object({
+      code: z.literal(200),
+      job: claimedJobDto.nullable(),
+    }),
+  },
+};
