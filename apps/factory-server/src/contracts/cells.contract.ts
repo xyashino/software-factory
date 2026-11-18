@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { projectIdSchema, slugSchema } from './common';
+import { idParams, projectIdSchema, slugSchema } from './common';
 
 const allowedLinesSchema = z
   .array(z.union([z.literal('*'), slugSchema]))
@@ -96,5 +96,46 @@ export const claimJobContract = {
       code: z.literal(200),
       job: claimedJobDto.nullable(),
     }),
+  },
+};
+
+export const heartbeatCellContract = {
+  in: {
+    body: z.object({
+      jobId: z.string().trim().min(1),
+      epoch: z.number().int(),
+    }),
+  },
+  out: {
+    200: z.object({
+      code: z.literal(200),
+      leaseExpiresAt: z.number().int().nullable(),
+      signals: z.array(z.literal('abort')),
+    }),
+  },
+};
+
+const cellDto = z.object({
+  cellId: z.string(),
+  projectId: z.string(),
+  name: z.string(),
+  status: z.enum(['online', 'busy', 'draining', 'offline', 'revoked']),
+  allowedLines: z.array(z.string()),
+  runners: z.array(z.string()),
+  activeJobId: z.string().nullable(),
+  lastHeartbeatAt: z.number().int().nullable(),
+  leaseExpiresAt: z.number().int().nullable(),
+});
+
+export const listCellsContract = {
+  out: {
+    200: z.object({ code: z.literal(200), cells: z.array(cellDto) }),
+  },
+};
+
+export const revokeCellContract = {
+  in: { params: idParams },
+  out: {
+    200: z.object({ code: z.literal(200) }),
   },
 };
