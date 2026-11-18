@@ -296,7 +296,7 @@ describe('job fail, block and worktree_missing transitions', () => {
     expect(incidentsOf(db)).toEqual([
       expect.objectContaining({
         reason: 'step_retries_exhausted',
-        status: 'open',
+        status: 'triaging',
         triageOwner: 'mechanic',
         failedJobId: retry.jobId,
       }),

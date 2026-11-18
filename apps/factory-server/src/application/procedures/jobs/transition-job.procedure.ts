@@ -9,6 +9,7 @@ import { orderPlans } from '../../../db/schema/plans';
 import { stateTransitions } from '../../../db/schema/transitions';
 import { transitionJobContract } from '../../../contracts/jobs.contract';
 import {
+  asCellId,
   asCommandId,
   asJobId,
   asStepId,
@@ -20,6 +21,7 @@ import {
 } from '../../../domain/common/brand';
 import { addMs } from '../../../domain/common/time';
 import { allowsLine } from '../../../domain/cells/claim-eligibility';
+import { triageIncident } from '../../../domain/incidents/incident-rules';
 import {
   assertArtifactsProduced,
   materializeLineSnapshot,
@@ -34,21 +36,29 @@ import {
   InternalServer,
   NotFound,
   StaleLeaseEpoch,
-  UnprocessableEntity,
 } from '../../core/error-handling';
 import { scopedProcedure } from '../../core/procedure';
 import {
   flushTransitions,
   orderTransition,
   publishCommitted,
+  releaseCell,
   requireOrder,
   requirePlan,
+  requireProject,
+  settle,
   updateWorkOrder,
   type Actor,
   type TransitionLog,
   type WorkOrderInsert,
 } from '../../orders/order-writes';
-import { openIncident, type OpenIncident } from '../../orders/incident-writes';
+import {
+  insertMechanicJob,
+  openIncident,
+  toOrderSteps,
+  toWorkOrderSnapshot,
+  type OpenIncident,
+} from '../../orders/incident-writes';
 import { claimNext, toClaimedJob } from '../cells/claim-job.procedure';
 
 const JOB_KIND_BY_STEP_KIND = {
@@ -246,18 +256,6 @@ const insertSteps = (
         updatedAt: now,
       })),
     )
-    .run();
-};
-
-const releaseCell = (tx: DbTx, cellId: CellId): void => {
-  const cell = tx.select().from(cells).where(eq(cells.cellId, cellId)).get();
-  if (cell === undefined) return;
-  tx.update(cells)
-    .set({
-      activeJobId: null,
-      status: cell.status === 'busy' ? 'online' : cell.status,
-    })
-    .where(eq(cells.cellId, cellId))
     .run();
 };
 
@@ -653,17 +651,6 @@ const completeJob = (
   return completeStep(tx, job, order, boundStep(tx, job), completion, log);
 };
 
-const toOrderSteps = (rows: readonly StepRow[]): OrderStep[] =>
-  rows.map((row) => ({
-    stepIndex: row.stepIndex,
-    stationId: row.stationId,
-    kind: row.kind,
-    requiredFiles: row.requiredFilesJson,
-    maxAttempts: row.maxAttempts,
-    onFailRetryStationId: row.onFailRetryStationId,
-    attemptsUsed: row.attemptsUsed,
-  }));
-
 const stepWithId = (steps: readonly StepRow[], stepId: string): StepRow => {
   const step = steps.find((candidate) => candidate.stepId === stepId);
   if (step === undefined)
@@ -738,10 +725,20 @@ const blockOrder = (
   log: TransitionLog,
   patch: Partial<WorkOrderInsert> = {},
 ): TransitionResponse => {
+  const triage = triageIncident(
+    incident.reason,
+    toWorkOrderSnapshot(order, stepsOf(tx, order.orderId)),
+  );
   updateWorkOrder(
     tx,
     order,
-    { ...patch, state: 'blocked', activeJobId: null, activeCellId: null },
+    {
+      ...patch,
+      mechanicRuns: triage.workOrder.mechanicRuns,
+      state: 'blocked',
+      activeJobId: null,
+      activeCellId: null,
+    },
     now,
   );
   log.push(
@@ -756,7 +753,7 @@ const blockOrder = (
     }),
   );
   releaseCell(tx, cellId);
-  openIncident(
+  const incidentId = openIncident(
     tx,
     {
       projectId: order.projectId,
@@ -765,9 +762,21 @@ const blockOrder = (
       failedJobId: job.jobId,
       reason: incident.reason,
       detail: incident.detail,
+      triage: triage.incident,
     },
     now,
   );
+  if (triage.mechanicJob !== null)
+    insertMechanicJob(
+      tx,
+      order,
+      {
+        incidentId,
+        cellId: asCellId(triage.mechanicJob.pinnedCellId),
+        repoUrl: requireProject(tx, order.projectId).repoUrl,
+      },
+      now,
+    );
   return blockedResponse(action);
 };
 
@@ -1036,6 +1045,10 @@ const lineUnavailable = (
         failedJobId: job.jobId,
         reason: 'line_unavailable',
         detail: input.detail,
+        triage: triageIncident(
+          'line_unavailable',
+          toWorkOrderSnapshot(order, stepsOf(tx, order.orderId)),
+        ).incident,
       },
       now,
     );
@@ -1063,16 +1076,6 @@ const dispatch = (
       return blockJob(tx, job, cellId, body, now, log);
     case 'worktree_missing':
       return resetWorktree(tx, job, cellId, body, now, log);
-  }
-};
-
-const settle = <T>(run: () => T): T => {
-  try {
-    return run();
-  } catch (error) {
-    if (error instanceof UnprocessableTransition)
-      throw new UnprocessableEntity(error.message);
-    throw error;
   }
 };
 

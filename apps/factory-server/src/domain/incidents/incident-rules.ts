@@ -5,17 +5,27 @@ import {
 } from '../orders/job-transitions';
 import type { WorkOrderState } from '../orders/order-state';
 
-export type IncidentReason =
-  | 'line_unavailable'
-  | 'step_retries_exhausted'
-  | 'operator_blocked'
-  | 'workspace_failed'
-  | 'worktree_reset_limit'
-  | 'delivery_failed'
-  | 'parent_rebased';
+export const INCIDENT_REASONS = [
+  'line_unavailable',
+  'step_retries_exhausted',
+  'operator_blocked',
+  'workspace_failed',
+  'worktree_reset_limit',
+  'delivery_failed',
+  'parent_rebased',
+] as const;
 
-export type IncidentStatus =
-  'open' | 'triaging' | 'resolved' | 'escalated' | 'cancelled';
+export const INCIDENT_STATUSES = [
+  'open',
+  'triaging',
+  'resolved',
+  'escalated',
+  'cancelled',
+] as const;
+
+export type IncidentReason = (typeof INCIDENT_REASONS)[number];
+
+export type IncidentStatus = (typeof INCIDENT_STATUSES)[number];
 
 export type TriageOwner = 'mechanic' | 'supervisor';
 
