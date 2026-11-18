@@ -16,11 +16,14 @@ import {
   type CommandId,
   type OrderId,
   type ProjectId,
+  type StepId,
 } from '../../../domain/common/brand';
 import { addMs } from '../../../domain/common/time';
 import {
   assertArtifactsProduced,
   materializeLineSnapshot,
+  planStepFailure,
+  planWorktreeMissing,
   UnprocessableTransition,
   type OrderStep,
 } from '../../../domain/orders/job-transitions';
@@ -44,6 +47,7 @@ import {
   type TransitionLog,
   type WorkOrderInsert,
 } from '../../orders/order-writes';
+import { openIncident, type OpenIncident } from '../../orders/incident-writes';
 import { toClaimedJob } from '../cells/claim-job.procedure';
 
 const JOB_KIND_BY_STEP_KIND = {
@@ -74,6 +78,22 @@ type Completion = {
   now: number;
 };
 
+type FailInput = {
+  detail: string;
+  output?: Record<string, unknown>;
+  workspaceFailed?: boolean;
+};
+type BlockInput = { detail: string; handoverFile?: string };
+type WorktreeMissingInput = { missingStepId: string; missingFiles: string[] };
+type IssueInput = {
+  cellId: CellId;
+  workspaceMode: JobRow['workspaceMode'];
+  now: number;
+  log: TransitionLog;
+  orderPatch: Partial<WorkOrderInsert>;
+};
+type BlockedAction = 'fail' | 'block' | 'worktree_missing';
+
 const cellActor = (cellId: CellId): Actor => ({ kind: 'cell', id: cellId });
 
 const startedResponse = (): TransitionResponse => ({
@@ -86,6 +106,26 @@ const completedResponse = (nextJob: ClaimedJob | null): TransitionResponse => ({
   code: 200,
   action: 'complete',
   completed: true,
+  nextJob,
+});
+
+const failedResponse = (nextJob: ClaimedJob): TransitionResponse => ({
+  code: 200,
+  action: 'fail',
+  failed: true,
+  nextJob,
+});
+
+const blockedResponse = (action: BlockedAction): TransitionResponse => ({
+  code: 200,
+  action,
+  blocked: true,
+});
+
+const resetResponse = (nextJob: ClaimedJob): TransitionResponse => ({
+  code: 200,
+  action: 'worktree_missing',
+  resetToScratch: true,
   nextJob,
 });
 
@@ -450,6 +490,95 @@ const deliverOrder = (
   return completedResponse(null);
 };
 
+const issueJob = (
+  tx: DbTx,
+  job: JobRow,
+  order: WorkOrderRow,
+  steps: readonly StepRow[],
+  next: StepRow,
+  input: IssueInput,
+): ClaimedJob => {
+  const { cellId, now, log } = input;
+  const epoch = order.epoch + 1;
+  const leaseExpiresAt = addMs(now, LEASE_TTL_MS);
+
+  tx.update(orderSteps)
+    .set({ state: 'claimed', updatedAt: now })
+    .where(eq(orderSteps.stepId, next.stepId))
+    .run();
+  log.push(
+    orderTransition({
+      projectId: job.projectId,
+      entityType: 'order_step',
+      entityId: next.stepId,
+      fromState: next.state,
+      toState: 'claimed',
+      actor: cellActor(cellId),
+      at: now,
+    }),
+  );
+  const nextJob = tx
+    .insert(jobs)
+    .values({
+      jobId: asJobId(`job-${crypto.randomUUID()}`),
+      projectId: job.projectId,
+      orderId: order.orderId,
+      stepId: next.stepId,
+      lineName: order.lineName,
+      kind: JOB_KIND_BY_STEP_KIND[next.kind],
+      workspaceMode: input.workspaceMode,
+      status: 'claimed',
+      repoUrl: job.repoUrl,
+      baseBranch: job.baseBranch,
+      baseCommitSha: job.baseCommitSha,
+      targetBranch: job.targetBranch,
+      expectedPriorStepsJson: steps
+        .filter((prior) => prior.stepIndex < next.stepIndex)
+        .map((prior) => ({
+          stepId: prior.stepId,
+          stationId: prior.stationId,
+          stepIndex: prior.stepIndex,
+          requiredFiles: prior.requiredFilesJson,
+        })),
+      payloadJson: { stepIndex: next.stepIndex },
+      cellId,
+      epoch,
+      leaseExpiresAt,
+      createdAt: now,
+      startedAt: now,
+    })
+    .returning()
+    .get();
+  log.push(
+    orderTransition({
+      projectId: job.projectId,
+      entityType: 'job',
+      entityId: nextJob.jobId,
+      fromState: null,
+      toState: 'claimed',
+      actor: cellActor(cellId),
+      at: now,
+    }),
+  );
+
+  updateWorkOrder(
+    tx,
+    order,
+    {
+      ...input.orderPatch,
+      currentStepIndex: next.stepIndex,
+      activeJobId: nextJob.jobId,
+      epoch,
+    },
+    now,
+  );
+  tx.update(cells)
+    .set({ activeJobId: nextJob.jobId })
+    .where(eq(cells.cellId, cellId))
+    .run();
+  return toClaimedJob(nextJob, leaseExpiresAt);
+};
+
 const advanceOrder = (
   tx: DbTx,
   job: JobRow,
@@ -464,84 +593,14 @@ const advanceOrder = (
   );
   if (next === undefined)
     throw new UnprocessableTransition(`no step after index ${step.stepIndex}`);
-  const epoch = order.epoch + 1;
-  const leaseExpiresAt = addMs(completion.now, LEASE_TTL_MS);
-
-  tx.update(orderSteps)
-    .set({ state: 'claimed', updatedAt: completion.now })
-    .where(eq(orderSteps.stepId, next.stepId))
-    .run();
-  log.push(
-    orderTransition({
-      projectId: job.projectId,
-      entityType: 'order_step',
-      entityId: next.stepId,
-      fromState: next.state,
-      toState: 'claimed',
-      actor: cellActor(completion.cellId),
-      at: completion.now,
-    }),
-  );
-  const nextJob = tx
-    .insert(jobs)
-    .values({
-      jobId: asJobId(`job-${crypto.randomUUID()}`),
-      projectId: job.projectId,
-      orderId: order.orderId,
-      stepId: next.stepId,
-      lineName: order.lineName,
-      kind: JOB_KIND_BY_STEP_KIND[next.kind],
-      workspaceMode: 'reuse',
-      status: 'claimed',
-      repoUrl: job.repoUrl,
-      baseBranch: job.baseBranch,
-      baseCommitSha: job.baseCommitSha,
-      targetBranch: job.targetBranch,
-      expectedPriorStepsJson: steps
-        .filter((prior) => prior.stepIndex <= step.stepIndex)
-        .map((prior) => ({
-          stepId: prior.stepId,
-          stationId: prior.stationId,
-          stepIndex: prior.stepIndex,
-          requiredFiles: prior.requiredFilesJson,
-        })),
-      payloadJson: { stepIndex: next.stepIndex },
-      cellId: completion.cellId,
-      epoch,
-      leaseExpiresAt,
-      createdAt: completion.now,
-      startedAt: completion.now,
-    })
-    .returning()
-    .get();
-  log.push(
-    orderTransition({
-      projectId: job.projectId,
-      entityType: 'job',
-      entityId: nextJob.jobId,
-      fromState: null,
-      toState: 'claimed',
-      actor: cellActor(completion.cellId),
-      at: completion.now,
-    }),
-  );
-
-  updateWorkOrder(
-    tx,
-    order,
-    {
-      currentStepIndex: next.stepIndex,
-      headCommitSha: completion.commitSha,
-      activeJobId: nextJob.jobId,
-      epoch,
-    },
-    completion.now,
-  );
-  tx.update(cells)
-    .set({ activeJobId: nextJob.jobId })
-    .where(eq(cells.cellId, completion.cellId))
-    .run();
-  return completedResponse(toClaimedJob(nextJob, leaseExpiresAt));
+  const nextJob = issueJob(tx, job, order, steps, next, {
+    cellId: completion.cellId,
+    workspaceMode: 'reuse',
+    now: completion.now,
+    log,
+    orderPatch: { headCommitSha: completion.commitSha },
+  });
+  return completedResponse(nextJob);
 };
 
 const completeStep = (
@@ -582,6 +641,299 @@ const completeJob = (
   return completeStep(tx, job, order, boundStep(tx, job), completion, log);
 };
 
+const toOrderSteps = (rows: readonly StepRow[]): OrderStep[] =>
+  rows.map((row) => ({
+    stepIndex: row.stepIndex,
+    stationId: row.stationId,
+    kind: row.kind,
+    requiredFiles: row.requiredFilesJson,
+    maxAttempts: row.maxAttempts,
+    onFailRetryStationId: row.onFailRetryStationId,
+    attemptsUsed: row.attemptsUsed,
+  }));
+
+const stepWithId = (steps: readonly StepRow[], stepId: string): StepRow => {
+  const step = steps.find((candidate) => candidate.stepId === stepId);
+  if (step === undefined)
+    throw new UnprocessableTransition(`no step with id ${stepId}`);
+  return step;
+};
+
+const endJob = (
+  tx: DbTx,
+  job: JobRow,
+  status: 'failed' | 'blocked',
+  cellId: CellId,
+  resultJson: Record<string, unknown>,
+  now: number,
+  log: TransitionLog,
+): void => {
+  tx.update(jobs)
+    .set({ status, resultJson, finishedAt: now })
+    .where(eq(jobs.jobId, job.jobId))
+    .run();
+  log.push(
+    orderTransition({
+      projectId: job.projectId,
+      entityType: 'job',
+      entityId: job.jobId,
+      fromState: job.status,
+      toState: status,
+      actor: cellActor(cellId),
+      at: now,
+    }),
+  );
+};
+
+const setStepState = (
+  tx: DbTx,
+  job: JobRow,
+  step: StepRow,
+  state: StepRow['state'],
+  cellId: CellId,
+  now: number,
+  log: TransitionLog,
+  patch: Partial<StepInsert> = {},
+): void => {
+  tx.update(orderSteps)
+    .set({ ...patch, state, updatedAt: now })
+    .where(eq(orderSteps.stepId, step.stepId))
+    .run();
+  if (step.state === state) return;
+  log.push(
+    orderTransition({
+      projectId: job.projectId,
+      entityType: 'order_step',
+      entityId: step.stepId,
+      fromState: step.state,
+      toState: state,
+      actor: cellActor(cellId),
+      at: now,
+    }),
+  );
+};
+
+const blockOrder = (
+  tx: DbTx,
+  job: JobRow,
+  order: WorkOrderRow,
+  cellId: CellId,
+  action: BlockedAction,
+  incident: Pick<OpenIncident, 'reason' | 'detail'> & {
+    failedStepId: StepId | null;
+  },
+  now: number,
+  log: TransitionLog,
+  patch: Partial<WorkOrderInsert> = {},
+): TransitionResponse => {
+  updateWorkOrder(
+    tx,
+    order,
+    { ...patch, state: 'blocked', activeJobId: null, activeCellId: null },
+    now,
+  );
+  log.push(
+    orderTransition({
+      projectId: order.projectId,
+      entityType: 'work_order',
+      entityId: order.orderId,
+      fromState: order.state,
+      toState: 'blocked',
+      actor: cellActor(cellId),
+      at: now,
+    }),
+  );
+  releaseCell(tx, cellId);
+  openIncident(
+    tx,
+    {
+      projectId: order.projectId,
+      orderId: order.orderId,
+      failedStepId: incident.failedStepId,
+      failedJobId: job.jobId,
+      reason: incident.reason,
+      detail: incident.detail,
+    },
+    now,
+  );
+  return blockedResponse(action);
+};
+
+const rewindTo = (
+  tx: DbTx,
+  job: JobRow,
+  cellId: CellId,
+  order: WorkOrderRow,
+  target: number,
+  current: number,
+  now: number,
+  log: TransitionLog,
+): ClaimedJob => {
+  for (const step of stepsOf(tx, order.orderId)) {
+    if (step.stepIndex > target && step.stepIndex <= current)
+      setStepState(tx, job, step, 'pending', cellId, now, log);
+  }
+  const steps = stepsOf(tx, order.orderId);
+  return issueJob(tx, job, order, steps, stepAt(steps, target), {
+    cellId,
+    workspaceMode: 'reuse',
+    now,
+    log,
+    orderPatch: {},
+  });
+};
+
+const failJob = (
+  tx: DbTx,
+  job: JobRow,
+  cellId: CellId,
+  input: FailInput,
+  now: number,
+  log: TransitionLog,
+): TransitionResponse => {
+  requireStatus(job, 'running');
+  const order = requireOrder(tx, orderIdOf(job));
+  const step = boundStep(tx, job);
+  const failure = planStepFailure(
+    toOrderSteps(stepsOf(tx, order.orderId)),
+    step.stepIndex,
+  );
+  endJob(
+    tx,
+    job,
+    'failed',
+    cellId,
+    { detail: input.detail, output: input.output ?? null },
+    now,
+    log,
+  );
+  setStepState(tx, job, step, 'failed', cellId, now, log, {
+    attemptsUsed: failure.attemptsUsed,
+  });
+
+  const plan = failure.plan;
+  if (plan.kind === 'blocked')
+    return blockOrder(
+      tx,
+      job,
+      order,
+      cellId,
+      'fail',
+      {
+        failedStepId: step.stepId,
+        reason: input.workspaceFailed ? 'workspace_failed' : plan.trigger,
+        detail: input.detail,
+      },
+      now,
+      log,
+    );
+  const nextJob = rewindTo(
+    tx,
+    job,
+    cellId,
+    order,
+    plan.stepIndex,
+    step.stepIndex,
+    now,
+    log,
+  );
+  return failedResponse(nextJob);
+};
+
+const blockJob = (
+  tx: DbTx,
+  job: JobRow,
+  cellId: CellId,
+  input: BlockInput,
+  now: number,
+  log: TransitionLog,
+): TransitionResponse => {
+  requireStatus(job, 'running');
+  const order = requireOrder(tx, orderIdOf(job));
+  const step = boundStep(tx, job);
+  endJob(
+    tx,
+    job,
+    'blocked',
+    cellId,
+    { detail: input.detail, handoverFile: input.handoverFile ?? null },
+    now,
+    log,
+  );
+  setStepState(tx, job, step, 'blocked', cellId, now, log);
+  return blockOrder(
+    tx,
+    job,
+    order,
+    cellId,
+    'block',
+    {
+      failedStepId: step.stepId,
+      reason: 'operator_blocked',
+      detail:
+        input.handoverFile === undefined
+          ? input.detail
+          : `${input.detail} (handover: ${input.handoverFile})`,
+    },
+    now,
+    log,
+  );
+};
+
+const resetWorktree = (
+  tx: DbTx,
+  job: JobRow,
+  cellId: CellId,
+  input: WorktreeMissingInput,
+  now: number,
+  log: TransitionLog,
+): TransitionResponse => {
+  requireStatus(job, 'running');
+  const order = requireOrder(tx, orderIdOf(job));
+  const missing = stepWithId(stepsOf(tx, order.orderId), input.missingStepId);
+  const reset = planWorktreeMissing(order.worktreeResets);
+  endJob(
+    tx,
+    job,
+    'failed',
+    cellId,
+    { missingStepId: input.missingStepId, missingFiles: input.missingFiles },
+    now,
+    log,
+  );
+
+  if (reset.plan.kind === 'blocked')
+    return blockOrder(
+      tx,
+      job,
+      order,
+      cellId,
+      'worktree_missing',
+      {
+        failedStepId: missing.stepId,
+        reason: reset.plan.trigger,
+        detail: `worktree missing: ${input.missingFiles.join(', ')}`,
+      },
+      now,
+      log,
+      { worktreeResets: reset.worktreeResets },
+    );
+
+  for (const step of stepsOf(tx, order.orderId))
+    setStepState(tx, job, step, 'pending', cellId, now, log, {
+      attemptsUsed: 0,
+    });
+  const steps = stepsOf(tx, order.orderId);
+  const nextJob = issueJob(tx, job, order, steps, stepAt(steps, 0), {
+    cellId,
+    workspaceMode: 'fresh',
+    now,
+    log,
+    orderPatch: { worktreeResets: reset.worktreeResets },
+  });
+  return resetResponse(nextJob);
+};
+
 const dispatch = (
   tx: DbTx,
   job: JobRow,
@@ -595,6 +947,12 @@ const dispatch = (
       return startJob(tx, job, cellId, body, now, log);
     case 'complete':
       return completeJob(tx, job, cellId, body, now, log);
+    case 'fail':
+      return failJob(tx, job, cellId, body, now, log);
+    case 'block':
+      return blockJob(tx, job, cellId, body, now, log);
+    case 'worktree_missing':
+      return resetWorktree(tx, job, cellId, body, now, log);
   }
 };
 
