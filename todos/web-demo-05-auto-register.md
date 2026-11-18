@@ -8,7 +8,7 @@ line: feature
 type: feat
 ---
 
-# Todo: `web-demo-05-auto-register` — Register on Localhost Like a Cell
+# Todo: `web-demo-05-auto-register` — Register on Loopback Like a Cell
 
 ## 🎯 Objective
 
