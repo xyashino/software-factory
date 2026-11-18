@@ -11,6 +11,7 @@ import {
   asOrderId,
   asPlanId,
   asProjectId,
+  type CellId,
   type CommandId,
   type ProjectId,
 } from '../../domain/common/brand';
@@ -20,6 +21,7 @@ import type {
   StateTransitionInput,
   StateTransitionRecord,
 } from '../../domain/common/events';
+import { UnprocessableTransition } from '../../domain/orders/job-transitions';
 import type {
   PlanState,
   WorkOrderAction,
@@ -31,7 +33,7 @@ import {
   type PlanRef,
   type ResolvedBaseBranch,
 } from '../../domain/topology/resolve-base-branch';
-import { NotFound } from '../core/error-handling';
+import { NotFound, UnprocessableEntity } from '../core/error-handling';
 import type { TransportContext } from '../core/procedure';
 import type { OrderPlanRow, ProjectRow, WorkOrderRow } from './order-views';
 
@@ -350,4 +352,26 @@ export const publishCommitted = (
     )
   )
     ctx.claimWaiters.wakeAll();
+};
+
+export const releaseCell = (tx: DbTx, cellId: CellId): void => {
+  const cell = tx.select().from(cells).where(eq(cells.cellId, cellId)).get();
+  if (cell === undefined) return;
+  tx.update(cells)
+    .set({
+      activeJobId: null,
+      status: cell.status === 'busy' ? 'online' : cell.status,
+    })
+    .where(eq(cells.cellId, cellId))
+    .run();
+};
+
+export const settle = <T>(run: () => T): T => {
+  try {
+    return run();
+  } catch (error) {
+    if (error instanceof UnprocessableTransition)
+      throw new UnprocessableEntity(error.message);
+    throw error;
+  }
 };

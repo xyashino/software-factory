@@ -181,8 +181,8 @@ describe('job line_unavailable transition', () => {
     expect(incidentsOf(db)).toEqual([
       expect.objectContaining({
         reason: 'line_unavailable',
-        status: 'open',
-        triageOwner: 'mechanic',
+        status: 'triaging',
+        triageOwner: 'supervisor',
         failedJobId: job.jobId,
       }),
     ]);
