@@ -268,7 +268,7 @@ const claimNext = (
   return claimWorkOrder(tx, cell, project, leaseExpiresAt, now, log);
 };
 
-const toClaimedJob = (row: JobRow, leaseExpiresAt: number) => ({
+export const toClaimedJob = (row: JobRow, leaseExpiresAt: number) => ({
   jobId: row.jobId,
   kind: row.kind,
   orderId: row.orderId,

@@ -59,7 +59,7 @@ export const helloCellContract = {
   },
 };
 
-const claimedJobDto = z.object({
+export const claimedJobDto = z.object({
   jobId: z.string(),
   kind: z.string(),
   orderId: z.string().nullable(),
