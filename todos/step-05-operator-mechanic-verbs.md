@@ -2,7 +2,7 @@
 status: todo
 factory: v2
 plan: operator-cli
-depends_on: [step-03-operator-define-verb-cli]
+depends_on: [step-04-operator-operator-verbs]
 priority: high
 line: feature
 type: feat

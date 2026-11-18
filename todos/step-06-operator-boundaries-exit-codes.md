@@ -2,7 +2,7 @@
 status: todo
 factory: v2
 plan: operator-cli
-depends_on: [step-04-operator-operator-verbs, step-05-operator-mechanic-verbs]
+depends_on: [step-05-operator-mechanic-verbs]
 priority: high
 line: feature
 type: test
