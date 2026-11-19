@@ -214,7 +214,7 @@ describe('cell claims', () => {
     const { status, body } = await claim(app, token);
 
     expect(status).toBe(200);
-    expect(body).toEqual({ code: 200, job: null });
+    expect(body).toEqual({ code: 200, job: null, signals: [] });
   });
 
   it('does not hand a cell work from another project', async () => {
@@ -268,7 +268,7 @@ describe('cell claims', () => {
 
     const { body } = await claim(app, token);
 
-    expect(body).toEqual({ code: 200, job: null });
+    expect(body).toEqual({ code: 200, job: null, signals: [] });
   });
 
   it('refuses a claim from a revoked cell', async () => {
@@ -299,7 +299,7 @@ describe('cell claims', () => {
     const { status, body } = await claim(app, token, 50);
 
     expect(status).toBe(200);
-    expect(body).toEqual({ code: 200, job: null });
+    expect(body).toEqual({ code: 200, job: null, signals: [] });
   });
 
   it('wakes a parked idle claim as soon as a queue import adds work', async () => {
@@ -335,7 +335,7 @@ describe('cell claims', () => {
     await Promise.all(parked);
 
     expect(Date.now() - started).toBeLessThan(PROMPT_MS);
-    expect(overflow.body).toEqual({ code: 200, job: null });
+    expect(overflow.body).toEqual({ code: 200, job: null, signals: [] });
   });
 
   it('takes a silent cell offline and re-queues its order when the lease expires', async () => {

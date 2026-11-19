@@ -246,6 +246,42 @@ describe('cell drain', () => {
     expect(orderRow(db, 'order-1')).toMatchObject({ state: 'queued' });
   });
 
+  it('tells an idle draining cell to drain on its claim reply', async () => {
+    const { app } = setup();
+    const cell = await enrollCell(app, 'cell-a');
+    await drainCell(app, cell.cellId);
+
+    const response = await postJson(
+      app,
+      '/api/v1/cells/claims',
+      {},
+      bearer(cell.token),
+    );
+
+    expect(await response.json()).toMatchObject({
+      code: 200,
+      job: null,
+      signals: ['drain'],
+    });
+  });
+
+  it('sends no drain signal on a claim reply for a running cell', async () => {
+    const { app } = setup();
+    const cell = await enrollCell(app, 'cell-a');
+
+    const response = await postJson(
+      app,
+      '/api/v1/cells/claims',
+      {},
+      bearer(cell.token),
+    );
+
+    expect(await response.json()).toMatchObject({
+      job: expect.any(Object),
+      signals: [],
+    });
+  });
+
   it('refuses to drain a cell that does not exist', async () => {
     const { app } = setup();
 
