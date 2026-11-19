@@ -20,6 +20,7 @@ export type TransportContext = {
   transitionBus: TransitionBusPort;
   bearer: string | null;
   signal: AbortSignal;
+  remoteAddress: string | null;
 };
 
 export type AuthenticatedContext = TransportContext & { principal: Principal };

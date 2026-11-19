@@ -22,6 +22,8 @@ const PREFIX_BY_KIND: Record<TokenKind, TokenPrefix> = {
   supervisor: TOKEN_PREFIXES.supervisor,
   cell_join: TOKEN_PREFIXES.join,
   cell_session: TOKEN_PREFIXES.cell,
+  web_join: TOKEN_PREFIXES.join,
+  web_session: TOKEN_PREFIXES.supervisor,
 };
 
 type TokenKind = (typeof TOKEN_KINDS)[number];
