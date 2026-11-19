@@ -6,6 +6,7 @@ import {
   chmodSync,
 } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
+import { z } from 'zod';
 import type { ProcessPort } from '../../application/ports/process.port';
 import type {
   RunHandle,
@@ -19,9 +20,18 @@ const HERDR = 'herdr';
 const CLAUDE = 'claude';
 const POLL_MS = 1000;
 const ABORTED_EXIT = 130;
-const WORKSPACE_ENV = 'FACTORY_HERDR_WORKSPACE';
+const WORKSPACE_LABEL_PREFIX = 'factory:';
 const TAB_ID = /"tab_id"\s*:\s*"([^"]+)"/;
 const PANE_ID = /"pane_id"\s*:\s*"([^"]+)"/;
+const WORKSPACE_ID = /"workspace_id"\s*:\s*"([^"]+)"/;
+
+const workspaceListSchema = z.object({
+  result: z.object({
+    workspaces: z.array(
+      z.object({ label: z.string().nullish(), workspace_id: z.string() }),
+    ),
+  }),
+});
 
 interface HerdrRun {
   cwd: string;
@@ -61,23 +71,48 @@ const herdrOk = async (
   return result.stdout;
 };
 
-const workspaceArgsOf = async (
+const cellWorkspaceOf = async (
   processPort: ProcessPort,
+  cellName: string,
   cwd: string,
-): Promise<string[]> => {
-  const label = process.env[WORKSPACE_ENV];
-  if (label === undefined) return [];
-  const listed = await herdrOk(processPort, ['workspace', 'list'], cwd);
-  const match = new RegExp(
-    `"label"\\s*:\\s*"${label}"[^}]*"workspace_id"\\s*:\\s*"([^"]+)"`,
-  ).exec(listed);
-  return match?.[1] === undefined ? [] : ['--workspace', match[1]];
+): Promise<string> => {
+  const label = `${WORKSPACE_LABEL_PREFIX}${cellName}`;
+  const listed = workspaceListSchema.parse(
+    JSON.parse(await herdrOk(processPort, ['workspace', 'list'], cwd)),
+  );
+  const existing = listed.result.workspaces.find(
+    (workspace) => workspace.label === label,
+  );
+  if (existing !== undefined) return existing.workspace_id;
+  const created = await herdrOk(
+    processPort,
+    ['workspace', 'create', '--label', label, '--cwd', cwd, '--no-focus'],
+    cwd,
+  );
+  const workspaceId = WORKSPACE_ID.exec(created)?.[1];
+  if (workspaceId === undefined) {
+    throw new Error('herdr workspace create returned no workspace_id');
+  }
+  return workspaceId;
 };
 
-export const createHerdrRunner = (processPort: ProcessPort): RunnerPort => {
+export const createHerdrRunner = (
+  processPort: ProcessPort,
+  cellName: () => Promise<string>,
+): RunnerPort => {
   const runs = new Map<string, HerdrRun>();
   let started = 0;
   let previousTabId: string | undefined;
+  let workspace: Promise<string> | undefined;
+  const cellWorkspace = (cwd: string): Promise<string> => {
+    workspace ??= cellName()
+      .then((name) => cellWorkspaceOf(processPort, name, cwd))
+      .catch((error: unknown) => {
+        workspace = undefined;
+        throw error;
+      });
+    return workspace;
+  };
   return {
     start: async (spec: RunSpec): Promise<RunHandle> => {
       started += 1;
@@ -99,7 +134,8 @@ export const createHerdrRunner = (processPort: ProcessPort): RunnerPort => {
         [
           'tab',
           'create',
-          ...(await workspaceArgsOf(processPort, spec.cwd)),
+          '--workspace',
+          await cellWorkspace(spec.cwd),
           '--cwd',
           spec.cwd,
           '--label',

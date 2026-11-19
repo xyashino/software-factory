@@ -2,10 +2,6 @@
   "project": "software-factory",
   "rules": "./.nitpick/rules",
   "skills": "./.nitpick/skills",
-  "herdr": {
-    "tabPerRun": true,
-    "closePreviousOperatorTabs": true
-  },
   "logs": {
     "store": "files",
     "dir": ".factory-local/logs"
