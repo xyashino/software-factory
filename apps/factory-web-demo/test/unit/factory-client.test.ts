@@ -151,6 +151,28 @@ describe('factory client', () => {
     expect(body).toEqual({ action: 'resume' });
   });
 
+  it('keeps the code and message of a conflict reply', async () => {
+    // Arrange
+    server.use(
+      http.post(`${BASE_URL}/api/v1/work-orders/order-1/transitions`, () =>
+        HttpResponse.json(
+          { code: 409, type: 'conflict', message: 'order is cancelled' },
+          { status: 409 },
+        ),
+      ),
+    );
+
+    // Act
+    const error = await captureError(() =>
+      client().transitionWorkOrder('order-1', 'resume'),
+    );
+
+    // Assert
+    expect(error.status).toBe(409);
+    expect(error.code).toBe('conflict');
+    expect(error.detail).toBe('order is cancelled');
+  });
+
   it('keeps the token out of the error', async () => {
     // Arrange
     server.use(

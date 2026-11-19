@@ -2,20 +2,47 @@
 import Base from '../../layouts/Base.astro';
 import { failureResponse } from '../../lib/page-error';
 import { createSessionClient } from '../../lib/session';
+import { isWorkOrderState } from '../../lib/view-model';
+import { canCancel, canResume } from '../../lib/write-guard';
 
 const session = await createSessionClient(process.env).catch(failureResponse);
 if (session instanceof Response) return session;
 const { client } = session;
 const reply = await client
-  .getWorkOrder(Astro.params.id ?? '')
+  .getWorkOrder(decodeURIComponent(Astro.params.id ?? ''))
   .catch(failureResponse);
 if (reply instanceof Response) return reply;
 const { order, steps, jobs, incidents } = reply;
+const state = isWorkOrderState(order.state) ? order.state : undefined;
+const actionPath = (action: string): string =>
+  `/actions/work-orders/${encodeURIComponent(order.orderId)}/${action}`;
+const notice = Astro.url.searchParams.get('notice');
+const error = Astro.url.searchParams.get('error');
 ---
 
 <Base>
   <h1>{order.slug}</h1>
   <p>{order.title}</p>
+  {notice !== null && <p role="status">{notice}</p>}
+  {error !== null && <p role="alert">{error}</p>}
+  {
+    state !== undefined && canResume(state) && (
+      <form method="post" action={actionPath('resume')}>
+        <button type="submit">Resume</button>
+      </form>
+    )
+  }
+  {
+    state !== undefined && canCancel(state) && (
+      <form method="post" action={actionPath('cancel')}>
+        <label>
+          <input type="checkbox" name="confirm" value="yes" required />
+          Confirm: cancel this work order (cannot be undone)
+        </label>
+        <button type="submit">Delete</button>
+      </form>
+    )
+  }
   <dl>
     <dt>State</dt>
     <dd>{order.state}</dd>

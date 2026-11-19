@@ -11,7 +11,10 @@ import {
 const REQUEST_TIMEOUT_MS = 5_000;
 const HTTP_BAD_GATEWAY = 502;
 
-const errorBodySchema = z.object({ type: z.string() });
+const errorBodySchema = z.object({
+  type: z.string(),
+  message: z.string().optional(),
+});
 
 export type FactoryClientOptions = {
   baseUrl: string;
@@ -42,13 +45,13 @@ const toQuery = (filter: Record<string, string | undefined>): string => {
   return query === '' ? '' : `?${query}`;
 };
 
-const readErrorCode = async (
+const readErrorBody = async (
   response: Response,
-): Promise<string | undefined> => {
+): Promise<z.infer<typeof errorBodySchema> | undefined> => {
   const parsed = errorBodySchema.safeParse(
     await response.json().catch(() => null),
   );
-  return parsed.success ? parsed.data.type : undefined;
+  return parsed.success ? parsed.data : undefined;
 };
 
 const request = async <Schema extends z.ZodType>(
@@ -76,10 +79,8 @@ const request = async <Schema extends z.ZodType>(
   }
 
   if (!response.ok) {
-    throw new FactoryUnavailable(
-      response.status,
-      await readErrorCode(response),
-    );
+    const body = await readErrorBody(response);
+    throw new FactoryUnavailable(response.status, body?.type, body?.message);
   }
 
   const parsed = schema.safeParse(await response.json().catch(() => null));
