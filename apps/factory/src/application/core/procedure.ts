@@ -6,6 +6,7 @@ import type { GitPort } from '../ports/git.port';
 import type { OperatorEndpointPort } from '../ports/operator-endpoint.port';
 import type { PidFilePort } from '../ports/pid-file.port';
 import type { ProcessPort } from '../ports/process.port';
+import type { RunnerCatalogPort } from '../ports/runner-catalog.port';
 import type { RunnerPort } from '../ports/runner.port';
 import type { ServerPort } from '../ports/server.port';
 import type { TodoFilesPort } from '../ports/todo-files.port';
@@ -21,6 +22,7 @@ export interface Ports {
   tokens: TokenStorePort;
   operator: OperatorEndpointPort;
   runner: RunnerPort;
+  runners: RunnerCatalogPort;
   git: GitPort;
   process: ProcessPort;
   pidFile: PidFilePort;

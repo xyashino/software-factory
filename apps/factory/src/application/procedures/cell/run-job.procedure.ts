@@ -25,6 +25,8 @@ const LINE_SUFFIX = '.yml';
 const CYCLE_TOKEN_BYTES = 16;
 const UNKNOWN_LINE = 'unknown';
 const FAILED_VERDICT_DETAIL = 'verdict fail';
+const PROMPT_FILE = 'prompt.md';
+const STEP_LOG = 'step.log';
 
 type TransitionCommand = z.infer<typeof transitionJobContract.in.body>;
 type TransitionBody<C> = C extends unknown
@@ -37,6 +39,15 @@ type RunEnd =
   | { kind: 'operator'; outcome: OperatorOutcome }
   | { kind: 'exited'; exitCode: number }
   | { kind: 'aborted' };
+
+interface Launch {
+  command: string;
+  args: string[];
+  logPath: string;
+}
+
+type LaunchPlan =
+  { kind: 'ok'; launch: Launch } | { kind: 'unavailable'; detail: string };
 
 type LineLoad =
   | { kind: 'ok'; snapshot: LineSnapshot; station: StepLine | undefined }
@@ -178,6 +189,51 @@ const missingRequiredFiles = async (
   return missing;
 };
 
+const lineUnavailable = async (
+  runtime: CellRuntime,
+  job: ClaimedJob,
+  lineName: string,
+  detail: string,
+): Promise<ClaimedJob | null> =>
+  nextJobOf(
+    await transition(runtime, job, {
+      action: 'line_unavailable',
+      lineName,
+      detail,
+    }),
+  );
+
+const launchOf = async (
+  runtime: CellRuntime,
+  job: ClaimedJob,
+  station: StepLine | undefined,
+): Promise<LaunchPlan> => {
+  const runner = station?.runner ?? null;
+  if (station === undefined || runner === null) {
+    return { kind: 'unavailable', detail: 'station names no runner' };
+  }
+  const { runners } = runtime.ports;
+  if (!(await runners.isInstalled(runner))) {
+    return { kind: 'unavailable', detail: `runner not installed: ${runner}` };
+  }
+  const stepId = job.stepId ?? station.stationId;
+  const commandLine = runners.commandLine(
+    runner,
+    joinPath('.cell', stepId, PROMPT_FILE),
+  );
+  if (commandLine === undefined) {
+    return { kind: 'unavailable', detail: `no runner adapter: ${runner}` };
+  }
+  return {
+    kind: 'ok',
+    launch: {
+      command: commandLine.command,
+      args: commandLine.args,
+      logPath: joinPath(worktreeOf(runtime, job), '.cell', stepId, STEP_LOG),
+    },
+  };
+};
+
 const outcomeOf = (
   verb: z.infer<typeof operatorRequest>,
 ): OperatorOutcome | null => {
@@ -305,6 +361,7 @@ const execute = async (
   runtime: CellRuntime,
   job: ClaimedJob,
   station: StepLine | undefined,
+  launch: Launch,
 ): Promise<ClaimedJob | null> => {
   const { ports } = runtime;
   const cycleToken = cycleTokenOf();
@@ -314,8 +371,7 @@ const execute = async (
     operatorHandler(cycleToken, end),
   );
   const handle = await ports.runner.start({
-    command: runtime.runner.command,
-    args: runtime.runner.args,
+    ...launch,
     cwd: worktreeOf(runtime, job),
     env: {
       FACTORY_OPERATOR_URL: endpoint.url,
@@ -356,13 +412,11 @@ export const runJob = async (
 ): Promise<ClaimedJob | null> => {
   const line = await loadLine(runtime, job);
   if (line.kind === 'unavailable') {
-    return nextJobOf(
-      await transition(runtime, job, {
-        action: 'line_unavailable',
-        lineName: line.lineName,
-        detail: line.detail,
-      }),
-    );
+    return lineUnavailable(runtime, job, line.lineName, line.detail);
+  }
+  const plan = await launchOf(runtime, job, line.station);
+  if (plan.kind === 'unavailable') {
+    return lineUnavailable(runtime, job, line.snapshot.name, plan.detail);
   }
   const missing = await missingPriorFiles(runtime, job);
   if (missing !== null) {
@@ -378,5 +432,5 @@ export const runJob = async (
     action: 'start',
     lineSnapshot: line.snapshot,
   });
-  return execute(runtime, job, line.station);
+  return execute(runtime, job, line.station, plan.launch);
 };
