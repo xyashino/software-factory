@@ -22,6 +22,19 @@ export const issueTokenContract = {
   },
 };
 
+export const joinTokenContract = {
+  in: {
+    body: z.object({ joinSecret: z.string().min(1) }),
+  },
+  out: {
+    201: z.object({
+      code: z.literal(201),
+      token: z.string(),
+      expiresAt: z.number().int(),
+    }),
+  },
+};
+
 export const rotateTokenContract = {
   out: {
     200: z.object({ code: z.literal(200), ...issuedTokenFields }),

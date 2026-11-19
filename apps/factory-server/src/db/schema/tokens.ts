@@ -8,7 +8,13 @@ import type { CellId, TokenId } from '../../domain/common/brand';
 import { jsonColumn } from '../columns';
 import { cells } from './cells';
 
-export const TOKEN_KINDS = ['supervisor', 'cell_join', 'cell_session'] as const;
+export const TOKEN_KINDS = [
+  'supervisor',
+  'cell_join',
+  'cell_session',
+  'web_join',
+  'web_session',
+] as const;
 
 export const safeTokens = sqliteTable('safe_tokens', {
   tokenId: text('token_id').$type<TokenId>().primaryKey(),

@@ -34,6 +34,7 @@ export const transportMiddleware = (createTransport: CreateTransport) =>
       createTransport({
         bearer: bearerOf(c.req.header('authorization')),
         signal: c.req.raw.signal,
+        remoteAddress: c.env?.remoteAddress ?? null,
       }),
     );
     await next();
