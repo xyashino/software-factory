@@ -18,7 +18,7 @@ const readBody = async (request: Request): Promise<unknown> => {
 
 export const honoAdapter =
   (procedure: Procedure) => async (c: Context<AppEnv>) => {
-    const response = await procedure(
+    const response = await procedure.execute(
       {
         params: c.req.param(),
         query: c.req.query(),
