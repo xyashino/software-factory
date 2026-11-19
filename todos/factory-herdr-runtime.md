@@ -19,7 +19,7 @@ Today the v2 Cell only runs headless. `bootstrap/context.ts` wires `createHeadle
 
 Agreed model:
 - **One workspace per Cell**, label `factory:<cellName>`. A Cell runs one job at a time (`claimLoop` is sequential, `cells.active_job_id` is a single value), so one workspace is enough.
-- **One tab per Operator step** in that workspace, the same way the legacy workflow had one tab per Operator. When a new step starts, the previous step's tab is closed first. Mechanic tabs follow the same rule and are specified in `factory-mechanic-pane-and-logs`.
+- **One tab per Operator step** in that workspace, the same way the legacy workflow had one tab per Operator. When a new step starts, the previous step's tab is closed first. Mechanic tabs follow the same rule and are specified in `factory-mechanic-tab`.
 - **The tab holds Cell information, not the workdir.** The worktree and cwd are job state. Pane metadata shows the Cell name, Cell id, job and step.
 - **Logs are not changed by this todo.** The existing per-step log (`<worktree>/.cell/<stepId>/step.log`, `headless` `spec.logPath`) stays as it is. No logs tab and no new log layout here.
 - **Workflow unchanged.** Verdicts still come from the Operator verbs on the operator endpoint. Headless keeps the exit-code contract.

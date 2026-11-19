@@ -2,7 +2,7 @@
 status: todo
 priority: high
 plan: factory-herdr-panes
-depends_on: [factory-herdr-pane-runtime]
+depends_on: [factory-herdr-runtime]
 ---
 
 # Todo: Mechanic jobs run in their own Herdr tab with a repair dir
@@ -23,9 +23,9 @@ The new Cell (`apps/factory`) does none of this yet:
 
 Logs stay as they are: step logs keep going to `<worktree>/.cell/<stepId>/step.log` and headless output to `spec.logPath`. This todo does not add a logs tab and does not move logs.
 
-Tab model comes from `factory-herdr-pane-runtime`: one workspace per Cell, one tab per step, the previous step tab closed before the next one opens.
+Tab model comes from `factory-herdr-runtime`: one workspace per Cell, one tab per step, the previous step tab closed before the next one opens.
 
-Depends on `factory-herdr-pane-runtime`, which provides `ensureCellWorkspace` and the Herdr runner.
+Depends on `factory-herdr-runtime`, which provides `ensureCellWorkspace` and the Herdr runner.
 
 ---
 
