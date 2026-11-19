@@ -36,6 +36,7 @@ catalog:
   hono: 4.13.14
   husky: 9.1.7
   lint-staged: 17.6.0
+  msw: 3.0.3
   picocolors: 1.1.1
   prettier: 3.9.10
   turbo: 2.11.10
