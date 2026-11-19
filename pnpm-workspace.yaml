@@ -13,11 +13,14 @@ trustPolicyExclude:
   - semver@6.3.1
 
 catalog:
+  '@astrojs/check': 0.9.12
+  '@astrojs/node': 11.1.9
   '@eslint/js': 9.39.5
   '@types/bun': 1.4.4
   '@types/node': 26.6.4
   '@vitest/coverage-v8': 5.1.0
   ajv: 8.20.0
+  astro: 7.4.5
   handlebars: 4.7.10
   citty: 0.2.2
   drizzle-kit: 0.31.11
