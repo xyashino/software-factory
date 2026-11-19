@@ -110,8 +110,43 @@ export const heartbeatCellContract = {
     200: z.object({
       code: z.literal(200),
       leaseExpiresAt: z.number().int().nullable(),
-      signals: z.array(z.literal('abort')),
+      signals: z.array(z.enum(['abort', 'drain', 'force'])),
     }),
+  },
+};
+
+export const drainCellContract = {
+  in: {
+    params: idParams,
+    body: z
+      .object({
+        force: z.boolean().default(false),
+        commandId: z.string().trim().min(1).optional(),
+      })
+      .strict()
+      .optional(),
+  },
+  out: {
+    200: z.object({
+      code: z.literal(200),
+      status: z.literal('draining'),
+      force: z.boolean(),
+    }),
+  },
+};
+
+export const leaveCellContract = {
+  in: {
+    body: z
+      .object({
+        commandId: z.string().trim().min(1),
+        epoch: z.number().int(),
+        jobId: z.string().trim().min(1).optional(),
+      })
+      .strict(),
+  },
+  out: {
+    200: z.object({ code: z.literal(200), status: z.literal('left') }),
   },
 };
 
@@ -119,7 +154,7 @@ const cellDto = z.object({
   cellId: z.string(),
   projectId: z.string(),
   name: z.string(),
-  status: z.enum(['online', 'busy', 'draining', 'offline', 'revoked']),
+  status: z.enum(['online', 'busy', 'draining', 'left', 'offline', 'revoked']),
   allowedLines: z.array(z.string()),
   runners: z.array(z.string()),
   activeJobId: z.string().nullable(),

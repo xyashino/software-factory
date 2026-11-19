@@ -1,0 +1,1 @@
+ALTER TABLE `cells` ADD `drain_force` integer DEFAULT false NOT NULL;

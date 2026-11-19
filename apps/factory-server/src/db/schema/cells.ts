@@ -7,6 +7,7 @@ export const CELL_STATUSES = [
   'online',
   'busy',
   'draining',
+  'left',
   'offline',
   'revoked',
 ] as const;
@@ -25,6 +26,9 @@ export const cells = sqliteTable('cells', {
     'local_worktrees_json',
   ).notNull(),
   activeJobId: text('active_job_id').$type<JobId>(),
+  drainForce: integer('drain_force', { mode: 'boolean' })
+    .notNull()
+    .default(false),
   lastHeartbeatAt: integer('last_heartbeat_at'),
   createdAt: integer('created_at').notNull(),
   revokedAt: integer('revoked_at'),
