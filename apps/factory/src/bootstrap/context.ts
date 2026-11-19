@@ -5,6 +5,9 @@ import { createCellStateFile } from '../adapters/fs/cell-state';
 import { createPidFile } from '../adapters/fs/pid-file';
 import { createTodoFiles } from '../adapters/fs/todo-files';
 import { createTokenFile } from '../adapters/fs/token-file';
+import { writeTextFile } from '../adapters/fs/write-text';
+import { createGitAdapter } from '../adapters/git/git';
+import { createPrAdapter } from '../adapters/git/gh';
 import { createServerClient } from '../adapters/http/server-client';
 import { createRunnerCatalog } from '../adapters/runners/catalog';
 import { createHeadlessRunner } from '../adapters/runners/headless';
@@ -32,7 +35,7 @@ export const buildContext = (): Ports => ({
   }),
   fs: {
     readText: async (path) => readFileSync(path, 'utf8'),
-    writeText: notWired,
+    writeText: writeTextFile,
     exists: async (path) => existsSync(path),
     list: async (dir) => (existsSync(dir) ? readdirSync(dir) : []),
     readStdin: notWired,
@@ -42,7 +45,8 @@ export const buildContext = (): Ports => ({
   operator: { open: notWired, close: notWired },
   runner: createHeadlessRunner(),
   runners: createRunnerCatalog(binaryOnPath),
-  git: { currentBranch: notWired, isClean: notWired },
+  git: createGitAdapter(processPort),
+  pr: createPrAdapter(processPort),
   process: processPort,
   pidFile: createPidFile(),
   clock: createSystemClock(),

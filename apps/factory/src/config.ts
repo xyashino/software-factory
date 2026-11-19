@@ -15,6 +15,7 @@ export const MAX_BODY_BYTES = 1024 * 1024;
 export const REPO_CONFIG_PATH = '.factory/config.json';
 export const LINES_DIR = '.factory/lines';
 export const WORKTREES_DIR = '.worktrees';
+export const PR_TEMPLATE_PATH = '.factory/templates/pr/body.md';
 export const CELL_STATE_PATH = '.factory-local/cell.json';
 export const JOIN_TOKEN_ENV = 'FACTORY_JOIN_TOKEN';
 export const DEFAULT_TODO_DIR = 'todos';

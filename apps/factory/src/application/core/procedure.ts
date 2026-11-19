@@ -5,6 +5,7 @@ import type { FsPort } from '../ports/fs.port';
 import type { GitPort } from '../ports/git.port';
 import type { OperatorEndpointPort } from '../ports/operator-endpoint.port';
 import type { PidFilePort } from '../ports/pid-file.port';
+import type { PrPort } from '../ports/pr.port';
 import type { ProcessPort } from '../ports/process.port';
 import type { RunnerCatalogPort } from '../ports/runner-catalog.port';
 import type { RunnerPort } from '../ports/runner.port';
@@ -24,6 +25,7 @@ export interface Ports {
   runner: RunnerPort;
   runners: RunnerCatalogPort;
   git: GitPort;
+  pr: PrPort;
   process: ProcessPort;
   pidFile: PidFilePort;
   clock: ClockPort;

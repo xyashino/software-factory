@@ -127,6 +127,18 @@ const transitionCalls = (calls: ServerCall[]): ServerCall[] =>
 const actionsOf = (calls: ServerCall[]): string[] =>
   transitionCalls(calls).map((call) => actionOf(call.body));
 
+const NOOP_GIT: Ports['git'] = {
+  currentBranch: async () => 'main',
+  isClean: async () => true,
+  worktreeAdd: async () => undefined,
+  worktreeRemove: async () => undefined,
+  excludeLocally: async () => undefined,
+  commit: async () => undefined,
+  push: async () => undefined,
+  headSha: async () => 'abc123',
+  status: async () => '',
+};
+
 const memoryFs = (files: Record<string, string>): Ports['fs'] => ({
   readText: async (path) => {
     const text = files[path];
@@ -135,8 +147,8 @@ const memoryFs = (files: Record<string, string>): Ports['fs'] => ({
     }
     return text;
   },
-  writeText: async () => {
-    throw new Error('the cell must not write files in this step');
+  writeText: async (path, text) => {
+    files[path] = text;
   },
   exists: async (path) => path in files,
   list: async (dir) =>
@@ -238,6 +250,8 @@ const runScenario = async (scenario: Scenario) => {
   const ports: Ports = {
     ...fake.ports,
     fs: memoryFs(scenario.files ?? baseFiles()),
+    git: NOOP_GIT,
+    pr: { publish: async () => undefined },
     cellState: state.port,
     clock: testClock,
     runners: {

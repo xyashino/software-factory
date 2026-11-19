@@ -13,12 +13,15 @@ import { commandIdOf } from '../../../domain/cell/command-id';
 import type { OperatorOutcome } from '../../../domain/cell/cell-loop';
 import { toJobId } from '../../../domain/common/brand';
 import { joinPath } from '../../../domain/common/path';
+import { factoryBranchOf, slugOf } from '../../../domain/git/branch-names';
 import { parseLine, type LineSnapshot } from '../../../domain/line/parse-line';
 import {
   type CellRuntime,
   type ClaimedJob,
   sendWithRetry,
 } from './cell-runtime';
+import { checkpointStation } from './checkpoint.procedure';
+import { deliverWorkOrder } from './deliver.procedure';
 
 const HEARTBEATS_ROUTE = '/api/v1/cells/heartbeats';
 const LINE_SUFFIX = '.yml';
@@ -27,6 +30,10 @@ const UNKNOWN_LINE = 'unknown';
 const FAILED_VERDICT_DETAIL = 'verdict fail';
 const PROMPT_FILE = 'prompt.md';
 const STEP_LOG = 'step.log';
+const CELL_DIR = '.cell';
+const CELL_EXCLUDE = `${CELL_DIR}/`;
+const WORKTREE_FILE = 'worktree.json';
+const WORKTREE_JSON_INDENT = 2;
 
 type TransitionCommand = z.infer<typeof transitionJobContract.in.body>;
 type TransitionBody<C> = C extends unknown
@@ -68,11 +75,7 @@ const errorText = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
 
 const worktreeOf = (runtime: CellRuntime, job: ClaimedJob): string =>
-  joinPath(
-    runtime.repoRoot,
-    WORKTREES_DIR,
-    (job.orderId ?? '').split(':').pop() ?? '',
-  );
+  joinPath(runtime.repoRoot, WORKTREES_DIR, slugOf(job.orderId));
 
 const nextJobOf = (reply: TransitionReply): ClaimedJob | null =>
   'nextJob' in reply ? reply.nextJob : null;
@@ -306,10 +309,26 @@ const finishComplete = async (
     );
   }
   const produced = station?.requiredFiles ?? [];
+  let commitSha: string | undefined;
+  try {
+    commitSha = await checkpointStation(runtime.ports, {
+      worktree: worktreeOf(runtime, job),
+      slug: slugOf(job.orderId),
+      stepId: job.stepId ?? station?.stationId ?? '',
+      producedFiles: produced,
+    });
+  } catch (error) {
+    return finishWithFail(
+      runtime,
+      job,
+      `checkpoint failed: ${errorText(error)}`,
+    );
+  }
   return nextJobOf(
     await transition(runtime, job, {
       action: 'complete',
       producedFiles: produced,
+      commitSha,
     }),
   );
 };
@@ -354,6 +373,86 @@ const finishOperator = async (
           detail: outcome.reason,
         }),
       );
+  }
+};
+
+const worktreeMissingOf = async (
+  runtime: CellRuntime,
+  job: ClaimedJob,
+  missing: { stepId: string; files: string[] },
+): Promise<ClaimedJob | null> =>
+  nextJobOf(
+    await transition(runtime, job, {
+      action: 'worktree_missing',
+      missingStepId: missing.stepId,
+      missingFiles: missing.files,
+    }),
+  );
+
+const prepareWorktree = async (
+  runtime: CellRuntime,
+  job: ClaimedJob,
+  lineName: string,
+): Promise<string | null> => {
+  const { git, fs } = runtime.ports;
+  const worktree = worktreeOf(runtime, job);
+  const slug = slugOf(job.orderId);
+  try {
+    if (!(await fs.exists(worktree))) {
+      await git.worktreeAdd(
+        runtime.repoRoot,
+        worktree,
+        factoryBranchOf(slug),
+        job.baseBranch,
+      );
+    }
+    await git.excludeLocally(worktree, CELL_EXCLUDE);
+    const record = {
+      projectId: runtime.projectId,
+      orderId: job.orderId,
+      planId: job.planId,
+      lineName,
+      baseBranch: job.baseBranch,
+      baseCommitSha: job.baseCommitSha,
+      cellId: runtime.session.cellId,
+    };
+    await fs.writeText(
+      joinPath(worktree, CELL_DIR, WORKTREE_FILE),
+      `${JSON.stringify(record, null, WORKTREE_JSON_INDENT)}\n`,
+    );
+    return null;
+  } catch (error) {
+    return `workspace failed: ${errorText(error)}`;
+  }
+};
+
+const deliverStation = async (
+  runtime: CellRuntime,
+  job: ClaimedJob,
+  snapshot: LineSnapshot,
+): Promise<ClaimedJob | null> => {
+  const missing = await missingPriorFiles(runtime, job);
+  if (missing !== null) {
+    return worktreeMissingOf(runtime, job, missing);
+  }
+  await transition(runtime, job, { action: 'start', lineSnapshot: snapshot });
+  try {
+    const commitSha = await deliverWorkOrder(runtime.ports, {
+      repoRoot: runtime.repoRoot,
+      worktree: worktreeOf(runtime, job),
+      slug: slugOf(job.orderId),
+      baseBranch: job.baseBranch,
+      priorStepIds: job.expectedPriorSteps.map((step) => step.stepId),
+    });
+    return nextJobOf(
+      await transition(runtime, job, {
+        action: 'complete',
+        producedFiles: [],
+        commitSha,
+      }),
+    );
+  } catch (error) {
+    return finishWithFail(runtime, job, `delivery failed: ${errorText(error)}`);
   }
 };
 
@@ -414,23 +513,26 @@ export const runJob = async (
   if (line.kind === 'unavailable') {
     return lineUnavailable(runtime, job, line.lineName, line.detail);
   }
+  if (line.station?.kind === 'deliver') {
+    return deliverStation(runtime, job, line.snapshot);
+  }
   const plan = await launchOf(runtime, job, line.station);
   if (plan.kind === 'unavailable') {
     return lineUnavailable(runtime, job, line.snapshot.name, plan.detail);
   }
   const missing = await missingPriorFiles(runtime, job);
   if (missing !== null) {
-    return nextJobOf(
-      await transition(runtime, job, {
-        action: 'worktree_missing',
-        missingStepId: missing.stepId,
-        missingFiles: missing.files,
-      }),
-    );
+    return worktreeMissingOf(runtime, job, missing);
   }
   await transition(runtime, job, {
     action: 'start',
     lineSnapshot: line.snapshot,
   });
+  if (job.expectedPriorSteps.length === 0) {
+    const failure = await prepareWorktree(runtime, job, line.snapshot.name);
+    if (failure !== null) {
+      return finishWithFail(runtime, job, failure);
+    }
+  }
   return execute(runtime, job, line.station, plan.launch);
 };
