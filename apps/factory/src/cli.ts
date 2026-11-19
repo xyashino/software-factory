@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 import { defineCommand, runCommand, showUsage } from 'citty';
 import { incidentCommand } from './adapters/cli/incident.command';
+import { operatorCommand } from './adapters/cli/operator.command';
 import { orderCommand } from './adapters/cli/order.command';
 import { queueCommand } from './adapters/cli/queue.command';
 import { serverCommand } from './adapters/cli/server.command';
@@ -23,6 +24,7 @@ const main = defineCommand({
     incident: incidentCommand,
     order: orderCommand,
     watch: watchCommand,
+    operator: operatorCommand,
   },
 });
 
