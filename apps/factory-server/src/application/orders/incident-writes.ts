@@ -92,7 +92,13 @@ export const openIncident = (
 export const insertMechanicJob = (
   tx: DbTx,
   order: WorkOrderRow,
-  input: { incidentId: IncidentId; cellId: CellId; repoUrl: string },
+  input: {
+    incidentId: IncidentId;
+    cellId: CellId;
+    repoUrl: string;
+    reason: string;
+    detail: string;
+  },
   now: number,
 ): void => {
   tx.insert(jobs)
@@ -109,7 +115,10 @@ export const insertMechanicJob = (
       baseCommitSha: order.baseCommitSha,
       targetBranch: order.branch,
       expectedPriorStepsJson: [],
-      payloadJson: {},
+      payloadJson: {
+        lineName: order.lineName,
+        incident: { reason: input.reason, detail: input.detail },
+      },
       cellId: input.cellId,
       epoch: 0,
       createdAt: now,
