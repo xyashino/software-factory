@@ -774,6 +774,8 @@ const blockOrder = (
         incidentId,
         cellId: asCellId(triage.mechanicJob.pinnedCellId),
         repoUrl: requireProject(tx, order.projectId).repoUrl,
+        reason: incident.reason,
+        detail: incident.detail,
       },
       now,
     );
