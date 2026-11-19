@@ -1,6 +1,7 @@
 import type { Context } from 'hono';
 import type { Procedure } from '../../application/core/procedure';
 import { BadRequest } from '../../application/core/error-handling';
+import type { ContractIn } from '../../application/core/schema/types';
 import type { AppEnv } from './types';
 
 const parseJson = (text: string): unknown => {
@@ -11,20 +12,25 @@ const parseJson = (text: string): unknown => {
   }
 };
 
-const readBody = async (request: Request): Promise<unknown> => {
+const readJson = async (request: Request): Promise<unknown> => {
   const text = await request.text();
-  return text.length === 0 ? undefined : parseJson(text);
+  if (text.length === 0) return undefined;
+  if (!request.headers.get('content-type')?.startsWith('application/json'))
+    throw new BadRequest('Unsupported Content-Type, expected application/json');
+  return parseJson(text);
 };
 
-export const honoAdapter =
-  (procedure: Procedure) => async (c: Context<AppEnv>) => {
+export const honoAdapter = (procedure: Procedure) => {
+  const declared: ContractIn = procedure.contract.in ?? {};
+  return async (c: Context<AppEnv>) => {
     const response = await procedure.execute(
       {
-        params: c.req.param(),
-        query: c.req.query(),
-        body: await readBody(c.req.raw),
+        params: declared.params ? c.req.param() : {},
+        query: declared.query ? c.req.query() : {},
+        body: declared.body ? await readJson(c.req.raw) : undefined,
       },
       c.get('transport'),
     );
     return c.json(response, response.code);
   };
+};
