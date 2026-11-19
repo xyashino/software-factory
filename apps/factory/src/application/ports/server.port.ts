@@ -11,6 +11,7 @@ export interface ServerPort {
     query: Record<string, string>,
     token: string,
   ): Promise<unknown>;
+  remove(route: string, token: string): Promise<unknown>;
   stream(
     route: string,
     query: Record<string, string>,

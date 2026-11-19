@@ -2,6 +2,7 @@ export interface RunSpec {
   command: string;
   args: readonly string[];
   cwd: string;
+  env: Readonly<Record<string, string>>;
 }
 
 export interface RunHandle {
