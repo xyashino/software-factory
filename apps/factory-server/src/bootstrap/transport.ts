@@ -19,4 +19,5 @@ export const createTransport =
     ...deps,
     bearer: request.bearer,
     signal: request.signal,
+    remoteAddress: request.remoteAddress,
   });

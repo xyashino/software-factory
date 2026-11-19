@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Factory web demo</title>
+  </head>
+  <body>
+    <nav>
+      <a href="/">Overview</a>
+      <a href="/cells">Cells</a>
+      <a href="/work-orders">Work orders</a>
+      <a href="/incidents">Incidents</a>
+    </nav>
+    <main>
+      <slot />
+    </main>
+  </body>
+</html>
+
+<style>
+  nav {
+    display: flex;
+    gap: 1rem;
+    padding: 1rem;
+    border-bottom: 1px solid #ccc;
+  }
+  main {
+    padding: 1rem;
+  }
+</style>

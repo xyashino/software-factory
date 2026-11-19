@@ -8,7 +8,8 @@
     "FACTORY_DATA_DIR",
     "FACTORY_DB_PATH",
     "FACTORY_PORT",
-    "FACTORY_HOST"
+    "FACTORY_HOST",
+    "FACTORY_URL"
   ],
   "tasks": {
     "//#format:check": {
@@ -38,7 +39,7 @@
       ]
     },
     "test": {
-      "dependsOn": ["^build"],
+      "dependsOn": ["^build", "build"],
       "env": [
         "FACTORY_PROPERTY_RUNS",
         "PATH",

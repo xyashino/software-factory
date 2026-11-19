@@ -36,7 +36,8 @@ import {
 import { reapExpiredLeases } from './reap-expired-leases';
 
 const ACTIVE_JOB_STATUSES = ['claimed', 'running'] as const;
-const UNREACHABLE_CELL_STATUSES = ['offline', 'revoked'] as const;
+const UNREACHABLE_CELL_STATUSES = ['offline', 'left', 'revoked'] as const;
+const NON_CLAIMING_CELL_STATUSES = ['draining', 'left'] as const;
 
 type CellRow = typeof cells.$inferSelect;
 type CellStatus = CellRow['status'];
@@ -163,6 +164,40 @@ const toClaimCandidate = (
   unavailableLineCells: row.unavailableLineCellsJson.map((id) => asCellId(id)),
 });
 
+const resumeReadyJob = (
+  tx: DbTx,
+  row: WorkOrderRow,
+  stepId: string | null,
+  cellId: CellId,
+  leaseExpiresAt: number,
+  now: number,
+): JobRow | undefined => {
+  const job = tx
+    .select()
+    .from(jobs)
+    .where(
+      and(
+        eq(jobs.orderId, row.orderId),
+        eq(jobs.kind, 'run_operator'),
+        eq(jobs.status, 'ready'),
+      ),
+    )
+    .get();
+  if (job === undefined || job.stepId !== stepId) return undefined;
+  return tx
+    .update(jobs)
+    .set({
+      status: 'claimed',
+      cellId,
+      epoch: job.epoch + 1,
+      leaseExpiresAt,
+      startedAt: now,
+    })
+    .where(eq(jobs.jobId, job.jobId))
+    .returning()
+    .get();
+};
+
 const claimWorkOrder = (
   tx: DbTx,
   cell: CellRow,
@@ -227,41 +262,50 @@ const claimWorkOrder = (
     (step) => step.stepIndex === row.currentStepIndex,
   );
   const epoch = row.epoch + 1;
-  const job = tx
-    .insert(jobs)
-    .values({
-      jobId: asJobId(`job-${crypto.randomUUID()}`),
-      projectId: row.projectId,
-      orderId: row.orderId,
-      stepId: currentStep?.stepId ?? null,
-      lineName: row.lineName,
-      kind: 'run_operator',
-      workspaceMode:
-        row.currentStepIndex === 0 && row.worktreeResets === 0
-          ? 'fresh'
-          : 'reuse',
-      status: 'claimed',
-      repoUrl: project.repoUrl,
-      baseBranch: row.baseBranch,
-      baseCommitSha: row.baseCommitSha,
-      targetBranch: row.branch,
-      expectedPriorStepsJson: steps
-        .filter((step) => step.stepIndex < row.currentStepIndex)
-        .map((step) => ({
-          stepId: step.stepId,
-          stationId: step.stationId,
-          stepIndex: step.stepIndex,
-          requiredFiles: step.requiredFilesJson,
-        })),
-      payloadJson: { stepIndex: row.currentStepIndex },
-      cellId: cell.cellId,
-      epoch,
+  const job =
+    resumeReadyJob(
+      tx,
+      row,
+      currentStep?.stepId ?? null,
+      cell.cellId,
       leaseExpiresAt,
-      createdAt: now,
-      startedAt: now,
-    })
-    .returning()
-    .get();
+      now,
+    ) ??
+    tx
+      .insert(jobs)
+      .values({
+        jobId: asJobId(`job-${crypto.randomUUID()}`),
+        projectId: row.projectId,
+        orderId: row.orderId,
+        stepId: currentStep?.stepId ?? null,
+        lineName: row.lineName,
+        kind: 'run_operator',
+        workspaceMode:
+          row.currentStepIndex === 0 && row.worktreeResets === 0
+            ? 'fresh'
+            : 'reuse',
+        status: 'claimed',
+        repoUrl: project.repoUrl,
+        baseBranch: row.baseBranch,
+        baseCommitSha: row.baseCommitSha,
+        targetBranch: row.branch,
+        expectedPriorStepsJson: steps
+          .filter((step) => step.stepIndex < row.currentStepIndex)
+          .map((step) => ({
+            stepId: step.stepId,
+            stationId: step.stationId,
+            stepIndex: step.stepIndex,
+            requiredFiles: step.requiredFilesJson,
+          })),
+        payloadJson: { stepIndex: row.currentStepIndex },
+        cellId: cell.cellId,
+        epoch,
+        leaseExpiresAt,
+        createdAt: now,
+        startedAt: now,
+      })
+      .returning()
+      .get();
   updateWorkOrder(
     tx,
     row,
@@ -270,7 +314,7 @@ const claimWorkOrder = (
       activeCellId: cell.cellId,
       activeJobId: job.jobId,
       pinnedCellId: cell.cellId,
-      epoch,
+      epoch: job.epoch,
     },
     now,
   );
@@ -330,17 +374,29 @@ const attemptClaim = (ctx: AuthenticatedContext, cellId: CellId) => {
     const cell = findCell(tx, cellId);
     if (cell === undefined) throw new NotFound(`Cell ${cellId} not found`);
     if (cell.status === 'revoked') throw new Forbidden('Cell is revoked');
-    const claimed = holdsActiveJob(tx, cell)
-      ? undefined
-      : claimNext(tx, cell, leaseExpiresAt, now, log);
+    const claimable = !NON_CLAIMING_CELL_STATUSES.some(
+      (status) => status === cell.status,
+    );
+    const claimed =
+      !claimable || holdsActiveJob(tx, cell)
+        ? undefined
+        : claimNext(tx, cell, leaseExpiresAt, now, log);
     return {
       job: claimed === undefined ? null : toClaimedJob(claimed, leaseExpiresAt),
+      claimable,
+      draining: cell.status === 'draining',
       records: flushTransitions(tx, log),
     };
   });
   publishCommitted(ctx, outcome.records);
-  return outcome.job;
+  return outcome;
 };
+
+const claimReply = (attempt: ReturnType<typeof attemptClaim>) => ({
+  code: 200 as const,
+  job: attempt.job,
+  signals: attempt.draining ? (['drain'] as const) : [],
+});
 
 export const claimJobProcedure = scopedProcedure(['cell:worker'])(
   claimJobContract,
@@ -349,7 +405,8 @@ export const claimJobProcedure = scopedProcedure(['cell:worker'])(
   if (cellId === null) throw new Forbidden('Token is not bound to a cell');
   const waitMs = Math.min(input.body?.waitMs ?? 0, CLAIM_WAIT_MS);
   const first = attemptClaim(ctx, cellId);
-  if (first !== null || waitMs === 0) return { code: 200 as const, job: first };
+  if (first.job !== null || waitMs === 0 || !first.claimable)
+    return claimReply(first);
   await ctx.claimWaiters.waitForWake(waitMs, ctx.signal);
-  return { code: 200 as const, job: attemptClaim(ctx, cellId) };
+  return claimReply(attemptClaim(ctx, cellId));
 });

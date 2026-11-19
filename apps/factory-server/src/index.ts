@@ -7,13 +7,15 @@ import { createSystemClock } from './adapters/memory/system-clock.adapter';
 import { createTransitionBus } from './adapters/memory/transition-bus.adapter';
 import { mintAdminToken } from './bootstrap/admin';
 import { createTransport } from './bootstrap/transport';
+import { writeWebJoinFile } from './bootstrap/web-join';
 import { DEFAULT_DB_PATH, DEFAULT_HOST, DEFAULT_PORT } from './config';
 import { createDb } from './db/client';
 
 const ADMIN_TOKEN_CREATE = 'admin token create';
 
 const dbPath = process.env.FACTORY_DB_PATH ?? DEFAULT_DB_PATH;
-mkdirSync(dirname(dbPath), { recursive: true });
+const dataDir = process.env.FACTORY_DATA_DIR ?? dirname(dbPath);
+mkdirSync(dataDir, { recursive: true });
 const db = createDb(dbPath);
 const clock = createSystemClock();
 
@@ -31,7 +33,23 @@ if (process.argv.slice(2).join(' ') === ADMIN_TOKEN_CREATE) {
       transitionBus: createTransitionBus(),
     }),
   );
-  Bun.serve({ port, hostname, fetch: app.fetch });
+  try {
+    writeWebJoinFile(db, clock, dataDir);
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : 'unknown error';
+    process.stderr.write(
+      `factory-server: cannot write web-demo.join: ${reason}\n`,
+    );
+    process.exit(1);
+  }
+  Bun.serve({
+    port,
+    hostname,
+    fetch: (request, server) =>
+      app.fetch(request, {
+        remoteAddress: server.requestIP(request)?.address ?? null,
+      }),
+  });
   process.stdout.write(
     `factory-server listening on http://${hostname}:${port} (db ${dbPath})\n`,
   );
