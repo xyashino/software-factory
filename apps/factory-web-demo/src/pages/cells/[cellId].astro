@@ -4,7 +4,9 @@ import { failureResponse, textResponse } from '../../lib/page-error';
 import { createSessionClient } from '../../lib/session';
 import { findCell, formatLease, formatTimestamp } from '../../lib/view-model';
 
-const { client, projectId } = createSessionClient(process.env);
+const session = await createSessionClient(process.env).catch(failureResponse);
+if (session instanceof Response) return session;
+const { client, projectId } = session;
 const cellId = Astro.params.cellId ?? '';
 const data = await Promise.all([
   client.listCells(),

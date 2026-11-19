@@ -4,7 +4,9 @@ import { failureResponse } from '../../lib/page-error';
 import { createSessionClient } from '../../lib/session';
 import { formatLease } from '../../lib/view-model';
 
-const { client } = createSessionClient(process.env);
+const session = await createSessionClient(process.env).catch(failureResponse);
+if (session instanceof Response) return session;
+const { client } = session;
 const reply = await client.listCells().catch(failureResponse);
 if (reply instanceof Response) return reply;
 const now = Date.now();
