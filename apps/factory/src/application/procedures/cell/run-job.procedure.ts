@@ -13,10 +13,19 @@ import { operatorRequest } from '../../../contracts/operator.contract';
 import { commandIdOf } from '../../../domain/cell/command-id';
 import type { OperatorOutcome } from '../../../domain/cell/cell-loop';
 import { drainPolicy } from '../../../domain/cell/drain-policy';
+import {
+  artifactsOf,
+  type PromptInput,
+  renderOperatorPrompt,
+} from '../../../domain/cell/render-prompt';
 import { toJobId } from '../../../domain/common/brand';
 import { joinPath } from '../../../domain/common/path';
 import { factoryBranchOf, slugOf } from '../../../domain/git/branch-names';
-import { parseLine, type LineSnapshot } from '../../../domain/line/parse-line';
+import {
+  parseLine,
+  toWireSnapshot,
+  type LineSnapshot,
+} from '../../../domain/line/parse-line';
 import {
   type CellRuntime,
   type ClaimedJob,
@@ -32,10 +41,15 @@ const CYCLE_TOKEN_BYTES = 16;
 const UNKNOWN_LINE = 'unknown';
 const FAILED_VERDICT_DETAIL = 'verdict fail';
 const PROMPT_FILE = 'prompt.md';
+const OPERATORS_DIR = '.factory/operators';
+const GATE_FILE = 'gate.md';
+const WORKTREE_SCOPE = '.';
+const COMMIT_FILE = 'commit.txt';
 const STEP_LOG = 'step.log';
 const CELL_DIR = '.cell';
 const CELL_EXCLUDE = `${CELL_DIR}/`;
 const WORKTREE_FILE = 'worktree.json';
+const STATE_FILE = 'state.json';
 const WORKTREE_JSON_INDENT = 2;
 
 type TransitionCommand = z.infer<typeof transitionJobContract.in.body>;
@@ -105,6 +119,9 @@ const transition = async (
     ),
   );
 };
+
+const textOf = (value: unknown): string =>
+  typeof value === 'string' ? value : '';
 
 const lineNameOf = (job: ClaimedJob): string | undefined => {
   const name = job.payload.lineName;
@@ -299,6 +316,20 @@ const finishWithFail = async (
 ): Promise<ClaimedJob | null> =>
   nextJobOf(await transition(runtime, job, { action: 'fail', detail }));
 
+const hasCommitTextOf = (
+  runtime: CellRuntime,
+  job: ClaimedJob,
+  station: StepLine | undefined,
+): Promise<boolean> =>
+  runtime.ports.fs.exists(
+    joinPath(
+      worktreeOf(runtime, job),
+      CELL_DIR,
+      job.stepId ?? station?.stationId ?? '',
+      COMMIT_FILE,
+    ),
+  );
+
 const finishComplete = async (
   runtime: CellRuntime,
   job: ClaimedJob,
@@ -315,12 +346,16 @@ const finishComplete = async (
   const produced = station?.requiredFiles ?? [];
   let commitSha: string | undefined;
   try {
-    commitSha = await checkpointStation(runtime.ports, {
-      worktree: worktreeOf(runtime, job),
-      slug: slugOf(job.orderId),
-      stepId: job.stepId ?? station?.stationId ?? '',
-      producedFiles: produced,
-    });
+    const worktree = worktreeOf(runtime, job);
+    commitSha =
+      (await checkpointStation(runtime.ports, {
+        worktree,
+        slug: slugOf(job.orderId),
+        stepId: job.stepId ?? station?.stationId ?? '',
+        producedFiles: (await hasCommitTextOf(runtime, job, station))
+          ? [WORKTREE_SCOPE]
+          : [],
+      })) ?? (await runtime.ports.git.headSha(worktree));
   } catch (error) {
     return finishWithFail(
       runtime,
@@ -328,6 +363,11 @@ const finishComplete = async (
       `checkpoint failed: ${errorText(error)}`,
     );
   }
+  const stepId = job.stepId ?? station?.stationId ?? '';
+  await runtime.ports.fs.writeText(
+    joinPath(worktreeOf(runtime, job), CELL_DIR, stepId, STATE_FILE),
+    `${JSON.stringify({ stepId, stationId: station?.stationId, stepIndex: job.payload.stepIndex, jobId: job.jobId, epoch: job.epoch, status: 'passed' }, null, WORKTREE_JSON_INDENT)}\n`,
+  );
   return nextJobOf(
     await transition(runtime, job, {
       action: 'complete',
@@ -399,7 +439,7 @@ const worktreeMissingOf = async (
 const prepareWorktree = async (
   runtime: CellRuntime,
   job: ClaimedJob,
-  lineName: string,
+  snapshot: LineSnapshot,
 ): Promise<string | null> => {
   const { git, fs } = runtime.ports;
   const worktree = worktreeOf(runtime, job);
@@ -414,11 +454,21 @@ const prepareWorktree = async (
       );
     }
     await git.excludeLocally(worktree, CELL_EXCLUDE);
+    for (const command of snapshot.prepare) {
+      const result = await runtime.ports.process.run(
+        'sh',
+        ['-c', command],
+        worktree,
+      );
+      if (result.exitCode !== 0) {
+        throw new Error(`${command} exited ${result.exitCode}`);
+      }
+    }
     const record = {
       projectId: runtime.projectId,
       orderId: job.orderId,
       planId: job.planId,
-      lineName,
+      lineName: snapshot.name,
       baseBranch: job.baseBranch,
       baseCommitSha: job.baseCommitSha,
       cellId: runtime.session.cellId,
@@ -442,7 +492,10 @@ const deliverStation = async (
   if (missing !== null) {
     return worktreeMissingOf(runtime, job, missing);
   }
-  await transition(runtime, job, { action: 'start', lineSnapshot: snapshot });
+  await transition(runtime, job, {
+    action: 'start',
+    lineSnapshot: toWireSnapshot(snapshot),
+  });
   try {
     const commitSha = await deliverWorkOrder(runtime.ports, {
       repoRoot: runtime.repoRoot,
@@ -463,13 +516,104 @@ const deliverStation = async (
   }
 };
 
+const readOrNull = async (
+  runtime: CellRuntime,
+  path: string,
+): Promise<string | null> =>
+  (await runtime.ports.fs.exists(path))
+    ? runtime.ports.fs.readText(path)
+    : null;
+
+const artifactFileOf = async (
+  runtime: CellRuntime,
+  worktree: string,
+  station: StepLine,
+  key: string,
+): Promise<string> => {
+  if (station.profile === null) return `${key}.md`;
+  const profileText = await runtime.ports.fs.readText(
+    joinPath(worktree, OPERATORS_DIR, `${station.profile}.md`),
+  );
+  return artifactsOf(profileText)[key] ?? `${key}.md`;
+};
+
+const promptContextOf = async (
+  runtime: CellRuntime,
+  job: ClaimedJob,
+  snapshot: LineSnapshot,
+  station: StepLine,
+): Promise<{ inputs: PromptInput['inputs']; context: string | null }> => {
+  const worktree = worktreeOf(runtime, job);
+  const inputs: PromptInput['inputs'] = [];
+  let context: string | null = null;
+  for (const ref of station.inputs) {
+    const [stationId = '', key = ''] = ref.split('.');
+    const prior = job.expectedPriorSteps.find(
+      (step) => step.stationId === stationId,
+    );
+    const priorStation = snapshot.stations.find(
+      (s) => s.stationId === stationId,
+    );
+    if (prior === undefined || priorStation === undefined) continue;
+    const file = await artifactFileOf(runtime, worktree, priorStation, key);
+    const content =
+      (await readOrNull(
+        runtime,
+        joinPath(worktree, '.cell', prior.stepId, file),
+      )) ?? '(missing)';
+    if (priorStation.kind === 'inspection') {
+      context = content;
+    } else {
+      inputs.push({ ref, content });
+    }
+  }
+  return { inputs, context };
+};
+
+const writePrompt = async (
+  runtime: CellRuntime,
+  job: ClaimedJob,
+  snapshot: LineSnapshot,
+  station: StepLine | undefined,
+): Promise<void> => {
+  if (station?.profile === null || station?.profile === undefined) {
+    return;
+  }
+  const worktree = worktreeOf(runtime, job);
+  const stepId = job.stepId ?? station.stationId;
+  const profileText = await runtime.ports.fs.readText(
+    joinPath(worktree, OPERATORS_DIR, `${station.profile}.md`),
+  );
+  const { inputs, context } = await promptContextOf(
+    runtime,
+    job,
+    snapshot,
+    station,
+  );
+  await runtime.ports.fs.writeText(
+    joinPath(worktree, '.cell', stepId, PROMPT_FILE),
+    renderOperatorPrompt({
+      profileText,
+      taskId: slugOf(job.orderId),
+      attemptId: job.jobId,
+      stepId,
+      title: textOf(job.payload.title),
+      description: textOf(job.payload.description),
+      inputs,
+      context: context === null ? null : `Gate result:\n\n${context}`,
+    }),
+  );
+};
+
 const execute = async (
   runtime: CellRuntime,
   job: ClaimedJob,
+  snapshot: LineSnapshot,
   station: StepLine | undefined,
   launch: Launch,
 ): Promise<ClaimedJob | null> => {
   const { ports } = runtime;
+  await writePrompt(runtime, job, snapshot, station);
   const cycleToken = cycleTokenOf();
   const end = deferred<RunEnd>();
   const endpoint = await ports.operator.open(
@@ -528,6 +672,81 @@ const execute = async (
   }
 };
 
+const gateTextOf = (station: StepLine): string =>
+  [
+    'Gate result: pass',
+    '',
+    'Commands run in the worktree, all exited 0:',
+    ...station.exec.map((command) => `- ${command}`),
+    '',
+  ].join('\n');
+
+const runInspection = async (
+  runtime: CellRuntime,
+  job: ClaimedJob,
+  snapshot: LineSnapshot,
+  station: StepLine,
+): Promise<ClaimedJob | null> => {
+  const missing = await missingPriorFiles(runtime, job);
+  if (missing !== null) {
+    return worktreeMissingOf(runtime, job, missing);
+  }
+  await transition(runtime, job, {
+    action: 'start',
+    lineSnapshot: toWireSnapshot(snapshot),
+  });
+  if (job.expectedPriorSteps.length === 0) {
+    const failure = await prepareWorktree(runtime, job, snapshot);
+    if (failure !== null) {
+      return finishWithFail(runtime, job, failure);
+    }
+  }
+  const heartbeat = startHeartbeat({
+    clock: runtime.ports.clock,
+    intervalMs: HEARTBEAT_INTERVAL_MS,
+    beat: async () => {
+      const { signals } = heartbeatCellContract.out[200].parse(
+        await runtime.ports.server.call(
+          HEARTBEATS_ROUTE,
+          { jobId: job.jobId, epoch: job.epoch },
+          runtime.session.sessionToken,
+        ),
+      );
+      observeDrain(runtime.drain, signals);
+      return signals;
+    },
+    onAbort: () => undefined,
+  });
+  try {
+    for (const command of station.exec) {
+      const result = await runtime.ports.process.run(
+        'sh',
+        ['-c', command],
+        worktreeOf(runtime, job),
+      );
+      if (result.exitCode !== 0) {
+        return finishWithFail(
+          runtime,
+          job,
+          `${command} exited ${result.exitCode}`,
+        );
+      }
+    }
+  } finally {
+    heartbeat.stop();
+  }
+  await runtime.ports.fs.writeText(
+    joinPath(
+      worktreeOf(runtime, job),
+      '.cell',
+      job.stepId ?? station.stationId,
+      GATE_FILE,
+    ),
+    gateTextOf(station),
+  );
+  return finishComplete(runtime, job, station);
+};
+
 export const runJob = async (
   runtime: CellRuntime,
   job: ClaimedJob,
@@ -539,6 +758,9 @@ export const runJob = async (
   if (line.station?.kind === 'deliver') {
     return deliverStation(runtime, job, line.snapshot);
   }
+  if (line.station?.kind === 'inspection') {
+    return runInspection(runtime, job, line.snapshot, line.station);
+  }
   const plan = await launchOf(runtime, job, line.station);
   if (plan.kind === 'unavailable') {
     return lineUnavailable(runtime, job, line.snapshot.name, plan.detail);
@@ -549,13 +771,13 @@ export const runJob = async (
   }
   await transition(runtime, job, {
     action: 'start',
-    lineSnapshot: line.snapshot,
+    lineSnapshot: toWireSnapshot(line.snapshot),
   });
   if (job.expectedPriorSteps.length === 0) {
-    const failure = await prepareWorktree(runtime, job, line.snapshot.name);
+    const failure = await prepareWorktree(runtime, job, line.snapshot);
     if (failure !== null) {
       return finishWithFail(runtime, job, failure);
     }
   }
-  return execute(runtime, job, line.station, plan.launch);
+  return execute(runtime, job, line.snapshot, line.station, plan.launch);
 };

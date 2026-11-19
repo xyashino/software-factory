@@ -550,7 +550,12 @@ const issueJob = (
           stepIndex: prior.stepIndex,
           requiredFiles: prior.requiredFilesJson,
         })),
-      payloadJson: { stepIndex: next.stepIndex },
+      payloadJson: {
+        stepIndex: next.stepIndex,
+        lineName: order.lineName,
+        title: order.title,
+        description: order.description,
+      },
       cellId,
       epoch,
       leaseExpiresAt,

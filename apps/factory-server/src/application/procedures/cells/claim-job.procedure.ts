@@ -297,7 +297,12 @@ const claimWorkOrder = (
             stepIndex: step.stepIndex,
             requiredFiles: step.requiredFilesJson,
           })),
-        payloadJson: { stepIndex: row.currentStepIndex },
+        payloadJson: {
+          stepIndex: row.currentStepIndex,
+          lineName: row.lineName,
+          title: row.title,
+          description: row.description,
+        },
         cellId: cell.cellId,
         epoch,
         leaseExpiresAt,

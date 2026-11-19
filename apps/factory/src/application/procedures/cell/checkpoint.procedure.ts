@@ -44,6 +44,9 @@ export const checkpointStation = async (
   if (paths.length === 0) {
     return undefined;
   }
+  if ((await ports.git.status(spec.worktree)).trim() === '') {
+    return undefined;
+  }
   const message = checkpointMessage(
     await commitTextOf(ports, spec.worktree, spec.stepId),
     spec.slug,

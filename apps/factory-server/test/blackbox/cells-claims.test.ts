@@ -96,6 +96,7 @@ type ClaimBody = {
     epoch: number;
     leaseExpiresAt: number;
     targetBranch: string;
+    payload: Record<string, unknown>;
   };
 };
 
@@ -177,6 +178,7 @@ describe('cell claims', () => {
       epoch: 1,
       leaseExpiresAt: clock.now() + LEASE_TTL_MS,
       targetBranch: 'factory/order-1',
+      payload: { stepIndex: 0, lineName: 'feature' },
     });
     expect(orderState(db, 'order-1')).toMatchObject({
       state: 'running',

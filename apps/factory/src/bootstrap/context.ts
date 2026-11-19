@@ -11,6 +11,7 @@ import { createPrAdapter } from '../adapters/git/gh';
 import { createServerClient } from '../adapters/http/server-client';
 import { createRunnerCatalog } from '../adapters/runners/catalog';
 import { createHeadlessRunner } from '../adapters/runners/headless';
+import { createOperatorEndpoint } from '../adapters/operator-endpoint/bun-endpoint';
 import { createProcessAdapter } from '../adapters/process/spawn-server';
 import { createSystemClock } from '../adapters/process/system-clock';
 import type { Ports } from '../application/core/procedure';
@@ -42,7 +43,7 @@ export const buildContext = (): Ports => ({
   },
   todoFiles: createTodoFiles(),
   tokens: createTokenFile(TOKEN_PATH),
-  operator: { open: notWired, close: notWired },
+  operator: createOperatorEndpoint(),
   runner: createHeadlessRunner(),
   runners: createRunnerCatalog(binaryOnPath),
   git: createGitAdapter(processPort),

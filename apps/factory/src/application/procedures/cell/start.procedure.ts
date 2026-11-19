@@ -1,4 +1,5 @@
 import { drainStateOf } from '../../../cell/drain-signal';
+import { commandIdOf } from '../../../domain/cell/command-id';
 import { JOIN_TOKEN_ENV, LINES_DIR, REPO_CONFIG_PATH } from '../../../config';
 import { joinPath } from '../../../domain/common/path';
 import { ArgumentError, Refused } from '../../core/errors';
@@ -6,6 +7,7 @@ import type { Ports } from '../../core/procedure';
 import { readProjectId } from '../../core/repo-access';
 import { claimLoop } from './claim-loop.procedure';
 import type { CellRuntime } from './cell-runtime';
+import type { CellSession } from '../../ports/cell-state.port';
 import { enrollCell } from './enroll.procedure';
 import { helloCell } from './hello.procedure';
 
@@ -45,6 +47,28 @@ const lineNamesOf = async (ports: Ports, dir: string): Promise<string[]> =>
     .map((name) => name.slice(0, -LINE_SUFFIX.length))
     .sort();
 
+const LEAVE_ROUTE = '/api/v1/cells/leave';
+
+const releaseResumedJob = (
+  ports: Ports,
+  session: CellSession,
+  job: { jobId: string; orderId: string | null; epoch: number },
+): Promise<unknown> =>
+  ports.server.call(
+    LEAVE_ROUTE,
+    {
+      commandId: commandIdOf({
+        cellId: session.cellId,
+        orderId: job.orderId ?? job.jobId,
+        epoch: job.epoch,
+        command: 'leave',
+      }),
+      epoch: job.epoch,
+      jobId: job.jobId,
+    },
+    session.sessionToken,
+  );
+
 export const startCell = async (
   ports: Ports,
   input: StartInput,
@@ -77,12 +101,21 @@ export const startCell = async (
       joinToken: input.joinToken,
     });
   }
-  await helloCell(ports, session, {
+  const hello = await helloCell(ports, session, {
     projectId,
     allowedLines,
     runners,
     localWorktrees: [],
   });
+  if (hello.resumedJob !== undefined) {
+    await releaseResumedJob(ports, session, hello.resumedJob);
+    await helloCell(ports, session, {
+      projectId,
+      allowedLines,
+      runners,
+      localWorktrees: [],
+    });
+  }
   const runtime: CellRuntime = {
     ports,
     session,

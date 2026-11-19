@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseLine } from '../../../src/domain/line/parse-line';
+import { parseLine, toWireSnapshot } from '../../../src/domain/line/parse-line';
 
 const LINE = [
   'name: feature',
@@ -29,7 +29,10 @@ describe('line snapshot', () => {
       stepIndex: 1,
       kind: 'operator',
       requiredFiles: ['report.md', 'commit.txt'],
+      exec: [],
+      inputs: [],
       runner: 'claude',
+      profile: null,
       maxAttempts: 3,
       onFailRetryStationId: 'build',
     });
@@ -44,6 +47,69 @@ describe('line snapshot', () => {
       maxAttempts: 1,
       onFailRetryStationId: null,
       requiredFiles: [],
+    });
+  });
+
+  it('takes a station runner from its operator pool', () => {
+    // Arrange
+    const text = [
+      'name: feature',
+      'operators:',
+      '  planner:',
+      '    runner: claude',
+      'stations:',
+      '  - id: plan',
+      '    kind: operator',
+      '    operator: planner',
+      '',
+    ].join('\n');
+
+    // Act
+    const line = parseLine(text);
+
+    // Assert
+    expect(line.stations[0]).toMatchObject({
+      stationId: 'plan',
+      runner: 'claude',
+    });
+  });
+
+  it('ends the line with a deliver station and sends stations by id', () => {
+    // Arrange
+    const text = [
+      'name: feature',
+      'operators:',
+      '  planner:',
+      '    runner: claude',
+      'stations:',
+      '  - id: plan',
+      '    kind: operator',
+      '    operator: planner',
+      'deliver:',
+      '  to: new-pr',
+      '',
+    ].join('\n');
+
+    // Act
+    const wire = toWireSnapshot(parseLine(text));
+
+    // Assert
+    expect(wire).toEqual({
+      name: 'feature',
+      stations: [
+        {
+          id: 'plan',
+          kind: 'operator',
+          requiredFiles: [],
+          maxAttempts: 1,
+        },
+        {
+          id: 'deliver',
+          kind: 'deliver',
+          requiredFiles: [],
+          maxAttempts: 1,
+        },
+      ],
     });
   });
 

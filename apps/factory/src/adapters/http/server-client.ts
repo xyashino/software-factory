@@ -24,15 +24,28 @@ const searchOf = (query: Record<string, string>): string => {
   return search.length > 0 ? `?${search}` : '';
 };
 
+// A claim long-polls for `waitMs` on the server; the timeout must outlast that wait.
+const waitMsOf = (body: unknown): number =>
+  typeof body === 'object' &&
+  body !== null &&
+  'waitMs' in body &&
+  typeof body.waitMs === 'number'
+    ? body.waitMs
+    : 0;
+
 export const createServerClient = ({
   baseUrl,
   fetchImpl = fetch,
 }: ServerClientOptions): ServerPort => {
-  const send = async (url: string, init: RequestInit): Promise<Response> => {
+  const send = async (
+    url: string,
+    init: RequestInit,
+    waitMs: number = 0,
+  ): Promise<Response> => {
     try {
       return await fetchImpl(url, {
         ...init,
-        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS + waitMs),
       });
     } catch {
       throw new Unreachable(`cannot reach factory server at ${baseUrl}`);
@@ -41,14 +54,18 @@ export const createServerClient = ({
 
   return {
     call: async (route, body, token) => {
-      const response = await send(`${baseUrl}${route}`, {
-        method: 'POST',
-        headers: {
-          authorization: `Bearer ${token}`,
-          'content-type': 'application/json',
+      const response = await send(
+        `${baseUrl}${route}`,
+        {
+          method: 'POST',
+          headers: {
+            authorization: `Bearer ${token}`,
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify(body),
         },
-        body: JSON.stringify(body),
-      });
+        waitMsOf(body),
+      );
       return mapReply(response.status, await readBody(response));
     },
     get: async (route, query, token) => {
