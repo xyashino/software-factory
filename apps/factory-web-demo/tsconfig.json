@@ -1,0 +1,7 @@
+{
+  "extends": "@repo/typescript-config/astro.json",
+  "compilerOptions": {
+    "types": ["node"]
+  },
+  "include": ["src", "test", "vitest.config.ts"]
+}

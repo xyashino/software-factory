@@ -1,0 +1,73 @@
+---
+import Base from '../../layouts/Base.astro';
+import { failureResponse, textResponse } from '../../lib/page-error';
+import { createSessionClient } from '../../lib/session';
+import { findCell, formatLease, formatTimestamp } from '../../lib/view-model';
+
+const session = await createSessionClient(process.env).catch(failureResponse);
+if (session instanceof Response) return session;
+const { client, projectId } = session;
+const cellId = Astro.params.cellId ?? '';
+const data = await Promise.all([
+  client.listCells(),
+  client.listWorkOrders({ projectId }),
+])
+  .then(([cells, orders]) => ({ cells, orders }))
+  .catch(failureResponse);
+if (data instanceof Response) return data;
+
+const cell = findCell(data.cells.cells, cellId);
+if (cell === undefined) return textResponse(404, 'not found');
+
+const pinnedOrders = data.orders.items.filter(
+  (order) => order.pinnedCellId === cell.cellId,
+);
+const activeOrders = data.orders.items.filter(
+  (order) => order.activeCellId === cell.cellId,
+);
+const now = Date.now();
+---
+
+<Base>
+  <h1>{cell.name}</h1>
+  <dl>
+    <dt>Cell ID</dt>
+    <dd>{cell.cellId}</dd>
+    <dt>Project</dt>
+    <dd>{cell.projectId}</dd>
+    <dt>Status</dt>
+    <dd>{cell.status}</dd>
+    <dt>Allowed lines</dt>
+    <dd>{cell.allowedLines.join(', ')}</dd>
+    <dt>Runners</dt>
+    <dd>{cell.runners.join(', ')}</dd>
+    <dt>Active job</dt>
+    <dd>{cell.activeJobId ?? '-'}</dd>
+    <dt>Last heartbeat</dt>
+    <dd>{formatTimestamp(cell.lastHeartbeatAt)}</dd>
+    <dt>Lease expiry</dt>
+    <dd>{formatLease(cell.leaseExpiresAt, now) ?? '-'}</dd>
+  </dl>
+
+  <h2>Pinned work orders</h2>
+  <ul>
+    {
+      pinnedOrders.map((order) => (
+        <li>
+          <a href={`/work-orders/${encodeURIComponent(order.orderId)}`}>{order.slug}</a>
+        </li>
+      ))
+    }
+  </ul>
+
+  <h2>Active work orders</h2>
+  <ul>
+    {
+      activeOrders.map((order) => (
+        <li>
+          <a href={`/work-orders/${encodeURIComponent(order.orderId)}`}>{order.slug}</a>
+        </li>
+      ))
+    }
+  </ul>
+</Base>

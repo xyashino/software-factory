@@ -1,0 +1,44 @@
+---
+import Base from '../layouts/Base.astro';
+import { failureResponse } from '../lib/page-error';
+import { createSessionClient } from '../lib/session';
+import { formatTimestamp } from '../lib/view-model';
+
+const session = await createSessionClient(process.env).catch(failureResponse);
+if (session instanceof Response) return session;
+const { client, projectId } = session;
+const reply = await client
+  .listIncidents({ projectId, status: 'open' })
+  .catch(failureResponse);
+if (reply instanceof Response) return reply;
+---
+
+<Base>
+  <h1>Open incidents</h1>
+  <table>
+    <thead>
+      <tr>
+        <th>Incident</th>
+        <th>Work order</th>
+        <th>Reason</th>
+        <th>Triage owner</th>
+        <th>Created</th>
+      </tr>
+    </thead>
+    <tbody>
+      {
+        reply.items.map((incident) => (
+          <tr>
+            <td>{incident.incidentId}</td>
+            <td>
+              <a href={`/work-orders/${encodeURIComponent(incident.orderId)}`}>{incident.orderId}</a>
+            </td>
+            <td>{incident.reason}</td>
+            <td>{incident.triageOwner}</td>
+            <td>{formatTimestamp(incident.createdAt)}</td>
+          </tr>
+        ))
+      }
+    </tbody>
+  </table>
+</Base>

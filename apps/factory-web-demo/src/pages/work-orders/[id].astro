@@ -1,0 +1,121 @@
+---
+import Base from '../../layouts/Base.astro';
+import { failureResponse } from '../../lib/page-error';
+import { createSessionClient } from '../../lib/session';
+import { isWorkOrderState } from '../../lib/view-model';
+import { canCancel, canResume } from '../../lib/write-guard';
+
+const session = await createSessionClient(process.env).catch(failureResponse);
+if (session instanceof Response) return session;
+const { client } = session;
+const reply = await client
+  .getWorkOrder(decodeURIComponent(Astro.params.id ?? ''))
+  .catch(failureResponse);
+if (reply instanceof Response) return reply;
+const { order, steps, jobs, incidents } = reply;
+const state = isWorkOrderState(order.state) ? order.state : undefined;
+const actionPath = (action: string): string =>
+  `/actions/work-orders/${encodeURIComponent(order.orderId)}/${action}`;
+const notice = Astro.url.searchParams.get('notice');
+const error = Astro.url.searchParams.get('error');
+---
+
+<Base>
+  <h1>{order.slug}</h1>
+  <p>{order.title}</p>
+  {notice !== null && <p role="status">{notice}</p>}
+  {error !== null && <p role="alert">{error}</p>}
+  {
+    state !== undefined && canResume(state) && (
+      <form method="post" action={actionPath('resume')}>
+        <button type="submit">Resume</button>
+      </form>
+    )
+  }
+  {
+    state !== undefined && canCancel(state) && (
+      <form method="post" action={actionPath('cancel')}>
+        <label>
+          <input type="checkbox" name="confirm" value="yes" required />
+          Confirm: cancel this work order (cannot be undone)
+        </label>
+        <button type="submit">Delete</button>
+      </form>
+    )
+  }
+  <dl>
+    <dt>State</dt>
+    <dd>{order.state}</dd>
+    <dt>Step index</dt>
+    <dd>{order.currentStepIndex}</dd>
+    <dt>Branch</dt>
+    <dd>{order.branch}</dd>
+    <dt>Line</dt>
+    <dd>{order.lineName}</dd>
+    <dt>Pinned cell</dt>
+    <dd>{order.pinnedCellId ?? '-'}</dd>
+    <dt>Active cell</dt>
+    <dd>{order.activeCellId ?? '-'}</dd>
+    <dt>Active job</dt>
+    <dd>{order.activeJobId ?? '-'}</dd>
+  </dl>
+
+  <h2>Steps</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Index</th>
+        <th>Station</th>
+        <th>Kind</th>
+        <th>State</th>
+      </tr>
+    </thead>
+    <tbody>
+      {
+        steps.map((step) => (
+          <tr>
+            <td>{step.stepIndex}</td>
+            <td>{step.stationId}</td>
+            <td>{step.kind}</td>
+            <td>{step.state}</td>
+          </tr>
+        ))
+      }
+    </tbody>
+  </table>
+
+  <h2>Jobs</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Job</th>
+        <th>Kind</th>
+        <th>Status</th>
+        <th>Cell</th>
+      </tr>
+    </thead>
+    <tbody>
+      {
+        jobs.map((job) => (
+          <tr>
+            <td>{job.jobId}</td>
+            <td>{job.kind}</td>
+            <td>{job.status}</td>
+            <td>{job.cellId ?? '-'}</td>
+          </tr>
+        ))
+      }
+    </tbody>
+  </table>
+
+  <h2>Incidents</h2>
+  <ul>
+    {
+      incidents.map((incident) => (
+        <li>
+          {incident.incidentId}: {incident.reason} ({incident.status})
+        </li>
+      ))
+    }
+  </ul>
+</Base>

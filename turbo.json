@@ -38,7 +38,7 @@
       ]
     },
     "test": {
-      "dependsOn": ["^build"],
+      "dependsOn": ["^build", "build"],
       "env": [
         "FACTORY_PROPERTY_RUNS",
         "PATH",
