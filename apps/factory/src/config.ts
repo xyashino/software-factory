@@ -12,3 +12,5 @@ export const HEARTBEAT_INTERVAL_MS = 10_000;
 export const SELF_FENCE_MS = 45_000;
 export const LEASE_TTL_MS = 60_000;
 export const MAX_BODY_BYTES = 1024 * 1024;
+export const REPO_CONFIG_PATH = '.factory/config.json';
+export const DEFAULT_TODO_DIR = 'todos';
