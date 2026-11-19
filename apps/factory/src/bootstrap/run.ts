@@ -9,6 +9,7 @@ import { EXIT, type ExitCode } from '../domain/exit-codes';
 import { buildContext, type Mode } from './context';
 
 const NO_TOKEN_MESSAGE = 'No token stored, cannot run this procedure';
+const SUPERVISOR: Access = { kind: 'supervisor' };
 
 export type RunResult<O> =
   | { kind: 'ok'; value: O }
@@ -29,20 +30,9 @@ const exitCodeOf = (error: unknown): ExitCode | undefined => {
   return undefined;
 };
 
-export const run = async <I, O>(
-  procedure: Procedure<I, O>,
-  input: unknown,
-  mode: Mode,
-  build: Build = buildContext,
-): Promise<RunResult<O>> => {
+const settle = async <O>(attempt: () => Promise<O>): Promise<RunResult<O>> => {
   try {
-    const ports = build(mode);
-    const token = await ports.tokens.read();
-    if (token === null) {
-      throw new Refused(NO_TOKEN_MESSAGE);
-    }
-    const ctx: Context<Access> = { ...ports, token, principal: token };
-    return { kind: 'ok', value: await procedure.execute(input, ctx) };
+    return { kind: 'ok', value: await attempt() };
   } catch (error) {
     const exitCode = exitCodeOf(error);
     if (exitCode === undefined) {
@@ -55,3 +45,32 @@ export const run = async <I, O>(
     };
   }
 };
+
+export const run = <I, O>(
+  procedure: Procedure<I, O>,
+  input: unknown,
+  mode: Mode,
+  build: Build = buildContext,
+): Promise<RunResult<O>> =>
+  settle(async () => {
+    const ports = build(mode);
+    const token = await ports.tokens.read();
+    if (token === null) {
+      throw new Refused(NO_TOKEN_MESSAGE);
+    }
+    const ctx: Context<Access> = { ...ports, token, principal: token };
+    return procedure.execute(input, ctx);
+  });
+
+export const runWithoutToken = <I, O>(
+  procedure: Procedure<I, O>,
+  input: unknown,
+  ports: Ports,
+): Promise<RunResult<O>> =>
+  settle(() =>
+    procedure.execute(input, {
+      ...ports,
+      token: SUPERVISOR,
+      principal: SUPERVISOR,
+    }),
+  );

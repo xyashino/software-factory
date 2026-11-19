@@ -1,10 +1,9 @@
-import type { Access } from '../../domain/access';
-
 export interface ServerPort {
-  call(route: string, body: unknown, token: Access): Promise<unknown>;
+  call(route: string, body: unknown, token: string): Promise<unknown>;
   stream(
     route: string,
     query: Record<string, string>,
-    token: Access,
+    token: string,
   ): AsyncIterable<unknown>;
+  probe(): Promise<boolean>;
 }
