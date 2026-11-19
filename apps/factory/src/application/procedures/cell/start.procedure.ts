@@ -1,3 +1,4 @@
+import { drainStateOf } from '../../../cell/drain-signal';
 import { JOIN_TOKEN_ENV, LINES_DIR, REPO_CONFIG_PATH } from '../../../config';
 import { joinPath } from '../../../domain/common/path';
 import { ArgumentError, Refused } from '../../core/errors';
@@ -17,6 +18,8 @@ export interface StartInput {
   joinToken: string | undefined;
   signal: AbortSignal;
 }
+
+export type StartOutcome = 'superseded' | 'stopped';
 
 const cellNameOf = (raw: string): string => {
   const slug = raw
@@ -45,7 +48,7 @@ const lineNamesOf = async (ports: Ports, dir: string): Promise<string[]> =>
 export const startCell = async (
   ports: Ports,
   input: StartInput,
-): Promise<void> => {
+): Promise<StartOutcome> => {
   const runners = await installedRunnersOf(ports);
   if (runners.length === 0) {
     throw new Refused('no runner installed on this machine');
@@ -86,6 +89,8 @@ export const startCell = async (
     projectId,
     repoRoot: input.repoRoot,
     signal: input.signal,
+    drain: drainStateOf(),
   };
   await claimLoop(runtime, null);
+  return runtime.drain.superseded ? 'superseded' : 'stopped';
 };

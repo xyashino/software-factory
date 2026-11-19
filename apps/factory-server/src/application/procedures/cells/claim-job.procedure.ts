@@ -384,12 +384,19 @@ const attemptClaim = (ctx: AuthenticatedContext, cellId: CellId) => {
     return {
       job: claimed === undefined ? null : toClaimedJob(claimed, leaseExpiresAt),
       claimable,
+      draining: cell.status === 'draining',
       records: flushTransitions(tx, log),
     };
   });
   publishCommitted(ctx, outcome.records);
   return outcome;
 };
+
+const claimReply = (attempt: ReturnType<typeof attemptClaim>) => ({
+  code: 200 as const,
+  job: attempt.job,
+  signals: attempt.draining ? (['drain'] as const) : [],
+});
 
 export const claimJobProcedure = scopedProcedure(['cell:worker'])(
   claimJobContract,
@@ -399,7 +406,7 @@ export const claimJobProcedure = scopedProcedure(['cell:worker'])(
   const waitMs = Math.min(input.body?.waitMs ?? 0, CLAIM_WAIT_MS);
   const first = attemptClaim(ctx, cellId);
   if (first.job !== null || waitMs === 0 || !first.claimable)
-    return { code: 200 as const, job: first.job };
+    return claimReply(first);
   await ctx.claimWaiters.waitForWake(waitMs, ctx.signal);
-  return { code: 200 as const, job: attemptClaim(ctx, cellId).job };
+  return claimReply(attemptClaim(ctx, cellId));
 });

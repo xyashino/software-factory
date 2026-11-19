@@ -95,6 +95,7 @@ export const claimJobContract = {
     200: z.object({
       code: z.literal(200),
       job: claimedJobDto.nullable(),
+      signals: z.array(z.enum(['drain'])),
     }),
   },
 };

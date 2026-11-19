@@ -1,5 +1,6 @@
 import type { z } from 'zod';
 import { startHeartbeat } from '../../../cell/heartbeat';
+import { observeDrain } from '../../../cell/drain-signal';
 import {
   HEARTBEAT_INTERVAL_MS,
   LINES_DIR,
@@ -11,6 +12,7 @@ import { transitionJobContract } from '../../../contracts/jobs.contract';
 import { operatorRequest } from '../../../contracts/operator.contract';
 import { commandIdOf } from '../../../domain/cell/command-id';
 import type { OperatorOutcome } from '../../../domain/cell/cell-loop';
+import { drainPolicy } from '../../../domain/cell/drain-policy';
 import { toJobId } from '../../../domain/common/brand';
 import { joinPath } from '../../../domain/common/path';
 import { factoryBranchOf, slugOf } from '../../../domain/git/branch-names';
@@ -22,6 +24,7 @@ import {
 } from './cell-runtime';
 import { checkpointStation } from './checkpoint.procedure';
 import { deliverWorkOrder } from './deliver.procedure';
+import { leaveCell } from './leave.procedure';
 
 const HEARTBEATS_ROUTE = '/api/v1/cells/heartbeats';
 const LINE_SUFFIX = '.yml';
@@ -45,7 +48,8 @@ type StepLine = LineSnapshot['stations'][number];
 type RunEnd =
   | { kind: 'operator'; outcome: OperatorOutcome }
   | { kind: 'exited'; exitCode: number }
-  | { kind: 'aborted' };
+  | { kind: 'aborted' }
+  | { kind: 'drain-force' };
 
 interface Launch {
   command: string;
@@ -342,6 +346,9 @@ const finish = async (
   switch (end.kind) {
     case 'aborted':
       return null;
+    case 'drain-force':
+      await leaveCell(runtime, job);
+      return null;
     case 'exited':
       return finishWithFail(
         runtime,
@@ -477,17 +484,33 @@ const execute = async (
       FACTORY_CYCLE_TOKEN: cycleToken,
     },
   });
+  let forced = false;
   const heartbeat = startHeartbeat({
     clock: ports.clock,
     intervalMs: HEARTBEAT_INTERVAL_MS,
-    beat: async () =>
-      heartbeatCellContract.out[200].parse(
+    beat: async () => {
+      const { signals } = heartbeatCellContract.out[200].parse(
         await ports.server.call(
           HEARTBEATS_ROUTE,
           { jobId: job.jobId, epoch: job.epoch },
           runtime.session.sessionToken,
         ),
-      ).signals,
+      );
+      observeDrain(runtime.drain, signals);
+      if (
+        !forced &&
+        drainPolicy({
+          jobHeld: true,
+          force: runtime.drain.force,
+          stationFinished: false,
+        }) === 'abort_then_leave'
+      ) {
+        forced = true;
+        end.resolve({ kind: 'drain-force' });
+        void ports.runner.abort(handle);
+      }
+      return signals;
+    },
     onAbort: () => {
       end.resolve({ kind: 'aborted' });
       void ports.runner.abort(handle);

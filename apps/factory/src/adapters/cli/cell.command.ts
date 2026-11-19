@@ -6,10 +6,13 @@ import { JOIN_TOKEN_ENV } from '../../config';
 import { startCell } from '../../application/procedures/cell/start.procedure';
 import { listCells } from '../../application/procedures/cell/list.procedure';
 import { revokeCell } from '../../application/procedures/cell/revoke.procedure';
+import { stopCell } from '../../application/procedures/cell/stop.procedure';
 import { EXIT } from '../../domain/exit-codes';
 import { printJson, printLine, printTable, reportFailure } from './output';
 
 const HEADERS = ['id', 'project', 'state', 'active job', 'last heartbeat'];
+const SUPERSEDED_LINE =
+  'cell left: the server had already moved its job, nothing handed over';
 
 const orDash = (value: string | null): string => value ?? '-';
 
@@ -29,6 +32,18 @@ const runStart = async (): Promise<number> => {
       signal: controller.signal,
     }),
   );
+  if (result.kind === 'ok' && result.value === 'superseded') {
+    printLine(SUPERSEDED_LINE);
+  }
+  return reportFailure(result);
+};
+
+const runStop = async (id: string, force: boolean): Promise<number> => {
+  const result = await run(stopCell, { id, force }, 'supervisor');
+  if (result.kind === 'ok') {
+    printLine(`cell ${result.value.cellId} ${result.value.status}`);
+    return EXIT.ok;
+  }
   return reportFailure(result);
 };
 
@@ -83,6 +98,25 @@ const listCommand = defineCommand({
   },
 });
 
+const stopCommand = defineCommand({
+  meta: {
+    name: 'stop',
+    description:
+      'Drain a Cell: it finishes its station, then leaves (returns at once)',
+  },
+  args: {
+    id: { type: 'string', required: true, description: 'Cell id' },
+    force: {
+      type: 'boolean',
+      default: false,
+      description: 'Abort the running station and hand its Job over now',
+    },
+  },
+  run: async ({ args }) => {
+    process.exitCode = await runStop(args.id, args.force);
+  },
+});
+
 const revokeCommand = defineCommand({
   meta: { name: 'revoke', description: 'Revoke a Cell (needs --yes)' },
   args: {
@@ -106,6 +140,7 @@ export const cellCommand = defineCommand({
   subCommands: {
     start: startCommand,
     list: listCommand,
+    stop: stopCommand,
     revoke: revokeCommand,
   },
 });
