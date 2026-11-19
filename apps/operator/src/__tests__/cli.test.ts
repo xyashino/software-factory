@@ -75,6 +75,20 @@ describe('operator CLI', () => {
     });
   });
 
+  it('exits 1 with the Cell rule text when the Cell refuses the verb', async () => {
+    const refusing = await startStubCell({
+      status: 409,
+      body: '{"ok":false,"code":"stale_epoch","message":"epoch moved on"}',
+    });
+
+    const code = await runCli(['pong'], io(cellEnv(refusing.url)), verbs);
+    await refusing.close();
+
+    expect(code).toBe(1);
+    expect(err).toEqual(['stale_epoch: epoch moved on']);
+    expect(refusing.requests).toHaveLength(1);
+  });
+
   it('refuses an unknown verb with exit 2 and no request', async () => {
     const code = await runCli(['launch'], io(cellEnv(cell.url)), verbs);
 
