@@ -1,8 +1,11 @@
 #!/usr/bin/env bun
 import { defineCommand, runCommand, showUsage } from 'citty';
+import { incidentCommand } from './adapters/cli/incident.command';
+import { orderCommand } from './adapters/cli/order.command';
 import { queueCommand } from './adapters/cli/queue.command';
 import { serverCommand } from './adapters/cli/server.command';
 import { todosCommand } from './adapters/cli/todos.command';
+import { watchCommand } from './adapters/cli/watch.command';
 import { EXIT } from './domain/exit-codes';
 
 const HELP_FLAGS = ['--help', '-h'];
@@ -17,6 +20,9 @@ const main = defineCommand({
     server: serverCommand,
     todos: todosCommand,
     queue: queueCommand,
+    incident: incidentCommand,
+    order: orderCommand,
+    watch: watchCommand,
   },
 });
 
