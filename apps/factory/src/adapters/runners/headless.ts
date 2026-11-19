@@ -63,5 +63,6 @@ export const createHeadlessRunner = (): RunnerPort => {
       runs.delete(handle.id);
       return { exitCode };
     },
+    interactiveAvailable: async () => false,
   };
 };
