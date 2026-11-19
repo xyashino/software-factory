@@ -1,6 +1,7 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
+import { createCellStateFile } from '../adapters/fs/cell-state';
 import { createPidFile } from '../adapters/fs/pid-file';
 import { createTodoFiles } from '../adapters/fs/todo-files';
 import { createTokenFile } from '../adapters/fs/token-file';
@@ -8,7 +9,7 @@ import { createServerClient } from '../adapters/http/server-client';
 import { createProcessAdapter } from '../adapters/process/spawn-server';
 import { createSystemClock } from '../adapters/process/system-clock';
 import type { Ports } from '../application/core/procedure';
-import { DEFAULT_FACTORY_URL } from '../config';
+import { CELL_STATE_PATH, DEFAULT_FACTORY_URL } from '../config';
 
 export type Mode = 'supervisor' | 'cell' | 'operator';
 
@@ -26,6 +27,7 @@ export const buildContext = (): Ports => ({
     readText: async (path) => readFileSync(path, 'utf8'),
     writeText: notWired,
     exists: async (path) => existsSync(path),
+    list: async (dir) => (existsSync(dir) ? readdirSync(dir) : []),
     readStdin: notWired,
   },
   todoFiles: createTodoFiles(),
@@ -36,4 +38,5 @@ export const buildContext = (): Ports => ({
   process: createProcessAdapter(),
   pidFile: createPidFile(),
   clock: createSystemClock(),
+  cellState: createCellStateFile(resolve(process.cwd(), CELL_STATE_PATH)),
 });

@@ -30,7 +30,9 @@ const exitCodeOf = (error: unknown): ExitCode | undefined => {
   return undefined;
 };
 
-const settle = async <O>(attempt: () => Promise<O>): Promise<RunResult<O>> => {
+export const settle = async <O>(
+  attempt: () => Promise<O>,
+): Promise<RunResult<O>> => {
   try {
     return { kind: 'ok', value: await attempt() };
   } catch (error) {

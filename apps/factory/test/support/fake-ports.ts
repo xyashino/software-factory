@@ -2,7 +2,7 @@ import type { Ports, Procedure } from '../../src/application/core/procedure';
 import type { Access } from '../../src/domain/access';
 
 export interface ServerCall {
-  method: 'GET' | 'POST';
+  method: 'GET' | 'POST' | 'DELETE';
   route: string;
   query?: Record<string, string>;
   body?: unknown;
@@ -51,6 +51,8 @@ export const createFakePorts = (options: FakeOptions = {}): FakePorts => {
         record({ method: 'POST', route, body, token }),
       get: async (route, query, token) =>
         record({ method: 'GET', route, query, token }),
+      remove: async (route, token) =>
+        record({ method: 'DELETE', route, token }),
       stream: unused,
       probe: async () => true,
     },
@@ -63,6 +65,7 @@ export const createFakePorts = (options: FakeOptions = {}): FakePorts => {
       },
       writeText: unused,
       exists: async () => config !== null,
+      list: unused,
       readStdin: unused,
     },
     todoFiles: {
@@ -90,6 +93,7 @@ export const createFakePorts = (options: FakeOptions = {}): FakePorts => {
     },
     pidFile: { read: unused, write: unused, remove: unused },
     clock: { now: unused, sleep: unused },
+    cellState: { read: async () => null, write: unused },
   };
   return { ports, calls, writes };
 };

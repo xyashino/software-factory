@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
 import { defineCommand, runCommand, showUsage } from 'citty';
+import { cellCommand } from './adapters/cli/cell.command';
 import { incidentCommand } from './adapters/cli/incident.command';
 import { operatorCommand } from './adapters/cli/operator.command';
 import { orderCommand } from './adapters/cli/order.command';
@@ -25,6 +26,7 @@ const main = defineCommand({
     order: orderCommand,
     watch: watchCommand,
     operator: operatorCommand,
+    cell: cellCommand,
   },
 });
 

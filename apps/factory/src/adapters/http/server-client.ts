@@ -58,6 +58,13 @@ export const createServerClient = ({
       });
       return mapReply(response.status, await readBody(response));
     },
+    remove: async (route, token) => {
+      const response = await send(`${baseUrl}${route}`, {
+        method: 'DELETE',
+        headers: { authorization: `Bearer ${token}` },
+      });
+      return mapReply(response.status, await readBody(response));
+    },
     stream: async function* (route, query, token, signal) {
       let response: Response;
       try {
