@@ -5,6 +5,7 @@
 node_modules/
 .turbo/
 dist/
+.astro/
 coverage/
 .worktrees/
 .boss.lock
