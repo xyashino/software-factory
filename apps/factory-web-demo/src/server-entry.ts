@@ -1,2 +1,3 @@
-import './lib/startup';
-export { handler, options, startServer } from '@astrojs/node/server.js';
+await import('./lib/startup');
+export const { handler, options, startServer } =
+  await import('@astrojs/node/server.js');

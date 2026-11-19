@@ -4,7 +4,9 @@ import { failureResponse } from '../lib/page-error';
 import { createSessionClient } from '../lib/session';
 import { countByState } from '../lib/view-model';
 
-const { client, projectId } = createSessionClient(process.env);
+const session = await createSessionClient(process.env).catch(failureResponse);
+if (session instanceof Response) return session;
+const { client, projectId } = session;
 const overview = await Promise.all([
   client.listCells(),
   client.listWorkOrders({ projectId }),

@@ -1,3 +1,3 @@
-import { loadConfig } from './config';
+import { startSession } from './session';
 
-loadConfig(process.env);
+await startSession(process.env);

@@ -9,7 +9,9 @@ if (stateParam !== null && !isWorkOrderState(stateParam)) {
   return textResponse(400, 'unknown state');
 }
 
-const { client, projectId } = createSessionClient(process.env);
+const session = await createSessionClient(process.env).catch(failureResponse);
+if (session instanceof Response) return session;
+const { client, projectId } = session;
 const reply = await client
   .listWorkOrders({ projectId, state: stateParam ?? undefined })
   .catch(failureResponse);
