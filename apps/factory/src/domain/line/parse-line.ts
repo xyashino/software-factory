@@ -12,6 +12,7 @@ const stationSchema = z.looseObject({
   id: z.string().trim().min(1),
   kind: z.string().trim().min(1),
   requiredFiles: z.array(z.string().trim().min(1)).default([]),
+  runner: z.string().trim().min(1).optional(),
   onFail: onFailSchema.optional(),
 });
 
@@ -25,6 +26,7 @@ export interface LineStation {
   stepIndex: number;
   kind: string;
   requiredFiles: string[];
+  runner: string | null;
   maxAttempts: number;
   onFailRetryStationId: string | null;
 }
@@ -42,6 +44,7 @@ const toStation = (
   stepIndex,
   kind: station.kind,
   requiredFiles: station.requiredFiles,
+  runner: station.runner ?? null,
   maxAttempts: station.onFail?.max ?? DEFAULT_MAX_ATTEMPTS,
   onFailRetryStationId: station.onFail?.retry ?? null,
 });

@@ -26,7 +26,6 @@ const runStart = async (): Promise<number> => {
       repoRoot: process.cwd(),
       cellName: hostname(),
       joinToken: process.env[JOIN_TOKEN_ENV],
-      runner: null,
       signal: controller.signal,
     }),
   );

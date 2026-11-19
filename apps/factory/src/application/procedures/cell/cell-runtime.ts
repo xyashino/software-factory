@@ -8,18 +8,11 @@ const RETRY_DELAYS_MS = [200, 400, 800];
 
 export type ClaimedJob = z.infer<typeof claimedJobDto>;
 
-export interface RunnerLaunch {
-  name: string;
-  command: string;
-  args: string[];
-}
-
 export interface CellRuntime {
   ports: Ports;
   session: CellSession;
   projectId: string;
   repoRoot: string;
-  runner: RunnerLaunch;
   signal: AbortSignal;
 }
 

@@ -6,6 +6,8 @@ import { createPidFile } from '../adapters/fs/pid-file';
 import { createTodoFiles } from '../adapters/fs/todo-files';
 import { createTokenFile } from '../adapters/fs/token-file';
 import { createServerClient } from '../adapters/http/server-client';
+import { createRunnerCatalog } from '../adapters/runners/catalog';
+import { createHeadlessRunner } from '../adapters/runners/headless';
 import { createProcessAdapter } from '../adapters/process/spawn-server';
 import { createSystemClock } from '../adapters/process/system-clock';
 import type { Ports } from '../application/core/procedure';
@@ -18,6 +20,11 @@ const TOKEN_PATH = join(homedir(), '.config', 'factory', 'token');
 const notWired = (): never => {
   throw new Error('port not wired');
 };
+
+const processPort = createProcessAdapter();
+
+const binaryOnPath = async (binary: string): Promise<boolean> =>
+  (await processPort.run('which', [binary], process.cwd())).exitCode === 0;
 
 export const buildContext = (): Ports => ({
   server: createServerClient({
@@ -33,9 +40,10 @@ export const buildContext = (): Ports => ({
   todoFiles: createTodoFiles(),
   tokens: createTokenFile(TOKEN_PATH),
   operator: { open: notWired, close: notWired },
-  runner: { start: notWired, abort: notWired, wait: notWired },
+  runner: createHeadlessRunner(),
+  runners: createRunnerCatalog(binaryOnPath),
   git: { currentBranch: notWired, isClean: notWired },
-  process: createProcessAdapter(),
+  process: processPort,
   pidFile: createPidFile(),
   clock: createSystemClock(),
   cellState: createCellStateFile(resolve(process.cwd(), CELL_STATE_PATH)),

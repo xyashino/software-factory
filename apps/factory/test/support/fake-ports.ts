@@ -84,6 +84,11 @@ export const createFakePorts = (options: FakeOptions = {}): FakePorts => {
     },
     operator: { open: unused, close: unused },
     runner: { start: unused, abort: unused, wait: unused },
+    runners: {
+      names: () => [],
+      isInstalled: async () => false,
+      commandLine: () => undefined,
+    },
     git: { currentBranch: unused, isClean: unused },
     process: {
       run: unused,

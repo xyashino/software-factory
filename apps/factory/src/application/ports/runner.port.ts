@@ -3,6 +3,7 @@ export interface RunSpec {
   args: readonly string[];
   cwd: string;
   env: Readonly<Record<string, string>>;
+  logPath: string;
 }
 
 export interface RunHandle {

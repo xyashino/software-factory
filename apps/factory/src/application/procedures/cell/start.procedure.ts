@@ -4,7 +4,7 @@ import { ArgumentError, Refused } from '../../core/errors';
 import type { Ports } from '../../core/procedure';
 import { readProjectId } from '../../core/repo-access';
 import { claimLoop } from './claim-loop.procedure';
-import type { CellRuntime, RunnerLaunch } from './cell-runtime';
+import type { CellRuntime } from './cell-runtime';
 import { enrollCell } from './enroll.procedure';
 import { helloCell } from './hello.procedure';
 
@@ -15,7 +15,6 @@ export interface StartInput {
   repoRoot: string;
   cellName: string;
   joinToken: string | undefined;
-  runner: RunnerLaunch | null;
   signal: AbortSignal;
 }
 
@@ -25,6 +24,16 @@ const cellNameOf = (raw: string): string => {
     .replace(/[^a-z0-9-]+/g, '-')
     .replace(/^-+|-+$/g, '');
   return slug.length > 0 ? slug : FALLBACK_CELL_NAME;
+};
+
+const installedRunnersOf = async (ports: Ports): Promise<string[]> => {
+  const installed: string[] = [];
+  for (const name of ports.runners.names()) {
+    if (await ports.runners.isInstalled(name)) {
+      installed.push(name);
+    }
+  }
+  return installed;
 };
 
 const lineNamesOf = async (ports: Ports, dir: string): Promise<string[]> =>
@@ -37,8 +46,9 @@ export const startCell = async (
   ports: Ports,
   input: StartInput,
 ): Promise<void> => {
-  if (input.runner === null) {
-    throw new Refused('no runner registered, runners arrive with cli-09');
+  const runners = await installedRunnersOf(ports);
+  if (runners.length === 0) {
+    throw new Refused('no runner installed on this machine');
   }
   const projectId = await readProjectId(
     ports,
@@ -51,7 +61,6 @@ export const startCell = async (
   if (allowedLines.length === 0) {
     throw new ArgumentError(`no line files in ${LINES_DIR}`);
   }
-  const runners = [input.runner.name];
   let session = await ports.cellState.read();
   if (session === null) {
     if (input.joinToken === undefined || input.joinToken === '') {
@@ -76,7 +85,6 @@ export const startCell = async (
     session,
     projectId,
     repoRoot: input.repoRoot,
-    runner: input.runner,
     signal: input.signal,
   };
   await claimLoop(runtime, null);

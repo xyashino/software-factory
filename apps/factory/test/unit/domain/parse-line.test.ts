@@ -9,6 +9,7 @@ const LINE = [
   '  - id: build',
   '    kind: operator',
   '    requiredFiles: [report.md, commit.txt]',
+  '    runner: claude',
   '    onFail:',
   '      retry: build',
   '      max: 3',
@@ -28,6 +29,7 @@ describe('line snapshot', () => {
       stepIndex: 1,
       kind: 'operator',
       requiredFiles: ['report.md', 'commit.txt'],
+      runner: 'claude',
       maxAttempts: 3,
       onFailRetryStationId: 'build',
     });

@@ -44,12 +44,17 @@ const HELLO_ROUTE = '/api/v1/cells/hello';
 const CLAIMS_ROUTE = '/api/v1/cells/claims';
 const HEARTBEATS_ROUTE = '/api/v1/cells/heartbeats';
 const CELLS_ROUTE = '/api/v1/cells';
-const RUNNER = { name: 'fake', command: 'fake-runner', args: [] };
+const RUNNER = 'claude';
+const INSTALLED_RUNNERS = [RUNNER, 'codex'];
 const FEATURE_LINE = [
   'name: feature',
   'stations:',
+  '  - id: plan',
+  '    kind: operator',
+  '    runner: claude',
   '  - id: build',
   '    kind: operator',
+  '    runner: claude',
   '    onFail:',
   '      retry: build',
   '      max: 3',
@@ -72,6 +77,7 @@ interface StubServer {
 
 interface Scenario {
   claims: (ClaimedJob | null)[];
+  uninstalled?: string[];
   files?: Record<string, string>;
   session?: CellSession | null;
   joinToken?: string;
@@ -234,6 +240,14 @@ const runScenario = async (scenario: Scenario) => {
     fs: memoryFs(scenario.files ?? baseFiles()),
     cellState: state.port,
     clock: testClock,
+    runners: {
+      names: () => INSTALLED_RUNNERS,
+      isInstalled: async (name) => !(scenario.uninstalled ?? []).includes(name),
+      commandLine: (name, promptFile) => ({
+        command: 'fake-runner',
+        args: [name, promptFile],
+      }),
+    },
     operator: {
       open: async (_jobId, next) => {
         handler = next;
@@ -260,7 +274,6 @@ const runScenario = async (scenario: Scenario) => {
     repoRoot: REPO,
     cellName: 'Dev Box',
     joinToken: scenario.joinToken ?? JOIN_TOKEN,
-    runner: RUNNER,
     signal: controller.signal,
   });
   return { calls: fake.calls, runs, stateWrites: state.writes };
@@ -332,7 +345,7 @@ describe('cell lifecycle', () => {
     expect(JSON.stringify(stateWrites)).not.toContain(JOIN_TOKEN);
     expect(
       bodyOf(calls.find((call) => call.route === HELLO_ROUTE) as ServerCall),
-    ).toMatchObject({ projectId: PROJECT, runners: ['fake'] });
+    ).toMatchObject({ projectId: PROJECT, runners: INSTALLED_RUNNERS });
     expect(actionsOf(calls)).toEqual(['start', 'complete']);
     expect(bodyOf(transitionCalls(calls)[1] as ServerCall).commandId).toBe(
       commandIdOf({
@@ -350,6 +363,26 @@ describe('cell lifecycle', () => {
     expect(runs).toHaveLength(1);
     expect(runs[0]?.env.FACTORY_OPERATOR_URL).toBe(OPERATOR_URL);
     expect(runs[0]?.env.FACTORY_CYCLE_TOKEN).toMatch(/^[0-9a-f]{32}$/);
+    expect(runs[0]).toMatchObject({
+      command: 'fake-runner',
+      args: [RUNNER, '.cell/build/prompt.md'],
+      logPath: join(REPO, '.worktrees', 'cli-08', '.cell', 'build', 'step.log'),
+    });
+  });
+
+  it('sends line_unavailable and never starts when the station runner is not installed', async () => {
+    // Arrange
+    const scenario: Scenario = { claims: [job(), null], uninstalled: [RUNNER] };
+
+    // Act
+    const { calls, runs } = await runScenario(scenario);
+
+    // Assert
+    expect(actionsOf(calls)).toEqual(['line_unavailable']);
+    expect(bodyOf(transitionCalls(calls)[0] as ServerCall).detail).toBe(
+      'runner not installed: claude',
+    );
+    expect(runs).toHaveLength(0);
   });
 
   it('reuses the stored session without enrolling again', async () => {
