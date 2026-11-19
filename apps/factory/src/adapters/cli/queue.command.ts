@@ -1,6 +1,6 @@
 import { resolve } from 'node:path';
 import { defineCommand } from 'citty';
-import { type RunResult, run } from '../../bootstrap/run';
+import { run } from '../../bootstrap/run';
 import { REPO_CONFIG_PATH } from '../../config';
 import {
   type QueueAction,
@@ -12,7 +12,7 @@ import {
   listQueue,
 } from '../../application/procedures/queue/list.procedure';
 import { EXIT } from '../../domain/exit-codes';
-import { printError, printJson, printLine } from './output';
+import { printJson, printLine, printTable, reportFailure } from './output';
 
 interface ListFilters {
   state?: string;
@@ -24,36 +24,13 @@ const HEADERS = ['id', 'state', 'line', 'priority', 'plan', 'active cell'];
 
 const cell = (value: string | null): string => value ?? '-';
 
-const reportFailure = <O>(result: RunResult<O>): number => {
-  if (result.kind === 'ok') {
-    return EXIT.ok;
-  }
-  printError(result.message);
-  return result.exitCode;
-};
-
-const padRow = (cells: string[], widths: number[]): string =>
-  cells
-    .map((text, index) => text.padEnd(widths[index] ?? 0))
-    .join('  ')
-    .trimEnd();
-
-const printTable = (rows: string[][]): void => {
-  const widths = HEADERS.map((header, index) =>
-    Math.max(header.length, ...rows.map((row) => (row[index] ?? '').length)),
-  );
-  printLine(padRow(HEADERS, widths));
-  for (const row of rows) {
-    printLine(padRow(row, widths));
-  }
-};
-
 const printList = (result: QueueListResult, json: boolean): void => {
   if (json) {
     printJson(result.rows);
     return;
   }
   printTable(
+    HEADERS,
     result.rows.map((row) => [
       row.orderId,
       row.state,

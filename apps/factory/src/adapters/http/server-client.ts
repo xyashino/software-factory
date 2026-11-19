@@ -1,6 +1,7 @@
 import { Unreachable } from '../../application/core/errors';
 import type { ServerPort } from '../../application/ports/server.port';
 import { mapReply } from './map-reply';
+import { readSseFrames } from './sse-client';
 
 const REQUEST_TIMEOUT_MS = 10_000;
 const PROBE_TIMEOUT_MS = 1_000;
@@ -16,6 +17,11 @@ const readBody = async (response: Response): Promise<string> => {
   } catch {
     throw new Unreachable('server reply could not be read');
   }
+};
+
+const searchOf = (query: Record<string, string>): string => {
+  const search = new URLSearchParams(query).toString();
+  return search.length > 0 ? `?${search}` : '';
 };
 
 export const createServerClient = ({
@@ -46,18 +52,43 @@ export const createServerClient = ({
       return mapReply(response.status, await readBody(response));
     },
     get: async (route, query, token) => {
-      const search = new URLSearchParams(query).toString();
-      const response = await send(
-        `${baseUrl}${route}${search.length > 0 ? `?${search}` : ''}`,
-        {
-          method: 'GET',
-          headers: { authorization: `Bearer ${token}` },
-        },
-      );
+      const response = await send(`${baseUrl}${route}${searchOf(query)}`, {
+        method: 'GET',
+        headers: { authorization: `Bearer ${token}` },
+      });
       return mapReply(response.status, await readBody(response));
     },
-    stream: () => {
-      throw new Error('stream is not wired in this step');
+    stream: async function* (route, query, token, signal) {
+      let response: Response;
+      try {
+        response = await fetchImpl(`${baseUrl}${route}${searchOf(query)}`, {
+          method: 'GET',
+          headers: {
+            authorization: `Bearer ${token}`,
+            accept: 'text/event-stream',
+          },
+          signal,
+        });
+      } catch {
+        if (signal.aborted) {
+          return;
+        }
+        throw new Unreachable(`cannot reach factory server at ${baseUrl}`);
+      }
+      if (!response.ok) {
+        mapReply(response.status, await readBody(response));
+      }
+      if (response.body === null) {
+        throw new Unreachable('server stream has no body');
+      }
+      try {
+        yield* readSseFrames(response.body);
+      } catch {
+        if (signal.aborted) {
+          return;
+        }
+        throw new Unreachable(`stream from ${baseUrl} dropped`);
+      }
     },
     probe: async () => {
       try {

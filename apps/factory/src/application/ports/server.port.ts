@@ -1,3 +1,9 @@
+export interface SseFrame {
+  event: string;
+  id: string | null;
+  data: string;
+}
+
 export interface ServerPort {
   call(route: string, body: unknown, token: string): Promise<unknown>;
   get(
@@ -9,6 +15,7 @@ export interface ServerPort {
     route: string,
     query: Record<string, string>,
     token: string,
-  ): AsyncIterable<unknown>;
+    signal: AbortSignal,
+  ): AsyncIterable<SseFrame>;
   probe(): Promise<boolean>;
 }
