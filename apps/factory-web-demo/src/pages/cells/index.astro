@@ -1,0 +1,41 @@
+---
+import Base from '../../layouts/Base.astro';
+import { failureResponse } from '../../lib/page-error';
+import { createSessionClient } from '../../lib/session';
+import { formatLease } from '../../lib/view-model';
+
+const { client } = createSessionClient(process.env);
+const reply = await client.listCells().catch(failureResponse);
+if (reply instanceof Response) return reply;
+const now = Date.now();
+---
+
+<Base>
+  <h1>Cells</h1>
+  <table>
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Status</th>
+        <th>Allowed lines</th>
+        <th>Active job</th>
+        <th>Lease expiry</th>
+      </tr>
+    </thead>
+    <tbody>
+      {
+        reply.cells.map((cell) => (
+          <tr>
+            <td>
+              <a href={`/cells/${encodeURIComponent(cell.cellId)}`}>{cell.name}</a>
+            </td>
+            <td>{cell.status}</td>
+            <td>{cell.allowedLines.join(', ')}</td>
+            <td>{cell.activeJobId ?? '-'}</td>
+            <td>{formatLease(cell.leaseExpiresAt, now) ?? '-'}</td>
+          </tr>
+        ))
+      }
+    </tbody>
+  </table>
+</Base>

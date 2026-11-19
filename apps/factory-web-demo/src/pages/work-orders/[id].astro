@@ -1,0 +1,92 @@
+---
+import Base from '../../layouts/Base.astro';
+import { failureResponse } from '../../lib/page-error';
+import { createSessionClient } from '../../lib/session';
+
+const { client } = createSessionClient(process.env);
+const reply = await client
+  .getWorkOrder(Astro.params.id ?? '')
+  .catch(failureResponse);
+if (reply instanceof Response) return reply;
+const { order, steps, jobs, incidents } = reply;
+---
+
+<Base>
+  <h1>{order.slug}</h1>
+  <p>{order.title}</p>
+  <dl>
+    <dt>State</dt>
+    <dd>{order.state}</dd>
+    <dt>Step index</dt>
+    <dd>{order.currentStepIndex}</dd>
+    <dt>Branch</dt>
+    <dd>{order.branch}</dd>
+    <dt>Line</dt>
+    <dd>{order.lineName}</dd>
+    <dt>Pinned cell</dt>
+    <dd>{order.pinnedCellId ?? '-'}</dd>
+    <dt>Active cell</dt>
+    <dd>{order.activeCellId ?? '-'}</dd>
+    <dt>Active job</dt>
+    <dd>{order.activeJobId ?? '-'}</dd>
+  </dl>
+
+  <h2>Steps</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Index</th>
+        <th>Station</th>
+        <th>Kind</th>
+        <th>State</th>
+      </tr>
+    </thead>
+    <tbody>
+      {
+        steps.map((step) => (
+          <tr>
+            <td>{step.stepIndex}</td>
+            <td>{step.stationId}</td>
+            <td>{step.kind}</td>
+            <td>{step.state}</td>
+          </tr>
+        ))
+      }
+    </tbody>
+  </table>
+
+  <h2>Jobs</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Job</th>
+        <th>Kind</th>
+        <th>Status</th>
+        <th>Cell</th>
+      </tr>
+    </thead>
+    <tbody>
+      {
+        jobs.map((job) => (
+          <tr>
+            <td>{job.jobId}</td>
+            <td>{job.kind}</td>
+            <td>{job.status}</td>
+            <td>{job.cellId ?? '-'}</td>
+          </tr>
+        ))
+      }
+    </tbody>
+  </table>
+
+  <h2>Incidents</h2>
+  <ul>
+    {
+      incidents.map((incident) => (
+        <li>
+          {incident.incidentId}: {incident.reason} ({incident.status})
+        </li>
+      ))
+    }
+  </ul>
+</Base>

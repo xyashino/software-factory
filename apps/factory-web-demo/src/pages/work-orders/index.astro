@@ -1,0 +1,45 @@
+---
+import Base from '../../layouts/Base.astro';
+import { failureResponse, textResponse } from '../../lib/page-error';
+import { createSessionClient } from '../../lib/session';
+import { isWorkOrderState } from '../../lib/view-model';
+
+const stateParam = Astro.url.searchParams.get('state');
+if (stateParam !== null && !isWorkOrderState(stateParam)) {
+  return textResponse(400, 'unknown state');
+}
+
+const { client, projectId } = createSessionClient(process.env);
+const reply = await client
+  .listWorkOrders({ projectId, state: stateParam ?? undefined })
+  .catch(failureResponse);
+if (reply instanceof Response) return reply;
+---
+
+<Base>
+  <h1>Work orders</h1>
+  <table>
+    <thead>
+      <tr>
+        <th>Slug</th>
+        <th>Line</th>
+        <th>State</th>
+        <th>Pinned cell</th>
+      </tr>
+    </thead>
+    <tbody>
+      {
+        reply.items.map((order) => (
+          <tr>
+            <td>
+              <a href={`/work-orders/${encodeURIComponent(order.orderId)}`}>{order.slug}</a>
+            </td>
+            <td>{order.lineName}</td>
+            <td>{order.state}</td>
+            <td>{order.pinnedCellId ?? '-'}</td>
+          </tr>
+        ))
+      }
+    </tbody>
+  </table>
+</Base>
