@@ -156,7 +156,12 @@ describe('read pages', () => {
     expect(pages.map((page) => page.status)).toEqual([
       200, 200, 200, 200, 200, 200,
     ]);
-    expect(pages.some((page) => /<form|<script/.test(page.body))).toBe(false);
+    const readOnlyPages = pages.filter(
+      (_, index) => paths[index] !== '/work-orders/order-1',
+    );
+    expect(readOnlyPages.some((page) => /<form|<script/.test(page.body))).toBe(
+      false,
+    );
   });
 
   it('lists the lease expiry of a busy cell', async () => {

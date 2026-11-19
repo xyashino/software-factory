@@ -26,5 +26,8 @@ const adapter = {
 export default defineConfig({
   output: 'server',
   adapter,
+  // The Node adapter builds request.url from localhost, so Astro's Origin check
+  // rejects same-site POSTs on 127.0.0.1. The action route checks Origin itself.
+  security: { checkOrigin: false },
   server: { host: '127.0.0.1', port: 4321 },
 });
