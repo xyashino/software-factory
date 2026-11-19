@@ -13,7 +13,13 @@ import type {
 import { addMs, isExpired } from '../../../domain/common/time';
 import { Forbidden, NotFound } from '../../core/error-handling';
 import { scopedProcedure } from '../../core/procedure';
-import { requireProject } from '../../orders/order-writes';
+import {
+  flushTransitions,
+  orderTransition,
+  publishCommitted,
+  requireProject,
+  type TransitionLog,
+} from '../../orders/order-writes';
 
 const RESUMABLE_JOB_STATUSES = ['claimed', 'running'] as const;
 
@@ -63,11 +69,25 @@ export const helloCellProcedure = scopedProcedure(['cell:worker'])(
   const body = input.body;
   const now = ctx.clock.now();
 
-  const resumedJob = immediateTx(ctx.db, (tx) => {
+  const outcome = immediateTx(ctx.db, (tx) => {
     const cell = findCell(tx, cellId);
     if (cell === undefined) throw new NotFound(`Cell ${cellId} not found`);
     if (cell.status === 'revoked') throw new Forbidden('Cell is revoked');
     const project = requireProject(tx, body.projectId);
+    const log: TransitionLog = [];
+    const reviving = cell.status === 'left';
+    if (reviving)
+      log.push(
+        orderTransition({
+          projectId: project.projectId,
+          entityType: 'cell',
+          entityId: cellId,
+          fromState: 'left',
+          toState: 'online',
+          actor: { kind: 'cell', id: cellId },
+          at: now,
+        }),
+      );
 
     tx.update(cells)
       .set({
@@ -76,13 +96,19 @@ export const helloCellProcedure = scopedProcedure(['cell:worker'])(
         runnersJson: body.runners,
         localWorktreesJson: body.localWorktrees,
         lastHeartbeatAt: now,
+        status: reviving ? 'online' : cell.status,
       })
       .where(eq(cells.cellId, cellId))
       .run();
 
-    return resumeActiveJob(tx, cell.activeJobId, now);
+    return {
+      resumedJob: resumeActiveJob(tx, cell.activeJobId, now),
+      records: flushTransitions(tx, log),
+    };
   });
+  publishCommitted(ctx, outcome.records);
 
+  const { resumedJob } = outcome;
   return resumedJob === undefined
     ? { code: 200 as const, cellId }
     : { code: 200 as const, cellId, resumedJob };

@@ -24,7 +24,8 @@ const FENCEABLE_JOB_STATUSES = ['claimed', 'running', 'cancelled'] as const;
 const EXTENDABLE_JOB_STATUSES = ['claimed', 'running'] as const;
 const ABORTING_ORDER_STATES = ['paused', 'cancelled'] as const;
 
-type CellSignal = 'abort';
+type CellSignal = 'abort' | 'drain' | 'force';
+type CellRow = typeof cells.$inferSelect;
 type JobRow = typeof jobs.$inferSelect;
 type Heartbeat = {
   leaseExpiresAt: number | null;
@@ -47,6 +48,17 @@ const abortSignals = (tx: DbTx, job: JobRow): CellSignal[] => {
     ? ['abort']
     : [];
 };
+
+const drainSignals = (cell: CellRow): CellSignal[] => {
+  if (cell.status !== 'draining') return [];
+  return cell.drainForce ? ['drain', 'force'] : ['drain'];
+};
+
+const heartbeatSignals = (
+  tx: DbTx,
+  cell: CellRow,
+  job: JobRow,
+): CellSignal[] => [...abortSignals(tx, job), ...drainSignals(cell)];
 
 const recordHeartbeat = (
   tx: DbTx,
@@ -80,7 +92,7 @@ const recordHeartbeat = (
   if (!extendable)
     return {
       leaseExpiresAt: job.leaseExpiresAt,
-      signals: abortSignals(tx, job),
+      signals: heartbeatSignals(tx, cell, job),
     };
 
   const leaseExpiresAt = addMs(now, LEASE_TTL_MS);
@@ -88,7 +100,7 @@ const recordHeartbeat = (
     .set({ leaseExpiresAt })
     .where(eq(jobs.jobId, job.jobId))
     .run();
-  return { leaseExpiresAt, signals: abortSignals(tx, job) };
+  return { leaseExpiresAt, signals: heartbeatSignals(tx, cell, job) };
 };
 
 export const heartbeatCellProcedure = scopedProcedure(['cell:worker'])(

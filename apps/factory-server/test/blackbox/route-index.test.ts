@@ -28,13 +28,15 @@ const ENDPOINTS: Endpoint[] = [
   { method: 'DELETE', path: '/api/v1/cells/cell-1' },
   { method: 'POST', path: '/api/v1/cells/claims' },
   { method: 'POST', path: '/api/v1/cells/heartbeats' },
+  { method: 'POST', path: '/api/v1/cells/cell-1/drain' },
+  { method: 'POST', path: '/api/v1/cells/leave' },
   { method: 'POST', path: '/api/v1/jobs/job-1/transitions' },
   { method: 'GET', path: '/api/v1/stream' },
 ];
 
 describe('route index', () => {
-  it('lists all 26 endpoints of the plan', () => {
-    expect(ENDPOINTS).toHaveLength(26);
+  it('lists all 28 endpoints of the plan', () => {
+    expect(ENDPOINTS).toHaveLength(28);
   });
 
   it.each(ENDPOINTS)(
