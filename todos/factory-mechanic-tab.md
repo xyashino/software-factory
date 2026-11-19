@@ -1,5 +1,6 @@
 ---
 status: todo
+factory: v2
 priority: high
 plan: factory-herdr-panes
 depends_on: [factory-herdr-runtime]

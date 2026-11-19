@@ -11,9 +11,12 @@ import { createPrAdapter } from '../adapters/git/gh';
 import { createServerClient } from '../adapters/http/server-client';
 import { createRunnerCatalog } from '../adapters/runners/catalog';
 import { createHeadlessRunner } from '../adapters/runners/headless';
+import { createHerdrRunner } from '../adapters/runners/herdr';
+import { createRoutingRunner } from '../adapters/runners/routing';
 import { createProcessAdapter } from '../adapters/process/spawn-server';
 import { createSystemClock } from '../adapters/process/system-clock';
 import type { Ports } from '../application/core/procedure';
+import type { CellStatePort } from '../application/ports/cell-state.port';
 import { CELL_STATE_PATH, DEFAULT_FACTORY_URL } from '../config';
 
 export type Mode = 'supervisor' | 'cell' | 'operator';
@@ -26,29 +29,44 @@ const notWired = (): never => {
 
 const processPort = createProcessAdapter();
 
+const enrolledCellName =
+  (cellState: CellStatePort) => async (): Promise<string> => {
+    const session = await cellState.read();
+    if (session === null) throw new Error('cell is not enrolled');
+    return session.cellId;
+  };
+
 const binaryOnPath = async (binary: string): Promise<boolean> =>
   (await processPort.run('which', [binary], process.cwd())).exitCode === 0;
 
-export const buildContext = (): Ports => ({
-  server: createServerClient({
-    baseUrl: process.env.FACTORY_URL ?? DEFAULT_FACTORY_URL,
-  }),
-  fs: {
-    readText: async (path) => readFileSync(path, 'utf8'),
-    writeText: writeTextFile,
-    exists: async (path) => existsSync(path),
-    list: async (dir) => (existsSync(dir) ? readdirSync(dir) : []),
-    readStdin: notWired,
-  },
-  todoFiles: createTodoFiles(),
-  tokens: createTokenFile(TOKEN_PATH),
-  operator: { open: notWired, close: notWired },
-  runner: createHeadlessRunner(),
-  runners: createRunnerCatalog(binaryOnPath),
-  git: createGitAdapter(processPort),
-  pr: createPrAdapter(processPort),
-  process: processPort,
-  pidFile: createPidFile(),
-  clock: createSystemClock(),
-  cellState: createCellStateFile(resolve(process.cwd(), CELL_STATE_PATH)),
-});
+export const buildContext = (): Ports => {
+  const cellState = createCellStateFile(
+    resolve(process.cwd(), CELL_STATE_PATH),
+  );
+  return {
+    server: createServerClient({
+      baseUrl: process.env.FACTORY_URL ?? DEFAULT_FACTORY_URL,
+    }),
+    fs: {
+      readText: async (path) => readFileSync(path, 'utf8'),
+      writeText: writeTextFile,
+      exists: async (path) => existsSync(path),
+      list: async (dir) => (existsSync(dir) ? readdirSync(dir) : []),
+      readStdin: notWired,
+    },
+    todoFiles: createTodoFiles(),
+    tokens: createTokenFile(TOKEN_PATH),
+    operator: { open: notWired, close: notWired },
+    runner: createRoutingRunner(
+      createHeadlessRunner(),
+      createHerdrRunner(processPort, enrolledCellName(cellState)),
+    ),
+    runners: createRunnerCatalog(binaryOnPath),
+    git: createGitAdapter(processPort),
+    pr: createPrAdapter(processPort),
+    process: processPort,
+    pidFile: createPidFile(),
+    clock: createSystemClock(),
+    cellState,
+  };
+};

@@ -7,7 +7,6 @@ describe('parse repo config', () => {
     const text = JSON.stringify({
       project: 'software-factory',
       rules: './.nitpick/rules',
-      herdr: { tabPerRun: true },
     });
 
     // Act
