@@ -1,9 +1,36 @@
 # `factory` CLI — plan
 
-One binary. Its name is `factory-2` while the new flow runs alongside the current `factory`
-(`apps/cli`). Commands below are written as `factory <command>`; read them as `factory-2 <command>`
-until cut-over (not planned yet; the Supervisor checks the flow manually first). It serves the Supervisor (you), the Cell daemon (each machine that runs
-work), and the Operator and Mechanic verbs (agents inside a job).
+One binary: `sf`. It runs alongside the old `factory` CLI (`apps/cli`) and serves the Supervisor (you),
+the Cell daemon (each machine that runs work), and the Operator and Mechanic verbs (agents inside a job).
+
+## 0. Install and quickstart
+
+`pnpm build:sf` compiles `apps/factory/dist/sf` (server, init templates and SQL migrations embedded) and
+builds the web UI. `scripts/install.sh` copies them under `$PREFIX` (default `/usr/local`):
+
+```bash
+pnpm install && pnpm build:sf
+sudo scripts/install.sh               # bin/sf + share/sf/web
+PREFIX=$HOME/.local scripts/install.sh   # no sudo; then SF_WEB_DIR=$HOME/.local/share/sf/web
+```
+
+`sf web start` finds the web UI in `$SF_WEB_DIR`, then `/usr/local/share/sf/web`, then `/usr/share/sf/web`.
+State lives in `$XDG_DATA_HOME/sf` (default `~/.local/share/sf`): `factory.db`, `web.pid`, server files.
+
+Quickstart in any git repository (proved by `apps/factory/test/blackbox/standalone-external-repo.test.ts`):
+
+```bash
+cd path/to/repo
+sf init                                   # .factory/ + .gitignore entries
+sf server start
+sf server token create --save             # .factory-local/supervisor.token
+sf project add my-project --repo <url>
+sf web start                              # http://127.0.0.1:4321
+sf token create --kind cell_join --name worker-1
+FACTORY_JOIN_TOKEN=<token> sf cell start --name worker-1
+sf todos import && sf queue
+sf web stop && sf server stop
+```
 
 Source of truth for server behaviour: [`apps/factory-server/docs/PLAN.md`](../../factory-server/docs/PLAN.md),
 especially §3 (Cell lifecycle) and §11 (agent reporting). Operator CLI spec:
@@ -13,24 +40,29 @@ especially §3 (Cell lifecycle) and §11 (agent reporting). Operator CLI spec:
 
 | Group | Command | Who runs it | Server endpoint |
 | :---- | :------ | :---------- | :-------------- |
-| server | `factory server start` | Supervisor | none (spawns `apps/factory-server`) |
-| server | `factory server stop` | Supervisor | none (signals the pid file) |
-| server | `factory server token create` | Supervisor | none (admin path in server) |
-| cell | `factory cell start` | Supervisor, on a Cell machine | `enroll` once, then `hello`, `claims`, `heartbeats`, `jobs/{id}/transitions` |
-| cell | `factory cell list` | Supervisor | `GET /api/v1/cells` |
-| cell | `factory cell stop --id <id>` | Supervisor | drain (§3) |
-| cell | `factory cell revoke --id <id>` | Supervisor | `DELETE /api/v1/cells/{id}` |
-| todos | `factory todos import` | Supervisor | `POST /api/v1/queue/import` |
-| todos | `factory todos export` | Supervisor | `GET /api/v1/queue/export` |
-| queue | `factory queue` | Supervisor | `GET /api/v1/work-orders`, `GET /api/v1/order-plans` |
-| queue | `factory queue pause \| unpause \| reprioritise \| reset \| cancel` | Supervisor | `POST /api/v1/queue/actions` |
-| incident | `factory incident list` | Supervisor | `GET /api/v1/incidents` |
-| incident | `factory incident resolve <id> --action ...` | Supervisor | `POST /api/v1/incidents/{id}/resolve` |
-| order | `factory order show <id>` | Supervisor | `GET /api/v1/work-orders/{id}` |
-| order | `factory order resume \| reopen \| cancel <id>` | Supervisor | `POST /api/v1/work-orders/{id}/transitions` |
-| watch | `factory watch` | Supervisor | `GET /api/v1/stream` (SSE) |
-| operator | `factory operator done \| verdict \| block \| context` | Agent in a station job | none (talks to its own Cell, §5) |
-| operator | `factory operator read \| incident` | Agent in a Mechanic job | `incidents/{id}/resolve` through its Cell |
+| init | `sf init` | Supervisor, in a repo | none (writes `.factory/`, `.gitignore`) |
+| project | `sf project add <id> --repo <url>` | Supervisor | `POST /api/v1/projects` |
+| project | `sf project ls` | Supervisor | `GET /api/v1/projects` |
+| token | `sf token create --kind cell_join --name <n>` | Supervisor | `POST /api/v1/tokens` |
+| server | `sf server start` | Supervisor | none (spawns the embedded server) |
+| server | `sf server stop` | Supervisor | none (signals the pid file) |
+| server | `sf server token create [--save]` | Supervisor | none (admin path in server) |
+| web | `sf web start \| stop \| status` | Supervisor | none (runs the installed web UI, pid in `web.pid`) |
+| cell | `sf cell start [--name <slug>]` | Supervisor, on a Cell machine | `enroll` once, then `hello`, `claims`, `heartbeats`, `jobs/{id}/transitions` |
+| cell | `sf cell list` | Supervisor | `GET /api/v1/cells` |
+| cell | `sf cell stop --id <id>` | Supervisor | drain (§3) |
+| cell | `sf cell revoke --id <id>` | Supervisor | `DELETE /api/v1/cells/{id}` |
+| todos | `sf todos import` | Supervisor | `POST /api/v1/queue/import` |
+| todos | `sf todos export` | Supervisor | `GET /api/v1/queue/export` |
+| queue | `sf queue` | Supervisor | `GET /api/v1/work-orders`, `GET /api/v1/order-plans` |
+| queue | `sf queue pause \| unpause \| reprioritise \| reset \| cancel` | Supervisor | `POST /api/v1/queue/actions` |
+| incident | `sf incident list` | Supervisor | `GET /api/v1/incidents` |
+| incident | `sf incident resolve <id> --action ...` | Supervisor | `POST /api/v1/incidents/{id}/resolve` |
+| order | `sf order show <id>` | Supervisor | `GET /api/v1/work-orders/{id}` |
+| order | `sf order resume \| reopen \| cancel <id>` | Supervisor | `POST /api/v1/work-orders/{id}/transitions` |
+| watch | `sf watch` | Supervisor | `GET /api/v1/stream` (SSE) |
+| operator | `sf operator done \| verdict \| block \| context` | Agent in a station job | none (talks to its own Cell, §5) |
+| operator | `sf operator read \| incident` | Agent in a Mechanic job | `incidents/{id}/resolve` through its Cell |
 
 Open verbs (`answer`, `context` for the Operator, `tell`) follow the decisions in
 [`apps/factory-server/docs/PLAN.md` §11.6](../../factory-server/docs/PLAN.md).
@@ -98,7 +130,7 @@ Rules carried over from factory-server:
 - `application/procedures/` imports ports, never adapters. An adapter is picked in `bootstrap/`.
 - `contracts/` is the only place wire shapes are declared. The server, the CLI and the operator use
   the same files, or a shared package later (§7).
-- The operator verbs have their own procedures. `factory operator` never reads `.factory/` or the
+- The operator verbs have their own procedures. `sf operator` never reads `.factory/` or the
   supervisor token.
 - No barrel files. `.tmp/omino-api` has `index.ts` re-exports; this repo's rules forbid them, so
   imports name the concrete file.
@@ -107,7 +139,7 @@ Rules carried over from factory-server:
 
 The Cell is the only process that talks to the server. Agents never do.
 
-1. **Enroll (once).** `factory cell start` reads `.factory/config.json` for `project` and
+1. **Enroll (once).** `sf cell start` reads `.factory/config.json` for `project` and
    `FACTORY_JOIN_TOKEN` (`sf_join_`). It calls `POST /api/v1/cells/enroll` and stores the returned
    `sf_cell_` token in `.factory-local/cell.json` (mode `0600`). The join token is not used again.
 2. **Hello.** `POST /api/v1/cells/hello` with `projectId`, `allowedLines` (from the local
@@ -136,9 +168,9 @@ The Cell is the only process that talks to the server. Agents never do.
 
 ### Stop and revoke
 
-- `factory cell stop --id` **drains**. The Cell takes no new claims. It finishes or hands over its
+- `sf cell stop --id` **drains**. The Cell takes no new claims. It finishes or hands over its
   current Job, then exits.
-- `factory cell revoke --id` calls `DELETE`. The server unpins the Cell's orders and releases its Job.
+- `sf cell revoke --id` calls `DELETE`. The server unpins the Cell's orders and releases its Job.
   Use it only for a Cell you will not bring back.
 
 Gap: the server has no drain or leave endpoint. Until one exists, `stop` can only finish the current
@@ -151,18 +183,18 @@ Job or let the lease expire. See §8.
 - The token is random, per Job, held only in Cell memory.
 - The Cell maps the token to `{ jobId, role, incidentId?, epoch }`, and refuses verbs the role
   cannot use.
-- `factory operator ...` is the client. It reads `FACTORY_OPERATOR_URL` and `FACTORY_CYCLE_TOKEN`
+- `sf operator ...` is the client. It reads `FACTORY_OPERATOR_URL` and `FACTORY_CYCLE_TOKEN`
   and never reads `.factory/` or the supervisor config. It runs in the agent's shell, so it gets no
   factory credentials.
 
 ## 5. Supervisor side
 
-- `factory server start` finds the server binary, starts it, and writes a pid file. The discovery
+- `sf server start` runs the server embedded in the `sf` binary, and writes a pid file. The discovery
   address comes from `FACTORY_URL` (default `http://127.0.0.1:7070`).
-- `factory server stop` signals only the server process, through its pid file. It does not stop, drain
+- `sf server stop` signals only the server process, through its pid file. It does not stop, drain
   or revoke Cells. See §8, decision 4.
-- The supervisor token (`sf_sup_`) comes from `FACTORY_TOKEN` or `~/.config/factory/token`. It is
-  never printed.
+- The supervisor token (`sf_sup_`) comes from `FACTORY_TOKEN`, `.factory-local/supervisor.token` (written by
+  `sf server token create --save`) or `~/.config/factory/token`. It is never printed.
 - Every command maps to one endpoint from §1. No command reads the database directly.
 - Output is one human-readable table by default, and `--json` for scripts.
 
@@ -186,8 +218,8 @@ rule forbids that prefix). The server's BE_RULES need an explicit exception when
 
 Decided:
 
-1. **Name.** `factory cell`. Not `call`.
-2. **One binary, named `factory-2`.** Cut-over (rename to `factory`) is not planned yet.
+1. **Name.** `sf cell`. Not `call`.
+2. **One binary, named `sf`.**
    The Cell daemon lives in `apps/factory/src/cell`. `apps/cell` is not used by the new
    approach. This reverses the earlier plan to keep it separate.
 3. **Coexistence.** The new approach is built alongside the current implementation, which stays until
@@ -195,7 +227,7 @@ Decided:
 4. **`server stop` does not stop Cells.** It stops only the server process. Cells keep running and
    retry their requests with the same `commandId`. If the server stays down past the self-fence window
    (45 s), a Cell aborts its runner, and its Job is lost once the lease ends (factory-server §3.7).
-   `factory server start` brings the server back, and Cells resume.
+   `sf server start` brings the server back, and Cells resume.
 5. **Cell token storage.** Not important for now. Keep the simplest option that works.
 6. **Runners in v2.0.** All five ship: `claude`, `codex`, `cursor`, `antigravity`, `opencode`. They match
    the adapters in `apps/cell/src/adapters/runners/registry.ts`.
@@ -211,4 +243,4 @@ Open:
 
 - The Operator's runner integration (Herdr, panes, headless). That is part of the Cell's runner
   adapters, to be planned separately.
-- Web UI. The SSE stream (`factory watch`) is the only live view.
+- Web UI internals. `sf web start` only runs the installed build; the SSE stream (`sf watch`) is the CLI live view.
