@@ -5,7 +5,6 @@ import type { ArtifactRef } from '@repo/factory-definitions/line-schema';
 import type { Template } from '@repo/factory-definitions/templates';
 import { renderTemplate } from './prompts/render';
 
-const REPORT_MAX_CHARS = 4000;
 const COMMIT_MAX_CHARS = 4096;
 
 const SUBJECT =
@@ -73,14 +72,6 @@ export const verificationLinesOf = (
   return lines.length > 0 ? lines : ['_No verification steps in the Line._'];
 };
 
-const reportExcerpt = (report: string | undefined): string | undefined => {
-  const trimmed = report?.trim();
-  if (trimmed === undefined || trimmed === '') return undefined;
-  return trimmed.length > REPORT_MAX_CHARS
-    ? `${trimmed.slice(0, REPORT_MAX_CHARS)}\n\n_(truncated)_`
-    : trimmed;
-};
-
 const templateBody = (
   templates: ReadonlyMap<string, Template>,
   id: string,
@@ -92,16 +83,13 @@ const templateBody = (
 
 export interface PrBodyInput {
   taskId: string;
-  type: string;
   /** The todo body, without frontmatter. */
   todoBody: string;
   commitMessage: string;
-  report?: string;
-  logCommand: string;
   verification: string[];
 }
 
-/** The PR markdown from the `body` and `report` templates. `{{adrSection}}` stays for the Cell to fill. */
+/** The PR markdown from the `body` template. `{{adrSection}}` stays for the Cell to fill. */
 export const formatPrBody = (
   input: PrBodyInput,
   templates: ReadonlyMap<string, Template>,
@@ -110,10 +98,8 @@ export const formatPrBody = (
     .split('\n')
     .filter((line) => /^\s*-\s+/.test(line))
     .map((line) => line.trimEnd());
-  const excerpt = reportExcerpt(input.report);
   const body = renderTemplate(templateBody(templates, 'body'), {
     taskId: input.taskId,
-    typeSuffix: ` (${input.type})`,
     objective: extractObjective(input.todoBody),
     changes:
       changes.length > 0
@@ -121,11 +107,6 @@ export const formatPrBody = (
         : '_No change list in the commit message._',
     adrSection: PR_ADR_TOKEN,
     verificationSection: input.verification.join('\n'),
-    logCommand: input.logCommand,
-    reportSection:
-      excerpt === undefined
-        ? ''
-        : `\n${renderTemplate(templateBody(templates, 'report'), { excerpt })}`,
   });
   return `${body.trimEnd()}\n`;
 };

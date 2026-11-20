@@ -877,27 +877,25 @@ const deliverStation = async (
     action: 'start',
     lineSnapshot: wireSnapshotOf(snapshot),
   });
-  if (snapshot.requireAdr) {
-    const added = await runtime.ports.process.run(
-      'git',
-      [
-        'diff',
-        '--name-only',
-        '--diff-filter=A',
-        `${job.baseBranch}...HEAD`,
-        '--',
-        DECISIONS_DIR,
-      ],
-      worktreeOf(runtime, job),
+  const added = await runtime.ports.process.run(
+    'git',
+    [
+      'diff',
+      '--name-only',
+      '--diff-filter=A',
+      `${job.baseBranch}...HEAD`,
+      '--',
+      DECISIONS_DIR,
+    ],
+    worktreeOf(runtime, job),
+  );
+  const adrPaths = added.stdout.split('\n').filter(Boolean);
+  if (snapshot.requireAdr && (added.exitCode !== 0 || adrPaths.length !== 1)) {
+    return finishWithFail(
+      runtime,
+      job,
+      `delivery failed: requireAdr needs exactly one new ${DECISIONS_DIR} entry, found ${adrPaths.length}`,
     );
-    const count = added.stdout.split('\n').filter(Boolean).length;
-    if (added.exitCode !== 0 || count !== 1) {
-      return finishWithFail(
-        runtime,
-        job,
-        `delivery failed: requireAdr needs exactly one new ${DECISIONS_DIR} entry, found ${count}`,
-      );
-    }
   }
   try {
     const commitSha = await deliverWorkOrder(runtime.ports, {
@@ -906,6 +904,11 @@ const deliverStation = async (
       slug: slugOf(job.orderId),
       baseBranch: job.baseBranch,
       priorStepIds: job.expectedPriorSteps.map((step) => step.stationId),
+      taskDescription: stepPayloadSchema.parse(job.payload).task?.description,
+      adrPaths: added.exitCode === 0 ? adrPaths : [],
+      checks: snapshot.stations
+        .filter((station) => station.kind === 'inspection')
+        .flatMap((station) => station.exec),
     });
     return nextJobOf(
       await transition(runtime, job, {
@@ -1051,9 +1054,7 @@ const mechanicStateOf = async (
   return {
     incident: job.payload.incident ?? null,
     steps,
-    logs: tailOf(
-      await readIfPresent(runtime, joinPath(runtime.repoRoot, CELL_LOG_PATH)),
-    ),
+    logs: tailOf(await readIfPresent(runtime, runtime.logPath)),
   };
 };
 
@@ -1090,7 +1091,7 @@ const writeMechanicPrompt = async (
         evidenceDir: joinPath(worktree, stepDir, EVIDENCE_DIR),
         inputs: [],
         context: `### Incident\n\n\`\`\`json\n${JSON.stringify(job.payload.incident ?? null, null, 2)}\n\`\`\``,
-        operatorCommand: `bun ${CLI_ENTRY} operator`,
+        operatorCommand: operatorCommandOf(),
       }),
     );
     return null;

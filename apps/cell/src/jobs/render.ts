@@ -190,16 +190,12 @@ export const renderDelivery = async (input: {
   const commitMessage =
     usableCommitMessage(await textFor(deliver.commitBlob)) ??
     richCommitOf(deliver.type, deliver.title, deliver.taskId);
-  const report = await textFor(deliver.reportBlob);
   try {
     const body = formatPrBody(
       {
         taskId: deliver.taskId,
-        type: deliver.type,
         todoBody: (await textFor(deliver.todoBodyBlob)) ?? '',
         commitMessage,
-        ...(report === undefined ? {} : { report }),
-        logCommand: deliver.logCommand,
         verification: verificationLinesOf(deliver.verification),
       },
       definitions.prTemplates,

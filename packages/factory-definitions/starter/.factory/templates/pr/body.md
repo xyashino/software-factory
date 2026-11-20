@@ -1,20 +1,15 @@
-## 🎯 Summary
-
-Task: `{{taskId}}`{{typeSuffix}}
+## 🎯 Task: `{{taskId}}`
 
 {{objective}}
 
-### Changes
+### 📝 Changes
 
 {{changes}}
 
-## 🏛️ Architecture Decision (ADR)
+## 🏛️ ADR
 
 {{adrSection}}
 
-## 🧪 Verification & Quality Gate
+## 🧪 Checks
 
 {{verificationSection}}
-
-Event log: `{{logCommand}}`
-{{reportSection}}
