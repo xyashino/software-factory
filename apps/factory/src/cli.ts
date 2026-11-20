@@ -8,6 +8,7 @@ import { queueCommand } from './adapters/cli/queue.command';
 import { serverCommand } from './adapters/cli/server.command';
 import { todosCommand } from './adapters/cli/todos.command';
 import { watchCommand } from './adapters/cli/watch.command';
+import { webCommand } from './adapters/cli/web.command';
 import { EXIT } from './domain/exit-codes';
 
 const HELP_FLAGS = ['--help', '-h'];
@@ -27,6 +28,7 @@ const main = defineCommand({
     watch: watchCommand,
     operator: operatorCommand,
     cell: cellCommand,
+    web: webCommand,
   },
 });
 

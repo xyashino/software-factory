@@ -1,0 +1,37 @@
+import { z } from 'zod';
+import { Refused } from '../../core/errors';
+import { define, type Ports } from '../../core/procedure';
+
+const STOP_TIMEOUT_MS = 10_000;
+const POLL_INTERVAL_MS = 200;
+
+const StopSchema = z.object({ dataDir: z.string().min(1) }).strict();
+
+export type StopWebResult = { outcome: 'stopped' } | { outcome: 'not-running' };
+
+const waitUntilExited = async (ctx: Ports, pid: number): Promise<boolean> => {
+  const deadline = ctx.clock.now() + STOP_TIMEOUT_MS;
+  while (ctx.process.isAlive(pid)) {
+    if (ctx.clock.now() >= deadline) {
+      return false;
+    }
+    await ctx.clock.sleep(POLL_INTERVAL_MS);
+  }
+  return true;
+};
+
+export const stopWeb = define({ kind: 'supervisor' })(
+  StopSchema,
+)<StopWebResult>(async (input, ctx) => {
+  const pid = await ctx.webPidFile.read(input.dataDir);
+  if (pid === null || !ctx.process.isAlive(pid)) {
+    await ctx.webPidFile.remove(input.dataDir);
+    return { outcome: 'not-running' };
+  }
+  ctx.process.terminate(pid);
+  if (!(await waitUntilExited(ctx, pid))) {
+    throw new Refused(`web UI ${pid} did not stop within 10 s`);
+  }
+  await ctx.webPidFile.remove(input.dataDir);
+  return { outcome: 'stopped' };
+});

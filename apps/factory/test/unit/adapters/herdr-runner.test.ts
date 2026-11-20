@@ -52,6 +52,7 @@ const fakeHerdr = (
     spawnDetached: async () => 0,
     isAlive: () => false,
     terminate: () => undefined,
+    probeUrl: async () => false,
   };
   return { port, calls };
 };

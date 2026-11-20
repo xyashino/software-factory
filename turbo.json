@@ -10,7 +10,8 @@
     "FACTORY_PORT",
     "FACTORY_HOST",
     "FACTORY_URL",
-    "XDG_DATA_HOME"
+    "XDG_DATA_HOME",
+    "SF_WEB_DIR"
   ],
   "tasks": {
     "//#format:check": {
