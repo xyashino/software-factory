@@ -4,6 +4,7 @@ import { run } from '../../bootstrap/run';
 import { REPO_CONFIG_PATH } from '../../config';
 import { streamTransitions } from '../../application/procedures/watch/stream.procedure';
 import { printLine, reportFailure } from './output';
+import { parseWholeNumber } from './validate';
 
 interface TransitionLine {
   seq: number;
@@ -76,7 +77,10 @@ export const watchCommand = defineCommand({
     process.once('SIGINT', stop);
     try {
       process.exitCode = await runWatch(
-        { project: args.project, afterSeq: Number(args.after ?? 0) },
+        {
+          project: args.project,
+          afterSeq: parseWholeNumber(args.after ?? 0, '--after', { min: 0 }),
+        },
         controller.signal,
       );
     } finally {

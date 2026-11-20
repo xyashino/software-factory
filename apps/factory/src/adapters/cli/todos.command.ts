@@ -1,6 +1,6 @@
 import { resolve } from 'node:path';
 import { defineCommand } from 'citty';
-import { type RunResult, run } from '../../bootstrap/run';
+import { run } from '../../bootstrap/run';
 import { DEFAULT_TODO_DIR, REPO_CONFIG_PATH } from '../../config';
 import {
   type ExportResult,
@@ -11,17 +11,9 @@ import {
   importTodos,
 } from '../../application/procedures/todos/import.procedure';
 import { EXIT } from '../../domain/exit-codes';
-import { printError, printJson, printLine } from './output';
+import { printJson, printLine, reportFailure } from './output';
 
 const cwd = (): string => process.cwd();
-
-const reportFailure = <O>(result: RunResult<O>): number => {
-  if (result.kind === 'ok') {
-    return EXIT.ok;
-  }
-  printError(result.message);
-  return result.exitCode;
-};
 
 const printImport = (result: ImportResult, json: boolean): void => {
   if (json) {

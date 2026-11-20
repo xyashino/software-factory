@@ -67,11 +67,11 @@ export const run = <I, O>(
 export const runWithoutToken = <I, O>(
   procedure: Procedure<I, O>,
   input: unknown,
-  ports: Ports,
+  ports: Ports | (() => Ports),
 ): Promise<RunResult<O>> =>
-  settle(() =>
+  settle(async () =>
     procedure.execute(input, {
-      ...ports,
+      ...(typeof ports === 'function' ? ports() : ports),
       token: SUPERVISOR,
       principal: SUPERVISOR,
     }),

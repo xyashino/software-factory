@@ -92,6 +92,12 @@ const actionCommand = (action: QueueAction, description: string) =>
   defineCommand({
     meta: { name: action, description },
     args: {
+      orders: {
+        type: 'positional',
+        required: false,
+        valueHint: 'order-id...',
+        description: 'Work order ids',
+      },
       json: { type: 'boolean', default: false },
       yes: {
         type: 'boolean',

@@ -30,7 +30,7 @@ const runInit = async (
   const result = await runWithoutToken(
     initProject,
     { root, dirName: basename(root), projectId, force },
-    buildContext(),
+    () => buildContext(),
   );
   if (result.kind === 'ok') {
     if (json) {

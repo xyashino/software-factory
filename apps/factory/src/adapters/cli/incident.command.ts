@@ -13,6 +13,7 @@ import {
 } from '../../application/procedures/incidents/resolve.procedure';
 import { EXIT } from '../../domain/exit-codes';
 import { printJson, printLine, printTable, reportFailure } from './output';
+import { requiredPositional } from './validate';
 
 const HEADERS = ['id', 'reason', 'order', 'status', 'triage owner'];
 
@@ -118,6 +119,7 @@ const resolveCommand = defineCommand({
     description: `Resolve an incident: ${RESOLVE_ACTIONS.join('|')}. Needs scope supervisor:write`,
   },
   args: {
+    id: { type: 'positional', required: true, description: 'Incident id' },
     action: {
       type: 'string',
       description: `One of ${RESOLVE_ACTIONS.join(', ')}`,
@@ -135,7 +137,7 @@ const resolveCommand = defineCommand({
   run: async ({ args }) => {
     process.exitCode = await runResolve(
       {
-        incidentId: String(args._[0] ?? ''),
+        incidentId: requiredPositional(args.id, 'incident id'),
         action: args.action,
         step: args.step,
         report: args.report,

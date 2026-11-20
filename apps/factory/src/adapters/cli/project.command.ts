@@ -1,20 +1,12 @@
 import { defineCommand } from 'citty';
-import { type RunResult, run } from '../../bootstrap/run';
+import { run } from '../../bootstrap/run';
 import { addProject } from '../../application/procedures/projects/add-project.procedure';
 import { listProjects } from '../../application/procedures/projects/list-projects.procedure';
-import { EXIT } from '../../domain/exit-codes';
-import { printError, printJson, printLine, printTable } from './output';
+import { printJson, printLine, printTable, reportFailure } from './output';
+import { parseWholeNumber, requiredPositional } from './validate';
 
 const DEFAULT_BASE_BRANCH = 'main';
 const DEFAULT_MAX_RUNNING = '5';
-
-const reportFailure = <O>(result: RunResult<O>): number => {
-  if (result.kind === 'ok') {
-    return EXIT.ok;
-  }
-  printError(result.message);
-  return result.exitCode;
-};
 
 const runAdd = async (
   input: {
@@ -72,6 +64,7 @@ export const projectCommand = defineCommand({
         description: 'Register or update a project: sf project add <id>',
       },
       args: {
+        id: { type: 'positional', required: true, description: 'Project id' },
         repo: { type: 'string', required: true, description: 'Repo URL' },
         'base-branch': { type: 'string', default: DEFAULT_BASE_BRANCH },
         'max-running': { type: 'string', default: DEFAULT_MAX_RUNNING },
@@ -80,10 +73,12 @@ export const projectCommand = defineCommand({
       run: async ({ args }) => {
         process.exitCode = await runAdd(
           {
-            projectId: String(args._[0] ?? ''),
+            projectId: requiredPositional(args.id, 'project id'),
             repoUrl: args.repo,
             defaultBaseBranch: args['base-branch'],
-            maxRunning: Number(args['max-running']),
+            maxRunning: parseWholeNumber(args['max-running'], '--max-running', {
+              min: 1,
+            }),
           },
           args.json,
         );

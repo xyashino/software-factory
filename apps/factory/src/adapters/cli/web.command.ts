@@ -17,6 +17,7 @@ import { startWeb } from '../../application/procedures/web/start.procedure';
 import { statusWeb } from '../../application/procedures/web/status.procedure';
 import { stopWeb } from '../../application/procedures/web/stop.procedure';
 import { printJson, printLine, reportFailure } from './output';
+import { parsePort } from './validate';
 
 const dataDirFromEnv = (): string =>
   process.env.FACTORY_DATA_DIR ?? DEFAULT_DATA_DIR;
@@ -26,13 +27,19 @@ const runStart = async (
   port: string,
   json: boolean,
 ): Promise<number> => {
-  const ports = buildContext();
-  const project = await settle(() =>
-    readProjectId(ports, resolve(process.cwd(), REPO_CONFIG_PATH)),
-  );
-  if (project.kind === 'failed') {
-    return reportFailure(project);
+  const portNumber = parsePort(port, '--port');
+  const prepared = await settle(async () => {
+    const ports = buildContext();
+    const projectId = await readProjectId(
+      ports,
+      resolve(process.cwd(), REPO_CONFIG_PATH),
+    );
+    return { ports, projectId };
+  });
+  if (prepared.kind === 'failed') {
+    return reportFailure(prepared);
   }
+  const { ports, projectId } = prepared.value;
   const webEntry = webEntryPath();
   const result = await runWithoutToken(
     startWeb,
@@ -42,9 +49,9 @@ const runStart = async (
       webArgs: webArgsOf(IS_COMPILED, webEntry),
       dataDir: dataDirFromEnv(),
       factoryUrl: process.env.FACTORY_URL ?? DEFAULT_FACTORY_URL,
-      projectId: project.value,
+      projectId,
       host,
-      port: Number(port),
+      port: portNumber,
     },
     ports,
   );
@@ -64,7 +71,7 @@ const runStop = async (json: boolean): Promise<number> => {
   const result = await runWithoutToken(
     stopWeb,
     { dataDir: dataDirFromEnv() },
-    buildContext(),
+    () => buildContext(),
   );
   if (result.kind === 'ok') {
     if (json) {
@@ -85,8 +92,8 @@ const runStatus = async (
 ): Promise<number> => {
   const result = await runWithoutToken(
     statusWeb,
-    { dataDir: dataDirFromEnv(), host, port: Number(port) },
-    buildContext(),
+    { dataDir: dataDirFromEnv(), host, port: parsePort(port, '--port') },
+    () => buildContext(),
   );
   if (result.kind === 'ok') {
     if (json) {
