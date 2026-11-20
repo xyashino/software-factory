@@ -5,8 +5,6 @@ coverage
 pnpm-lock.yaml
 # Cell-owned worktree metadata (written by the Cell, not hand-formatted)
 .cell
-# drizzle-kit output (STORAGE §9): generated, never hand-formatted
-packages/factory-db/drizzle
 .tmp
 .mcp.json
 .cursor/mcp.json
