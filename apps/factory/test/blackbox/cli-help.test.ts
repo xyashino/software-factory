@@ -4,8 +4,8 @@ import { describe, expect, it } from 'vitest';
 
 const CLI_PATH = fileURLToPath(new URL('../../src/cli.ts', import.meta.url));
 
-describe('factory-2 entrypoint', () => {
-  it('prints root help and exits zero', () => {
+describe('sf entrypoint', () => {
+  it('prints root help naming sf and exits zero', () => {
     // Arrange
     const args = [CLI_PATH, '--help'];
 
@@ -15,5 +15,6 @@ describe('factory-2 entrypoint', () => {
     // Assert
     expect(result.status).toBe(0);
     expect(result.stdout).toContain('Software factory CLI');
+    expect(result.stdout).toContain('sf');
   });
 });

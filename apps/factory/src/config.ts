@@ -1,3 +1,4 @@
+import { basename, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const DEFAULT_FACTORY_URL = 'http://127.0.0.1:7070';
@@ -7,7 +8,6 @@ export const DEFAULT_DB_PATH = './.factory-local/factory.db';
 export const SERVER_ENTRY = fileURLToPath(
   new URL('../../factory-server/src/index.ts', import.meta.url),
 );
-export const CLI_ENTRY = fileURLToPath(new URL('./cli.ts', import.meta.url));
 export const CLAIM_WAIT_MS = 25_000;
 export const HEARTBEAT_INTERVAL_MS = 10_000;
 export const SELF_FENCE_MS = 45_000;
@@ -23,3 +23,14 @@ export const CELL_LOG_PATH = '.factory-local/cell.log';
 export const SUPERVISOR_TOKEN_PATH = '.factory-local/supervisor.token';
 export const JOIN_TOKEN_ENV = 'FACTORY_JOIN_TOKEN';
 export const DEFAULT_TODO_DIR = 'todos';
+
+export const operatorCommandOf = (
+  runtime: { execPath: string; entry: string } = {
+    execPath: process.execPath,
+    entry: resolve(process.argv[1] ?? ''),
+  },
+): string => {
+  if (!/^bun(\.exe)?$/.test(basename(runtime.execPath)))
+    return `${runtime.execPath} operator`;
+  return `bun ${runtime.entry} operator`;
+};

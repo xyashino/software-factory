@@ -3,11 +3,11 @@ import { startHeartbeat } from '../../../cell/heartbeat';
 import { observeDrain } from '../../../cell/drain-signal';
 import {
   CELL_LOG_PATH,
-  CLI_ENTRY,
   HEARTBEAT_INTERVAL_MS,
   LINES_DIR,
   OPERATORS_DIR,
   WORKTREES_DIR,
+  operatorCommandOf,
 } from '../../../config';
 import {
   heartbeatCellContract,
@@ -760,7 +760,7 @@ const writePrompt = async (
           ...inputs.map((input) => input.path),
         ],
         context: await contextOf(runtime, job, snapshot, station, inputs),
-        operatorCommand: `bun ${CLI_ENTRY} operator`,
+        operatorCommand: operatorCommandOf(),
       }),
     );
     return null;

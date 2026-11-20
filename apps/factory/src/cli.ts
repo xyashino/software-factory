@@ -14,7 +14,7 @@ const HELP_FLAGS = ['--help', '-h'];
 
 const main = defineCommand({
   meta: {
-    name: 'factory',
+    name: 'sf',
     version: '0.0.0',
     description: 'Software factory CLI (v2 flow)',
   },
