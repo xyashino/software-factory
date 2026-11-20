@@ -1,6 +1,6 @@
 # software-factory
 
-Monorepo hosting **SoftwareFactory** ([design docs](docs/README.md)), an autonomous AI harness that turns
+Monorepo hosting **SoftwareFactory** ([design docs](apps/factory/docs/PLAN.md), [server](apps/factory-server/docs/PLAN.md)), an autonomous AI harness that turns
 `todos/*.md` work orders into verified Pull Requests via declarative production lines.
 
 ## Main idea
@@ -12,13 +12,17 @@ The system is modeled as an automated software factory:
 - **Lines** are declarative production workflows composed of **Stations**—either an **Operator** (an AI specialist such as `planner`, `builder`, `reviewer`, `auditor`) or an **Inspection** (a deterministic command gate).
 - **Work orders** (`todos/*.md`) travel down a Line from station to station. If an Operator or Inspection hits a blocker, it raises an **Andon** (releasing the Worker immediately) with a **Handover** so a human supervisor can resolve it and resume on any available Worker.
 
-Extracted from the omino monorepo with only the packages the factory needs:
-
-| Package                      | Purpose                                                    |
-| ---------------------------- | ---------------------------------------------------------- |
-| `packages/nitpick`           | Rules/skills engine; generates `.agents/` from `.nitpick/` |
-| `packages/eslint-config`     | Shared ESLint config                                       |
-| `packages/typescript-config` | Shared tsconfig presets                                    |
+| Package                      | Purpose                                                         |
+| ---------------------------- | --------------------------------------------------------------- |
+| `apps/factory`               | `sf`: the single CLI binary (server, Cell, Supervisor commands) |
+| `apps/factory-server`        | Factory HTTP server and storage                                 |
+| `apps/factory-web-demo`      | Web UI served by `sf web start`                                 |
+| `apps/operator`              | Operator verbs used by agents inside a Cell                     |
+| `packages/nitpick`           | Rules/skills engine; generates `.agents/` from `.nitpick/`      |
+| `packages/prompt`            | Prompt building blocks                                          |
+| `packages/operator-protocol` | Shared operator protocol contracts                              |
+| `packages/eslint-config`     | Shared ESLint config                                            |
+| `packages/typescript-config` | Shared tsconfig presets                                         |
 
 ## Prerequisites
 
@@ -26,12 +30,10 @@ Extracted from the omino monorepo with only the packages the factory needs:
 - [Bun](https://bun.sh/) (the factory runs on Bun)
 - `herdr`, `gh` and the agent CLIs used in `.factory/lines/*.yml`
 
-## Usage
+## Development
 
 ```bash
 pnpm install
-pnpm factory check --dir .   # validate .factory/ definitions
-pnpm factory-server          # start the server
 pnpm ci:verify    # format, lint, typecheck, test, build
 ```
 

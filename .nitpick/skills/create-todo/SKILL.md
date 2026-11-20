@@ -57,9 +57,9 @@ When explicitly invoked by the user:
 3. **Drafting from Template**:
    - Use the canonical template structure from `references/todo.md` (next to this file).
    - Populate sections: **Objective**, **Context & Problem Statement**, **Specification / Scope**, **Implementation Plan**, and **Acceptance Criteria**.
-4. **Agent Override (only when the user names a runner, tier or model)**:
-   - Set `runner` and/or `tier` (`advanced` hard / cross-package, `default`, `light` trivial edits). Never write a model id, tasks have no `model` key.
-   - User names a model → find its runner and tier in `packages/factory/src/config/models.json` (same as `pnpm factory models`). Not there → say so, do not invent one.
+4. **Agent Override (only when the user names a runner or model)**:
+   - Runners and models are set per operator in `.factory/lines/*.yml`. Todos have no `model` key: pick the `line` instead.
+   - User names a model → find it in `.factory/lines/*.yml`. Not there → say so, do not invent one.
 5. **Lean Validation**:
    - Verify markdown formatting and ensure all acceptance criteria are actionable checkboxes (`- [ ]`).
    - Do **NOT** run test or build commands during todo creation — drafting specs does not execute code.
@@ -76,9 +76,6 @@ status: queued
 priority: medium # high | medium | low
 line: feature # feature | standard | fast
 depends_on: [] # ids (file names without .md) that must be done first
-# optional per-role agent override, defaults in packages/factory/src/config/models.json, keys execute and review:
-# execute: { runner: claude, tier: light } # runner: cursor | antigravity | claude | codex | opencode, tier: advanced | default | light
-# review: { runner: cursor, tier: default }
 ---
 
 # <slug>: [Scope / Package / Feature Name]
