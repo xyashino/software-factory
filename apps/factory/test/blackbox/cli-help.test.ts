@@ -17,4 +17,18 @@ describe('sf entrypoint', () => {
     expect(result.stdout).toContain('Software factory CLI');
     expect(result.stdout).toContain('sf');
   });
+
+  it('prints root usage when run with no arguments', () => {
+    // Arrange
+    const args = [CLI_PATH];
+
+    // Act
+    const result = spawnSync(process.execPath, args, { encoding: 'utf8' });
+
+    // Assert
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('Software factory CLI');
+    expect(result.stdout).toContain('sf');
+    expect(result.stderr).not.toContain('E_NO_COMMAND');
+  });
 });
