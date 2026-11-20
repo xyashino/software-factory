@@ -2,11 +2,13 @@ import { createHash } from 'node:crypto';
 import type { MigrationMeta } from 'drizzle-orm/migrator';
 import journal from './meta/_journal.json';
 import init from './0000_init.sql' with { type: 'text' };
+import factoryProfiles from './0001_hot_lucky_pierre.sql' with { type: 'text' };
 
 const STATEMENT_BREAKPOINT = '--> statement-breakpoint';
 
 const SQL_BY_TAG: Record<string, string> = {
   '0000_init': init,
+  '0001_hot_lucky_pierre': factoryProfiles,
 };
 
 interface JournalEntry {

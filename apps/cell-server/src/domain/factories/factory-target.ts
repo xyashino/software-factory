@@ -6,17 +6,25 @@ export type FactoryTarget = {
   isDefault: boolean;
 };
 
-const isAbsoluteUrl = (value: string): boolean => {
+const HTTP_PROTOCOLS: readonly string[] = ['http:', 'https:'];
+
+const parseHttpUrl = (value: string): URL => {
+  let url: URL;
   try {
-    new URL(value);
-    return true;
+    url = new URL(value);
   } catch {
-    return false;
+    throw new RangeError(`factory url must be an absolute URL: ${value}`);
   }
+  if (!HTTP_PROTOCOLS.includes(url.protocol))
+    throw new RangeError(`factory url must use http or https: ${value}`);
+  return url;
 };
 
-export const validateFactoryUrl = (value: string): string => {
-  if (!isAbsoluteUrl(value))
-    throw new RangeError(`factory url must be an absolute URL: ${value}`);
-  return value;
+export const validateFactoryUrl = (value: string): string =>
+  parseHttpUrl(value).href.replace(/\/+$/, '');
+
+export const validateFactoryName = (value: string): string => {
+  const name = value.trim();
+  if (name.length === 0) throw new RangeError('factory name must not be empty');
+  return name;
 };

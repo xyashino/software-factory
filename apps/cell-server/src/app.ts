@@ -9,6 +9,8 @@ import {
   transportMiddleware,
 } from './adapters/hono/middlewares';
 import { healthRoute } from './adapters/hono/routes/health.route';
+import { factoriesRoute } from './adapters/hono/routes/factories.route';
+import { settingsRoute } from './adapters/hono/routes/settings.route';
 
 export const createApp = (createTransport: CreateTransport) => {
   const app = new Hono<AppEnv>();
@@ -20,6 +22,8 @@ export const createApp = (createTransport: CreateTransport) => {
     transportMiddleware(createTransport),
   );
   app.route('/api/v1/health', healthRoute);
+  app.route('/api/v1/factories', factoriesRoute);
+  app.route('/api/v1/settings', settingsRoute);
   app.onError(errorHandler);
   app.notFound(notFoundHandler);
   return app;
