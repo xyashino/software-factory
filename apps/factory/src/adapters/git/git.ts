@@ -13,11 +13,22 @@ export const createGitAdapter = (process: ProcessPort): GitPort => {
     }
     return result.stdout;
   };
+  const hasOrigin = async (cwd: string): Promise<boolean> =>
+    (await process.run(GIT, ['remote', 'get-url', REMOTE], cwd)).exitCode === 0;
+  const fetchOrigin = async (cwd: string): Promise<void> => {
+    const result = await process.run(GIT, ['fetch', REMOTE], cwd);
+    if (result.exitCode !== 0) {
+      throw new Error(`git fetch ${REMOTE} failed: ${result.stderr.trim()}`);
+    }
+  };
   return {
     currentBranch: async (cwd) =>
       (await git(['rev-parse', '--abbrev-ref', 'HEAD'], cwd)).trim(),
     isClean: async (cwd) => (await git(['status', '--porcelain'], cwd)) === '',
     worktreeAdd: async (repoRoot, path, branch, baseBranch) => {
+      if (await hasOrigin(repoRoot)) {
+        await fetchOrigin(repoRoot);
+      }
       await git(['worktree', 'add', path, '-b', branch, baseBranch], repoRoot);
     },
     worktreeRemove: async (repoRoot, path) => {

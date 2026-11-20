@@ -8,6 +8,7 @@ import { createTokenFile } from '../adapters/fs/token-file';
 import { appendTextFile, writeTextFile } from '../adapters/fs/write-text';
 import { createGitAdapter } from '../adapters/git/git';
 import { createPrAdapter } from '../adapters/git/gh';
+import { createCellServerAdapter } from '../adapters/http/cell-server.adapter';
 import { createServerClient } from '../adapters/http/server-client';
 import { createLoopbackEndpoint } from '../adapters/operator-endpoint/loopback';
 import { createRunnerCatalog } from '../adapters/runners/catalog';
@@ -20,6 +21,7 @@ import type { Ports } from '../application/core/procedure';
 import type { CellStatePort } from '../application/ports/cell-state.port';
 import { cellNameOf } from '../domain/cell/cell-name';
 import {
+  DEFAULT_CELL_SERVER_URL,
   DEFAULT_FACTORY_URL,
   SUPERVISOR_TOKEN_PATH,
   cellLogPathOf,
@@ -84,5 +86,9 @@ export const buildContext = (cellName?: string): Ports => {
     webPidFile: createPidFile('web.pid'),
     clock: createSystemClock(),
     cellState,
+    cellServer: createCellServerAdapter({
+      baseUrl: process.env.CELL_SERVER_URL ?? DEFAULT_CELL_SERVER_URL,
+    }),
+    cellServerPidFile: createPidFile('cell-server.pid'),
   };
 };

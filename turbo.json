@@ -10,6 +10,8 @@
     "FACTORY_PORT",
     "FACTORY_HOST",
     "FACTORY_URL",
+    "CELL_NAME",
+    "CELL_SERVER_URL",
     "XDG_DATA_HOME",
     "SF_WEB_DIR"
   ],
