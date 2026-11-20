@@ -41,6 +41,7 @@ export const startServer = define({ kind: 'supervisor' })(
     command: input.bin,
     args: [input.serverEntry],
     env: {
+      FACTORY_DATA_DIR: input.dataDir,
       FACTORY_DB_PATH: input.dbPath,
       FACTORY_PORT: String(input.port),
     },
