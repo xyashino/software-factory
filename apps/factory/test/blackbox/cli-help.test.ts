@@ -31,4 +31,21 @@ describe('sf entrypoint', () => {
     expect(result.stdout).toContain('sf');
     expect(result.stderr).not.toContain('E_NO_COMMAND');
   });
+
+  it.each([
+    [['cell', '--help'], 'start|list|stop|revoke'],
+    [['cell', 'start', '--help'], 'Enroll this Cell'],
+    [['server', 'token', '--help'], 'create'],
+    [['operator', 'block', '--help'], 'block'],
+  ])('prints own usage for sf %s', (args, text) => {
+    // Act
+    const result = spawnSync(process.execPath, [CLI_PATH, ...args], {
+      encoding: 'utf8',
+    });
+
+    // Assert
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain(text);
+    expect(result.stdout).not.toContain('Software factory CLI');
+  });
 });
