@@ -1,4 +1,8 @@
-export type BusEvent = { readonly kind: string; readonly at: number };
+export type BusEvent = {
+  readonly kind: string;
+  readonly at: number;
+  readonly slotId?: string;
+};
 
 export type BusListener = (event: BusEvent) => void;
 

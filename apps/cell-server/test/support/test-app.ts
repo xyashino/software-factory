@@ -2,22 +2,56 @@ import { createApp } from '../../src/app';
 import { createEventBus } from '../../src/adapters/memory/event-bus.adapter';
 import { createTransport } from '../../src/bootstrap/transport';
 import type { Db } from '../../src/db/client';
+import type { EventBusPort } from '../../src/application/ports/event-bus.port';
 import { createTestDb } from './test-db';
+import {
+  createFakeFactoryClient,
+  createFakeRepoInspector,
+  createFakeSupervisor,
+  type FakeFactoryClient,
+  type FakeRepoInspector,
+  type FakeSupervisor,
+} from './fakes';
 import { createFakeClock, type FakeClock } from './test-transport';
 
 export type TestApp = ReturnType<typeof createApp>;
 
-export const createTestApp = (): {
+export type TestContext = {
   app: TestApp;
   db: Db;
   clock: FakeClock;
-} => {
+  eventBus: EventBusPort;
+  supervisor: FakeSupervisor;
+  factoryClient: FakeFactoryClient;
+  repoInspector: FakeRepoInspector;
+};
+
+export const createTestApp = (): TestContext => {
   const db = createTestDb();
   const clock = createFakeClock();
+  const eventBus = createEventBus();
+  const supervisor = createFakeSupervisor();
+  const factoryClient = createFakeFactoryClient();
+  const repoInspector = createFakeRepoInspector();
   const app = createApp(
-    createTransport({ db, clock, eventBus: createEventBus() }),
+    createTransport({
+      db,
+      clock,
+      eventBus,
+      supervisor,
+      factoryClient,
+      repoInspector,
+    }),
   );
-  return { app, db, clock };
+  return {
+    app,
+    db,
+    clock,
+    eventBus,
+    supervisor,
+    factoryClient,
+    repoInspector,
+  };
 };
 
 export const postJson = (
