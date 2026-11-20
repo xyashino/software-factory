@@ -11,13 +11,19 @@ export const createRunnerCatalog = (probe: BinaryProbe): RunnerCatalogPort => ({
     const adapter = getRunner(name);
     return adapter !== undefined && (await adapter.checkInstalled(probe));
   },
-  commandLine: (name, promptFile): CommandLine | undefined => {
+  commandLine: (name, promptFile, options = {}): CommandLine | undefined => {
     const adapter = getRunner(name);
     if (adapter === undefined) return undefined;
-    const [command = '', ...args] = adapter.buildCommand({
+    const spec = {
       promptFile,
-      permission: 'write',
-    });
+      model: options.model,
+      permission: options.permission ?? 'write',
+    };
+    const argv = options.interactive
+      ? adapter.buildInteractive?.(spec)
+      : adapter.buildCommand(spec);
+    if (argv === undefined) return undefined;
+    const [command = '', ...args] = argv;
     return { command, args };
   },
 });

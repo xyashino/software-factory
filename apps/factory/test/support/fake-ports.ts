@@ -64,6 +64,7 @@ export const createFakePorts = (options: FakeOptions = {}): FakePorts => {
         return config;
       },
       writeText: unused,
+      appendText: unused,
       exists: async () => config !== null,
       list: unused,
       readStdin: unused,

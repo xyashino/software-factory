@@ -18,5 +18,14 @@ export const antigravityRunner: RunnerAdapter = {
     '-p',
     promptFor(spec.promptFile),
   ],
+  buildInteractive: (spec) => [
+    BINARY,
+    '--mode',
+    'auto',
+    '--dangerously-skip-permissions',
+    ...modelArgs(spec),
+    '-i',
+    promptFor(spec.promptFile),
+  ],
   checkInstalled: (probe) => probe(BINARY),
 };

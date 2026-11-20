@@ -124,6 +124,9 @@ const memoryFs = (files: Record<string, string>): Ports['fs'] => ({
     Object.keys(files)
       .filter((path) => dirname(path) === dir)
       .map((path) => basename(path)),
+  appendText: async (path, text) => {
+    files[path] = (files[path] ?? '') + text;
+  },
   readStdin: async () => '',
 });
 

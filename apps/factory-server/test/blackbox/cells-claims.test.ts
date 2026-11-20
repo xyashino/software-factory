@@ -96,6 +96,7 @@ type ClaimBody = {
     epoch: number;
     leaseExpiresAt: number;
     targetBranch: string;
+    payload: Record<string, unknown>;
   };
 };
 
@@ -187,6 +188,24 @@ describe('cell claims', () => {
     expect(jobRow(db, body.job?.jobId ?? '')).toMatchObject({
       status: 'claimed',
       cellId: 'proj-1:cell-a',
+    });
+  });
+
+  it('tells the cell which line and task the claimed job runs', async () => {
+    const { app } = setup();
+    const token = await enrollCell(app, 'cell-a');
+
+    const { body } = await claim(app, token);
+
+    expect(body.job?.payload).toMatchObject({
+      stepIndex: 0,
+      lineName: 'feature',
+      task: {
+        slug: 'order-1',
+        title: 'order-1',
+        type: 'feat',
+        description: 'seeded order',
+      },
     });
   });
 

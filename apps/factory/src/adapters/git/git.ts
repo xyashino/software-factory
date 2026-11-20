@@ -26,12 +26,13 @@ export const createGitAdapter = (process: ProcessPort): GitPort => {
     excludeLocally: async (worktree, pattern) => {
       await addInfoExclude(process, worktree, pattern);
     },
+    // `--no-verify`: the Line's quality gate runs the hooks' checks (`ci:verify`) itself.
     commit: async (cwd, paths, message) => {
       await git(['add', '--', ...paths], cwd);
-      await git(['commit', '-m', message, '--', ...paths], cwd);
+      await git(['commit', '--no-verify', '-m', message, '--', ...paths], cwd);
     },
     push: async (cwd, branch) => {
-      await git(['push', '--set-upstream', REMOTE, branch], cwd);
+      await git(['push', '--no-verify', '--set-upstream', REMOTE, branch], cwd);
     },
     headSha: async (cwd) => (await git(['rev-parse', 'HEAD'], cwd)).trim(),
     status: (cwd) => git(['status', '--porcelain'], cwd),

@@ -155,6 +155,9 @@ const memoryFs = (files: Record<string, string>): Ports['fs'] => ({
     Object.keys(files)
       .filter((path) => dirname(path) === dir)
       .map((path) => basename(path)),
+  appendText: async (path, text) => {
+    files[path] = (files[path] ?? '') + text;
+  },
   readStdin: async () => '',
 });
 
@@ -369,6 +372,9 @@ describe('cell lifecycle', () => {
         command: 'complete',
       }),
     );
+    expect(bodyOf(transitionCalls(calls)[1] as ServerCall).commitSha).toBe(
+      'abc123',
+    );
     expect(calls.map((call) => call.route).join(' ')).not.toContain('drain');
     const claimWaits = calls
       .filter((call) => call.route === CLAIMS_ROUTE)
@@ -379,8 +385,8 @@ describe('cell lifecycle', () => {
     expect(runs[0]?.env.FACTORY_CYCLE_TOKEN).toMatch(/^[0-9a-f]{32}$/);
     expect(runs[0]).toMatchObject({
       command: 'fake-runner',
-      args: [RUNNER, '.cell/build/prompt.md'],
-      logPath: join(REPO, '.worktrees', 'cli-08', '.cell', 'build', 'step.log'),
+      args: [RUNNER, '.cell/plan/prompt.md'],
+      logPath: join(REPO, '.worktrees', 'cli-08', '.cell', 'plan', 'step.log'),
     });
   });
 

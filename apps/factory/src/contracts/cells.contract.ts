@@ -22,6 +22,18 @@ const resumedJobDto = z.object({
   leaseExpiresAt: z.number().int(),
 });
 
+export const stepPayloadSchema = z.looseObject({
+  lineName: z.string().optional(),
+  task: z
+    .object({
+      slug: z.string(),
+      title: z.string(),
+      type: z.string(),
+      description: z.string(),
+    })
+    .optional(),
+});
+
 export const claimedJobDto = z.object({
   jobId: z.string(),
   kind: z.string(),

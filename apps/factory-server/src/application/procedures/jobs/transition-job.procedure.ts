@@ -30,6 +30,7 @@ import {
   UnprocessableTransition,
   type OrderStep,
 } from '../../../domain/orders/job-transitions';
+import { stepJobPayload } from '../../orders/job-payload';
 import {
   Conflict,
   Forbidden,
@@ -550,7 +551,7 @@ const issueJob = (
           stepIndex: prior.stepIndex,
           requiredFiles: prior.requiredFilesJson,
         })),
-      payloadJson: { stepIndex: next.stepIndex },
+      payloadJson: stepJobPayload(order, next.stepIndex),
       cellId,
       epoch,
       leaseExpiresAt,

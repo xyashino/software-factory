@@ -14,13 +14,21 @@ import type {
   RunOutcome,
   RunSpec,
 } from '../../application/ports/runner.port';
+import {
+  acceptAntigravityTrust,
+  antigravitySettingsPathOf,
+} from './antigravity-trust';
 import { acceptClaudeTrust, claudeConfigPathOf } from './claude-trust';
 
 const HERDR = 'herdr';
 const CLAUDE = 'claude';
+const ANTIGRAVITY = 'agy';
 const POLL_MS = 1000;
 const ABORTED_EXIT = 130;
 const WORKSPACE_LABEL_PREFIX = 'factory:';
+const LOGS_LABEL = 'logs';
+const LOG_TAIL_LINES = 200;
+const CLEAR_SCREEN = "printf '\\033[2J\\033[3J\\033[H'";
 const TAB_ID = /"tab_id"\s*:\s*"([^"]+)"/;
 const PANE_ID = /"pane_id"\s*:\s*"([^"]+)"/;
 const WORKSPACE_ID = /"workspace_id"\s*:\s*"([^"]+)"/;
@@ -32,6 +40,31 @@ const workspaceListSchema = z.object({
     ),
   }),
 });
+
+const tabListSchema = z.object({
+  result: z.object({
+    tabs: z.array(
+      z.object({
+        tab_id: z.string(),
+        label: z.string().nullish(),
+        number: z.number(),
+      }),
+    ),
+  }),
+});
+
+const paneListSchema = z.object({
+  result: z.object({
+    panes: z.array(z.object({ pane_id: z.string(), tab_id: z.string() })),
+  }),
+});
+
+export interface HerdrRunnerOptions {
+  /** where the Cell workspace and its logs tab open */
+  home: string;
+  /** the Cell log the first tab follows */
+  logPath: string;
+}
 
 interface HerdrRun {
   cwd: string;
@@ -96,17 +129,78 @@ const cellWorkspaceOf = async (
   return workspaceId;
 };
 
+// The workspace's first tab follows the Cell log, as the legacy `logs` tab did. Cosmetic: failures are ignored.
+const ensureLogsTab = async (
+  processPort: ProcessPort,
+  workspaceId: string,
+  options: HerdrRunnerOptions,
+): Promise<void> => {
+  try {
+    const { tabs } = tabListSchema.parse(
+      JSON.parse(
+        await herdrOk(
+          processPort,
+          ['tab', 'list', '--workspace', workspaceId],
+          options.home,
+        ),
+      ),
+    ).result;
+    if (tabs.some((tab) => tab.label === LOGS_LABEL)) return;
+    const [first] = [...tabs].sort((a, b) => a.number - b.number);
+    if (first === undefined) return;
+    const { panes } = paneListSchema.parse(
+      JSON.parse(
+        await herdrOk(
+          processPort,
+          ['pane', 'list', '--workspace', workspaceId],
+          options.home,
+        ),
+      ),
+    ).result;
+    const pane = panes.find((item) => item.tab_id === first.tab_id);
+    if (pane === undefined) return;
+    await herdrOk(
+      processPort,
+      ['tab', 'rename', first.tab_id, LOGS_LABEL],
+      options.home,
+    );
+    await herdrOk(
+      processPort,
+      [
+        'pane',
+        'run',
+        pane.pane_id,
+        `${CLEAR_SCREEN} && exec tail -n ${LOG_TAIL_LINES} -F ${shellQuote(options.logPath)}`,
+      ],
+      options.home,
+    );
+  } catch {
+    // the logs tab is for watching only
+  }
+};
+
 export const createHerdrRunner = (
   processPort: ProcessPort,
   cellName: () => Promise<string>,
+  options?: HerdrRunnerOptions,
 ): RunnerPort => {
   const runs = new Map<string, HerdrRun>();
   let started = 0;
-  let previousTabId: string | undefined;
+  let previous: { runId: string; tabId: string } | undefined;
   let workspace: Promise<string> | undefined;
   const cellWorkspace = (cwd: string): Promise<string> => {
     workspace ??= cellName()
-      .then((name) => cellWorkspaceOf(processPort, name, cwd))
+      .then(async (name) => {
+        const id = await cellWorkspaceOf(
+          processPort,
+          name,
+          options?.home ?? cwd,
+        );
+        if (options !== undefined) {
+          await ensureLogsTab(processPort, id, options);
+        }
+        return id;
+      })
       .catch((error: unknown) => {
         workspace = undefined;
         throw error;
@@ -126,8 +220,18 @@ export const createHerdrRunner = (
       if (basename(spec.command) === CLAUDE) {
         acceptClaudeTrust(claudeConfigPathOf(), spec.cwd);
       }
-      if (previousTabId !== undefined) {
-        await processPort.run(HERDR, ['tab', 'close', previousTabId], spec.cwd);
+      if (basename(spec.command) === ANTIGRAVITY) {
+        acceptAntigravityTrust(antigravitySettingsPathOf(), spec.cwd);
+      }
+      if (previous !== undefined) {
+        // A TUI step never writes its exit file; closing its tab ends its wait.
+        const prior = runs.get(previous.runId);
+        if (prior !== undefined) prior.aborted = true;
+        await processPort.run(
+          HERDR,
+          ['tab', 'close', previous.tabId],
+          spec.cwd,
+        );
       }
       const created = await herdrOk(
         processPort,
@@ -155,7 +259,7 @@ export const createHerdrRunner = (
         spec.cwd,
       );
       runs.set(id, { cwd: spec.cwd, tabId, exitFile, aborted: false });
-      previousTabId = tabId;
+      previous = { runId: id, tabId };
       return { id };
     },
     abort: async (handle) => {
