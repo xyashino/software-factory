@@ -55,6 +55,7 @@ export const claimedJobDto = z.object({
       requiredFiles: z.array(z.string()),
     }),
   ),
+  incidentId: z.string().nullable().optional(),
   payload: z.record(z.string(), z.unknown()),
 });
 

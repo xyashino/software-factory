@@ -479,6 +479,44 @@ describe('incident listing and resolution', () => {
     expect(job).toMatchObject({ kind: 'mechanic', stepId: null, epoch: 1 });
   });
 
+  it('the mechanic job claim names the incident it triages', async () => {
+    const { app, db } = setup();
+    const token = await enrollCell(app, 'cell-a');
+    await exhaustBuildRetries(app, token);
+
+    const response = await postJson(
+      app,
+      '/api/v1/cells/claims',
+      {},
+      bearer(token),
+    );
+    const body = (await response.json()) as { job: { incidentId: string } };
+
+    expect(body.job.incidentId).toBe(onlyIncident(db).incidentId);
+  });
+
+  it('starting a mechanic job runs it without moving its order steps', async () => {
+    const { app, db } = setup();
+    const token = await enrollCell(app, 'cell-a');
+    await exhaustBuildRetries(app, token);
+    const mechanic = await claimJob(app, token);
+    const stepsBefore = db.select().from(orderSteps).all();
+
+    const { status } = await startJob(app, token, mechanic);
+
+    expect(status).toBe(200);
+    expect(db.select().from(jobs).all()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'mechanic',
+          status: 'running',
+          stepId: null,
+        }),
+      ]),
+    );
+    expect(db.select().from(orderSteps).all()).toEqual(stepsBefore);
+  });
+
   it('the mechanic cell resolves its leased incident and its mechanic job passes', async () => {
     const { app, db } = setup();
     const token = await enrollCell(app, 'cell-a');

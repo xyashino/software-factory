@@ -164,4 +164,42 @@ describe('line snapshot', () => {
     });
     expect(line.requireAdr).toBe(true);
   });
+
+  it('reads the mechanic block into the line with its runner and timeout', () => {
+    // Arrange
+    const text = `${LINE}mechanic:\n  profile: mechanic\n  runner: antigravity\n  model: gemini-3.8-flash-medium\n  timeout: 20m\n  headless: false\n  permission: read\n`;
+
+    // Act
+    const line = parseLine(text);
+
+    // Assert
+    expect(line.mechanic).toEqual({
+      profile: 'mechanic',
+      runner: 'antigravity',
+      model: 'gemini-3.8-flash-medium',
+      timeoutMs: 20 * 60_000,
+      headless: false,
+      permission: 'read',
+    });
+  });
+
+  it('defaults the mechanic to headless and read-only', () => {
+    // Arrange
+    const text = `${LINE}mechanic:\n  profile: mechanic\n  runner: antigravity\n  model: gemini-3.8-flash-medium\n`;
+
+    // Act
+    const line = parseLine(text);
+
+    // Assert
+    expect(line.mechanic).toMatchObject({
+      headless: true,
+      permission: 'read',
+      timeoutMs: 30 * 60_000,
+    });
+  });
+
+  it('has no mechanic when the line declares no complete mechanic block', () => {
+    expect(parseLine(LINE).mechanic).toBeNull();
+    expect(parseLine(`${LINE}mechanic:\n  timeout: 40m\n`).mechanic).toBeNull();
+  });
 });

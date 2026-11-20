@@ -29,6 +29,14 @@ operators:
     headless: false
     permission: read
 
+mechanic:
+  profile: mechanic
+  runner: antigravity
+  model: gemini-3.8-flash-medium
+  timeout: 20m
+  headless: false
+  permission: read
+
 stations:
   - id: build
     kind: operator

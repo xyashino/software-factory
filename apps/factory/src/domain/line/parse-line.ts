@@ -37,6 +37,15 @@ const operatorSchema = z.looseObject({
   permission: z.enum(['read', 'write']).default('write'),
 });
 
+const mechanicSchema = z.looseObject({
+  profile: z.string().trim().min(1).optional(),
+  runner: z.string().trim().min(1).optional(),
+  model: z.string().trim().min(1).optional(),
+  timeout: z.string().trim().min(1).optional(),
+  headless: z.boolean().default(true),
+  permission: z.enum(['read', 'write']).default('read'),
+});
+
 const lineSchema = z.looseObject({
   name: z.string().trim().min(1),
   stations: z.array(stationSchema).min(1),
@@ -49,9 +58,7 @@ const lineSchema = z.looseObject({
     })
     .optional(),
   deliver: z.looseObject({ requireAdr: z.boolean().default(false) }).optional(),
-  mechanic: z
-    .looseObject({ timeout: z.string().trim().min(1).optional() })
-    .optional(),
+  mechanic: mechanicSchema.optional(),
 });
 
 export interface LineStation {
@@ -71,11 +78,23 @@ export interface LineStation {
   timeoutMs: number | null;
 }
 
+/** The read-only operator that triages an incident: which profile runs, on which runner and model. */
+export interface LineMechanic {
+  profile: string;
+  runner: string;
+  model: string;
+  timeoutMs: number;
+  headless: boolean;
+  permission: 'read' | 'write';
+}
+
 export interface LineSnapshot {
   name: string;
   stations: LineStation[];
   setup: string[];
   requireAdr: boolean;
+  /** null when the line declares no complete mechanic block */
+  mechanic: LineMechanic | null;
 }
 
 export interface WireStation {
@@ -89,6 +108,36 @@ export interface WireStation {
 const durationMs = (text: string | undefined): number | null => {
   const match = text === undefined ? null : DURATION.exec(text);
   return match ? Number(match[1]) * (MS_PER_UNIT[match[2] ?? ''] ?? 0) : null;
+};
+
+const mechanicTimeout = (timeout: string | undefined): number => {
+  if (timeout === undefined) return DEFAULT_MECHANIC_TIMEOUT_MS;
+  const ms = durationMs(timeout);
+  if (ms === null) {
+    throw new Error(`invalid duration "${timeout}", use e.g. 30s, 40m or 1h`);
+  }
+  return ms;
+};
+
+const toMechanic = (
+  block: z.infer<typeof mechanicSchema> | undefined,
+): LineMechanic | null => {
+  if (
+    block === undefined ||
+    block.profile === undefined ||
+    block.runner === undefined ||
+    block.model === undefined
+  ) {
+    return null;
+  }
+  return {
+    profile: block.profile,
+    runner: block.runner,
+    model: block.model,
+    timeoutMs: mechanicTimeout(block.timeout),
+    headless: block.headless,
+    permission: block.permission,
+  };
 };
 
 const toStation = (
@@ -148,6 +197,7 @@ export const parseLine = (text: string): LineSnapshot => {
     stations,
     setup: line.workspace?.setup?.exec ?? [],
     requireAdr: line.deliver?.requireAdr ?? false,
+    mechanic: toMechanic(line.mechanic),
   };
 };
 
@@ -168,11 +218,5 @@ export const wireSnapshotOf = (
 
 /** The Mechanic's timeout from the line's `mechanic` block; the default when the line has none. */
 export const mechanicTimeoutMs = (text: string): number => {
-  const timeout = lineSchema.parse(parse(text)).mechanic?.timeout;
-  if (timeout === undefined) return DEFAULT_MECHANIC_TIMEOUT_MS;
-  const ms = durationMs(timeout);
-  if (ms === null) {
-    throw new Error(`invalid duration "${timeout}", use e.g. 30s, 40m or 1h`);
-  }
-  return ms;
+  return mechanicTimeout(lineSchema.parse(parse(text)).mechanic?.timeout);
 };

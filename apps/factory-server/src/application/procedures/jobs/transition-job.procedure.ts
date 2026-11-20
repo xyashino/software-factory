@@ -355,7 +355,7 @@ const startJob = (
 ): TransitionResponse => {
   requireStatus(job, 'claimed');
   const actor = cellActor(cellId);
-  if (job.kind === 'plan_branch') {
+  if (job.kind === 'plan_branch' || job.kind === 'mechanic') {
     tx.update(jobs)
       .set({ status: 'running' })
       .where(eq(jobs.jobId, job.jobId))

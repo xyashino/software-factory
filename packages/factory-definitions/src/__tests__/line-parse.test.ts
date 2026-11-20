@@ -80,4 +80,22 @@ describe('parseLine (schema v2)', () => {
       permission: 'write',
     });
   });
+
+  it('accepts a mechanic block and keeps it on the line', () => {
+    const text = `${readFileSync(VALID, 'utf8')}\nmechanic:\n  profile: planner\n  runner: claude\n  model: sonnet\n  timeout: 20m\n  permission: read\n`;
+    const parsed = parseLine({ file: FILE, path: VALID }, text);
+    if (!parsed.ok) throw new Error('mechanic block must parse');
+    expect(parsed.value.mechanic).toMatchObject({
+      profile: 'planner',
+      timeoutMs: 20 * 60_000,
+      headless: false,
+      permission: 'read',
+    });
+  });
+
+  it('rejects an unknown key inside the mechanic block', () => {
+    const text = `${readFileSync(VALID, 'utf8')}\nmechanic:\n  profile: planner\n  runner: claude\n  model: sonnet\n  timeout: 20m\n  colour: red\n`;
+    const parsed = parseLine({ file: FILE, path: VALID }, text);
+    expect(parsed.ok).toBe(false);
+  });
 });

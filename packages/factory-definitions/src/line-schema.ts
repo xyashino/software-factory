@@ -93,6 +93,8 @@ export interface Line {
     setup: CommandBlock;
   };
   operators: Record<string, OperatorPool>;
+  /** the read-only operator that triages an incident; absent when the line declares none */
+  mechanic?: OperatorPool;
   stations: LineStation[];
   deliver: {
     commit: ArtifactRef;
@@ -276,6 +278,7 @@ export const lineFileSchema = z.strictObject({
         });
       }
     }),
+  mechanic: operatorPoolSchema.optional(),
   stations: z
     .array(stationSchema)
     .min(1, 'must contain at least one station')
@@ -336,6 +339,9 @@ const toLine = (data: LineFileData, path: string): Line => {
         toOperatorPool(pool),
       ]),
     ),
+    ...(data.mechanic === undefined
+      ? {}
+      : { mechanic: toOperatorPool(data.mechanic) }),
     stations: data.stations.map(toStation),
     deliver: data.deliver,
     path,

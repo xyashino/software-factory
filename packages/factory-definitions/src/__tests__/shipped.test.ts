@@ -62,10 +62,11 @@ describe('shipped definitions', () => {
     expect(loaded.ok ? [] : loaded.error).toEqual([]);
   });
 
-  it('ship four operator profiles and no on-call operator (that stays behind until M10)', () => {
+  it('ship five operator profiles and no on-call operator (that stays behind until M10)', () => {
     expect([...definitions().operators.keys()].sort()).toEqual([
       'builder',
       'doctor',
+      'mechanic',
       'plan-reviewer',
       'planner',
     ]);
