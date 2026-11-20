@@ -3,6 +3,7 @@
   "private": true,
   "scripts": {
     "build": "turbo run build",
+    "build:sf": "pnpm --filter @repo/factory build:sf && pnpm --filter @repo/factory-web-demo build && pnpm --filter @repo/factory-web-demo deploy --prod apps/factory-web-demo/dist/sf-deps",
     "lint": "turbo run lint",
     "check-types": "turbo run check-types",
     "test": "turbo run test",

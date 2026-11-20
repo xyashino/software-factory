@@ -8,7 +8,7 @@ const POLL_INTERVAL_MS = 200;
 const StartSchema = z
   .object({
     bin: z.string().min(1),
-    serverEntry: z.string().min(1),
+    serverArgs: z.array(z.string().min(1)).min(1),
     dataDir: z.string().min(1),
     dbPath: z.string().min(1),
     port: z.number().int().positive(),
@@ -39,7 +39,7 @@ export const startServer = define({ kind: 'supervisor' })(
   }
   const pid = await ctx.process.spawnDetached({
     command: input.bin,
-    args: [input.serverEntry],
+    args: input.serverArgs,
     env: {
       FACTORY_DATA_DIR: input.dataDir,
       FACTORY_DB_PATH: input.dbPath,

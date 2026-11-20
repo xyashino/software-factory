@@ -14,6 +14,7 @@ const SPAWNED_PID = 555;
 const START_INPUT = {
   bin: 'node',
   webEntry: '/web/server/entry.mjs',
+  webArgs: ['/web/server/entry.mjs'],
   dataDir: '/data',
   factoryUrl: 'http://127.0.0.1:7070',
   projectId: 'project-1',

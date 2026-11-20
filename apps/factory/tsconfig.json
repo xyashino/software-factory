@@ -2,8 +2,8 @@
   "extends": "@repo/typescript-config/base.json",
   "compilerOptions": {
     "outDir": "dist",
-    "rootDir": "src",
+    "rootDir": "..",
     "types": ["node", "bun"]
   },
-  "include": ["src"]
+  "include": ["src", "../factory-server/src/sql.d.ts"]
 }

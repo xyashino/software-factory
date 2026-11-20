@@ -12,6 +12,9 @@ export const DEFAULT_DB_PATH = join(DEFAULT_DATA_DIR, 'factory.db');
 export const SERVER_ENTRY = fileURLToPath(
   new URL('../../factory-server/src/index.ts', import.meta.url),
 );
+export const IS_COMPILED = import.meta.url.includes('/$bunfs/');
+export const SERVER_MARKER = '__server';
+export const WEB_MARKER = '__web';
 export const CLAIM_WAIT_MS = 25_000;
 export const HEARTBEAT_INTERVAL_MS = 10_000;
 export const SELF_FENCE_MS = 45_000;
@@ -53,6 +56,12 @@ export const webEntryPath = (): string =>
       : []),
     ...WEB_ENTRY_FALLBACKS,
   ]) ?? MONOREPO_WEB_ENTRY;
+
+export const serverArgsOf = (compiled: boolean): string[] =>
+  compiled ? [SERVER_MARKER] : [SERVER_ENTRY];
+
+export const webArgsOf = (compiled: boolean, entry: string): string[] =>
+  compiled ? [WEB_MARKER, entry] : [entry];
 
 export const operatorCommandOf = (
   runtime: { execPath: string; entry: string } = {
