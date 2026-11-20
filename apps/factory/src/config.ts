@@ -1,10 +1,13 @@
-import { basename, resolve } from 'node:path';
+import { homedir } from 'node:os';
+import { basename, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+const XDG_DATA_HOME =
+  process.env.XDG_DATA_HOME || join(homedir(), '.local', 'share');
 export const DEFAULT_FACTORY_URL = 'http://127.0.0.1:7070';
 export const DEFAULT_PORT = 7070;
-export const DEFAULT_DATA_DIR = './.factory-local';
-export const DEFAULT_DB_PATH = './.factory-local/factory.db';
+export const DEFAULT_DATA_DIR = join(XDG_DATA_HOME, 'sf');
+export const DEFAULT_DB_PATH = join(DEFAULT_DATA_DIR, 'factory.db');
 export const SERVER_ENTRY = fileURLToPath(
   new URL('../../factory-server/src/index.ts', import.meta.url),
 );

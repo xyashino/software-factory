@@ -203,6 +203,62 @@ describe('factory server start and stop', () => {
   });
 });
 
+describe('factory server data directory', () => {
+  const SERVER_FILES = [
+    'server.pid',
+    'server.log',
+    'factory.db',
+    'web-demo.join',
+  ];
+
+  it('stores server state under XDG_DATA_HOME/sf by default', async () => {
+    // Arrange
+    const sandbox = await createSandbox();
+    delete sandbox.env.FACTORY_DATA_DIR;
+    delete sandbox.env.FACTORY_DB_PATH;
+    sandbox.env.XDG_DATA_HOME = join(sandbox.home, 'xdg');
+    const stateDir = join(sandbox.home, 'xdg', 'sf');
+
+    // Act
+    const result = runCli(sandbox, ['start']);
+
+    // Assert
+    expect(result.status).toBe(0);
+    for (const file of SERVER_FILES) {
+      expect(existsSync(join(stateDir, file))).toBe(true);
+    }
+  });
+
+  it('falls back to ~/.local/share/sf without XDG_DATA_HOME', async () => {
+    // Arrange
+    const sandbox = await createSandbox();
+    delete sandbox.env.FACTORY_DATA_DIR;
+    delete sandbox.env.FACTORY_DB_PATH;
+    const stateDir = join(sandbox.home, '.local', 'share', 'sf');
+
+    // Act
+    const result = runCli(sandbox, ['start']);
+
+    // Assert
+    expect(result.status).toBe(0);
+    for (const file of SERVER_FILES) {
+      expect(existsSync(join(stateDir, file))).toBe(true);
+    }
+  });
+
+  it('writes web-demo.join into FACTORY_DATA_DIR', async () => {
+    // Arrange
+    const sandbox = await createSandbox();
+
+    // Act
+    const result = runCli(sandbox, ['start']);
+
+    // Assert
+    expect(result.status).toBe(0);
+    expect(existsSync(join(sandbox.dataDir, 'web-demo.join'))).toBe(true);
+  });
+});
+
 describe('factory server token create', () => {
   it('prints the token once when no save flag is given', async () => {
     // Arrange

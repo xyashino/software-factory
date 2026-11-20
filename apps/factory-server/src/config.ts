@@ -1,3 +1,6 @@
+import { homedir } from 'node:os';
+import { join } from 'node:path';
+
 export const CLAIM_WAIT_MS = 25_000;
 export const HEARTBEAT_INTERVAL_MS = 10_000;
 export const SELF_FENCE_MS = 45_000;
@@ -11,4 +14,7 @@ export const MAX_CLAIM_WAITERS = 5;
 export const MAX_BODY_BYTES = 1_048_576;
 export const DEFAULT_PORT = 7070;
 export const DEFAULT_HOST = '127.0.0.1';
-export const DEFAULT_DB_PATH = './.factory-local/factory.db';
+const XDG_DATA_HOME =
+  process.env.XDG_DATA_HOME || join(homedir(), '.local', 'share');
+export const DEFAULT_DATA_DIR = join(XDG_DATA_HOME, 'sf');
+export const DEFAULT_DB_PATH = join(DEFAULT_DATA_DIR, 'factory.db');
