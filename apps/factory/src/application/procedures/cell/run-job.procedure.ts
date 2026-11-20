@@ -1051,9 +1051,7 @@ const mechanicStateOf = async (
   return {
     incident: job.payload.incident ?? null,
     steps,
-    logs: tailOf(
-      await readIfPresent(runtime, joinPath(runtime.repoRoot, CELL_LOG_PATH)),
-    ),
+    logs: tailOf(await readIfPresent(runtime, runtime.logPath)),
   };
 };
 
@@ -1090,7 +1088,7 @@ const writeMechanicPrompt = async (
         evidenceDir: joinPath(worktree, stepDir, EVIDENCE_DIR),
         inputs: [],
         context: `### Incident\n\n\`\`\`json\n${JSON.stringify(job.payload.incident ?? null, null, 2)}\n\`\`\``,
-        operatorCommand: `bun ${CLI_ENTRY} operator`,
+        operatorCommand: operatorCommandOf(),
       }),
     );
     return null;
