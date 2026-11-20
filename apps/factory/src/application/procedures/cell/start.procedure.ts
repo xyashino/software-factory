@@ -83,6 +83,7 @@ export const startCell = async (
     runners,
     localWorktrees: [],
   });
+  await ports.runner.prepare();
   const runtime: CellRuntime = {
     ports,
     session,

@@ -220,4 +220,63 @@ describe('herdr pane runner', () => {
     // Assert
     expect(calls.some((call) => call[2] === 'rename')).toBe(false);
   });
+
+  it('opens the Cell workspace and its logs tab on prepare, before any run', async () => {
+    // Arrange
+    const { port, calls } = fakeHerdr();
+    const runner = createHerdrRunner(port, CELL, LOG_OPTIONS);
+
+    // Act
+    await runner.prepare();
+
+    // Assert
+    expect(
+      calls.filter((call) => call[1] === 'workspace' && call[2] === 'create'),
+    ).toEqual([
+      [
+        'herdr',
+        'workspace',
+        'create',
+        '--label',
+        'factory:omarchy',
+        '--cwd',
+        '/repo',
+        '--no-focus',
+      ],
+    ]);
+    expect(calls).toContainEqual(['herdr', 'tab', 'rename', 'w9:t1', 'logs']);
+    expect(
+      calls.some((call) => call[1] === 'tab' && call[2] === 'create'),
+    ).toBe(false);
+  });
+
+  it('resolves prepare when herdr is down and retries on the first run', async () => {
+    // Arrange
+    const dir = stepDir();
+    const { port, calls } = fakeHerdr();
+    let herdrUp = false;
+    const flaky: ProcessPort = {
+      ...port,
+      run: async (command, args, cwd) => {
+        if (!herdrUp && args[0] === 'workspace') {
+          return { ...OK, exitCode: 1, stderr: 'herdr is down' };
+        }
+        return port.run(command, args, cwd);
+      },
+    };
+    const runner = createHerdrRunner(flaky, CELL, LOG_OPTIONS);
+
+    // Act
+    await expect(runner.prepare()).resolves.toBeUndefined();
+    herdrUp = true;
+    await finish(runner, dir);
+
+    // Assert
+    expect(
+      calls.some((call) => call[1] === 'workspace' && call[2] === 'create'),
+    ).toBe(true);
+    expect(
+      calls.some((call) => call[1] === 'tab' && call[2] === 'create'),
+    ).toBe(true);
+  });
 });

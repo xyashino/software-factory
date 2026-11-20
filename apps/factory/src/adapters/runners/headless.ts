@@ -47,6 +47,7 @@ export const createHeadlessRunner = (): RunnerPort => {
   const runs = new Map<string, HeadlessRun>();
   let started = 0;
   return {
+    prepare: async () => undefined,
     start: async (spec: RunSpec): Promise<RunHandle> => {
       started += 1;
       const id = `headless-${started}`;

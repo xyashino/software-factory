@@ -16,6 +16,7 @@ export interface RunOutcome {
 }
 
 export interface RunnerPort {
+  prepare(): Promise<void>;
   start(spec: RunSpec): Promise<RunHandle>;
   abort(handle: RunHandle): Promise<void>;
   wait(handle: RunHandle): Promise<RunOutcome>;

@@ -275,6 +275,7 @@ const runScenario = async (scenario: Scenario) => {
       },
     },
     runner: {
+      prepare: async () => undefined,
       start: async (spec: RunSpec): Promise<RunHandle> => {
         runs.push(spec);
         void handler?.({

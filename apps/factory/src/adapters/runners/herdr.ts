@@ -208,6 +208,12 @@ export const createHerdrRunner = (
     return workspace;
   };
   return {
+    // Herdr may be down at connect time; the first interactive run retries.
+    prepare: async () => {
+      await cellWorkspace(options?.home ?? process.cwd()).catch(
+        () => undefined,
+      );
+    },
     start: async (spec: RunSpec): Promise<RunHandle> => {
       started += 1;
       const id = `herdr-${started}`;
