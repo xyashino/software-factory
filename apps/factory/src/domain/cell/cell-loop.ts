@@ -7,11 +7,26 @@ export type NextStep<T> =
 
 export type HeartbeatVerdict = 'continue' | 'abort';
 
+export type IncidentAction =
+  | 'retry_step'
+  | 'restart_from_step'
+  | 'restart_from_scratch'
+  | 'escalate'
+  | 'cancel';
+
 export type OperatorOutcome =
   | { kind: 'done' }
   | { kind: 'verdict'; outcome: 'pass' }
   | { kind: 'verdict'; outcome: 'fail'; feedback: string }
-  | { kind: 'block'; reason: string; handover: string };
+  | { kind: 'block'; reason: string; handover: string }
+  | {
+      kind: 'incident';
+      action: IncidentAction;
+      stepIndex: number | undefined;
+      diagnosis: string;
+      tried: string;
+      report: string;
+    };
 
 export const nextStep = <T>(job: T | null): NextStep<T> =>
   job === null

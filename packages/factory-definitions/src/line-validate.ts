@@ -38,6 +38,13 @@ export const validateLine = (
       fail(`operators.${key}.profile`, `unknown profile "${pool.profile}"`);
     }
   }
+  if (
+    line.mechanic !== undefined &&
+    !operators.has(line.mechanic.profile) &&
+    !brokenOperators.has(line.mechanic.profile)
+  ) {
+    fail('mechanic.profile', `unknown profile "${line.mechanic.profile}"`);
+  }
 
   const usedOperators = new Set<string>();
 

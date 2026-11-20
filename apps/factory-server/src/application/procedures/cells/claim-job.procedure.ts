@@ -363,6 +363,7 @@ export const toClaimedJob = (row: JobRow, leaseExpiresAt: number) => ({
   baseCommitSha: row.baseCommitSha,
   targetBranch: row.targetBranch,
   expectedPriorSteps: row.expectedPriorStepsJson,
+  incidentId: row.incidentId,
   payload: row.payloadJson,
 });
 
