@@ -5,7 +5,8 @@ import {
   DEFAULT_DATA_DIR,
   DEFAULT_DB_PATH,
   DEFAULT_PORT,
-  SERVER_ENTRY,
+  IS_COMPILED,
+  serverArgsOf,
 } from '../../config';
 import { startServer } from '../../application/procedures/server/start.procedure';
 import { stopServer } from '../../application/procedures/server/stop.procedure';
@@ -37,7 +38,7 @@ const runStart = async (json: boolean): Promise<number> => {
     startServer,
     {
       bin: process.execPath,
-      serverEntry: SERVER_ENTRY,
+      serverArgs: serverArgsOf(IS_COMPILED),
       dataDir: paths.dataDir,
       dbPath: paths.dbPath,
       port: Number(process.env.FACTORY_PORT ?? DEFAULT_PORT),
@@ -82,7 +83,7 @@ const runTokenCreate = async (
     createServerToken,
     {
       bin: process.execPath,
-      serverEntry: SERVER_ENTRY,
+      serverArgs: serverArgsOf(IS_COMPILED),
       cwd: process.cwd(),
       dbPath: pathsFromEnv().dbPath,
       save,

@@ -5,7 +5,7 @@ import { define } from '../../core/procedure';
 const TokenCreateSchema = z
   .object({
     bin: z.string().min(1),
-    serverEntry: z.string().min(1),
+    serverArgs: z.array(z.string().min(1)).min(1),
     cwd: z.string().min(1),
     dbPath: z.string().min(1),
     save: z.boolean(),
@@ -21,7 +21,7 @@ export const createServerToken = define({ kind: 'supervisor' })(
 )<TokenCreateResult>(async (input, ctx) => {
   const result = await ctx.process.run(
     input.bin,
-    [input.serverEntry, 'admin', 'token', 'create'],
+    [...input.serverArgs, 'admin', 'token', 'create'],
     input.cwd,
     { FACTORY_DB_PATH: input.dbPath },
   );

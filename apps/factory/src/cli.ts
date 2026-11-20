@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
 import { defineCommand, runCommand, showUsage } from 'citty';
+import { dispatchInternal } from './bootstrap/server-dispatch';
 import { cellCommand } from './adapters/cli/cell.command';
 import { incidentCommand } from './adapters/cli/incident.command';
 import { initCommand } from './adapters/cli/init.command';
@@ -40,14 +41,16 @@ const main = defineCommand({
 
 const rawArgs = process.argv.slice(2);
 
-try {
-  if (rawArgs.some((arg) => HELP_FLAGS.includes(arg))) {
-    await showUsage(main);
-    process.exit(EXIT.ok);
+if (!(await dispatchInternal(rawArgs))) {
+  try {
+    if (rawArgs.some((arg) => HELP_FLAGS.includes(arg))) {
+      await showUsage(main);
+      process.exit(EXIT.ok);
+    }
+    await runCommand(main, { rawArgs });
+    process.exit(process.exitCode ?? EXIT.ok);
+  } catch (error) {
+    console.error(error);
+    process.exit(EXIT.argument);
   }
-  await runCommand(main, { rawArgs });
-  process.exit(process.exitCode ?? EXIT.ok);
-} catch (error) {
-  console.error(error);
-  process.exit(EXIT.argument);
 }

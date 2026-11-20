@@ -4,6 +4,8 @@ import {
   cellPidNameOf,
   cellStatePathOf,
   operatorCommandOf,
+  serverArgsOf,
+  webArgsOf,
 } from '../../src/config';
 
 describe('cell files', () => {
@@ -71,5 +73,51 @@ describe('operator command', () => {
 
     // Assert
     expect(command.endsWith(' operator')).toBe(true);
+  });
+});
+
+describe('server spawn args', () => {
+  it('starts the internal server marker in the compiled binary', () => {
+    // Arrange
+    // Act
+    const args = serverArgsOf(true);
+
+    // Assert
+    expect(args).toEqual(['__server']);
+  });
+
+  it('starts the server entry source in dev', () => {
+    // Arrange
+    // Act
+    const args = serverArgsOf(false);
+
+    // Assert
+    expect(args).toEqual([
+      expect.stringMatching(/factory-server\/src\/index\.ts$/),
+    ]);
+  });
+});
+
+describe('web spawn args', () => {
+  it('hands the web entry to the internal web marker in the compiled binary', () => {
+    // Arrange
+    const entry = '/usr/local/share/sf/web/server/entry.mjs';
+
+    // Act
+    const args = webArgsOf(true, entry);
+
+    // Assert
+    expect(args).toEqual(['__web', entry]);
+  });
+
+  it('runs the web entry directly in dev', () => {
+    // Arrange
+    const entry = '/repo/apps/factory-web-demo/dist/server/entry.mjs';
+
+    // Act
+    const args = webArgsOf(false, entry);
+
+    // Assert
+    expect(args).toEqual([entry]);
   });
 });

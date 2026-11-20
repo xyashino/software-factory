@@ -7,7 +7,9 @@ import {
   DEFAULT_FACTORY_URL,
   DEFAULT_WEB_HOST,
   DEFAULT_WEB_PORT,
+  IS_COMPILED,
   REPO_CONFIG_PATH,
+  webArgsOf,
   webEntryPath,
 } from '../../config';
 import { readProjectId } from '../../application/core/repo-access';
@@ -31,11 +33,13 @@ const runStart = async (
   if (project.kind === 'failed') {
     return reportFailure(project);
   }
+  const webEntry = webEntryPath();
   const result = await runWithoutToken(
     startWeb,
     {
       bin: process.execPath,
-      webEntry: webEntryPath(),
+      webEntry,
+      webArgs: webArgsOf(IS_COMPILED, webEntry),
       dataDir: dataDirFromEnv(),
       factoryUrl: process.env.FACTORY_URL ?? DEFAULT_FACTORY_URL,
       projectId: project.value,

@@ -9,6 +9,7 @@ const StartSchema = z
   .object({
     bin: z.string().min(1),
     webEntry: z.string().min(1),
+    webArgs: z.array(z.string().min(1)).min(1),
     dataDir: z.string().min(1),
     factoryUrl: z.url(),
     projectId: z.string().min(1),
@@ -56,7 +57,7 @@ export const startWeb = define({ kind: 'supervisor' })(
   const url = `http://${input.host}:${input.port}`;
   const pid = await ctx.process.spawnDetached({
     command: input.bin,
-    args: [input.webEntry],
+    args: input.webArgs,
     env: {
       FACTORY_URL: input.factoryUrl,
       FACTORY_DATA_DIR: input.dataDir,
