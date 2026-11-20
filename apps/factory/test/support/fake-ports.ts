@@ -123,6 +123,19 @@ export const createFakePorts = (options: FakeOptions = {}): FakePorts => {
     },
     clock: { now: unused, sleep: unused },
     cellState: { read: async () => null, write: unused },
+    cellServer: {
+      health: unused,
+      get: unused,
+      post: unused,
+      patch: unused,
+      delete: unused,
+    },
+    cellServerPidFile: {
+      read: unused,
+      write: unused,
+      acquire: unused,
+      remove: unused,
+    },
   };
   return { ports, calls, writes };
 };

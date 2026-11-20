@@ -3,9 +3,10 @@ import { homedir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const XDG_DATA_HOME =
+export const XDG_DATA_HOME =
   process.env.XDG_DATA_HOME || join(homedir(), '.local', 'share');
 export const DEFAULT_FACTORY_URL = 'http://127.0.0.1:7070';
+export const DEFAULT_CELL_SERVER_URL = 'http://127.0.0.1:7071';
 export const DEFAULT_PORT = 7070;
 export const DEFAULT_DATA_DIR = join(XDG_DATA_HOME, 'sf');
 export const DEFAULT_DB_PATH = join(DEFAULT_DATA_DIR, 'factory.db');
@@ -13,8 +14,12 @@ export const SERVER_ENTRY = fileURLToPath(
   new URL('../../factory-server/src/index.ts', import.meta.url),
 );
 export const IS_COMPILED = import.meta.url.includes('/$bunfs/');
+export const CELL_SERVER_ENTRY = fileURLToPath(
+  new URL('../../cell-server/src/index.ts', import.meta.url),
+);
 export const SERVER_MARKER = '__server';
 export const WEB_MARKER = '__web';
+export const CELL_SERVER_MARKER = '__cell-server';
 export const CLAIM_WAIT_MS = 25_000;
 export const HEARTBEAT_INTERVAL_MS = 10_000;
 export const SELF_FENCE_MS = 45_000;
@@ -59,6 +64,9 @@ export const webEntryPath = (): string =>
 
 export const serverArgsOf = (compiled: boolean): string[] =>
   compiled ? [SERVER_MARKER] : [SERVER_ENTRY];
+
+export const cellServerArgsOf = (compiled: boolean): string[] =>
+  compiled ? [CELL_SERVER_MARKER] : [CELL_SERVER_ENTRY];
 
 export const webArgsOf = (compiled: boolean, entry: string): string[] =>
   compiled ? [WEB_MARKER, entry] : [entry];

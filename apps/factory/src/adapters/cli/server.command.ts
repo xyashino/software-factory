@@ -42,6 +42,7 @@ const runStart = async (json: boolean): Promise<number> => {
       dataDir: paths.dataDir,
       dbPath: paths.dbPath,
       port: Number(process.env.FACTORY_PORT ?? DEFAULT_PORT),
+      host: process.env.FACTORY_HOST || undefined,
     },
     buildContext(),
   );

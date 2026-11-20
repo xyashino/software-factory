@@ -12,6 +12,7 @@ const StartSchema = z
     dataDir: z.string().min(1),
     dbPath: z.string().min(1),
     port: z.number().int().positive(),
+    host: z.string().min(1).optional(),
   })
   .strict();
 
@@ -44,6 +45,7 @@ export const startServer = define({ kind: 'supervisor' })(
       FACTORY_DATA_DIR: input.dataDir,
       FACTORY_DB_PATH: input.dbPath,
       FACTORY_PORT: String(input.port),
+      ...(input.host === undefined ? {} : { FACTORY_HOST: input.host }),
     },
     logPath: `${input.dataDir}/server.log`,
   });

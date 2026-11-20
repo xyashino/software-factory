@@ -1,4 +1,5 @@
 import type { Access } from '../../domain/access';
+import type { CellServerPort } from '../ports/cell-server.port';
 import type { CellStatePort } from '../ports/cell-state.port';
 import type { ClockPort } from '../ports/clock.port';
 import type { FsPort } from '../ports/fs.port';
@@ -31,6 +32,8 @@ export interface Ports {
   webPidFile: PidFilePort;
   clock: ClockPort;
   cellState: CellStatePort;
+  cellServer: CellServerPort;
+  cellServerPidFile: PidFilePort;
 }
 
 export type Context<A extends Access> = Ports & {
