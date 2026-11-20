@@ -51,6 +51,7 @@ export default config({
     'create-todo': { source: './skills/create-todo' },
     'do-ui': { source: './skills/do-ui' },
     evidence: { source: './skills/evidence' },
+    'factory-install': { source: './skills/factory-install' },
     'feature-workflow': { source: './skills/feature-workflow' },
     'boss-factory': { source: './skills/boss-factory' },
     'plan-be': { source: './skills/plan-be' },
@@ -59,9 +60,7 @@ export default config({
     'plan-fe': { source: './skills/plan-fe' },
     'plan-requirements': { source: './skills/plan-requirements' },
     'run-workflow': { source: './skills/run-workflow' },
-    'setup-factory': { source: './skills/setup-factory' },
     sloth: { source: './skills/sloth' },
-    'vps-gon-stack': { source: './skills/vps-gon-stack' },
     'witch-doctor': { source: './skills/witch-doctor' },
   },
   refs: {
