@@ -43,7 +43,10 @@ const rawArgs = process.argv.slice(2);
 
 if (!(await dispatchInternal(rawArgs))) {
   try {
-    if (rawArgs.some((arg) => HELP_FLAGS.includes(arg))) {
+    if (
+      rawArgs.length === 0 ||
+      rawArgs.some((arg) => HELP_FLAGS.includes(arg))
+    ) {
       await showUsage(main);
       process.exit(EXIT.ok);
     }
