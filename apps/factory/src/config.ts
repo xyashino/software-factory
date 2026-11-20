@@ -22,8 +22,8 @@ export const LINES_DIR = '.factory/lines';
 export const OPERATORS_DIR = '.factory/operators';
 export const WORKTREES_DIR = '.worktrees';
 export const PR_TEMPLATE_PATH = '.factory/templates/pr/body.md';
-export const CELL_STATE_PATH = '.factory-local/cell.json';
-export const CELL_LOG_PATH = '.factory-local/cell.log';
+export const CELLS_DIR = '.factory-local/cells';
+export const LEGACY_CELL_STATE_PATH = '.factory-local/cell.json';
 export const SUPERVISOR_TOKEN_PATH = '.factory-local/supervisor.token';
 export const JOIN_TOKEN_ENV = 'FACTORY_JOIN_TOKEN';
 export const DEFAULT_TODO_DIR = 'todos';
@@ -39,6 +39,12 @@ const MONOREPO_WEB_ENTRY = fileURLToPath(
 
 const firstExisting = (candidates: readonly string[]): string | undefined =>
   candidates.find((path) => existsSync(path));
+
+export const cellStatePathOf = (name: string): string =>
+  join(CELLS_DIR, `${name}.json`);
+export const cellLogPathOf = (name: string): string =>
+  join(CELLS_DIR, `${name}.log`);
+export const cellPidNameOf = (name: string): string => `${name}.pid`;
 
 export const webEntryPath = (): string =>
   firstExisting([

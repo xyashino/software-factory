@@ -1,5 +1,31 @@
 import { describe, expect, it } from 'vitest';
-import { operatorCommandOf } from '../../src/config';
+import {
+  cellLogPathOf,
+  cellPidNameOf,
+  cellStatePathOf,
+  operatorCommandOf,
+} from '../../src/config';
+
+describe('cell files', () => {
+  it('keeps state, log and lock of one cell name together', () => {
+    // Arrange
+    const name = 'dev-box-2';
+
+    // Act
+    const files = [
+      cellStatePathOf(name),
+      cellLogPathOf(name),
+      cellPidNameOf(name),
+    ];
+
+    // Assert
+    expect(files).toEqual([
+      '.factory-local/cells/dev-box-2.json',
+      '.factory-local/cells/dev-box-2.log',
+      'dev-box-2.pid',
+    ]);
+  });
+});
 
 describe('operator command', () => {
   it('runs the compiled sf binary directly', () => {

@@ -1,5 +1,5 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
-import { homedir } from 'node:os';
+import { homedir, hostname } from 'node:os';
 import { join, resolve } from 'node:path';
 import { createCellStateFile } from '../adapters/fs/cell-state';
 import { createPidFile } from '../adapters/fs/pid-file';
@@ -18,11 +18,12 @@ import { createProcessAdapter } from '../adapters/process/spawn-server';
 import { createSystemClock } from '../adapters/process/system-clock';
 import type { Ports } from '../application/core/procedure';
 import type { CellStatePort } from '../application/ports/cell-state.port';
+import { cellNameOf } from '../domain/cell/cell-name';
 import {
-  CELL_LOG_PATH,
-  CELL_STATE_PATH,
   DEFAULT_FACTORY_URL,
   SUPERVISOR_TOKEN_PATH,
+  cellLogPathOf,
+  cellStatePathOf,
 } from '../config';
 
 export type Mode = 'supervisor' | 'cell' | 'operator';
@@ -45,9 +46,10 @@ const enrolledCellName =
 const binaryOnPath = async (binary: string): Promise<boolean> =>
   (await processPort.run('which', [binary], process.cwd())).exitCode === 0;
 
-export const buildContext = (): Ports => {
+export const buildContext = (cellName?: string): Ports => {
+  const name = cellNameOf(cellName ?? hostname());
   const cellState = createCellStateFile(
-    resolve(process.cwd(), CELL_STATE_PATH),
+    resolve(process.cwd(), cellStatePathOf(name)),
   );
   return {
     server: createServerClient({
@@ -71,7 +73,7 @@ export const buildContext = (): Ports => {
       createHeadlessRunner(),
       createHerdrRunner(processPort, enrolledCellName(cellState), {
         home: process.cwd(),
-        logPath: resolve(process.cwd(), CELL_LOG_PATH),
+        logPath: resolve(process.cwd(), cellLogPathOf(name)),
       }),
     ),
     runners: createRunnerCatalog(binaryOnPath),

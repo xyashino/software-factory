@@ -25,7 +25,10 @@ interface FakeHerdr {
 const TABS = (label: string): string =>
   `{"result":{"tabs":[{"tab_id":"w9:t1","label":"${label}","number":1}]}}`;
 const PANES = '{"result":{"panes":[{"pane_id":"w9:p1","tab_id":"w9:t1"}]}}';
-const LOG_OPTIONS = { home: '/repo', logPath: '/repo/.factory-local/cell.log' };
+const LOG_OPTIONS = {
+  home: '/repo',
+  logPath: '/repo/.factory-local/cells/omarchy.log',
+};
 
 const fakeHerdr = (
   statusCode = 0,
@@ -196,7 +199,7 @@ describe('herdr pane runner', () => {
     );
     expect(follow?.[3]).toBe('w9:p1');
     expect(follow?.[4]).toContain(
-      "tail -n 200 -F '/repo/.factory-local/cell.log'",
+      "tail -n 200 -F '/repo/.factory-local/cells/omarchy.log'",
     );
     expect(calls).toContainEqual([
       'herdr',

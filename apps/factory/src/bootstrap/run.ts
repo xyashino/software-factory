@@ -52,7 +52,7 @@ export const run = <I, O>(
   procedure: Procedure<I, O>,
   input: unknown,
   mode: Mode,
-  build: Build = buildContext,
+  build: Build = () => buildContext(),
 ): Promise<RunResult<O>> =>
   settle(async () => {
     const ports = build(mode);
