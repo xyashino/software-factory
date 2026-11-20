@@ -258,7 +258,7 @@ describe('deliver job (deferred commit, PROTOCOL §8.3)', () => {
         draft: false,
       }),
     ]);
-    expect(github.created[0]?.body).toContain('Task: `todo-1` (feat)');
+    expect(github.created[0]?.body).toContain('## 🎯 Task: `todo-1`');
     expect(github.created[0]?.body).toContain(BODY);
     expect(reportsOf(calls)).toEqual([
       { status: 'finished', prUrl: PR_URL, commit: tip },

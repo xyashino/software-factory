@@ -161,26 +161,21 @@ You must follow the declared rules.
 - Otherwise run \`factory-operator verdict fail --feedback -\` and give each problem with its file and line on stdin.
 `;
 
-export const PR_BODY_TEMPLATE = `## Summary
-
-Task: {{taskId}}{{typeSuffix}}
+export const PR_BODY_TEMPLATE = `## 🎯 Task: \`{{taskId}}\`
 
 {{objective}}
 
-### Changes
+### 📝 Changes
 
 {{changes}}
 
-## Architecture Decision (ADR)
+## 🏛️ ADR
 
 {{adrSection}}
 
-## Verification & Quality Gate
+## 🧪 Checks
 
 {{verificationSection}}
-
-Event log: {{logCommand}}
-{{reportSection}}
 `;
 
 export const repoConfigText = (projectId: string): string =>

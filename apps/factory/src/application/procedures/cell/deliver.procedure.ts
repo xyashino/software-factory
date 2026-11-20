@@ -3,16 +3,16 @@ import { factoryBranchOf } from '../../../domain/git/branch-names';
 import { joinPath } from '../../../domain/common/path';
 import { checkpointMessage } from '../../../domain/git/checkpoint-policy';
 import {
+  extractObjective,
+  formatAdrEntries,
+  formatChecks,
   prChangesOf,
   prTitleOf,
   renderPrBody,
+  type AdrEntry,
 } from '../../../domain/git/pr-body';
 import type { Ports } from '../../core/procedure';
 import { commitTextOf } from './checkpoint.procedure';
-
-const ADR_NOTE = 'One entry in `decisions/` for this change.';
-const VERIFICATION_NOTE =
-  "Checks and proof recorded by the Work order's build station.";
 
 export interface DeliverSpec {
   repoRoot: string;
@@ -20,7 +20,18 @@ export interface DeliverSpec {
   slug: string;
   baseBranch: string;
   priorStepIds: readonly string[];
+  taskDescription?: string;
+  adrPaths?: readonly string[];
+  checks?: readonly string[];
 }
+
+const adrEntriesOf = (ports: Ports, spec: DeliverSpec): Promise<AdrEntry[]> =>
+  Promise.all(
+    (spec.adrPaths ?? []).map(async (path) => ({
+      path,
+      content: await ports.fs.readText(joinPath(spec.worktree, path)),
+    })),
+  );
 
 const commitTextForPr = async (
   ports: Ports,
@@ -48,20 +59,18 @@ export const deliverWorkOrder = async (
   const template = await ports.fs.readText(
     joinPath(spec.repoRoot, PR_TEMPLATE_PATH),
   );
+  const title = prTitleOf(commitText);
   await ports.pr.publish({
     cwd: spec.worktree,
     branch,
     baseBranch: spec.baseBranch,
-    title: prTitleOf(commitText),
+    title,
     body: renderPrBody(template, {
       taskId: spec.slug,
-      typeSuffix: '',
-      objective: prTitleOf(commitText),
+      objective: extractObjective(spec.taskDescription ?? '', title),
       changes: prChangesOf(commitText),
-      adrSection: ADR_NOTE,
-      verificationSection: VERIFICATION_NOTE,
-      logCommand: '',
-      reportSection: '',
+      adrSection: formatAdrEntries(await adrEntriesOf(ports, spec)),
+      verificationSection: formatChecks(spec.checks ?? []),
     }),
   });
   const commitSha = await ports.git.headSha(spec.worktree);

@@ -62,30 +62,24 @@ describe('PR body (v1 format)', () => {
     ]);
   });
 
-  it('renders the template with the changes, the report, and the ADR left for the Cell', () => {
+  it('renders the template with the changes and the ADR left for the Cell', () => {
     const body = formatPrBody(
       {
         taskId: 'add-login',
-        type: 'feat',
         todoBody: TODO_BODY,
         commitMessage: COMMIT,
-        report: '- changed login.ts',
-        logCommand: 'factory log software-factory:add-login',
         verification: ['- [x] `pnpm test`'],
       },
       shippedDefinitions().prTemplates,
     );
 
-    expect(body).toContain('## 🎯 Summary');
-    expect(body).toContain('Task: `add-login` (feat)');
+    expect(body).toContain('## 🎯 Task: `add-login`');
     expect(body).toContain('Let people sign in with SSO.');
     expect(body).toContain('- Add the login page\n- Wire the SSO callback');
     expect(body).toContain(PR_ADR_TOKEN);
     expect(body).toContain('- [x] `pnpm test`');
-    expect(body).toContain(
-      'Event log: `factory log software-factory:add-login`',
-    );
-    expect(body).toContain('- changed login.ts');
+    expect(body).not.toContain('Event log');
+    expect(body).not.toContain('Cell report');
     expect(body.endsWith('\n')).toBe(true);
   });
 

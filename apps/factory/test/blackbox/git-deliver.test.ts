@@ -50,7 +50,10 @@ const createSandbox = (): Sandbox => {
   git(repo, ['config', 'user.email', EMAIL]);
   git(repo, ['remote', 'add', 'origin', remote]);
   writeFile(join(repo, 'README.md'), 'seed\n');
-  writeFile(join(repo, PR_TEMPLATE), '# {{objective}}\n\n{{changes}}\n');
+  writeFile(
+    join(repo, PR_TEMPLATE),
+    '# {{objective}}\n\n{{changes}}\n\n{{adrSection}}\n\n{{verificationSection}}\n',
+  );
   git(repo, ['add', '--', '.']);
   git(repo, ['commit', '-m', 'chore: seed']);
   git(repo, ['push', '-u', 'origin', 'main']);
@@ -149,6 +152,10 @@ describe('git work for a job', () => {
       stepId: 'build',
       producedFiles: ['src/feature.ts'],
     });
+    writeFile(
+      join(sandbox.worktree, 'decisions', 'entry.md'),
+      '---\nsummary: Did it\nwhy: Needed\n---\n\n- bullet\n',
+    );
 
     // Act
     await deliverWorkOrder(ports, {
@@ -157,6 +164,9 @@ describe('git work for a job', () => {
       slug: SLUG,
       baseBranch: 'main',
       priorStepIds: ['build'],
+      taskDescription: '## Objective\n\nAdd git work.\n',
+      adrPaths: ['decisions/entry.md'],
+      checks: ['pnpm ci:verify'],
     });
 
     // Assert
@@ -165,6 +175,10 @@ describe('git work for a job', () => {
     );
     expect(published).toHaveLength(1);
     expect(published[0]?.title).toBe('feat(factory): add git work for a job');
+    expect(published[0]?.body).toContain('# Add git work.');
+    expect(published[0]?.body).toContain('> **Why:** Needed');
+    expect(published[0]?.body).toContain('- [x] `pnpm ci:verify`');
+    expect(published[0]?.body).not.toContain('Event log:');
     expect(existsSync(sandbox.worktree)).toBe(false);
   });
 

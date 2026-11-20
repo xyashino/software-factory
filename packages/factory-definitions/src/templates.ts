@@ -26,16 +26,7 @@ export const TEMPLATE_VARS = {
 
 /** The variables each PR template may use. The supervisor fills exactly these. */
 export const PR_TEMPLATE_VARS = {
-  body: [
-    'taskId',
-    'typeSuffix',
-    'objective',
-    'changes',
-    'adrSection',
-    'verificationSection',
-    'logCommand',
-    'reportSection',
-  ],
+  body: ['taskId', 'objective', 'changes', 'adrSection', 'verificationSection'],
   blocked: ['taskId', 'reason', 'detail', 'logCommand'],
   report: ['excerpt'],
 } as const satisfies Record<string, readonly string[]>;
