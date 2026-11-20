@@ -2,6 +2,7 @@ import { parse } from 'yaml';
 import { z } from 'zod';
 
 const DEFAULT_MAX_ATTEMPTS = 1;
+const DEFAULT_MECHANIC_TIMEOUT_MS = 30 * 60_000;
 const DELIVER_STATION_ID = 'deliver';
 const DURATION = /^(\d+)(s|m|h)$/;
 const MS_PER_UNIT: Record<string, number> = {
@@ -48,6 +49,9 @@ const lineSchema = z.looseObject({
     })
     .optional(),
   deliver: z.looseObject({ requireAdr: z.boolean().default(false) }).optional(),
+  mechanic: z
+    .looseObject({ timeout: z.string().trim().min(1).optional() })
+    .optional(),
 });
 
 export interface LineStation {
@@ -161,3 +165,14 @@ export const wireSnapshotOf = (
       : { onFailRetryStationId: station.onFailRetryStationId }),
   })),
 });
+
+/** The Mechanic's timeout from the line's `mechanic` block; the default when the line has none. */
+export const mechanicTimeoutMs = (text: string): number => {
+  const timeout = lineSchema.parse(parse(text)).mechanic?.timeout;
+  if (timeout === undefined) return DEFAULT_MECHANIC_TIMEOUT_MS;
+  const ms = durationMs(timeout);
+  if (ms === null) {
+    throw new Error(`invalid duration "${timeout}", use e.g. 30s, 40m or 1h`);
+  }
+  return ms;
+};
