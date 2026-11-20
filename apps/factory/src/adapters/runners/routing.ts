@@ -10,6 +10,7 @@ export const createRoutingRunner = (
 ): RunnerPort => {
   const owners = new Map<string, RunnerPort>();
   return {
+    prepare: () => interactive.prepare(),
     start: async (spec: RunSpec): Promise<RunHandle> => {
       const port = spec.interactive ? interactive : headless;
       const handle = await port.start(spec);
