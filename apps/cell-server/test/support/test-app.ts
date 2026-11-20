@@ -35,3 +35,19 @@ export const postJson = (
 
 export const getJson = (app: TestApp, path: string): Promise<Response> =>
   Promise.resolve(app.request(path));
+
+export const patchJson = (
+  app: TestApp,
+  path: string,
+  body: unknown,
+): Promise<Response> =>
+  Promise.resolve(
+    app.request(path, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+  );
+
+export const deleteJson = (app: TestApp, path: string): Promise<Response> =>
+  Promise.resolve(app.request(path, { method: 'DELETE' }));

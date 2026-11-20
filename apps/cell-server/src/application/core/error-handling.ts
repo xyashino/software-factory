@@ -1,4 +1,4 @@
-export type HttpStatus = 200 | 400 | 404 | 413 | 500;
+export type HttpStatus = 200 | 400 | 404 | 409 | 413 | 500;
 
 export class BaseError extends Error {
   readonly status: HttpStatus;
@@ -23,6 +23,12 @@ export class NotFound extends BaseError {
   }
 }
 
+export class Conflict extends BaseError {
+  constructor(message: string) {
+    super(409, 'conflict', message);
+  }
+}
+
 export class PayloadTooLarge extends BaseError {
   constructor(message: string) {
     super(413, 'payload-too-large', message);
@@ -37,3 +43,12 @@ export class InternalServer extends BaseError {
 
 export const isBaseError = (error: unknown): error is BaseError =>
   error instanceof BaseError;
+
+export const asBadRequest = <T>(validate: () => T): T => {
+  try {
+    return validate();
+  } catch (error) {
+    if (error instanceof RangeError) throw new BadRequest(error.message);
+    throw error;
+  }
+};

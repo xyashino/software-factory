@@ -31,6 +31,7 @@ const insertFactory = (db: Db, factoryId: string, isDefault: boolean) =>
     .insert(factories)
     .values({
       factoryId: asFactoryId(factoryId),
+      name: factoryId,
       url: 'http://127.0.0.1:7070',
       isDefault,
       createdAt: SEED_AT,
@@ -75,6 +76,26 @@ describe('factories default index', () => {
     insertFactory(db, 'factory-2', true);
 
     expectUniqueViolation(() => insertFactory(db, 'factory-3', true));
+  });
+});
+
+describe('factories name index', () => {
+  it('rejects two factories with the same name', () => {
+    const db = seededDb();
+
+    expectUniqueViolation(() =>
+      db
+        .insert(factories)
+        .values({
+          factoryId: asFactoryId('factory-2'),
+          name: 'factory-1',
+          url: 'http://127.0.0.1:7070',
+          isDefault: false,
+          createdAt: SEED_AT,
+          updatedAt: SEED_AT,
+        })
+        .run(),
+    );
   });
 });
 
