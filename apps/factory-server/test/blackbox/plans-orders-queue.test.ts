@@ -224,6 +224,26 @@ describe('queue dry run and apply', () => {
       order: { state: 'cancelled' },
     });
   });
+
+  it('imports a todo status as a queued work order and exports it as queued', async () => {
+    const { app } = setup();
+
+    const response = await importQueue(app, 'import-todo-alias', [
+      file('pay-schema', ['status: todo', 'line: feature'], 'Add schema'),
+    ]);
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ created: 1, errors: [] });
+    expect(await orderOf(app, 'pay-schema')).toMatchObject({
+      order: { state: 'queued' },
+    });
+    const exported = (await (await exportQueue(app)).json()) as {
+      files: QueueFile[];
+    };
+    expect(exported.files.map((item) => item.markdown)).toContain(
+      '---\nstatus: queued\npriority: medium\nline: feature\ntype: feat\n---\n\n# pay-schema: Add schema\n',
+    );
+  });
 });
 
 describe('queue export and round trip', () => {

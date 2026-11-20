@@ -72,15 +72,16 @@ Every generated file in `todos/` must adhere to this markdown structure:
 
 ```markdown
 ---
-status: todo
+status: queued
 priority: medium # high | medium | low
+line: feature # feature | standard | fast
 depends_on: [] # ids (file names without .md) that must be done first
 # optional per-role agent override, defaults in packages/factory/src/config/models.json, keys execute and review:
 # execute: { runner: claude, tier: light } # runner: cursor | antigravity | claude | codex | opencode, tier: advanced | default | light
 # review: { runner: cursor, tier: default }
 ---
 
-# Todo: [Scope / Package / Feature Name]
+# <slug>: [Scope / Package / Feature Name]
 
 ## 🎯 Objective
 

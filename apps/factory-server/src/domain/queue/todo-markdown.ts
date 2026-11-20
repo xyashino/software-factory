@@ -115,7 +115,12 @@ const parseTodo = (filename: string, markdown: string): TodoFile => {
     slug,
     title,
     description,
-    status: pickOneOf('status', fields.get('status'), TODO_STATUSES, 'queued'),
+    status: pickOneOf(
+      'status',
+      fields.get('status') === 'todo' ? 'queued' : fields.get('status'),
+      TODO_STATUSES,
+      'queued',
+    ),
     priority: pickOneOf(
       'priority',
       fields.get('priority'),

@@ -109,6 +109,18 @@ describe('todo markdown parsing', () => {
     expect(message).toBe('heading slug pay-web does not match file pay-api');
   });
 
+  it('reads the todo status as the queued alias', () => {
+    const result = parseTodoMarkdown(
+      'pay-api.md',
+      '---\nstatus: todo\nline: feature\n---\n\n# pay-api: Title\n',
+    );
+
+    expect(result).toMatchObject({
+      ok: true,
+      todo: { status: 'queued' },
+    });
+  });
+
   it('rejects a status outside the queue vocabulary', () => {
     const message = errorOf(
       'pay-api.md',
