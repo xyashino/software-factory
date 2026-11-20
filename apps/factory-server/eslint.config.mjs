@@ -1,11 +1,5 @@
 import { config } from '@repo/eslint-config/base';
 
-const LEGACY = {
-  group: ['@repo/factory-*', '@repo/factory-*/*'],
-  message:
-    'factory-server-v2 owns its domain, schema and contracts; it must not import legacy or Cell packages (BE_RULES §1.2).',
-};
-
 const HTTP = {
   group: ['hono', 'hono/*'],
   message: 'Only adapters import Hono (BE_RULES §2).',
@@ -36,13 +30,8 @@ export default [
     },
   },
   {
-    files: ['src/**/*.ts', 'test/**/*.ts'],
-    rules: restricted([LEGACY]),
-  },
-  {
     files: ['src/domain/**/*.ts'],
     rules: restricted([
-      LEGACY,
       HTTP,
       ADAPTERS,
       BOOTSTRAP,
@@ -63,12 +52,11 @@ export default [
   },
   {
     files: ['src/application/**/*.ts'],
-    rules: restricted([LEGACY, HTTP, ADAPTERS, BOOTSTRAP]),
+    rules: restricted([HTTP, ADAPTERS, BOOTSTRAP]),
   },
   {
     files: ['src/contracts/**/*.ts'],
     rules: restricted([
-      LEGACY,
       HTTP,
       ADAPTERS,
       BOOTSTRAP,
@@ -81,7 +69,6 @@ export default [
   {
     files: ['src/db/**/*.ts'],
     rules: restricted([
-      LEGACY,
       HTTP,
       ADAPTERS,
       BOOTSTRAP,

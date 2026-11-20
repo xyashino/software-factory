@@ -7,9 +7,9 @@ Source of truth for code shape, layering, transactions, and testing in `apps/fac
 ## 1. Runtime & Stack
 
 1. **Stack**: Bun (`Bun.serve`, `bun:sqlite` WAL) + Hono (`^4.13`) + Drizzle ORM (`drizzle-orm/bun-sqlite`) + Zod (`^4.6`).
-2. **100% Standalone Backend Isolation (Zero Cell / Legacy Package Coupling)**:
-   - Scope is strictly limited to `apps/factory-server/`. Do **NOT** modify, wire, or connect `apps/cell`, `apps/cli`, `apps/operator-cli`, `apps/server`, or `packages/factory-*`.
-   - `apps/factory-server` owns all of its domain, SQLite schema, contracts, procedures, and Hono adapters inside `apps/factory-server/src/` and **MUST NOT** import `@repo/factory-core`, `@repo/factory-db`, `@repo/factory-runtime`, `@repo/factory-definitions`, or `@repo/factory-cell`.
+2. **Standalone Backend Isolation**:
+   - Scope is strictly limited to `apps/factory-server/`. Do **NOT** modify, wire, or connect other apps or packages from here.
+   - `apps/factory-server` owns all of its domain, SQLite schema, contracts, procedures, and Hono adapters inside `apps/factory-server/src/`.
    - All Cell interactions (`enroll`, `hello`, `claims`, `heartbeats`, `jobs/:id/transitions`, `incidents/:id/resolve`) are implemented purely as backend HTTP endpoints and verified via black-box `app.request()` HTTP tests inside `apps/factory-server/test/`.
 3. **Catalog dependencies only**: Pin third-party packages via `catalog:` in `pnpm-workspace.yaml` (`hono`, `drizzle-orm`, `drizzle-kit`, `zod`, `yaml`, `vitest`, `@types/bun`, `@types/node`, `typescript`, `eslint`).
 4. **Zero GitHub coupling**: Server never calls `gh` CLI, GitHub REST/GraphQL APIs, or GitHub webhooks. Cells push branches, publish PRs on `deliver`, and report git refs/commits back via REST.

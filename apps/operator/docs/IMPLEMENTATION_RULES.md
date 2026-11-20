@@ -11,9 +11,8 @@ shape, this file wins.
 1. **Thin client only.** The CLI parses arguments, reads files named by options, sends one request
    to `FACTORY_OPERATOR_URL`, and prints the reply. It holds no Line rules, no state machine, and no
    factory credentials (PLAN §1, §5).
-2. **No runner or agent knowledge.** `apps/operator/src/` MUST NOT import from `apps/cell`,
-   `apps/factory-server`, `apps/server`, `apps/worker`, `apps/operator-cli`, or any `packages/factory-*`.
-   Herdr, headless, Claude, and any other runner or agent stay in the Cell (`apps/cell/src/runners/`).
+2. **No runner or agent knowledge.** `apps/operator/src/` MUST NOT import from `apps/factory-server`
+   or any other app. Herdr, headless, Claude, and any other runner or agent stay in the Cell.
 3. **Shared wire shape only.** Verb contracts live in `packages/operator-protocol`. The CLI and the
    Cell both import it. It holds schemas and constants only, never rules.
 4. **Catalog dependencies only.** Third-party packages are pinned with `catalog:` in
@@ -131,8 +130,7 @@ apps/operator/
      Assert on exit code and output only.
 2. **Test names are short user stories**, AAA layout, no Gherkin, no internal mocks of `client.ts`.
 3. **`boundaries.test.ts` must assert:**
-   - no file under `apps/operator/src/` imports from `apps/cell`, `apps/factory-server`, or
-     `packages/factory-*`,
+   - no file under `apps/operator/src/` imports from `apps/factory-server` or any other app,
    - no file under `packages/operator-protocol/src/` imports `process`, `node:fs`, or `node:net`.
 4. **Every exit code in PLAN §4 has a test.** `0`, `1`, `2`, and `3` each have at least one black-box
    case.
