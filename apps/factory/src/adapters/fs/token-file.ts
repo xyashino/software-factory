@@ -13,28 +13,38 @@ import type { Access } from '../../domain/access';
 const TOKEN_ENV = 'FACTORY_TOKEN';
 const TOKEN_MODE = 0o600;
 
-const readSecret = (path: string): string | null => {
+const readSecret = (paths: readonly string[]): string | null => {
   const fromEnv = process.env[TOKEN_ENV]?.trim();
   if (fromEnv) {
     return fromEnv;
   }
-  if (!existsSync(path)) {
-    return null;
+  for (const path of paths) {
+    if (!existsSync(path)) {
+      continue;
+    }
+    const fromFile = readFileSync(path, 'utf8').trim();
+    if (fromFile.length > 0) {
+      return fromFile;
+    }
   }
-  const fromFile = readFileSync(path, 'utf8').trim();
-  return fromFile.length > 0 ? fromFile : null;
+  return null;
 };
 
-export const createTokenFile = (path: string): TokenStorePort => ({
-  read: async (): Promise<Access | null> =>
-    readSecret(path) === null ? null : { kind: 'supervisor' },
-  secret: async () => readSecret(path),
-  write: async (secret) => {
-    mkdirSync(dirname(path), { recursive: true });
-    writeFileSync(path, `${secret}\n`, { mode: TOKEN_MODE });
-    chmodSync(path, TOKEN_MODE);
-  },
-  clear: async () => {
-    rmSync(path, { force: true });
-  },
-});
+export const createTokenFile = (
+  paths: [string, ...string[]],
+): TokenStorePort => {
+  const [writePath] = paths;
+  return {
+    read: async (): Promise<Access | null> =>
+      readSecret(paths) === null ? null : { kind: 'supervisor' },
+    secret: async () => readSecret(paths),
+    write: async (secret) => {
+      mkdirSync(dirname(writePath), { recursive: true });
+      writeFileSync(writePath, `${secret}\n`, { mode: TOKEN_MODE });
+      chmodSync(writePath, TOKEN_MODE);
+    },
+    clear: async () => {
+      rmSync(writePath, { force: true });
+    },
+  };
+};

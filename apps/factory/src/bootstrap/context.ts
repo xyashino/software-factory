@@ -18,7 +18,12 @@ import { createProcessAdapter } from '../adapters/process/spawn-server';
 import { createSystemClock } from '../adapters/process/system-clock';
 import type { Ports } from '../application/core/procedure';
 import type { CellStatePort } from '../application/ports/cell-state.port';
-import { CELL_LOG_PATH, CELL_STATE_PATH, DEFAULT_FACTORY_URL } from '../config';
+import {
+  CELL_LOG_PATH,
+  CELL_STATE_PATH,
+  DEFAULT_FACTORY_URL,
+  SUPERVISOR_TOKEN_PATH,
+} from '../config';
 
 export type Mode = 'supervisor' | 'cell' | 'operator';
 
@@ -57,7 +62,10 @@ export const buildContext = (): Ports => {
       readStdin: notWired,
     },
     todoFiles: createTodoFiles(),
-    tokens: createTokenFile(TOKEN_PATH),
+    tokens: createTokenFile([
+      resolve(process.cwd(), SUPERVISOR_TOKEN_PATH),
+      TOKEN_PATH,
+    ]),
     operator: createLoopbackEndpoint(),
     runner: createRoutingRunner(
       createHeadlessRunner(),

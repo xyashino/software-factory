@@ -68,6 +68,7 @@ const createSandbox = async (): Promise<Sandbox> => {
 
 const runCli = (sandbox: Sandbox, args: readonly string[]) =>
   spawnSync(process.execPath, [CLI_PATH, 'server', ...args], {
+    cwd: sandbox.home,
     env: sandbox.env,
     encoding: 'utf8',
     timeout: COMMAND_TIMEOUT_MS,
@@ -221,7 +222,7 @@ describe('factory server token create', () => {
   it('writes the token file with --save and prints nothing', async () => {
     // Arrange
     const sandbox = await createSandbox();
-    const tokenFile = join(sandbox.home, '.config', 'factory', 'token');
+    const tokenFile = join(sandbox.home, '.factory-local', 'supervisor.token');
 
     // Act
     const result = runCli(sandbox, ['token', 'create', '--save']);

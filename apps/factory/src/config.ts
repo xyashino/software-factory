@@ -20,5 +20,6 @@ export const WORKTREES_DIR = '.worktrees';
 export const PR_TEMPLATE_PATH = '.factory/templates/pr/body.md';
 export const CELL_STATE_PATH = '.factory-local/cell.json';
 export const CELL_LOG_PATH = '.factory-local/cell.log';
+export const SUPERVISOR_TOKEN_PATH = '.factory-local/supervisor.token';
 export const JOIN_TOKEN_ENV = 'FACTORY_JOIN_TOKEN';
 export const DEFAULT_TODO_DIR = 'todos';
