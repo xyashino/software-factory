@@ -19,3 +19,4 @@ tags: [cell-server, db, http, foundation]
 - Ports `supervisor` and `factory-client` are type-only; `event-bus` has an in-memory adapter.
 - Open choices: `cells` PK is `slot_id`, not `cell_id`; 400/413 black-box tests use test-only probe routes.
 - Blocker: `apps/cell-server/docs/PLAN.md` and `BE_RULES.md` are missing; `apps/factory-server/docs/BE_RULES.md` used as reference.
+- Unblocks `ci:verify`: `apps/factory` mechanic job (#164) used undefined `CLI_ENTRY` and `CELL_LOG_PATH`. Now uses `operatorCommandOf()` and `runtime.logPath`, same as the rest of the procedure.
