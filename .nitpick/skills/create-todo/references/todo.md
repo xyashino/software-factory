@@ -1,4 +1,11 @@
-# Todo: [Scope / Package / Feature Name]
+---
+status: queued
+priority: medium # high | medium | low
+line: feature # feature | standard | fast
+depends_on: [] # ids (file names without .md) that must be done first
+---
+
+# <slug>: [Scope / Package / Feature Name]
 
 ## 🎯 Objective
 
