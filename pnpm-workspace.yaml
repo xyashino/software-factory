@@ -33,7 +33,7 @@ catalog:
   eslint-plugin-turbo: 2.11.10
   fast-check: 4.10.2
   globals: 17.14.0
-  hono: 4.13.14
+  hono: 4.13.19
   husky: 9.1.7
   lint-staged: 17.6.0
   msw: 3.0.3
