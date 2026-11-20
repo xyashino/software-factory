@@ -2,7 +2,6 @@ import type { z } from 'zod';
 import { startHeartbeat } from '../../../cell/heartbeat';
 import { observeDrain } from '../../../cell/drain-signal';
 import {
-  CELL_LOG_PATH,
   HEARTBEAT_INTERVAL_MS,
   LINES_DIR,
   OPERATORS_DIR,
@@ -132,7 +131,7 @@ const logLine = async (
 ): Promise<void> => {
   try {
     await runtime.ports.fs.appendText(
-      joinPath(runtime.repoRoot, CELL_LOG_PATH),
+      runtime.logPath,
       `${renderLogLine({
         at: runtime.ports.clock.now(),
         order: slugOf(job.orderId),

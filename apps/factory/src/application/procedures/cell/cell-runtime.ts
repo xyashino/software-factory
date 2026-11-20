@@ -14,6 +14,7 @@ export interface CellRuntime {
   session: CellSession;
   projectId: string;
   repoRoot: string;
+  logPath: string;
   signal: AbortSignal;
   drain: DrainState;
 }

@@ -1,41 +1,84 @@
 import { hostname } from 'node:os';
+import { resolve } from 'node:path';
 import { defineCommand } from 'citty';
 import { buildContext } from '../../bootstrap/context';
 import { run, settle } from '../../bootstrap/run';
-import { JOIN_TOKEN_ENV } from '../../config';
+import { JOIN_TOKEN_ENV, cellLogPathOf } from '../../config';
+import { Refused } from '../../application/core/errors';
 import { startCell } from '../../application/procedures/cell/start.procedure';
 import { listCells } from '../../application/procedures/cell/list.procedure';
 import { revokeCell } from '../../application/procedures/cell/revoke.procedure';
 import { stopCell } from '../../application/procedures/cell/stop.procedure';
+import { cellNameOf } from '../../domain/cell/cell-name';
 import { EXIT } from '../../domain/exit-codes';
+import {
+  claimCellSlot,
+  migrateLegacyCellState,
+  releaseCellSlot,
+} from '../fs/cell-slot';
 import { printJson, printLine, printTable, reportFailure } from './output';
 
 const HEADERS = ['id', 'project', 'state', 'active job', 'last heartbeat'];
 const SUPERSEDED_LINE =
   'cell left: the server had already moved its job, nothing handed over';
+const MIGRATED_LINE = 'migrated legacy .factory-local/cell.json to this cell';
 
 const orDash = (value: string | null): string => value ?? '-';
 
 const heartbeatText = (ms: number | null): string =>
   ms === null ? '-' : new Date(ms).toISOString();
 
-const runStart = async (): Promise<number> => {
+const claimSlot = async (
+  cwd: string,
+  requested: string | undefined,
+): Promise<string> => {
+  if (requested !== undefined) {
+    const name = cellNameOf(requested);
+    if (!(await claimCellSlot(cwd, name))) {
+      throw new Refused(`cell ${name} already running`);
+    }
+    return name;
+  }
+  const base = cellNameOf(hostname());
+  for (let suffix = 1; ; suffix += 1) {
+    const name = suffix === 1 ? base : `${base}-${suffix}`;
+    if (await claimCellSlot(cwd, name)) {
+      return name;
+    }
+  }
+};
+
+const runStart = async (requested: string | undefined): Promise<number> => {
+  const cwd = process.cwd();
+  const claim = await settle(() => claimSlot(cwd, requested));
+  if (claim.kind === 'failed') {
+    return reportFailure(claim);
+  }
+  const name = claim.value;
   const controller = new AbortController();
   const stop = (): void => controller.abort();
   process.once('SIGINT', stop);
   process.once('SIGTERM', stop);
-  const result = await settle(() =>
-    startCell(buildContext(), {
-      repoRoot: process.cwd(),
-      cellName: hostname(),
-      joinToken: process.env[JOIN_TOKEN_ENV],
-      signal: controller.signal,
-    }),
-  );
-  if (result.kind === 'ok' && result.value === 'superseded') {
-    printLine(SUPERSEDED_LINE);
+  try {
+    if (name === cellNameOf(hostname()) && migrateLegacyCellState(cwd, name)) {
+      printLine(MIGRATED_LINE);
+    }
+    const result = await settle(() =>
+      startCell(buildContext(name), {
+        repoRoot: cwd,
+        cellName: name,
+        logPath: resolve(cwd, cellLogPathOf(name)),
+        joinToken: process.env[JOIN_TOKEN_ENV],
+        signal: controller.signal,
+      }),
+    );
+    if (result.kind === 'ok' && result.value === 'superseded') {
+      printLine(SUPERSEDED_LINE);
+    }
+    return reportFailure(result);
+  } finally {
+    await releaseCellSlot(cwd, name);
   }
-  return reportFailure(result);
 };
 
 const runStop = async (id: string, force: boolean): Promise<number> => {
@@ -83,8 +126,15 @@ const startCommand = defineCommand({
     name: 'start',
     description: 'Enroll this Cell if needed and run its loop',
   },
-  run: async () => {
-    process.exitCode = await runStart();
+  args: {
+    name: {
+      type: 'string',
+      description:
+        'Cell name, unique while running (default: hostname, then hostname-2, ...)',
+    },
+  },
+  run: async ({ args }) => {
+    process.exitCode = await runStart(args.name);
   },
 });
 
