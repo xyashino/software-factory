@@ -18,11 +18,15 @@ export const cells = sqliteTable(
     factoryId: idText<FactoryId>('factory_id')
       .notNull()
       .references(() => factories.factoryId),
+    projectId: text('project_id'),
     repoRoot: text('repo_root').notNull(),
     name: text('name').notNull(),
     desiredState: text('desired_state', { enum: DESIRED_STATES }).notNull(),
     runtimeStatus: text('runtime_status', { enum: RUNTIME_STATUSES }).notNull(),
     pid: integer('pid'),
+    sessionToken: text('session_token'),
+    logPath: text('log_path'),
+    lastError: text('last_error'),
     ...timestamps(),
   },
   (table) => [

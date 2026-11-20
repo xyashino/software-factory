@@ -10,6 +10,7 @@ export const MAX_BODY_BYTES = 1_048_576;
 const XDG_DATA_HOME =
   process.env.XDG_DATA_HOME || join(homedir(), '.local', 'share');
 export const DEFAULT_DB_PATH = join(XDG_DATA_HOME, 'sf', 'cell-server.db');
+export const CELL_LOG_DIR = join(XDG_DATA_HOME, 'sf', 'cells');
 
 export const readMachineSettings = (
   env: Record<string, string | undefined>,

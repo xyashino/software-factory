@@ -1,4 +1,4 @@
-export type HttpStatus = 200 | 400 | 404 | 409 | 413 | 500;
+export type HttpStatus = 200 | 201 | 400 | 404 | 409 | 413 | 500 | 502;
 
 export class BaseError extends Error {
   readonly status: HttpStatus;
@@ -38,6 +38,12 @@ export class PayloadTooLarge extends BaseError {
 export class InternalServer extends BaseError {
   constructor(message: string) {
     super(500, 'internal-server-error', message);
+  }
+}
+
+export class BadGateway extends BaseError {
+  constructor(message: string) {
+    super(502, 'bad-gateway', message);
   }
 }
 
