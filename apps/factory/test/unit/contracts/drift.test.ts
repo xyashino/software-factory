@@ -26,6 +26,8 @@ const PAIRS: ReadonlyArray<readonly [string, URL]> = [
   ],
   ['incidents.contract.ts', new URL('incidents.contract.ts', SERVER_CONTRACTS)],
   ['stream.contract.ts', new URL('stream.contract.ts', SERVER_CONTRACTS)],
+  ['projects.contract.ts', new URL('projects.contract.ts', SERVER_CONTRACTS)],
+  ['tokens.contract.ts', new URL('tokens.contract.ts', SERVER_CONTRACTS)],
   ['operator.contract.ts', OPERATOR_DOCS],
 ];
 

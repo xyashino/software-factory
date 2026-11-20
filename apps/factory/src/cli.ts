@@ -2,11 +2,14 @@
 import { defineCommand, runCommand, showUsage } from 'citty';
 import { cellCommand } from './adapters/cli/cell.command';
 import { incidentCommand } from './adapters/cli/incident.command';
+import { initCommand } from './adapters/cli/init.command';
 import { operatorCommand } from './adapters/cli/operator.command';
 import { orderCommand } from './adapters/cli/order.command';
+import { projectCommand } from './adapters/cli/project.command';
 import { queueCommand } from './adapters/cli/queue.command';
 import { serverCommand } from './adapters/cli/server.command';
 import { todosCommand } from './adapters/cli/todos.command';
+import { tokenCommand } from './adapters/cli/token.command';
 import { watchCommand } from './adapters/cli/watch.command';
 import { webCommand } from './adapters/cli/web.command';
 import { EXIT } from './domain/exit-codes';
@@ -29,6 +32,9 @@ const main = defineCommand({
     operator: operatorCommand,
     cell: cellCommand,
     web: webCommand,
+    init: initCommand,
+    project: projectCommand,
+    token: tokenCommand,
   },
 });
 
