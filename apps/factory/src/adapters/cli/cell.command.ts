@@ -26,13 +26,7 @@ import {
 import type { Cell } from '../../application/procedures/cell-server/shapes';
 import { cellServerCommand } from './cell-server.command';
 import { runCellServer } from './cell-server-run';
-import {
-  printError,
-  printJson,
-  printLine,
-  printTable,
-  reportFailure,
-} from './output';
+import { printJson, printLine, printTable, reportFailure } from './output';
 
 const HEADERS = ['id', 'project', 'state', 'active job', 'last heartbeat'];
 const SUPERSEDED_LINE =
@@ -43,6 +37,12 @@ const orDash = (value: string | null): string => value ?? '-';
 
 const heartbeatText = (ms: number | null): string =>
   ms === null ? '-' : new Date(ms).toISOString();
+
+const cliError = (message: string): Error => {
+  const error = new Error(message);
+  error.name = 'CLIError';
+  return error;
+};
 
 const claimSlot = async (
   cwd: string,
@@ -155,8 +155,7 @@ const runStop = async (
     return runLocalStopAll(options.force, options.json);
   }
   if (id === undefined) {
-    printError('cell id required, or --all');
-    return EXIT.argument;
+    throw cliError('cell id required, or --all');
   }
   if ((await localSlotIds()).includes(id)) {
     return runLocalStop(id, options.force, options.json);
