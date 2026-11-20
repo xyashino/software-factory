@@ -9,6 +9,7 @@ import type { Ports } from '../../core/procedure';
 const CELL_DIR = '.cell';
 const COMMIT_FILE = 'commit.txt';
 const PORCELAIN_PATH_OFFSET = 3;
+const WHOLE_WORKTREE = '.';
 
 export interface CheckpointSpec {
   worktree: string;
@@ -25,7 +26,14 @@ const leftoverOf = async (
   (await ports.git.status(worktree))
     .split('\n')
     .map((line) => line.slice(PORCELAIN_PATH_OFFSET))
-    .filter((path) => paths.some((reported) => path.startsWith(reported)));
+    .filter(
+      (path) =>
+        path.length > 0 &&
+        paths.some(
+          (reported) =>
+            reported === WHOLE_WORKTREE || path.startsWith(reported),
+        ),
+    );
 
 export const commitTextOf = async (
   ports: Ports,
@@ -40,10 +48,15 @@ export const checkpointStation = async (
   ports: Ports,
   spec: CheckpointSpec,
 ): Promise<string | undefined> => {
-  const paths = checkpointPaths(spec.producedFiles);
-  if (paths.length === 0) {
+  const reported = checkpointPaths(spec.producedFiles);
+  // An operator reports only its `.cell/` artifacts; its code changes are whatever it left in the worktree.
+  if (
+    reported.length === 0 &&
+    (await ports.git.status(spec.worktree)).trim() === ''
+  ) {
     return undefined;
   }
+  const paths = reported.length > 0 ? reported : [WHOLE_WORKTREE];
   const message = checkpointMessage(
     await commitTextOf(ports, spec.worktree, spec.stepId),
     spec.slug,

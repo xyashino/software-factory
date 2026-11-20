@@ -23,5 +23,11 @@ export const claudeRunner: RunnerAdapter = {
     'json',
     ...modelArgs(spec),
   ],
+  buildInteractive: (spec) => [
+    BINARY,
+    ...permissionArgs(spec),
+    ...modelArgs(spec),
+    promptFor(spec.promptFile),
+  ],
   checkInstalled: (probe) => probe(BINARY),
 };

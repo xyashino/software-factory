@@ -19,6 +19,7 @@ import {
   type JobId,
 } from '../../../domain/common/brand';
 import { addMs } from '../../../domain/common/time';
+import { stepJobPayload } from '../../orders/job-payload';
 import { Forbidden, NotFound } from '../../core/error-handling';
 import {
   scopedProcedure,
@@ -297,7 +298,7 @@ const claimWorkOrder = (
             stepIndex: step.stepIndex,
             requiredFiles: step.requiredFilesJson,
           })),
-        payloadJson: { stepIndex: row.currentStepIndex },
+        payloadJson: stepJobPayload(row, row.currentStepIndex),
         cellId: cell.cellId,
         epoch,
         leaseExpiresAt,

@@ -24,15 +24,24 @@ const searchOf = (query: Record<string, string>): string => {
   return search.length > 0 ? `?${search}` : '';
 };
 
+const waitMsOf = (body: unknown): number => {
+  const waitMs = (body as { waitMs?: unknown } | null)?.waitMs;
+  return typeof waitMs === 'number' && waitMs > 0 ? waitMs : 0;
+};
+
 export const createServerClient = ({
   baseUrl,
   fetchImpl = fetch,
 }: ServerClientOptions): ServerPort => {
-  const send = async (url: string, init: RequestInit): Promise<Response> => {
+  const send = async (
+    url: string,
+    init: RequestInit,
+    timeoutMs: number = REQUEST_TIMEOUT_MS,
+  ): Promise<Response> => {
     try {
       return await fetchImpl(url, {
         ...init,
-        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+        signal: AbortSignal.timeout(timeoutMs),
       });
     } catch {
       throw new Unreachable(`cannot reach factory server at ${baseUrl}`);
@@ -41,14 +50,20 @@ export const createServerClient = ({
 
   return {
     call: async (route, body, token) => {
-      const response = await send(`${baseUrl}${route}`, {
-        method: 'POST',
-        headers: {
-          authorization: `Bearer ${token}`,
-          'content-type': 'application/json',
+      // A claim long-polls for `waitMs` before the server answers, so its timeout must cover that wait.
+      const waitMs = waitMsOf(body);
+      const response = await send(
+        `${baseUrl}${route}`,
+        {
+          method: 'POST',
+          headers: {
+            authorization: `Bearer ${token}`,
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify(body),
         },
-        body: JSON.stringify(body),
-      });
+        REQUEST_TIMEOUT_MS + waitMs,
+      );
       return mapReply(response.status, await readBody(response));
     },
     get: async (route, query, token) => {

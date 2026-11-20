@@ -20,6 +20,8 @@ export interface RunnerAdapter {
   readonly name: string;
   /** argv, binary first, for one non-interactive run */
   buildCommand(spec: CommandSpec): string[];
+  /** argv for a TUI session that starts on the prompt; absent when the CLI has none */
+  buildInteractive?(spec: CommandSpec): string[];
   checkInstalled(probe: BinaryProbe): Promise<boolean>;
 }
 

@@ -59,6 +59,17 @@ export const helloCellContract = {
   },
 };
 
+export const stepJobPayloadDto = z.object({
+  stepIndex: z.number().int(),
+  lineName: z.string(),
+  task: z.object({
+    slug: z.string(),
+    title: z.string(),
+    type: z.string(),
+    description: z.string(),
+  }),
+});
+
 export const claimedJobDto = z.object({
   jobId: z.string(),
   kind: z.string(),

@@ -22,9 +22,15 @@ interface FakeHerdr {
   calls: string[][];
 }
 
+const TABS = (label: string): string =>
+  `{"result":{"tabs":[{"tab_id":"w9:t1","label":"${label}","number":1}]}}`;
+const PANES = '{"result":{"panes":[{"pane_id":"w9:p1","tab_id":"w9:t1"}]}}';
+const LOG_OPTIONS = { home: '/repo', logPath: '/repo/.factory-local/cell.log' };
+
 const fakeHerdr = (
   statusCode = 0,
   workspaceList = NO_WORKSPACES,
+  tabList = TABS('1'),
 ): FakeHerdr => {
   const calls: string[][] = [];
   const port: ProcessPort = {
@@ -37,6 +43,10 @@ const fakeHerdr = (
         return { ...OK, stdout: CREATED_WORKSPACE };
       if (args[0] === 'tab' && args[1] === 'create')
         return { ...OK, stdout: TAB_ANSWER };
+      if (args[0] === 'tab' && args[1] === 'list')
+        return { ...OK, stdout: tabList };
+      if (args[0] === 'pane' && args[1] === 'list')
+        return { ...OK, stdout: PANES };
       return OK;
     },
     spawnDetached: async () => 0,
@@ -168,5 +178,46 @@ describe('herdr pane runner', () => {
 
     expect(calls).toContainEqual(['herdr', 'tab', 'close', 'w1:t7']);
     expect(outcome.exitCode).toBe(130);
+  });
+
+  it('turns the first tab of the cell workspace into a logs tab that follows the cell log', async () => {
+    // Arrange
+    const { port, calls } = fakeHerdr();
+    const runner = createHerdrRunner(port, CELL, LOG_OPTIONS);
+
+    // Act
+    await finish(runner, stepDir());
+
+    // Assert
+    expect(calls).toContainEqual(['herdr', 'tab', 'rename', 'w9:t1', 'logs']);
+    const follow = calls.find(
+      (call) => call[1] === 'pane' && call[2] === 'run',
+    );
+    expect(follow?.[3]).toBe('w9:p1');
+    expect(follow?.[4]).toContain(
+      "tail -n 200 -F '/repo/.factory-local/cell.log'",
+    );
+    expect(calls).toContainEqual([
+      'herdr',
+      'workspace',
+      'create',
+      '--label',
+      'factory:omarchy',
+      '--cwd',
+      '/repo',
+      '--no-focus',
+    ]);
+  });
+
+  it('leaves an existing logs tab alone', async () => {
+    // Arrange
+    const { port, calls } = fakeHerdr(0, CELL_WORKSPACE('w9'), TABS('logs'));
+    const runner = createHerdrRunner(port, CELL, LOG_OPTIONS);
+
+    // Act
+    await finish(runner, stepDir());
+
+    // Assert
+    expect(calls.some((call) => call[2] === 'rename')).toBe(false);
   });
 });
