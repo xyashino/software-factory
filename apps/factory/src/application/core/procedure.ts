@@ -28,6 +28,7 @@ export interface Ports {
   pr: PrPort;
   process: ProcessPort;
   pidFile: PidFilePort;
+  webPidFile: PidFilePort;
   clock: ClockPort;
   cellState: CellStatePort;
 }

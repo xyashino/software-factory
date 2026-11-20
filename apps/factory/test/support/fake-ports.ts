@@ -112,8 +112,10 @@ export const createFakePorts = (options: FakeOptions = {}): FakePorts => {
       spawnDetached: unused,
       isAlive: unused,
       terminate: unused,
+      probeUrl: unused,
     },
     pidFile: { read: unused, write: unused, remove: unused },
+    webPidFile: { read: unused, write: unused, remove: unused },
     clock: { now: unused, sleep: unused },
     cellState: { read: async () => null, write: unused },
   };

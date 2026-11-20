@@ -79,6 +79,7 @@ export const buildContext = (): Ports => {
     pr: createPrAdapter(processPort),
     process: processPort,
     pidFile: createPidFile(),
+    webPidFile: createPidFile('web.pid'),
     clock: createSystemClock(),
     cellState,
   };

@@ -9,6 +9,7 @@ import type {
 } from '../../application/ports/process.port';
 
 const SPAWN_FAILED_EXIT = 127;
+const PROBE_TIMEOUT_MS = 1_000;
 
 const collect = (
   command: string,
@@ -56,7 +57,7 @@ export const createProcessAdapter = (): ProcessPort => ({
     child.unref();
     closeSync(logFd);
     if (child.pid === undefined) {
-      throw new Unreachable('factory server process did not start');
+      throw new Unreachable('process did not start');
     }
     return child.pid;
   },
@@ -73,6 +74,18 @@ export const createProcessAdapter = (): ProcessPort => ({
       process.kill(pid, 'SIGTERM');
     } catch {
       return;
+    }
+  },
+  probeUrl: async (url) => {
+    try {
+      const response = await fetch(url, {
+        method: 'GET',
+        signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
+      });
+      await response.body?.cancel();
+      return true;
+    } catch {
+      return false;
     }
   },
 });

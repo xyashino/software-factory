@@ -1,3 +1,5 @@
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 import { z } from 'zod';
 import { isLoopbackUrl } from './loopback';
 
@@ -22,24 +24,29 @@ const configSchema = z
         path: ['FACTORY_TOKEN'],
         message: 'required for a non-loopback FACTORY_URL',
       });
-    } else if (config.FACTORY_DATA_DIR === undefined) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['FACTORY_DATA_DIR'],
-        message: 'required to read the join secret on loopback',
-      });
     }
   });
 
+type Env = Record<string, string | undefined>;
+
 export type Config = z.infer<typeof configSchema>;
+
+const defaultDataDir = (env: Env): string =>
+  join(env.XDG_DATA_HOME || join(homedir(), '.local', 'share'), 'sf');
+
+const withDefaultDataDir = (env: Env): Env =>
+  env.FACTORY_DATA_DIR === undefined &&
+  isLoopbackUrl(env.FACTORY_URL ?? DEFAULT_FACTORY_URL)
+    ? { ...env, FACTORY_DATA_DIR: defaultDataDir(env) }
+    : env;
 
 const describeFailure = (error: z.ZodError): string =>
   error.issues
     .map((issue) => `${issue.path.join('.')}: ${issue.message}`)
     .join('; ');
 
-export const loadConfig = (env: Record<string, string | undefined>): Config => {
-  const result = configSchema.safeParse(env);
+export const loadConfig = (env: Env): Config => {
+  const result = configSchema.safeParse(withDefaultDataDir(env));
   if (!result.success) {
     throw new Error(`Invalid configuration: ${describeFailure(result.error)}`);
   }
