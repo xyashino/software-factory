@@ -1,0 +1,56 @@
+name: Onboarding
+
+'on':
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+    paths:
+      - 'scripts/**'
+      - 'apps/sf/**'
+      - 'apps/web-demo/**'
+      - 'package.json'
+
+concurrency:
+  group: onboarding-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: install and quickstart
+    timeout-minutes: 30
+    if: github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    env:
+      CI: 'true'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+
+      - name: Install deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Build sf
+        run: pnpm build:sf
+
+      - name: Install sf and run quickstart
+        run: pnpm --filter @repo/sf exec bun --bun vitest run test/blackbox/standalone-external-repo.test.ts

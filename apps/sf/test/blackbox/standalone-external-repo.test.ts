@@ -16,7 +16,9 @@ const ROOT = fileURLToPath(new URL('../../../..', import.meta.url));
 const SF_BUILD = join(ROOT, 'apps/sf/dist/sf');
 const WEB_BUILD = join(ROOT, 'apps/web-demo/dist/server/entry.mjs');
 const WEB_DEPS = join(ROOT, 'apps/web-demo/dist/sf-deps/node_modules');
-const INSTALL_SCRIPT = join(ROOT, 'scripts/install.sh');
+const INSTALL_MJS = join(ROOT, 'scripts/install.mjs');
+const INSTALL_SH = join(ROOT, 'scripts/install.sh');
+const CI = process.env.CI === 'true';
 const COMMAND_TIMEOUT_MS = 30_000;
 const ENROLL_TIMEOUT_MS = 20_000;
 const POLL_MS = 250;
@@ -39,6 +41,10 @@ interface CliResult {
 }
 
 const built = [SF_BUILD, WEB_BUILD, WEB_DEPS].every((path) => existsSync(path));
+
+if (CI && !built) {
+  throw new Error('missing sf build in CI: run pnpm build:sf first');
+}
 
 const freePort = (): Promise<number> =>
   new Promise((resolve, reject) => {
@@ -84,12 +90,16 @@ describe.skipIf(!built)('compiled sf in an external repository', () => {
   beforeAll(async () => {
     base = mkdtempSync(join(tmpdir(), 'sf-smoke-'));
     const prefix = join(base, 'prefix');
-    const install = spawnSync('bash', [INSTALL_SCRIPT], {
-      env: { PATH: process.env.PATH ?? '', PREFIX: prefix },
-      encoding: 'utf8',
-    });
+    const install = spawnSync(
+      process.execPath,
+      [INSTALL_MJS, '--prefix', prefix],
+      {
+        env: { PATH: process.env.PATH ?? '' },
+        encoding: 'utf8',
+      },
+    );
     if (install.status !== 0) {
-      throw new Error(`install.sh failed: ${install.stderr}`);
+      throw new Error(`install.mjs failed: ${install.stderr}`);
     }
     sfBin = join(prefix, 'bin', 'sf');
     repo = join(base, 'external', 'widgets');
@@ -123,6 +133,21 @@ describe.skipIf(!built)('compiled sf in an external repository', () => {
       run(['server', 'stop']);
     }
     rmSync(base, { recursive: true, force: true });
+  });
+
+  it('installs the binary with install.sh', () => {
+    // Arrange
+    const prefix = join(base, 'sh-prefix');
+
+    // Act
+    const result = spawnSync('bash', [INSTALL_SH], {
+      env: { PATH: process.env.PATH ?? '', PREFIX: prefix },
+      encoding: 'utf8',
+    });
+
+    // Assert
+    expect(result.status).toBe(0);
+    expect(existsSync(join(prefix, 'bin', 'sf'))).toBe(true);
   });
 
   it('scaffolds .factory/ with sf init', () => {
