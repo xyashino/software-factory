@@ -117,6 +117,7 @@ export const createFakePorts = (options: FakeOptions = {}): FakePorts => {
       writeText: unused,
       appendText: unused,
       exists: async () => config !== null,
+      writable: async () => true,
       list: unused,
       readStdin: unused,
     },

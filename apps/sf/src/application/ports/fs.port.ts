@@ -3,6 +3,7 @@ export interface FsPort {
   writeText(path: string, text: string, mode?: number): Promise<void>;
   appendText(path: string, text: string): Promise<void>;
   exists(path: string): Promise<boolean>;
+  writable(path: string): Promise<boolean>;
   list(dir: string): Promise<string[]>;
   readStdin(): Promise<string>;
 }

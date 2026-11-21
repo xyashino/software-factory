@@ -3,6 +3,7 @@ import { defineCommand, runCommand, showUsage } from 'citty';
 import { dispatchInternal } from './bootstrap/server-dispatch';
 import { cellCommand } from './adapters/cli/cell.command';
 import { connectCommand } from './adapters/cli/connection.command';
+import { doctorCommand } from './adapters/cli/doctor.command';
 import { incidentCommand } from './adapters/cli/incident.command';
 import { initCommand } from './adapters/cli/init.command';
 import { operatorCommand } from './adapters/cli/operator.command';
@@ -31,6 +32,7 @@ const main = defineCommand({
   },
   subCommands: {
     server: serverCommand,
+    doctor: doctorCommand,
     connect: connectCommand,
     target: targetCommand,
     todos: todosCommand,

@@ -6,6 +6,7 @@ import { createConnectionStore } from '../adapters/fs/connection-store';
 import { createPidFile } from '../adapters/fs/pid-file';
 import { createTodoFiles } from '../adapters/fs/todo-files';
 import { createTokenFile } from '../adapters/fs/token-file';
+import { isWritable } from '../adapters/fs/writable';
 import { appendTextFile, writeTextFile } from '../adapters/fs/write-text';
 import { createGitAdapter } from '../adapters/git/git';
 import { createPrAdapter } from '../adapters/git/gh';
@@ -81,6 +82,7 @@ export const buildContext = (cellName?: string): Ports => {
       writeText: writeTextFile,
       appendText: appendTextFile,
       exists: async (path) => existsSync(path),
+      writable: isWritable,
       list: async (dir) => (existsSync(dir) ? readdirSync(dir) : []),
       readStdin: notWired,
     },
