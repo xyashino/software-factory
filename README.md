@@ -39,16 +39,25 @@ pnpm ci:verify    # format, lint, typecheck, test, build
 
 ## Install `sf`
 
-`sf` is one standalone binary (server, init templates and migrations embedded) plus the web UI. Build and install it from this checkout:
+`sf` is one standalone binary (server, init templates and migrations embedded) plus the web UI. Build and install it from this checkout, as your user, with no admin rights needed.
+
+Linux:
 
 ```bash
-pnpm install
-pnpm build:sf                            # apps/factory/dist/sf + web UI
-sudo scripts/install.sh                  # /usr/local/bin/sf, /usr/local/share/sf/web
-PREFIX=$HOME/.local scripts/install.sh   # no sudo; add SF_WEB_DIR=$HOME/.local/share/sf/web at runtime
+pnpm install && pnpm install:sf          # ~/.local/bin/sf, ~/.local/share/sf/web
 ```
 
-`PREFIX` (default `/usr/local`), `DESTDIR` and `SF_WEB_DIR` override the targets. State lives in `$XDG_DATA_HOME/sf` (default `~/.local/share/sf`).
+Windows 10 (PowerShell):
+
+```powershell
+pnpm install; pnpm install:sf            # %LOCALAPPDATA%\sf\bin\sf.exe, %LOCALAPPDATA%\sf\web
+```
+
+`pnpm install:sf` runs `pnpm build:sf`, then `node scripts/install.mjs`. If the install directory is not on `PATH`, the script prints the line to add. Options: `--prefix <dir>` (installs to `<dir>/bin` and `<dir>/share/sf/web`), `--source <dir>` (directory holding the built `sf`), `--web-dir <dir>`; env `PREFIX`, `DESTDIR` and `SF_WEB_DIR` work the same way.
+
+System-wide Linux install: `pnpm build:sf && sudo scripts/install.sh` (`/usr/local/bin/sf`, `/usr/local/share/sf/web`; `PREFIX` and `DESTDIR` override the targets).
+
+State lives in `$XDG_DATA_HOME/sf` (default `~/.local/share/sf` on Linux, `%LOCALAPPDATA%\sf` on Windows).
 
 ## Use `sf` in any repository
 

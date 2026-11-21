@@ -13,6 +13,7 @@
     "CELL_NAME",
     "CELL_SERVER_URL",
     "XDG_DATA_HOME",
+    "LOCALAPPDATA",
     "SF_WEB_DIR"
   ],
   "tasks": {

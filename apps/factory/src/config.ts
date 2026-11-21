@@ -4,7 +4,10 @@ import { basename, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const XDG_DATA_HOME =
-  process.env.XDG_DATA_HOME || join(homedir(), '.local', 'share');
+  process.env.XDG_DATA_HOME ||
+  (process.platform === 'win32'
+    ? process.env.LOCALAPPDATA || join(homedir(), 'AppData', 'Local')
+    : join(homedir(), '.local', 'share'));
 export const DEFAULT_FACTORY_URL = 'http://127.0.0.1:7070';
 export const DEFAULT_CELL_SERVER_URL = 'http://127.0.0.1:7071';
 export const DEFAULT_PORT = 7070;
@@ -13,7 +16,8 @@ export const DEFAULT_DB_PATH = join(DEFAULT_DATA_DIR, 'factory.db');
 export const SERVER_ENTRY = fileURLToPath(
   new URL('../../factory-server/src/index.ts', import.meta.url),
 );
-export const IS_COMPILED = import.meta.url.includes('/$bunfs/');
+export const COMPILED_URL_PATTERN = /\/(\$bunfs|~BUN)\//;
+export const IS_COMPILED = COMPILED_URL_PATTERN.test(import.meta.url);
 export const CELL_SERVER_ENTRY = fileURLToPath(
   new URL('../../cell-server/src/index.ts', import.meta.url),
 );
@@ -38,8 +42,13 @@ export const DEFAULT_TODO_DIR = 'todos';
 export const DEFAULT_WEB_HOST = '127.0.0.1';
 export const DEFAULT_WEB_PORT = 4321;
 const WEB_ENTRY_FALLBACKS = [
-  '/usr/local/share/sf/web/server/entry.mjs',
-  '/usr/share/sf/web/server/entry.mjs',
+  join(DEFAULT_DATA_DIR, 'web', 'server', 'entry.mjs'),
+  ...(process.platform === 'win32'
+    ? []
+    : [
+        '/usr/local/share/sf/web/server/entry.mjs',
+        '/usr/share/sf/web/server/entry.mjs',
+      ]),
 ];
 const MONOREPO_WEB_ENTRY = fileURLToPath(
   new URL('../../factory-web-demo/dist/server/entry.mjs', import.meta.url),
@@ -47,6 +56,9 @@ const MONOREPO_WEB_ENTRY = fileURLToPath(
 
 const firstExisting = (candidates: readonly string[]): string | undefined =>
   candidates.find((path) => existsSync(path));
+
+const quoteIfSpaced = (path: string): string =>
+  /\s/.test(path) ? `"${path}"` : path;
 
 export const cellStatePathOf = (name: string): string =>
   join(CELLS_DIR, `${name}.json`);
@@ -78,6 +90,6 @@ export const operatorCommandOf = (
   },
 ): string => {
   if (!/^bun(\.exe)?$/.test(basename(runtime.execPath)))
-    return `${runtime.execPath} operator`;
-  return `bun ${runtime.entry} operator`;
+    return `${quoteIfSpaced(runtime.execPath)} operator`;
+  return `bun ${quoteIfSpaced(runtime.entry)} operator`;
 };
