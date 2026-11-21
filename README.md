@@ -1,6 +1,6 @@
 # software-factory
 
-Monorepo hosting **SoftwareFactory** ([design docs](apps/factory/docs/PLAN.md), [server](apps/factory-server/docs/PLAN.md)), an autonomous AI harness that turns
+Monorepo hosting **SoftwareFactory** ([design docs](apps/sf/docs/PLAN.md), [server](apps/factory/docs/PLAN.md)), an autonomous AI harness that turns
 `todos/*.md` work orders into verified Pull Requests via declarative production lines.
 
 ## Main idea
@@ -14,9 +14,10 @@ The system is modeled as an automated software factory:
 
 | Package                      | Purpose                                                         |
 | ---------------------------- | --------------------------------------------------------------- |
-| `apps/factory`               | `sf`: the single CLI binary (server, Cell, Supervisor commands) |
-| `apps/factory-server`        | Factory HTTP server and storage                                 |
-| `apps/factory-web-demo`      | Web UI served by `sf web start`                                 |
+| `apps/sf`                    | `sf`: the single CLI binary (server, Cell, Supervisor commands) |
+| `apps/factory`               | Factory HTTP server and storage                                 |
+| `apps/cell`                  | Cell server: runs Cell slots for a Factory                      |
+| `apps/web-demo`              | Web UI served by `sf web start`                                 |
 | `apps/operator`              | Operator verbs used by agents inside a Cell                     |
 | `packages/nitpick`           | Rules/skills engine; generates `.agents/` from `.nitpick/`      |
 | `packages/prompt`            | Prompt building blocks                                          |
@@ -76,7 +77,7 @@ sf todos import && sf queue                # push todos/*.md, see the queue
 sf server stop
 ```
 
-Run `sf init`, `sf project add` and `sf cell start` in each repository to share one server across repositories. Command reference: [apps/factory/docs/PLAN.md](apps/factory/docs/PLAN.md). The flow is proved end to end by `apps/factory/test/blackbox/standalone-external-repo.test.ts` (runs after `pnpm build:sf`, skipped without build output).
+Run `sf init`, `sf project add` and `sf cell start` in each repository to share one server across repositories. Command reference: [apps/sf/docs/PLAN.md](apps/sf/docs/PLAN.md). The flow is proved end to end by `apps/sf/test/blackbox/standalone-external-repo.test.ts` (runs after `pnpm build:sf`, skipped without build output).
 
 ## Credits
 

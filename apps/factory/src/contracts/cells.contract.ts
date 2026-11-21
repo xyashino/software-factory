@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { errorReplies, idParams, projectIdSchema, slugSchema } from './common';
+import { idParams, projectIdSchema, slugSchema } from './common';
 
 const allowedLinesSchema = z
   .array(z.union([z.literal('*'), slugSchema]))
@@ -22,16 +22,52 @@ const resumedJobDto = z.object({
   leaseExpiresAt: z.number().int(),
 });
 
-export const stepPayloadSchema = z.looseObject({
-  lineName: z.string().optional(),
-  task: z
-    .object({
-      slug: z.string(),
-      title: z.string(),
-      type: z.string(),
-      description: z.string(),
-    })
-    .optional(),
+export const enrollCellContract = {
+  in: {
+    body: z.object({
+      projectId: projectIdSchema,
+      name: slugSchema,
+      allowedLines: allowedLinesSchema,
+      runners: runnersSchema,
+    }),
+  },
+  out: {
+    201: z.object({
+      code: z.literal(201),
+      cellId: z.string(),
+      sessionToken: z.string(),
+      expiresAt: z.number().int(),
+    }),
+  },
+};
+
+export const helloCellContract = {
+  in: {
+    body: z.object({
+      projectId: projectIdSchema,
+      allowedLines: allowedLinesSchema,
+      runners: runnersSchema,
+      localWorktrees: localWorktreesSchema.default([]),
+    }),
+  },
+  out: {
+    200: z.object({
+      code: z.literal(200),
+      cellId: z.string(),
+      resumedJob: resumedJobDto.optional(),
+    }),
+  },
+};
+
+export const stepJobPayloadDto = z.object({
+  stepIndex: z.number().int(),
+  lineName: z.string(),
+  task: z.object({
+    slug: z.string(),
+    title: z.string(),
+    type: z.string(),
+    description: z.string(),
+  }),
 });
 
 export const claimedJobDto = z.object({
@@ -59,88 +95,29 @@ export const claimedJobDto = z.object({
   payload: z.record(z.string(), z.unknown()),
 });
 
-const cellDto = z.object({
-  cellId: z.string(),
-  projectId: z.string(),
-  name: z.string(),
-  status: z.enum(['online', 'busy', 'draining', 'left', 'offline', 'revoked']),
-  allowedLines: z.array(z.string()),
-  runners: z.array(z.string()),
-  activeJobId: z.string().nullable(),
-  lastHeartbeatAt: z.number().int().nullable(),
-  leaseExpiresAt: z.number().int().nullable(),
-});
-
-export const enrollCellContract = {
-  in: {
-    body: z
-      .object({
-        projectId: projectIdSchema,
-        name: slugSchema,
-        allowedLines: allowedLinesSchema,
-        runners: runnersSchema,
-      })
-      .strict(),
-  },
-  out: {
-    201: z.object({
-      code: z.literal(201),
-      cellId: z.string(),
-      sessionToken: z.string(),
-      expiresAt: z.number().int(),
-    }),
-    ...errorReplies,
-  },
-};
-
-export const helloCellContract = {
-  in: {
-    body: z
-      .object({
-        projectId: projectIdSchema,
-        allowedLines: allowedLinesSchema,
-        runners: runnersSchema,
-        localWorktrees: localWorktreesSchema.default([]),
-      })
-      .strict(),
-  },
-  out: {
-    200: z.object({
-      code: z.literal(200),
-      cellId: z.string(),
-      resumedJob: resumedJobDto.optional(),
-    }),
-    ...errorReplies,
-  },
-};
-
 export const claimJobContract = {
   in: {
     body: z
       .object({
         waitMs: z.number().int().min(0).default(0),
       })
-      .strict()
       .optional(),
   },
   out: {
     200: z.object({
       code: z.literal(200),
       job: claimedJobDto.nullable(),
-      signals: z.array(z.enum(['drain'])).default([]),
+      signals: z.array(z.enum(['drain'])),
     }),
-    ...errorReplies,
   },
 };
 
 export const heartbeatCellContract = {
   in: {
-    body: z
-      .object({
-        jobId: z.string().trim().min(1),
-        epoch: z.number().int(),
-      })
-      .strict(),
+    body: z.object({
+      jobId: z.string().trim().min(1),
+      epoch: z.number().int(),
+    }),
   },
   out: {
     200: z.object({
@@ -148,14 +125,19 @@ export const heartbeatCellContract = {
       leaseExpiresAt: z.number().int().nullable(),
       signals: z.array(z.enum(['abort', 'drain', 'force'])),
     }),
-    ...errorReplies,
   },
 };
 
 export const drainCellContract = {
   in: {
     params: idParams,
-    body: z.object({ force: z.boolean() }).strict(),
+    body: z
+      .object({
+        force: z.boolean().default(false),
+        commandId: z.string().trim().min(1).optional(),
+      })
+      .strict()
+      .optional(),
   },
   out: {
     200: z.object({
@@ -163,7 +145,6 @@ export const drainCellContract = {
       status: z.literal('draining'),
       force: z.boolean(),
     }),
-    ...errorReplies,
   },
 };
 
@@ -179,14 +160,24 @@ export const leaveCellContract = {
   },
   out: {
     200: z.object({ code: z.literal(200), status: z.literal('left') }),
-    ...errorReplies,
   },
 };
+
+const cellDto = z.object({
+  cellId: z.string(),
+  projectId: z.string(),
+  name: z.string(),
+  status: z.enum(['online', 'busy', 'draining', 'left', 'offline', 'revoked']),
+  allowedLines: z.array(z.string()),
+  runners: z.array(z.string()),
+  activeJobId: z.string().nullable(),
+  lastHeartbeatAt: z.number().int().nullable(),
+  leaseExpiresAt: z.number().int().nullable(),
+});
 
 export const listCellsContract = {
   out: {
     200: z.object({ code: z.literal(200), cells: z.array(cellDto) }),
-    ...errorReplies,
   },
 };
 
@@ -194,6 +185,5 @@ export const revokeCellContract = {
   in: { params: idParams },
   out: {
     200: z.object({ code: z.literal(200) }),
-    ...errorReplies,
   },
 };

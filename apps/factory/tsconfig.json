@@ -1,9 +1,11 @@
 {
   "extends": "@repo/typescript-config/base.json",
   "compilerOptions": {
-    "outDir": "dist",
-    "rootDir": "..",
-    "types": ["node", "bun"]
+    "noEmit": true,
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ESNext"],
+    "types": ["bun", "node"]
   },
-  "include": ["src", "../factory-server/src/sql.d.ts"]
+  "include": ["src", "test", "drizzle.config.ts", "vitest.config.ts"]
 }

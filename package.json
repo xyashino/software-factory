@@ -3,7 +3,7 @@
   "private": true,
   "scripts": {
     "build": "turbo run build",
-    "build:sf": "pnpm --filter @repo/factory build:sf && pnpm --filter @repo/factory-web-demo build && pnpm --filter @repo/factory-web-demo deploy --prod --force apps/factory-web-demo/dist/sf-deps",
+    "build:sf": "pnpm --filter @repo/sf build:sf && pnpm --filter @repo/web-demo build && pnpm --filter @repo/web-demo deploy --prod --force apps/web-demo/dist/sf-deps",
     "install:sf": "pnpm build:sf && node scripts/install.mjs",
     "lint": "turbo run lint",
     "check-types": "turbo run check-types",

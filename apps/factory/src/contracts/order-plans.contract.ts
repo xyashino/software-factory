@@ -1,7 +1,9 @@
 import { z } from 'zod';
-import { PLAN_STATES, errorReplies, projectIdSchema } from './common';
+import { PLAN_ACTIONS, PLAN_STATES } from '../domain/orders/order-state';
+import { idParams, projectIdSchema, slugSchema, titleSchema } from './common';
+import { workOrderDto } from './work-orders.contract';
 
-const orderPlanDto = z.object({
+export const orderPlanDto = z.object({
   planId: z.string(),
   projectId: z.string(),
   slug: z.string(),
@@ -16,6 +18,21 @@ const orderPlanDto = z.object({
   updatedAt: z.number().int(),
 });
 
+export const createOrderPlanContract = {
+  in: {
+    body: z.object({
+      projectId: projectIdSchema,
+      slug: slugSchema,
+      title: titleSchema,
+      baseBranch: z.string().trim().min(1).optional(),
+      activate: z.boolean().default(false),
+    }),
+  },
+  out: {
+    201: z.object({ code: z.literal(201), plan: orderPlanDto }),
+  },
+};
+
 export const listOrderPlansContract = {
   in: {
     query: z.object({
@@ -25,6 +42,26 @@ export const listOrderPlansContract = {
   },
   out: {
     200: z.object({ code: z.literal(200), items: z.array(orderPlanDto) }),
-    ...errorReplies,
+  },
+};
+
+export const getOrderPlanContract = {
+  in: { params: idParams },
+  out: {
+    200: z.object({
+      code: z.literal(200),
+      plan: orderPlanDto,
+      workOrders: z.array(workOrderDto),
+    }),
+  },
+};
+
+export const transitionOrderPlanContract = {
+  in: {
+    params: idParams,
+    body: z.object({ action: z.enum(PLAN_ACTIONS) }),
+  },
+  out: {
+    200: z.object({ code: z.literal(200), plan: orderPlanDto }),
   },
 };

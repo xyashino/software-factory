@@ -4,7 +4,7 @@ The `operator` CLI is how an LLM agent reports back to its Cell. It is a thin cl
 arguments, reads the files they name, and sends one request to the Cell. It holds no rules and no
 factory credentials.
 
-Source of truth: [`apps/factory-server/docs`](../../factory-server/docs/PLAN.md). Section 11 defines
+Source of truth: [`apps/factory/docs`](../../factory/docs/PLAN.md). Section 11 defines
 the endpoint, the verbs and their effects.
 
 | Document | Covers |

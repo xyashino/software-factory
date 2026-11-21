@@ -2,10 +2,8 @@ import { z } from 'zod';
 import {
   INCIDENT_REASONS,
   INCIDENT_STATUSES,
-  errorReplies,
-  idParams,
-  projectIdSchema,
-} from './common';
+} from '../domain/incidents/incident-rules';
+import { idParams, projectIdSchema } from './common';
 import { workOrderDto } from './work-orders.contract';
 
 const incidentDto = z.object({
@@ -37,25 +35,19 @@ const epochSchema = z.number().int().optional();
 const stepIndexSchema = z.number().int().min(0);
 
 const resolveIncidentBody = z.discriminatedUnion('action', [
-  z
-    .object({
-      action: z.literal('retry_step'),
-      stepIndex: stepIndexSchema,
-      epoch: epochSchema,
-    })
-    .strict(),
-  z
-    .object({
-      action: z.literal('restart_from_step'),
-      stepIndex: stepIndexSchema,
-      epoch: epochSchema,
-    })
-    .strict(),
-  z
-    .object({ action: z.literal('restart_from_scratch'), epoch: epochSchema })
-    .strict(),
-  z.object({ action: z.literal('escalate'), epoch: epochSchema }).strict(),
-  z.object({ action: z.literal('cancel'), epoch: epochSchema }).strict(),
+  z.object({
+    action: z.literal('retry_step'),
+    stepIndex: stepIndexSchema,
+    epoch: epochSchema,
+  }),
+  z.object({
+    action: z.literal('restart_from_step'),
+    stepIndex: stepIndexSchema,
+    epoch: epochSchema,
+  }),
+  z.object({ action: z.literal('restart_from_scratch'), epoch: epochSchema }),
+  z.object({ action: z.literal('escalate'), epoch: epochSchema }),
+  z.object({ action: z.literal('cancel'), epoch: epochSchema }),
 ]);
 
 export const listIncidentsContract = {
@@ -69,7 +61,6 @@ export const listIncidentsContract = {
   },
   out: {
     200: z.object({ code: z.literal(200), items: z.array(incidentDto) }),
-    ...errorReplies,
   },
 };
 
@@ -84,6 +75,5 @@ export const resolveIncidentContract = {
       incident: incidentDto,
       workOrder: workOrderDto,
     }),
-    ...errorReplies,
   },
 };

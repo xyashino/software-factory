@@ -17,7 +17,7 @@ const WIN = process.platform === 'win32';
 const BIN_NAME = WIN ? 'sf.exe' : 'sf';
 const SOURCE_BIN_NAMES = WIN ? ['sf.exe', 'sf'] : ['sf'];
 const DEFAULT_SOURCE = join(ROOT, 'apps/factory/dist');
-const WEB_DIST = join(ROOT, 'apps/factory-web-demo/dist');
+const WEB_DIST = join(ROOT, 'apps/web-demo/dist');
 const WEB_PARTS = [
   ['server', 'server'],
   ['client', 'client'],

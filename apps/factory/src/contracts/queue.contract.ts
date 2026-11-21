@@ -1,11 +1,6 @@
 import { z } from 'zod';
-import {
-  PRIORITIES,
-  WORK_ORDER_STATES,
-  errorReplies,
-  projectIdSchema,
-  slugSchema,
-} from './common';
+import { PRIORITIES, WORK_ORDER_STATES } from '../domain/orders/order-state';
+import { projectIdSchema, slugSchema } from './common';
 
 const importErrorDto = z.object({
   filename: z.string(),
@@ -51,7 +46,6 @@ export const exportQueueContract = {
       exportedAt: z.number().int(),
       files: z.array(exportFileDto),
     }),
-    ...errorReplies,
   },
 };
 
@@ -68,7 +62,6 @@ export const importQueueContract = {
           )
           .max(500),
       })
-      .strict()
       .refine(
         (body) => body.mode === 'dry_run' || body.commandId !== undefined,
         {
@@ -92,35 +85,24 @@ export const importQueueContract = {
       message: z.string(),
       errors: z.array(importErrorDto).min(1),
     }),
-    ...errorReplies,
   },
 };
 
 export const queueActionsContract = {
   in: {
     body: z.discriminatedUnion('action', [
-      z
-        .object({ action: z.literal('pause'), orderIds: orderIdsSchema })
-        .strict(),
-      z
-        .object({ action: z.literal('unpause'), orderIds: orderIdsSchema })
-        .strict(),
-      z
-        .object({
-          action: z.literal('reset_to_scratch'),
-          orderIds: orderIdsSchema,
-        })
-        .strict(),
-      z
-        .object({ action: z.literal('cancel'), orderIds: orderIdsSchema })
-        .strict(),
-      z
-        .object({
-          action: z.literal('reprioritise'),
-          orderIds: orderIdsSchema,
-          priority: z.enum(PRIORITIES),
-        })
-        .strict(),
+      z.object({ action: z.literal('pause'), orderIds: orderIdsSchema }),
+      z.object({ action: z.literal('unpause'), orderIds: orderIdsSchema }),
+      z.object({
+        action: z.literal('reset_to_scratch'),
+        orderIds: orderIdsSchema,
+      }),
+      z.object({ action: z.literal('cancel'), orderIds: orderIdsSchema }),
+      z.object({
+        action: z.literal('reprioritise'),
+        orderIds: orderIdsSchema,
+        priority: z.enum(PRIORITIES),
+      }),
     ]),
   },
   out: {
@@ -134,6 +116,5 @@ export const queueActionsContract = {
         }),
       ),
     }),
-    ...errorReplies,
   },
 };

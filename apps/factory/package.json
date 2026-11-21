@@ -3,19 +3,16 @@
   "version": "0.0.0",
   "type": "module",
   "private": true,
-  "bin": {
-    "sf": "./src/cli.ts"
-  },
   "scripts": {
     "check-types": "tsc --noEmit",
+    "db:check": "drizzle-kit check",
+    "db:generate": "drizzle-kit generate",
     "lint": "eslint src test --max-warnings 0",
-    "test": "bun --bun vitest run",
-    "build": "bun build src/cli.ts --outfile dist/sf.js --target bun",
-    "build:sf": "bun build --compile src/cli.ts --outfile dist/sf"
+    "test": "bun --bun vitest run"
   },
   "dependencies": {
-    "citty": "catalog:",
-    "picocolors": "catalog:",
+    "drizzle-orm": "catalog:",
+    "hono": "catalog:",
     "yaml": "catalog:",
     "zod": "catalog:"
   },
@@ -24,6 +21,7 @@
     "@repo/typescript-config": "workspace:*",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
+    "drizzle-kit": "catalog:",
     "eslint": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
