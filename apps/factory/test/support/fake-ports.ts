@@ -1,5 +1,9 @@
 import type { Ports, Procedure } from '../../src/application/core/procedure';
 import type { Access } from '../../src/domain/access';
+import {
+  EMPTY_CONNECTION_CONFIG,
+  type ConnectionConfig,
+} from '../../src/domain/connection/connection-config';
 
 export interface ServerCall {
   method: 'GET' | 'POST' | 'DELETE';
@@ -12,6 +16,7 @@ export interface ServerCall {
 export interface FakeOptions {
   config?: string | null;
   secret?: string | null;
+  connectionConfig?: ConnectionConfig;
   todos?: Record<string, string>;
   reply?: (call: ServerCall) => unknown;
   writeOutcome?: 'written' | 'refused';
@@ -21,6 +26,7 @@ export interface FakePorts {
   ports: Ports;
   calls: ServerCall[];
   writes: { dir: string; filename: string; force: boolean }[];
+  savedConnections: ConnectionConfig[];
 }
 
 const unused = (): never => {
@@ -41,6 +47,8 @@ export const createFakePorts = (options: FakeOptions = {}): FakePorts => {
   const reply = options.reply ?? noReply;
   const calls: ServerCall[] = [];
   const writes: FakePorts['writes'] = [];
+  const savedConnections: ConnectionConfig[] = [];
+  let connectionConfig = options.connectionConfig ?? EMPTY_CONNECTION_CONFIG;
   const record = (call: ServerCall): unknown => {
     calls.push(call);
     return reply(call);
@@ -55,6 +63,20 @@ export const createFakePorts = (options: FakeOptions = {}): FakePorts => {
         record({ method: 'DELETE', route, token }),
       stream: unused,
       probe: async () => true,
+    },
+    connection: {
+      url: 'http://127.0.0.1:7070',
+      urlSource: 'default',
+      token: secret,
+      tokenSource: secret === null ? null : 'env:FACTORY_TOKEN',
+    },
+    connections: {
+      path: '/fake/config/sf/config.json',
+      read: () => connectionConfig,
+      write: (next) => {
+        connectionConfig = next;
+        savedConnections.push(next);
+      },
     },
     fs: {
       readText: async () => {
@@ -137,7 +159,7 @@ export const createFakePorts = (options: FakeOptions = {}): FakePorts => {
       remove: unused,
     },
   };
-  return { ports, calls, writes };
+  return { ports, calls, writes, savedConnections };
 };
 
 export const runProcedure = <I, O>(

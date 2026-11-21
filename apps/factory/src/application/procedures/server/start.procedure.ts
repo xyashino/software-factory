@@ -1,6 +1,8 @@
 import { z } from 'zod';
+import { LOCAL_TARGET } from '../../../domain/connection/connection-config';
 import { Refused, Unreachable } from '../../core/errors';
 import { define, type Ports } from '../../core/procedure';
+import { mintSupervisorToken, saveLocalTarget } from './local-token';
 
 const START_TIMEOUT_MS = 10_000;
 const POLL_INTERVAL_MS = 200;
@@ -9,6 +11,7 @@ const StartSchema = z
   .object({
     bin: z.string().min(1),
     serverArgs: z.array(z.string().min(1)).min(1),
+    cwd: z.string().min(1),
     dataDir: z.string().min(1),
     dbPath: z.string().min(1),
     port: z.number().int().positive(),
@@ -51,6 +54,10 @@ export const startServer = define({ kind: 'supervisor' })(
   });
   await ctx.pidFile.write(input.dataDir, pid);
   if (await waitUntilAnswering(ctx)) {
+    if (ctx.connections.read().targets[LOCAL_TARGET] === undefined) {
+      const token = await mintSupervisorToken(ctx, input);
+      saveLocalTarget(ctx, `http://127.0.0.1:${input.port}`, token);
+    }
     return { pid };
   }
   ctx.process.terminate(pid);

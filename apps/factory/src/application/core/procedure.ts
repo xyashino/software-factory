@@ -1,6 +1,8 @@
 import type { Access } from '../../domain/access';
+import type { Connection } from '../../domain/connection/connection-config';
 import type { CellServerPort } from '../ports/cell-server.port';
 import type { CellStatePort } from '../ports/cell-state.port';
+import type { ConnectionStorePort } from '../ports/connection-store.port';
 import type { ClockPort } from '../ports/clock.port';
 import type { FsPort } from '../ports/fs.port';
 import type { GitPort } from '../ports/git.port';
@@ -19,6 +21,8 @@ const REFUSAL_MESSAGE = 'Token cannot run this procedure';
 
 export interface Ports {
   server: ServerPort;
+  connection: Connection;
+  connections: ConnectionStorePort;
   fs: FsPort;
   todoFiles: TodoFilesPort;
   tokens: TokenStorePort;

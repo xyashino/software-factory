@@ -1,15 +1,28 @@
 import {
   ArgumentError,
   Refused,
+  Unauthorized,
   Unreachable,
 } from '../application/core/errors';
 import type { Context, Ports, Procedure } from '../application/core/procedure';
 import type { Access } from '../domain/access';
+import type { Connection } from '../domain/connection/connection-config';
+import { recoveryCommandOf } from '../domain/connection/connection-config';
 import { EXIT, type ExitCode } from '../domain/exit-codes';
 import { buildContext, type Mode } from './context';
 
-const NO_TOKEN_MESSAGE = 'No token stored, cannot run this procedure';
 const SUPERVISOR: Access = { kind: 'supervisor' };
+
+const noTokenMessage = (connection: Connection): string =>
+  `No token stored for ${connection.url}, cannot run this procedure\nfix: ${recoveryCommandOf(connection.url)}`;
+
+const unauthorizedMessage = (connection: Connection, reason: string): string =>
+  [
+    reason,
+    `target: ${connection.url} (${connection.urlSource})`,
+    `token source: ${connection.tokenSource ?? 'none'}`,
+    `fix: ${recoveryCommandOf(connection.url)}`,
+  ].join('\n');
 
 export type RunResult<O> =
   | { kind: 'ok'; value: O }
@@ -58,10 +71,20 @@ export const run = <I, O>(
     const ports = build(mode);
     const token = await ports.tokens.read();
     if (token === null) {
-      throw new Refused(NO_TOKEN_MESSAGE);
+      throw new Refused(noTokenMessage(ports.connection));
     }
     const ctx: Context<Access> = { ...ports, token, principal: token };
-    return procedure.execute(input, ctx);
+    try {
+      return await procedure.execute(input, ctx);
+    } catch (error) {
+      if (error instanceof Unauthorized) {
+        throw new Refused(
+          unauthorizedMessage(ports.connection, error.message),
+          error.details,
+        );
+      }
+      throw error;
+    }
   });
 
 export const runWithoutToken = <I, O>(

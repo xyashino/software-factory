@@ -22,6 +22,7 @@ const spawnedEnvFor = async (
     process: {
       ...fake.process,
       isAlive: () => false,
+      run: async () => ({ exitCode: 0, stdout: 'minted\n', stderr: '' }),
       spawnDetached: async (spec: DetachedSpec) => {
         spawned.push(spec);
         return 1;
@@ -32,6 +33,7 @@ const spawnedEnvFor = async (
     {
       bin: '/usr/bin/bun',
       serverArgs: ['/repo/server.ts'],
+      cwd: '/repo',
       dataDir: '/data',
       dbPath: '/data/factory.db',
       port: 7070,

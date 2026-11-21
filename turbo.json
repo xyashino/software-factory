@@ -10,10 +10,12 @@
     "FACTORY_PORT",
     "FACTORY_HOST",
     "FACTORY_URL",
+    "FACTORY_TOKEN",
     "CELL_NAME",
     "CELL_SERVER_URL",
     "XDG_DATA_HOME",
     "LOCALAPPDATA",
+    "XDG_CONFIG_HOME",
     "SF_WEB_DIR"
   ],
   "tasks": {

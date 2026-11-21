@@ -2,6 +2,7 @@
 import { defineCommand, runCommand, showUsage } from 'citty';
 import { dispatchInternal } from './bootstrap/server-dispatch';
 import { cellCommand } from './adapters/cli/cell.command';
+import { connectCommand } from './adapters/cli/connection.command';
 import { incidentCommand } from './adapters/cli/incident.command';
 import { initCommand } from './adapters/cli/init.command';
 import { operatorCommand } from './adapters/cli/operator.command';
@@ -11,6 +12,7 @@ import { projectCommand } from './adapters/cli/project.command';
 import { queueCommand } from './adapters/cli/queue.command';
 import { argsOf, resolveCommand } from './adapters/cli/resolve-command';
 import { serverCommand } from './adapters/cli/server.command';
+import { targetCommand } from './adapters/cli/target.command';
 import { todosCommand } from './adapters/cli/todos.command';
 import { tokenCommand } from './adapters/cli/token.command';
 import { assertValidArgs } from './adapters/cli/validate';
@@ -29,6 +31,8 @@ const main = defineCommand({
   },
   subCommands: {
     server: serverCommand,
+    connect: connectCommand,
+    target: targetCommand,
     todos: todosCommand,
     queue: queueCommand,
     incident: incidentCommand,
