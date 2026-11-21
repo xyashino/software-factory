@@ -45,7 +45,6 @@ const BARE_GROUPS: string[][] = [
 const MISSING_FLAGS: string[][] = [
   ['cell', 'stop'],
   ['cell', 'revoke'],
-  ['project', 'add', 'foo'],
   ['token', 'create'],
 ];
 

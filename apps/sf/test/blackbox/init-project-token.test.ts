@@ -1,5 +1,12 @@
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { type IncomingMessage, type Server, createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -199,6 +206,76 @@ describe('sf project', () => {
       maxRunning: 5,
     });
     expect(post?.authorization).toBe(`Bearer ${SUPERVISOR_TOKEN}`);
+  });
+
+  it('registers the origin repo under its name with no arguments', async () => {
+    // Arrange
+    const repo = freshRepo();
+
+    // Act
+    const result = await runCli(repo, ['project', 'add', '--json']);
+
+    // Assert
+    expect(result.status).toBe(0);
+    const post = requests.filter(
+      (call) => call.method === 'POST' && call.url === '/api/v1/projects',
+    );
+    expect(post.at(-1)?.body).toEqual({
+      projectId: 'widgets',
+      repoUrl: 'https://github.com/acme/widgets.git',
+      defaultBaseBranch: 'main',
+      maxRunning: 5,
+    });
+  });
+
+  it('uses the project id from the repo config with no arguments', async () => {
+    // Arrange
+    const repo = freshRepo();
+    mkdirSync(join(repo, '.factory'));
+    writeFileSync(
+      join(repo, '.factory/config.json'),
+      JSON.stringify({ project: 'widgets-config' }),
+    );
+
+    // Act
+    const result = await runCli(repo, ['project', 'add']);
+
+    // Assert
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('project widgets-config registered');
+  });
+
+  it('warns and still registers when the explicit id differs from the config', async () => {
+    // Arrange
+    const repo = freshRepo();
+    mkdirSync(join(repo, '.factory'));
+    writeFileSync(
+      join(repo, '.factory/config.json'),
+      JSON.stringify({ project: 'widgets-config' }),
+    );
+
+    // Act
+    const result = await runCli(repo, ['project', 'add', 'gadgets']);
+
+    // Assert
+    expect(result.status).toBe(0);
+    expect(result.stderr).toContain(
+      'warning: gadgets differs from .factory/config.json project widgets-config',
+    );
+    expect(result.stdout).toContain('project gadgets registered');
+  });
+
+  it('exits 2 with a clear message outside a repo without arguments', async () => {
+    // Arrange
+    const outside = mkdtempSync(join(tmpdir(), 'sf-no-repo-'));
+    dirs.push(outside);
+
+    // Act
+    const result = await runCli(outside, ['project', 'add']);
+
+    // Assert
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain('no origin remote, pass --repo <url>');
   });
 
   it('lists the projects the server holds', async () => {
