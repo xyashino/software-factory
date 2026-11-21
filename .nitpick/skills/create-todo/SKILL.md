@@ -1,131 +1,89 @@
 ---
 name: create-todo
-description: "Generates structured, actionable, and token-lean todos/<name>.md task specification files for monorepo packages, modules, features, or architectural problems. ONLY activate when explicitly requested by the user (e.g., 'use create-todo skill', 'run create-todo', 'create a todo spec file for...'). Never activate automatically."
+description: "Generates todos/<slug>.md work orders that the factory queue importer accepts: correct frontmatter, one parent, verified facts, self-contained agent prompt. ONLY activate when explicitly requested by the user (e.g., 'use create-todo skill', 'run create-todo', 'create a todo spec file for...'). Never activate automatically."
 ---
 
-# Create Todo Specification Skill
+# Create Todo
 
-## 🎯 Activation (Explicit Only)
+## Activation
 
-**Never activate this skill automatically.**
+Explicit only. Run when the user asks for `todos/<slug>.md` specs or names this skill. Never during normal implementation, planning chat or code questions.
 
-Only activate this skill when the user **explicitly** requests creating a `todos/<name>.md` specification or explicitly asks to use this skill, such as:
+## What a todo is
 
-- _"Use the create-todo skill to spec..."_
-- _"Run create-todo for..."_
-- _"Generate a todo spec file in todos for..."_
-- _"Create a todos/<name>.md problem spec"_
+One work order. The factory imports `todos/<slug>.md` (`sf todos import`, `POST /api/v1/queue/import`). Everything after the heading becomes the description sent to an LLM builder on a Line. So: the file must stand alone. No "as discussed", no reference to the chat.
 
-Do **NOT** activate this skill automatically during standard feature implementation, general task planning, answering questions about code, or everyday agent interactions unless explicitly commanded by the user.
+## Format (matches `apps/factory/src/domain/queue/todo-markdown.ts`)
 
----
+Frontmatter, then heading `# <slug>: <title>`, then body.
 
-## 🏛️ Core Philosophy
+| Key | Rule |
+| --- | --- |
+| `status` | `queued` (default), `paused`, `cancelled`. `todo` = alias of `queued`. |
+| `priority` | `high`, `medium` (default), `low`. |
+| `line` | Required. Lowercase slug of a file in `.factory/lines/`. |
+| `type` | `feat`, `fix`, `refactor`, `chore`, `docs`, `test`. Default `feat`: set it explicitly. |
+| `plan` | Optional lowercase slug. Root todo of a stack. Branch `feat/<plan>`. |
+| `depends_on` | Optional. AT MOST ONE slug (string or one-item list). Must be another todo. No cycles. |
 
-A `todos/<name>.md` file is not just a bullet point — it is an **executable technical contract**. It must provide sufficient architectural clarity, dependency contracts, and acceptance criteria that any engineer or AI agent can pick it up and implement it from start to finish without asking clarification questions.
+- File name `<slug>.md`, slug matches `^[a-z0-9][a-z0-9-]*$`. Heading slug must equal file slug.
+- Unknown keys are ignored. Do not add `model` or `runner`: pick the `line`.
 
-### Key Tenets
+## Pick the line
 
-1. **Single Responsibility**: One markdown file per logical package, module, or distinct problem (e.g. `todos/astro-config.md`, `todos/booking-management.md`).
-2. **Context-Rich, Zero Ambiguity**: Explain the _why_ alongside the _what_. State the architectural layer (Universal, Web UI, Domain Core, Integration).
-3. **Exact Dependency Alignments**: Reference explicit packages from `pnpm-workspace.yaml` `catalog:` or `workspace:*`.
-4. **Token-Lean Verification**: Avoid multi-step command churn. Use the unified CI verification gate (`pnpm ci:verify`) as the single deterministic verification step.
+| Line | Use for |
+| --- | --- |
+| `fast` | chores, docs, style. Builder + quality gate, direct delivery. |
+| `standard` | clear scope. Builder + quality gate + doctor audit. No planning. |
+| `feature` | unclear design. Plan, plan review, build, quality gate, audit. |
 
----
+Read `.factory/lines/*.yml` descriptions again if lines changed. Named model or runner not in a line file: say so, never invent.
 
-## 📁 File Naming & Directory Convention
+## Split and chain
 
-- **Directory**: Always output files to `todos/` in the repository root.
-- **File Name**: Strictly kebab-case reflecting the package or feature name:
-  - `@repo/astro-config` $\rightarrow$ `todos/astro-config.md`
-  - `@repo/uih` $\rightarrow$ `todos/uih.md`
-  - `booking-checkout` $\rightarrow$ `todos/booking-checkout.md`
+- One todo = one reviewable change, one ADR. Split package creation from app adoption. Split when a change rewrites about 30+ files or mixes behavior change with mechanical moves.
+- Dependencies form a forest: each todo has one parent. Fan-out is fine. Fan-in is not: linearize (`a` then `b` then `c`) or merge.
+- Epic of several todos: optional `docs/<name>-plan.md` with verified facts, decisions, order table, risks. Todos link to it.
 
----
+## Discovery
 
-## 🪜 Execution Pipeline
+- Read what is needed to state facts. Targeted `grep`, `diff`, `ls`, `package.json`, the files being moved. No whole-repo scans, no unrelated packages.
+- Verified fact goes in as fact, with paths. Unverified claim goes under "Verify first". Never guess.
+- Versions: `pnpm-workspace.yaml` `catalog:`. Workspace deps `workspace:*` (`linkWorkspacePackages: false`, declare every consumer).
+- Read ADRs in `decisions/` only if the change alters a recorded decision.
 
-When explicitly invoked by the user:
+## Template
 
-1. **Targeted Discovery (Zero Token Waste)**:
-   - Inspect **only** the target package's `package.json` and its direct dependencies.
-   - Do **NOT** perform exhaustive monorepo scans, broad directory walks, or dump unrelated catalog packages.
-   - Read relevant ADRs in `decisions/` only if the task directly alters architectural contracts.
-2. **Scoping**:
-   - Split complex epics into discrete, high-cohesion `todos/<name>.md` files.
-   - Do not bundle unrelated concerns (e.g. keep `@repo/uih` and `@repo/ui` in separate files).
-3. **Drafting from Template**:
-   - Use the canonical template structure from `references/todo.md` (next to this file).
-   - Populate sections: **Objective**, **Context & Problem Statement**, **Specification / Scope**, **Implementation Plan**, and **Acceptance Criteria**.
-4. **Agent Override (only when the user names a runner or model)**:
-   - Runners and models are set per operator in `.factory/lines/*.yml`. Todos have no `model` key: pick the `line` instead.
-   - User names a model → find it in `.factory/lines/*.yml`. Not there → say so, do not invent one.
-5. **Lean Validation**:
-   - Verify markdown formatting and ensure all acceptance criteria are actionable checkboxes (`- [ ]`).
-   - Do **NOT** run test or build commands during todo creation — drafting specs does not execute code.
+Copy `references/todo.md`. Sections: Objective, Context, Scope (target, classification, dependencies, out of scope), Verify first, Open decisions, Implementation Plan, Acceptance Criteria. Drop Verify first / Open decisions when empty.
 
----
+## Acceptance defaults
 
-## 📝 Required Document Structure
+Every todo ends with:
 
-Every generated file in `todos/` must adhere to this markdown structure:
+- [ ] Tests follow `testing` rules: black box, Arrange/Act/Assert, story-style names, public behavior only.
+- [ ] One new ADR in `decisions/` (`decision-log` rule).
+- [ ] Strict TypeScript, no `any`, no loose assertions.
+- [ ] `pnpm ci:verify` passes. Package-scoped `pnpm --filter <pkg> test|lint|check-types` allowed while working.
+- [ ] `pnpm nitpick:check` passes when `.nitpick/` changed.
 
-```markdown
----
-status: queued
-priority: medium # high | medium | low
-line: feature # feature | standard | fast
-depends_on: [] # ids (file names without .md) that must be done first
----
+## Style
 
-# <slug>: [Scope / Package / Feature Name]
+Markdown follows `general-caveman-markdown` and `general-prefer-ascii`: short, plain ASCII, no emoji, no filler.
 
-## 🎯 Objective
+## Validate before finishing
 
-[Crisp, 1-2 sentence statement defining what needs to be built, fixed, or refactored.]
+No script yet (see `todos/todo-lint-script.md`). Check by hand, per file:
 
----
+- [ ] Starts with `---` frontmatter block, valid YAML.
+- [ ] `line` set and `.factory/lines/<line>.yml` exists.
+- [ ] `type` set and valid.
+- [ ] `depends_on` has at most one slug and that todo exists.
+- [ ] Heading is `# <slug>: <title>` and slug equals file name.
+- [ ] No cycle in the chain.
+- [ ] Every path and number in the body was verified, or sits under "Verify first".
 
-## 🌐 Context & Problem Statement
+## Guardrails
 
-[Explain why this task is needed, how it fits into the monorepo architecture, and what issues occur if this problem is not solved.]
-
----
-
-## 📦 Specification / Scope
-
-- **Target**: `[e.g. packages/<name> or apps/<name>/src/modules/<module>]`
-- **Classification**: `[Universal Tooling | Web UI | Domain Core | Integration | Infrastructure]`
-- **Dependencies**:
-  - `[package-a: catalog:]`
-  - `[package-b: workspace:*]`
-
----
-
-## 🛠️ Implementation Plan
-
-1. **Initialize File Structure**:
-   - List key files to create or modify.
-2. **Core Logic & APIs**:
-   - List technical contracts, state structures, or APIs.
-3. **Integration & Exports**:
-   - Define export boundaries and consuming apps.
-
----
-
-## ✅ Acceptance Criteria
-
-- [ ] Explicit functional verification.
-- [ ] Strict TypeScript typing without `any` or loose assertions.
-- [ ] Passes verification gate (`pnpm ci:verify`).
-```
-
----
-
-## ⚠️ Narrowing & Guardrails
-
-- **Explicit Invocations Only**: Only run when explicitly requested by name or direct command.
-- **No Premature Full Implementation**: The todo file defines the plan and contracts, not dumps of untracked code.
-- **No Token-Wasting Multi-Command Checks**: Do not instruct subagents to run fragmented checks (`pnpm lint`, `pnpm test`, `pnpm check-types`, `pnpm format:check` individually). Point to `pnpm ci:verify`.
-- **Targeted Discovery Only**: Keep tool calls under 3 reads total during todo creation. Do not read unrelated workspace files.
-- **Catalog Consistency**: Check `pnpm-workspace.yaml` `catalog:` for pinned versions before guessing dependencies.
+- Do not implement. The todo defines the plan and contracts, not code dumps.
+- Do not run tests or builds while drafting.
+- Edit this skill only in `.nitpick/skills/create-todo/`, then `pnpm nitpick:sync`. `.claude/` and `.agents/` are generated.

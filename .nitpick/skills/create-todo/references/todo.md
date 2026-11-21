@@ -1,49 +1,46 @@
 ---
 status: queued
-priority: medium # high | medium | low
-line: feature # feature | standard | fast
-depends_on: [] # ids (file names without .md) that must be done first
+priority: medium
+line: standard
+type: feat
+depends_on: parent-slug
 ---
 
-# <slug>: [Scope / Package / Feature Name]
+# <slug>: <short title>
 
-## 🎯 Objective
+## Objective
 
-[Crisp, 1-2 sentence statement defining what needs to be built, fixed, or refactored.]
+<1-2 sentences: what is built, fixed or refactored.>
 
----
+## Context
 
-## 🌐 Context & Problem Statement
+<Why now. Verified facts with paths and numbers. Link `docs/<name>-plan.md` if part of an epic.>
 
-[Explain why this task is needed, how it fits into the monorepo architecture, and what issues occur if this problem is not solved.]
+## Scope
 
----
+- **Target**: `<apps/x | packages/y | path>`
+- **Classification**: `<Universal Tooling | Domain Core | Integration | Infrastructure | Web UI>`
+- **Dependencies**: `<name: catalog:>`, `<@repo/name: workspace:*>`
+- **Out of scope**: <what this todo must not touch>
 
-## 📦 Specification / Scope
+## Verify first
 
-- **Target**: `[e.g. packages/<name> or apps/<name>/src/modules/<module>]`
-- **Classification**: `[Universal Tooling | Web UI | Domain Core | Integration | Infrastructure]`
-- **Dependencies**:
-  - `[package-a: catalog:]`
-  - `[package-b: workspace:*]`
+<Claims not yet checked. Implementer confirms before coding. Delete section if empty.>
 
----
+## Open decisions
 
-## 🛠️ Implementation Plan
+<Choices the owner has not made, with the default taken. Delete section if empty.>
 
-1. **Initialize File Structure**:
-   - `[path/to/file1.ts]`
-   - `[path/to/file2.ts]`
-2. **Core Logic & Behavior**:
-   - [Detailed technical steps, contracts, APIs, or data flows]
-3. **Exports & Integration**:
-   - [How other modules or apps consume this code]
+## Implementation Plan
 
----
+1. **Files**: <create / modify / delete>
+2. **Behavior**: <contracts, APIs, data flow>
+3. **Integration**: <exports, consumers, wiring>
 
-## ✅ Acceptance Criteria
+## Acceptance Criteria
 
-- [ ] [Explicit functional criterion 1]
-- [ ] [Explicit functional criterion 2]
-- [ ] Strict TypeScript typings without `any` or loose assertions.
-- [ ] Passes verification gate (`pnpm ci:verify`).
+- [ ] <explicit functional check>
+- [ ] Tests: black box, Arrange/Act/Assert, story-style names.
+- [ ] One new ADR in `decisions/`.
+- [ ] Strict TypeScript, no `any`, no loose assertions.
+- [ ] `pnpm ci:verify` passes.
