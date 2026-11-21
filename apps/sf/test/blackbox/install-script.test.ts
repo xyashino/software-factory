@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 const ROOT = fileURLToPath(new URL('../../../..', import.meta.url));
-const SF_BUILD = join(ROOT, 'apps/factory/dist/sf');
+const SF_BUILD = join(ROOT, 'apps/sf/dist/sf');
 const WEB_BUILD = join(ROOT, 'apps/web-demo/dist/server/entry.mjs');
 const WEB_DEPS = join(ROOT, 'apps/web-demo/dist/sf-deps/node_modules');
 const INSTALL_SCRIPT = join(ROOT, 'scripts/install.mjs');
