@@ -59,6 +59,7 @@ interface Scenario {
   finishOnBeat?: boolean;
   nextJob?: ClaimedJob;
   staleLeave?: boolean;
+  signalOnStart?: boolean;
 }
 
 interface CliResult {
@@ -253,6 +254,7 @@ const runScenario = async (scenario: Scenario) => {
       prepare: async () => undefined,
       start: async (spec: RunSpec): Promise<RunHandle> => {
         runs.push(spec);
+        if (scenario.signalOnStart) controller.abort();
         return { id: `run-${runs.length}` };
       },
       abort: async (handle) => {
@@ -480,6 +482,28 @@ describe('cell drain on the Cell side', () => {
         epoch: 7,
         command: 'leave',
       }),
+      epoch: 7,
+      jobId: 'job-1',
+    });
+    expect(outcome).toBe('stopped');
+  });
+
+  it('aborts the runner, hands the job back and resolves when signalled mid-job', async () => {
+    // Arrange
+    const scenario: Scenario = {
+      claims: [{ job: job() }],
+      signalOnStart: true,
+    };
+
+    // Act
+    const { calls, aborts, outcome } = await runScenario(scenario);
+
+    // Assert
+    expect(aborts).toHaveLength(1);
+    expect(calls.filter((call) => actionOf(call) === 'complete')).toHaveLength(
+      0,
+    );
+    expect(bodyOf(leaveCallsOf(calls)[0] as ServerCall)).toMatchObject({
       epoch: 7,
       jobId: 'job-1',
     });

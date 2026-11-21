@@ -1096,6 +1096,9 @@ const runOperator = async (
   const startedAt = ports.clock.now();
   const cycleToken = cycleTokenOf();
   const end = deferred<RunEnd>();
+  const onSignal = (): void => end.resolve({ kind: 'drain-force' });
+  runtime.signal.addEventListener('abort', onSignal, { once: true });
+  if (runtime.signal.aborted) onSignal();
   const endpoint = await ports.operator.open(
     toJobId(job.jobId),
     operatorHandler(cycleToken, end, run.serving),
@@ -1227,6 +1230,7 @@ const runOperator = async (
     }
     return await finishRun(outcome, ranOf());
   } finally {
+    runtime.signal.removeEventListener('abort', onSignal);
     heartbeat.stop();
     // A headless runner that reported a verb may still be alive: its lock stays until its exit is seen.
     if (exit.code !== undefined || stopped) {

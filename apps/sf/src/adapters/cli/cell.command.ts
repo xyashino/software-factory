@@ -56,6 +56,9 @@ const SUPERSEDED_LINE =
 const MIGRATED_LINE = 'migrated legacy .factory-local/cell.json to this cell';
 const OFFLINE_LINE =
   'Cell is offline, no heartbeat will deliver this; check the process or `sf cell revoke`';
+const FORCED_STOP_LINE =
+  'cell stopped by a second signal: exiting now, a runner may still be alive';
+const FORCED_STOP_EXIT = 130;
 
 const orDash = (value: string | null): string => value ?? '-';
 
@@ -118,9 +121,15 @@ const runStart = async (
   }
   const name = claim.value;
   const controller = new AbortController();
-  const stop = (): void => controller.abort();
-  process.once('SIGINT', stop);
-  process.once('SIGTERM', stop);
+  const stop = (): void => {
+    if (controller.signal.aborted) {
+      printError(FORCED_STOP_LINE);
+      process.exit(FORCED_STOP_EXIT);
+    }
+    controller.abort();
+  };
+  process.on('SIGINT', stop);
+  process.on('SIGTERM', stop);
   try {
     if (name === cellNameOf(hostname()) && migrateLegacyCellState(cwd, name)) {
       printLine(MIGRATED_LINE);
