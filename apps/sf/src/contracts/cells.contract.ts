@@ -162,6 +162,7 @@ export const drainCellContract = {
       code: z.literal(200),
       status: z.literal('draining'),
       force: z.boolean(),
+      offline: z.boolean(),
     }),
     ...errorReplies,
   },

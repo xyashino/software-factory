@@ -281,9 +281,7 @@ const stubServer = (): Promise<{
       calls.push(`${request.method} ${request.url}`);
       request.resume();
       response.setHeader('content-type', 'application/json');
-      response.end(
-        JSON.stringify({ code: 200, status: 'draining', force: false }),
-      );
+      response.end(JSON.stringify(fixture.drainReply));
     });
     server.listen(0, '127.0.0.1', () => {
       const { port } = server.address() as AddressInfo;
@@ -313,7 +311,16 @@ const runCli = (
 const fixture: {
   stub?: { url: string; calls: string[]; server: Server };
   cwd: string;
-} = { cwd: mkdtempSync(join(tmpdir(), 'factory-cell-stop-')) };
+  drainReply: {
+    code: number;
+    status: string;
+    force: boolean;
+    offline: boolean;
+  };
+} = {
+  cwd: mkdtempSync(join(tmpdir(), 'factory-cell-stop-')),
+  drainReply: { code: 200, status: 'draining', force: false, offline: false },
+};
 
 beforeAll(async () => {
   fixture.stub = await stubServer();
@@ -327,7 +334,12 @@ describe('cell stop request', () => {
   it('sends one drain request and no other request', async () => {
     // Arrange
     const fake = createFakePorts({
-      reply: () => ({ code: 200, status: 'draining', force: false }),
+      reply: () => ({
+        code: 200,
+        status: 'draining',
+        force: false,
+        offline: false,
+      }),
     });
 
     // Act
@@ -341,7 +353,12 @@ describe('cell stop request', () => {
   it('asks for a forced drain when force is set', async () => {
     // Arrange
     const fake = createFakePorts({
-      reply: () => ({ code: 200, status: 'draining', force: true }),
+      reply: () => ({
+        code: 200,
+        status: 'draining',
+        force: true,
+        offline: false,
+      }),
     });
 
     // Act
@@ -357,6 +374,7 @@ describe('cell stop request', () => {
       cellId: CELL_ID,
       status: 'draining',
       force: true,
+      offline: false,
     });
   });
 });
@@ -483,21 +501,31 @@ describe('cell drain on the Cell side', () => {
 });
 
 describe('cell stop command', () => {
-  it('prints the draining state with one drain request', async () => {
-    // Arrange
+  const stopEnv = (): Record<string, string> => {
     const stub = fixture.stub as NonNullable<typeof fixture.stub>;
-    const before = stub.calls.length;
-    const env = {
+    return {
       PATH: process.env.PATH ?? '',
       HOME: fixture.cwd,
       FACTORY_URL: stub.url,
       FACTORY_TOKEN: 'supervisor-stub-value',
     };
+  };
+
+  it('prints the graceful drain line with one drain request', async () => {
+    // Arrange
+    const stub = fixture.stub as NonNullable<typeof fixture.stub>;
+    const before = stub.calls.length;
+    fixture.drainReply = {
+      code: 200,
+      status: 'draining',
+      force: false,
+      offline: false,
+    };
 
     // Act
     const result = await runCli(
       ['cell', 'stop', '--id', CELL_ID],
-      env,
+      stopEnv(),
       fixture.cwd,
     );
 
@@ -507,6 +535,55 @@ describe('cell stop command', () => {
     expect(stub.calls.slice(before)).toEqual([
       `POST /api/v1/cells/${CELL_ID}/drain`,
     ]);
+    expect(result.stdout).toBe(
+      `cell ${CELL_ID} draining: leaves after the current station; use --force to abort it now\n`,
+    );
+  });
+
+  it('prints the forced drain line when the drain is forced', async () => {
+    // Arrange
+    fixture.drainReply = {
+      code: 200,
+      status: 'draining',
+      force: true,
+      offline: false,
+    };
+
+    // Act
+    const result = await runCli(
+      ['cell', 'stop', '--id', CELL_ID, '--force'],
+      stopEnv(),
+      fixture.cwd,
+    );
+
+    // Assert
+    expect(result.code).toBe(EXIT.ok);
+    expect(result.stdout).toBe(
+      `cell ${CELL_ID} draining (force): current station is aborted at the next heartbeat\n`,
+    );
+  });
+
+  it('warns that an offline Cell will not receive the drain', async () => {
+    // Arrange
+    fixture.drainReply = {
+      code: 200,
+      status: 'draining',
+      force: false,
+      offline: true,
+    };
+
+    // Act
+    const result = await runCli(
+      ['cell', 'stop', '--id', CELL_ID],
+      stopEnv(),
+      fixture.cwd,
+    );
+
+    // Assert
+    expect(result.code).toBe(EXIT.ok);
     expect(result.stdout).toContain(`cell ${CELL_ID} draining`);
+    expect(result.stderr).toBe(
+      'Cell is offline, no heartbeat will deliver this; check the process or `sf cell revoke`\n',
+    );
   });
 });

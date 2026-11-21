@@ -188,6 +188,7 @@ describe('cell drain', () => {
       code: 200,
       status: 'draining',
       force: false,
+      offline: false,
     });
     expect(cellRow(db, cell.cellId)).toMatchObject({ status: 'draining' });
     expect(jobRow(db, job.jobId)).toMatchObject({
@@ -280,6 +281,40 @@ describe('cell drain', () => {
       job: expect.any(Object),
       signals: [],
     });
+  });
+
+  it('upgrades a pending drain to force when a later drain asks for force', async () => {
+    const { app } = setup();
+    const cell = await enrollCell(app, 'cell-a');
+    const job = await claimedJob(app, cell.token);
+    await drainCell(app, cell.cellId);
+
+    const response = await drainCell(app, cell.cellId, { force: true });
+    const { body } = await heartbeat(app, cell.token, job);
+
+    expect(await response.json()).toMatchObject({
+      status: 'draining',
+      force: true,
+    });
+    expect(body.signals).toEqual(['drain', 'force']);
+  });
+
+  it('records the drain on an offline cell and flags it as offline', async () => {
+    const { app, db } = setup();
+    const cell = await enrollCell(app, 'cell-a');
+    db.update(cells)
+      .set({ status: 'offline' })
+      .where(eq(cells.cellId, asCellId(cell.cellId)))
+      .run();
+
+    const response = await drainCell(app, cell.cellId);
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      status: 'draining',
+      offline: true,
+    });
+    expect(cellRow(db, cell.cellId)).toMatchObject({ status: 'draining' });
   });
 
   it('refuses to drain a cell that does not exist', async () => {
