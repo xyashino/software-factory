@@ -6,6 +6,7 @@ import { createFactoryClient } from './adapters/http/factory-client.adapter';
 import { createEventBus } from './adapters/memory/event-bus.adapter';
 import { createSystemClock } from './adapters/memory/system-clock.adapter';
 import { createRepoInspector } from './adapters/fs/repo-inspector.adapter';
+import { createWorkspaceAdapter } from './adapters/fs/workspace.adapter';
 import { createCellSupervisor } from './adapters/supervisor/cell-supervisor.adapter';
 import { createTransport } from './bootstrap/transport';
 import {
@@ -57,6 +58,7 @@ const app = createApp(
     supervisor,
     factoryClient: createFactoryClient(),
     repoInspector: createRepoInspector(),
+    workspace: createWorkspaceAdapter(),
   }),
 );
 

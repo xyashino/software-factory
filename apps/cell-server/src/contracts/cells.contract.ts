@@ -27,14 +27,22 @@ const cellDto = z.object({
 
 export const createCellsContract = {
   in: {
-    body: z.object({
-      repoRoot: z.string().min(1),
-      factory: z.string().min(1).optional(),
-      count: z.number().int().min(1).optional(),
-      name: z.string().trim().min(1).optional(),
-      allowedLines: z.array(z.string().min(1)).min(1).optional(),
-      joinToken: z.string().min(1).optional(),
-    }),
+    body: z
+      .object({
+        repoRoot: z.string().min(1).optional(),
+        projectId: z.string().min(1).optional(),
+        factory: z.string().min(1).optional(),
+        count: z.number().int().min(1).optional(),
+        name: z.string().trim().min(1).optional(),
+        allowedLines: z.array(z.string().min(1)).min(1).optional(),
+        joinToken: z.string().min(1).optional(),
+      })
+      .refine(
+        (body) => body.repoRoot !== undefined || body.projectId !== undefined,
+        {
+          message: 'repoRoot or projectId is required',
+        },
+      ),
   },
   out: {
     201: z.object({ code: z.literal(201), cells: z.array(cellDto) }),

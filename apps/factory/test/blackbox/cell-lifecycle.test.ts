@@ -31,6 +31,8 @@ import { commandIdOf } from '../../src/domain/cell/command-id';
 import { EXIT } from '../../src/domain/exit-codes';
 import {
   createFakePorts,
+  PROJECTS_REPLY,
+  PROJECTS_ROUTE,
   runProcedure,
   type ServerCall,
 } from '../support/fake-ports';
@@ -206,6 +208,7 @@ const serverReplies = (
     scenario.resetJob ?? job({ epoch: 8, expectedPriorSteps: [] });
   let startFailures = 0;
   return (call) => {
+    if (call.route === PROJECTS_ROUTE) return PROJECTS_REPLY;
     if (call.route === TOKENS_ROUTE) {
       return {
         code: 201,

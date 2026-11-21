@@ -26,6 +26,8 @@ import { commandIdOf } from '../../src/domain/cell/command-id';
 import { EXIT } from '../../src/domain/exit-codes';
 import {
   createFakePorts,
+  PROJECTS_REPLY,
+  PROJECTS_ROUTE,
   runProcedure,
   type ServerCall,
 } from '../support/fake-ports';
@@ -154,6 +156,9 @@ const runScenario = async (scenario: Scenario) => {
   let claimIndex = 0;
   const fake = createFakePorts({
     reply: (call) => {
+      if (call.route === PROJECTS_ROUTE) {
+        return PROJECTS_REPLY;
+      }
       if (call.route === HELLO_ROUTE) {
         return { code: 200, cellId: CELL_ID };
       }

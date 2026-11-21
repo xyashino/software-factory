@@ -1,3 +1,5 @@
+import { mkdir } from 'node:fs/promises';
+import { dirname } from 'node:path';
 import type { GitPort } from '../../application/ports/git.port';
 import type { ProcessPort } from '../../application/ports/process.port';
 import { addInfoExclude } from './exclude';
@@ -47,5 +49,13 @@ export const createGitAdapter = (process: ProcessPort): GitPort => {
     },
     headSha: async (cwd) => (await git(['rev-parse', 'HEAD'], cwd)).trim(),
     status: (cwd) => git(['status', '--porcelain'], cwd),
+    clone: async (url, dest) => {
+      await mkdir(dirname(dest), { recursive: true });
+      await git(['clone', url, dest], dirname(dest));
+    },
+    originUrl: async (cwd) => {
+      const result = await process.run(GIT, ['remote', 'get-url', REMOTE], cwd);
+      return result.exitCode === 0 ? result.stdout.trim() : null;
+    },
   };
 };

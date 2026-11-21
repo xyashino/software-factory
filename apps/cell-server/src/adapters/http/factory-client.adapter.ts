@@ -3,9 +3,11 @@ import type {
   EnrollRequest,
   EnrolledCell,
   FactoryClientPort,
+  ProjectSummary,
 } from '../../application/ports/factory-client.port';
 
 const JOIN_TOKEN_NAME = 'cell-server join';
+const PROJECTS_PATH = '/api/v1/projects';
 
 const failureOf = async (response: Response): Promise<BadGateway> => {
   const body = (await response.json().catch(() => null)) as {
@@ -41,6 +43,37 @@ const postJson = async (
   return response.json();
 };
 
+const getJson = async (url: string, bearer: string): Promise<unknown> => {
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      headers: { authorization: `Bearer ${bearer}` },
+    });
+  } catch (error) {
+    throw new BadGateway(
+      `factory unreachable: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  if (!response.ok) throw await failureOf(response);
+  return response.json();
+};
+
+const isProjectSummary = (value: unknown): value is ProjectSummary =>
+  typeof value === 'object' &&
+  value !== null &&
+  typeof (value as { projectId?: unknown }).projectId === 'string' &&
+  typeof (value as { repoUrl?: unknown }).repoUrl === 'string' &&
+  typeof (value as { defaultBaseBranch?: unknown }).defaultBaseBranch ===
+    'string';
+
+const isProjectList = (
+  value: unknown,
+): value is { projects: ProjectSummary[] } =>
+  typeof value === 'object' &&
+  value !== null &&
+  Array.isArray((value as { projects?: unknown }).projects) &&
+  (value as { projects: unknown[] }).projects.every(isProjectSummary);
+
 const isFactoryToken = (value: unknown): value is { token: string } =>
   typeof value === 'object' &&
   value !== null &&
@@ -73,6 +106,19 @@ export const createFactoryClient = (): FactoryClientPort => ({
     if (!isFactoryToken(reply))
       throw new BadGateway('factory returned no join token');
     return reply.token;
+  },
+  listProjects: async (factoryUrl, supervisorToken) => {
+    const reply = await getJson(
+      `${factoryUrl}${PROJECTS_PATH}`,
+      supervisorToken,
+    );
+    if (!isProjectList(reply))
+      throw new BadGateway('factory returned no project list');
+    return reply.projects.map((project) => ({
+      projectId: project.projectId,
+      repoUrl: project.repoUrl,
+      defaultBaseBranch: project.defaultBaseBranch,
+    }));
   },
   enroll: async (factoryUrl, joinToken, request: EnrollRequest) => {
     const reply = await postJson(

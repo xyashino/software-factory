@@ -4,6 +4,7 @@ import type { EventBusPort } from '../application/ports/event-bus.port';
 import type { FactoryClientPort } from '../application/ports/factory-client.port';
 import type { RepoInspectorPort } from '../application/ports/repo-inspector.port';
 import type { SupervisorPort } from '../application/ports/supervisor.port';
+import type { WorkspacePort } from '../application/ports/workspace.port';
 import type { Db } from '../db/client';
 
 export type TransportDeps = {
@@ -13,6 +14,7 @@ export type TransportDeps = {
   supervisor: SupervisorPort;
   factoryClient: FactoryClientPort;
   repoInspector: RepoInspectorPort;
+  workspace: WorkspacePort;
 };
 
 export const createTransport =

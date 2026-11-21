@@ -19,6 +19,7 @@ const XDG_CONFIG_HOME =
   process.env.XDG_CONFIG_HOME || join(homedir(), '.config');
 export const DEFAULT_DB_PATH = join(XDG_DATA_HOME, 'sf', 'cell-server.db');
 export const CELL_LOG_DIR = join(XDG_DATA_HOME, 'sf', 'cells');
+export const WORKSPACE_DIR = join(XDG_DATA_HOME, 'sf', 'workspaces');
 export const SHARED_CONFIG_PATH = join(XDG_CONFIG_HOME, 'sf', 'config.json');
 export const FACTORY_OVERRIDE_ENV = 'CELL_SERVER_FACTORY';
 

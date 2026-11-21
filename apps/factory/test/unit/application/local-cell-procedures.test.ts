@@ -13,6 +13,8 @@ import {
 import type { LocalSlot } from '../../../src/domain/cell/local-slot';
 import {
   createFakePorts,
+  PROJECTS_REPLY,
+  PROJECTS_ROUTE,
   runProcedure,
   type FakeOptions,
   type ServerCall,
@@ -34,6 +36,9 @@ const slotOf = (overrides: Partial<LocalSlot>): LocalSlot => ({
 });
 
 const tokenReply = (call: ServerCall): unknown => {
+  if (call.route === PROJECTS_ROUTE) {
+    return PROJECTS_REPLY;
+  }
   if (call.route === '/api/v1/tokens') {
     return {
       code: 201,

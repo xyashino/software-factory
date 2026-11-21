@@ -1,16 +1,19 @@
 import { drainStateOf } from '../../../cell/drain-signal';
-import { JOIN_TOKEN_ENV, LINES_DIR, REPO_CONFIG_PATH } from '../../../config';
+import { JOIN_TOKEN_ENV, LINES_DIR } from '../../../config';
 import type { Access } from '../../../domain/access';
 import { cellNameOf } from '../../../domain/cell/cell-name';
 import { joinPath } from '../../../domain/common/path';
 import { ArgumentError, Refused } from '../../core/errors';
 import type { Ports } from '../../core/procedure';
-import { readProjectId } from '../../core/repo-access';
 import { createToken } from '../tokens/token-create.procedure';
 import { claimLoop } from './claim-loop.procedure';
 import type { CellRuntime } from './cell-runtime';
 import { enrollCell } from './enroll.procedure';
 import { helloCell } from './hello.procedure';
+import {
+  resolveCellTarget,
+  type ProjectChooser,
+} from './resolve-project-target';
 
 const LINE_SUFFIX = '.yml';
 const SUPERVISOR: Access = { kind: 'supervisor' };
@@ -21,6 +24,8 @@ export interface StartInput {
   logPath: string;
   joinToken: string | undefined;
   lines: readonly string[] | undefined;
+  project?: string;
+  choose?: ProjectChooser;
   signal: AbortSignal;
 }
 
@@ -60,16 +65,18 @@ export const startCell = async (
   ports: Ports,
   input: StartInput,
 ): Promise<StartOutcome> => {
+  const target = await resolveCellTarget(ports, {
+    repoRoot: input.repoRoot,
+    requested: input.project,
+    choose: input.choose,
+  });
+  const { projectId, repoRoot } = target;
   const runners = await installedRunnersOf(ports);
   if (runners.length === 0) {
     throw new Refused('no runner installed on this machine');
   }
-  const projectId = await readProjectId(
-    ports,
-    joinPath(input.repoRoot, REPO_CONFIG_PATH),
-  );
   const allowedLines = (
-    await lineNamesOf(ports, joinPath(input.repoRoot, LINES_DIR))
+    await lineNamesOf(ports, joinPath(repoRoot, LINES_DIR))
   ).filter((name) => input.lines === undefined || input.lines.includes(name));
   if (allowedLines.length === 0) {
     throw new ArgumentError(`no line files in ${LINES_DIR}`);
@@ -103,7 +110,7 @@ export const startCell = async (
     ports,
     session,
     projectId,
-    repoRoot: input.repoRoot,
+    repoRoot,
     logPath: input.logPath,
     signal: input.signal,
     drain: drainStateOf(),

@@ -1,27 +1,31 @@
 import { z } from 'zod';
-import {
-  CELL_LINES_ENV,
-  JOIN_TOKEN_ENV,
-  REPO_CONFIG_PATH,
-} from '../../../config';
+import { CELL_LINES_ENV, JOIN_TOKEN_ENV } from '../../../config';
 import { cellNameOf } from '../../../domain/cell/cell-name';
 import {
   allocateLocalNames,
   type LocalSlot,
 } from '../../../domain/cell/local-slot';
 import type { Access } from '../../../domain/access';
-import { joinPath } from '../../../domain/common/path';
 import { ArgumentError, Refused } from '../../core/errors';
 import { define, type Ports } from '../../core/procedure';
-import { readProjectId } from '../../core/repo-access';
 import { createToken } from '../tokens/token-create.procedure';
 import { livePidOf } from './local-pid';
+import {
+  resolveCellTarget,
+  type ProjectChooser,
+} from './resolve-project-target';
 
 const SUPERVISOR: Access = { kind: 'supervisor' };
 
 const CreateSchema = z
   .object({
     repoRoot: z.string().min(1),
+    project: z.string().min(1).optional(),
+    choose: z
+      .custom<ProjectChooser | undefined>(
+        (value) => value === undefined || typeof value === 'function',
+      )
+      .optional(),
     count: z.number().int().min(1),
     name: z.string().min(1).optional(),
     baseName: z.string().min(1),
@@ -54,7 +58,11 @@ export const createLocalCells = define({ kind: 'supervisor' })(CreateSchema)<
   if (input.name !== undefined && input.count > 1) {
     throw new ArgumentError('name is only allowed with count 1');
   }
-  await readProjectId(ctx, joinPath(input.repoRoot, REPO_CONFIG_PATH));
+  const target = await resolveCellTarget(ctx, {
+    repoRoot: input.repoRoot,
+    requested: input.project,
+    choose: input.choose,
+  });
   const slots = await ctx.localSlots.read();
   const taken = takenNamesOf(ctx, slots);
   let names: string[];
@@ -78,7 +86,7 @@ export const createLocalCells = define({ kind: 'supervisor' })(CreateSchema)<
     const pid = await ctx.process.spawnDetached({
       command: process.execPath,
       args: [...input.launcher, 'cell', 'start', '--name', name],
-      cwd: input.repoRoot,
+      cwd: target.repoRoot,
       env: workerEnvOf(ctx, minted.token, input.lines),
       logPath: ctx.localSlots.logPathOf(slotId),
     });
@@ -86,7 +94,7 @@ export const createLocalCells = define({ kind: 'supervisor' })(CreateSchema)<
       slotId,
       name,
       factory: ctx.connection.url,
-      repoRoot: input.repoRoot,
+      repoRoot: target.repoRoot,
       pid,
       state: 'running',
       createdAt: ctx.clock.now(),

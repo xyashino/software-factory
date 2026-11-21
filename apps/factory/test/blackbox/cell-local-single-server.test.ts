@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { EXIT } from '../../src/domain/exit-codes';
+import { PROJECTS_REPLY, PROJECTS_ROUTE } from '../support/fake-ports';
 
 const CLI_PATH = fileURLToPath(new URL('../../src/cli.ts', import.meta.url));
 const COMMAND_TIMEOUT_MS = 30_000;
@@ -109,6 +110,10 @@ beforeAll(async () => {
         },
         response,
       );
+      return;
+    }
+    if (request.method === 'GET' && request.url === PROJECTS_ROUTE) {
+      replyJson(200, PROJECTS_REPLY, response);
       return;
     }
     if (request.method === 'GET' && request.url === '/api/v1/cells') {
