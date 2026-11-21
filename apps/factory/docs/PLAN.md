@@ -2,7 +2,7 @@
 
 ## 0. Abstract Flow (At a Glance)
 
-This section is the high-level summary. Sections 1–9 give the detailed rules, [BE_RULES.md](BE_RULES.md) defines hard code-shape rules, and Section 10 maps the implementation slices in [`todo/`](todo/README.md).
+This section is the high-level summary. Sections 1–9 and 11 give the detailed rules, and [BE_RULES.md](BE_RULES.md) defines hard code-shape rules.
 
 ```mermaid
 flowchart TD
@@ -111,14 +111,11 @@ Each repository roots its factory configuration in `.factory/config.json`, which
 
 ### 2.2 Server Database State (`factory.db`)
 
-The server stores structured relational state in SQLite (WAL mode, `BEGIN IMMEDIATE` transactions, no event-replay folding required):
+The server stores structured relational state in SQLite (WAL mode, `BEGIN IMMEDIATE` transactions, no event-replay folding required). Columns and enums live in `apps/factory/src/db/schema`, not here:
 
-- **`order_plans`**: Pinned `project_id`, plan lifecycle (`draft | branching | active | ready | completed | failed | cancelled`), `base_branch`, `branch` (`feat/<slug>`), and `branch_commit_sha`.
-- **`work_orders`**: Pinned `project_id`, order lifecycle (`waiting_parent | queued | paused | running | delivering | delivered | completed | line_unavailable | blocked | cancelled`), `line_name` (e.g., `feature`), `unavailable_line_cells_json` (Cells that reported this line missing locally), `base_branch`, `base_commit_sha`, `branch` (`factory/<slug>`), `head_commit_sha`, `stale_base` (`0 | 1`), `current_step_index`, **`pinned_cell_id`** (which Cell owns the execution from start to finish), **`active_cell_id`** & **`active_job_id`** (enforcing that at most 1 Cell executes the `WorkOrder` at a time), **`epoch`** (fencing token), and **`worktree_resets`** (how many times missing worktree forced a scratch restart).
-- **`order_steps`**: Ordered steps populated from the Line's stations (`step_index = 0..N-1`), `station_id` (e.g., `plan`, `build`, `quality-gate`, `deliver`), `state`, `required_files_json` (files expected under `.cell/<step-id>/`), `produced_files_json` (verified files written by the Cell), and `last_commit_sha`.
-- **`jobs`**: Pinned `project_id` and `line_name`, individual execution attempts with `status` (`ready | claimed | running | passed | failed | blocked | line_unavailable | lost | cancelled`) and lease fencing (`cell_id`, `epoch`, `lease_expires_at`, `workspace_mode: 'fresh' | 'reuse'`).
-- **`cells`**: Registered with `project_id` (from `.factory/config.json`), **`allowed_lines_json`** (e.g., `["feature", "fast"]` or `["*"]` for all lines), `runners_json`, and `local_worktrees_json`.
-- **`incidents`**: Triaged blocks/failures (Andons, including `reason = 'line_unavailable'`) with diagnosis, resolution action, and retry/reset history.
+- **Plans, orders, steps**: `order_plans`, `work_orders` (owning Cell and lease `epoch`), `order_steps` (one row per Line station).
+- **Execution**: `jobs` (one attempt per step, with lease fencing), `cells` (registered Cells, allowed Lines, local worktrees).
+- **Triage and audit**: `incidents`, and `state_transitions` as history for the SSE stream. Retries never read history.
 
 ### 2.3 Cell Worktree State (`./.cell/<step-id>/`) & Post-Deliver Cleanup
 
@@ -530,206 +527,17 @@ Every `Job` dispatched to a `Cell` includes an explicit, non-null `projectId`, `
 
 ---
 
-## 7. Database Schema (`bun:sqlite` + Drizzle ORM)
+## 7. Database Schema
 
-```mermaid
-erDiagram
-  projects ||--o{ cells : "registers cells"
-  projects ||--o{ order_plans : "pins project_id"
-  projects ||--o{ work_orders : "pins project_id"
-  projects ||--o{ jobs : "pins project_id"
-  order_plans ||--o{ work_orders : "contains (optional)"
-  work_orders ||--o{ work_orders : "parent_order_id (single parent stack)"
-  work_orders ||--|{ order_steps : "has ordered steps from Line"
-  work_orders ||--o{ incidents : "raises on block/fail"
-  order_plans ||--o{ jobs : "plan_branch jobs"
-  work_orders ||--o{ jobs : "step & mechanic jobs"
-  order_steps ||--o{ jobs : "execution attempts"
-  cells ||--o{ jobs : "claims & executes"
-  cells ||--o{ work_orders : "pinned_cell_id (warm worktree)"
-  safe_tokens ||--o{ cells : "enrolls / authenticates"
-  safe_tokens ||--o| safe_tokens : "rotated_from_id"
+The schema lives in `apps/factory/src/db/schema` (Drizzle on `bun:sqlite`). It is not copied here.
 
-  projects {
-    text project_id PK "From .factory/config.json 'project'"
-    text repo_url
-    text default_base_branch
-    integer max_running
-    integer created_at
-    integer updated_at
-  }
+Exclusivity (1 Cell per `WorkOrder` at a time) is backed by three partial unique indexes in that schema:
 
-  safe_tokens {
-    text token_id PK
-    text token_hash UK
-    text prefix
-    text kind "supervisor | cell_join | cell_session"
-    text name
-    text scopes_json "JSON string[]"
-    text cell_id FK
-    text rotated_from_id FK
-    integer expires_at
-    integer revoked_at
-    integer last_used_at
-    integer created_at
-  }
+- At most one `claimed` or `running` Job per WorkOrder.
+- At most one `claimed` or `running` Job per Cell.
+- At most one WorkOrder locked to a Cell through `active_cell_id`.
 
-  cells {
-    text cell_id PK
-    text name
-    text project_id FK "Pinned project from .factory/config.json"
-    text allowed_lines_json "JSON string[] e.g. ['feature','fast'] or ['*']"
-    text status "online | busy | draining | offline | revoked"
-    text runners_json "JSON string[]"
-    text local_worktrees_json "JSON [{ orderId, completedStepIds }]"
-    text active_job_id
-    integer last_heartbeat_at
-    integer created_at
-    integer revoked_at
-  }
-
-  order_plans {
-    text plan_id PK
-    text project_id FK "Pinned projectId"
-    text slug
-    text title
-    text base_branch "e.g. main"
-    text branch "e.g. feat/slug"
-    text branch_commit_sha
-    text state "draft | branching | active | ready | completed | failed | cancelled"
-    text failure_detail
-    integer version
-    integer created_at
-    integer updated_at
-  }
-
-  work_orders {
-    text order_id PK
-    text project_id FK "Pinned projectId"
-    text plan_id FK "nullable (standalone if null)"
-    text parent_order_id FK "nullable (single parent WorkOrder if stacked)"
-    text slug
-    text title
-    text type "feat | fix | refactor | chore | docs | test"
-    text description
-    text line_name "e.g. feature, standard, fast (checked locally by Cell)"
-    text line_snapshot_json "nullable; populated by Cell on Step 0 start"
-    text unavailable_line_cells_json "JSON string[] of cellIds where .factory/lines/<line>.yml was unavailable"
-    text priority "high | medium | low"
-    text base_branch "Always populated: main, feat/plan, or factory/parent"
-    text base_commit_sha "nullable"
-    text branch "e.g. factory/slug"
-    text head_commit_sha "nullable, updated on deliver"
-    integer stale_base "0 | 1 (1 if parent_order_id re-delivered a new commit)"
-    text state "waiting_parent | queued | paused | running | delivering | delivered | completed | line_unavailable | blocked | cancelled"
-    integer current_step_index
-    text pinned_cell_id FK "Cell owning this WorkOrder from start to finish"
-    integer worktree_resets "Count of scratch resets due to missing worktree"
-    integer mechanic_runs "Count of Mechanic triage attempts"
-    text active_job_id UK "At most 1 active Job per WorkOrder"
-    text active_cell_id UK "At most 1 active Cell per WorkOrder"
-    integer epoch "Monotonic fencing token for exclusive Cell execution"
-    integer version
-    integer created_at
-    integer updated_at
-  }
-
-  order_steps {
-    text step_id PK
-    text order_id FK
-    integer step_index
-    text station_id "Station id from .factory/lines/<line>.yml (plan, build, quality-gate, ...)"
-    text kind "operator | inspection | deliver"
-    text runner "nullable"
-    text config_json "station operator/exec/timeout from Line snapshot"
-    text required_files_json "Files Cell must write in ./.cell/<step-id>/"
-    text produced_files_json "Verified files present in ./.cell/<step-id>/"
-    text state "pending | ready | claimed | running | passed | failed | blocked | cancelled"
-    integer attempts_used
-    integer max_attempts
-    text on_fail_retry_station_id "nullable (e.g. quality-gate retries build)"
-    text last_commit_sha
-    text last_output_json
-    integer updated_at
-  }
-
-  jobs {
-    text job_id PK
-    text project_id FK "Pinned projectId"
-    text plan_id FK "nullable"
-    text order_id FK "nullable"
-    text step_id FK "nullable"
-    text incident_id FK "nullable (for mechanic job)"
-    text line_name "nullable for plan_branch; e.g. feature, standard, fast"
-    text kind "plan_branch | run_operator | run_inspection | deliver | mechanic"
-    text workspace_mode "fresh | reuse"
-    text status "ready | claimed | running | passed | failed | blocked | line_unavailable | lost | cancelled"
-    text repo_url
-    text base_branch "Always required on every Job"
-    text base_commit_sha "nullable"
-    text target_branch "feat/plan or factory/order"
-    text expected_prior_steps_json "JSON [{ stepId, stationId, stepIndex, requiredFiles }]"
-    text payload_json "station id, operator profile, inputs, outputs, workspace setup"
-    text cell_id FK "nullable until claimed"
-    integer epoch
-    integer lease_expires_at
-    text result_commit_sha
-    text result_json
-    text error_detail
-    integer created_at
-    integer started_at
-    integer finished_at
-  }
-
-  incidents {
-    text incident_id PK
-    text project_id FK "Pinned projectId"
-    text order_id FK
-    text failed_step_id FK "nullable"
-    text failed_job_id FK "nullable"
-    text reason "line_unavailable | step_retries_exhausted | operator_blocked | workspace_failed | worktree_reset_limit | delivery_failed | parent_rebased"
-    text detail
-    text status "open | triaging | resolved | escalated | cancelled"
-    text triage_owner "mechanic | supervisor"
-    text diagnosis "nullable"
-    text resolution_action "retry_step | restart_from_step | restart_from_scratch | escalate | cancel"
-    text resolved_by "nullable"
-    integer created_at
-    integer resolved_at
-  }
-
-  state_transitions {
-    integer seq PK
-    text project_id FK
-    text entity_type "order_plan | work_order | order_step | job | incident | cell"
-    text entity_id
-    text from_state
-    text to_state
-    text actor_kind "supervisor | mechanic | cell | system"
-    text actor_id
-    text meta_json
-    integer at
-  }
-```
-
-### SQLite Exclusivity Indexes (Enforcing 1 Cell per `WorkOrder` at a Time)
-
-```sql
--- 1. A WorkOrder can have at most ONE active (claimed or running) Job at a time:
-CREATE UNIQUE INDEX idx_jobs_one_active_per_order
-  ON jobs(order_id)
-  WHERE order_id IS NOT NULL AND status IN ('claimed', 'running');
-
--- 2. A Cell can execute at most ONE active (claimed or running) Job at a time:
-CREATE UNIQUE INDEX idx_jobs_one_active_per_cell
-  ON jobs(cell_id)
-  WHERE cell_id IS NOT NULL AND status IN ('claimed', 'running');
-
--- 3. At most ONE WorkOrder can be actively locked to a given Cell at a time:
-CREATE UNIQUE INDEX idx_work_orders_one_active_per_cell
-  ON work_orders(active_cell_id)
-  WHERE active_cell_id IS NOT NULL;
-```
+The indexes are a backstop. A second active claim fails at write time even if application code misses the check.
 
 ---
 
@@ -743,66 +551,9 @@ CREATE UNIQUE INDEX idx_work_orders_one_active_per_cell
 
 ---
 
-## 9. API Endpoint Index (REST + SSE)
+## 9. API Endpoints
 
-| Method   | Path                                   | Auth Scope                         | Summary                                                                                                                              |
-| :------- | :------------------------------------- | :--------------------------------- | :----------------------------------------------------------------------------------------------------------------------------------- |
-| `POST`   | `/api/v1/tokens`                       | `admin:tokens`                     | Issue a new `supervisor` or `cell_join` Safe Token                                                                                   |
-| `POST`   | `/api/v1/tokens/rotate`                | Any valid token                    | Rotate caller's own token with a 60s grace window                                                                                    |
-| `DELETE` | `/api/v1/tokens/{id}`                  | `admin:tokens`                     | Revoke a token immediately                                                                                                           |
-| `POST`   | `/api/v1/projects`                     | `supervisor:write`                 | Register a project (`projectId` from `.factory/config.json`, `repoUrl`, `defaultBaseBranch`)                                         |
-| `GET`    | `/api/v1/projects`                     | `supervisor:read`                  | List registered projects                                                                                                             |
-| `GET`    | `/api/v1/queue/export`                 | `supervisor:read`                  | Export matching `WorkOrder`s for `projectId` as clean `todos/<slug>.md` files (`line: <name>` frontmatter)                           |
-| `POST`   | `/api/v1/queue/import`                 | `supervisor:write`                 | Import/upsert `OrderPlan`s & `WorkOrder`s for `projectId` from `todos/*.md` (wakes long-polling `/claims`)                           |
-| `POST`   | `/api/v1/queue/actions`                | `supervisor:write`                 | Bulk queue management (`pause`, `unpause`, `reprioritise`, `reset_to_scratch`, `cancel`)                                             |
-| `POST`   | `/api/v1/order-plans`                  | `supervisor:write`                 | Create an `OrderPlan` pinned to `projectId` (with optional initial `WorkOrder` chain/DAG)                                            |
-| `GET`    | `/api/v1/order-plans`                  | `supervisor:read`                  | List `OrderPlan`s (filter by `projectId`, `state`)                                                                                   |
-| `GET`    | `/api/v1/order-plans/{id}`             | `supervisor:read`                  | Get `OrderPlan` detail, branch commit, and member `WorkOrder`s                                                                       |
-| `POST`   | `/api/v1/order-plans/{id}/transitions` | `supervisor:write`                 | Trigger plan state transition (`activate`, `retry`, `complete`, `cancel`)                                                            |
-| `POST`   | `/api/v1/work-orders`                  | `supervisor:write`                 | Create a standalone or plan-attached `WorkOrder` pinned to `projectId` and `lineName`                                                |
-| `GET`    | `/api/v1/work-orders`                  | `supervisor:read`                  | List `WorkOrder`s (filter by `projectId`, `planId`, `lineName`, `state`, `pinnedCellId`)                                             |
-| `GET`    | `/api/v1/work-orders/{id}`             | `supervisor:read`                  | Get `WorkOrder` detail, resolved `baseBranch`, `steps`, `jobs`, and `incidents`                                                      |
-| `POST`   | `/api/v1/work-orders/{id}/transitions` | `supervisor:write`                 | Trigger order transition (`resume`, `reset_to_scratch`, `reopen`, `complete`, `cancel`)                                              |
-| `GET`    | `/api/v1/incidents`                    | `supervisor:read`                  | List open/historical `Incident`s (filter by `projectId`, `orderId`, `reason`, `status`)                                              |
-| `POST`   | `/api/v1/incidents/{id}/resolve`       | `supervisor:write` / `cell:worker` | Resolve an incident (`retry_step`, `restart_from_step`, `restart_from_scratch`, `escalate`, `cancel`)                                |
-| `POST`   | `/api/v1/cells/enroll`                 | `cell:enroll`                      | Enroll a Cell with `projectId` (from `.factory/config.json`) & `allowedLines`; returns `cell_session` token                          |
-| `POST`   | `/api/v1/cells/hello`                  | `cell:worker`                      | Report Cell `projectId`, `allowedLines`, `runners`, and `localWorktrees`; returns `resumedJob` if reconnecting before lease expiry   |
-| `GET`    | `/api/v1/cells`                        | `supervisor:read`                  | List connected Cells, their `projectId`, `allowedLines`, pinned orders, and active job leases                                        |
-| `DELETE` | `/api/v1/cells/{id}`                   | `supervisor:write`                 | Revoke a Cell, unpin its orders, and release its active Job                                                                          |
-| `POST`   | `/api/v1/cells/claims`                 | `cell:worker`                      | Long-poll (`waitMs: 25000`) to claim next eligible `Job` matching Cell's `projectId` + `allowedLines`                                |
-| `POST`   | `/api/v1/cells/{id}/drain`             | `supervisor:write`                 | Drain a Cell: no new claims, heartbeat signals `drain` (+ `force`), never releases its Job                                           |
-| `POST`   | `/api/v1/cells/leave`                  | `cell:worker`                      | Cell hands over its Job (re-queued `ready`/`reuse`, pin kept) or leaves with none (`left`)                                           |
-| `POST`   | `/api/v1/cells/heartbeats`             | `cell:worker`                      | Every `10s`: extend active Job lease TTL (`60s`) and fetch `signals: ["abort"]`                                                      |
-| `POST`   | `/api/v1/jobs/{id}/transitions`        | `cell:worker`                      | Report Job transition (`start` with `lineSnapshot`, `complete` → `nextJob`, `fail`, `block`, `line_unavailable`, `worktree_missing`) |
-| `GET`    | `/api/v1/stream`                       | `supervisor:read`                  | SSE real-time stream of `state_transitions` (`?projectId=&afterSeq=`)                                                                |
-
----
-
-## 10. Implementation Roadmap & Vertical Slice Todos (`todo/`)
-
-Code shape and layering (`domain -> db -> contracts -> application (ports + procedures) -> adapters/hono -> bootstrap -> tests`) are governed by [**`BE_RULES.md`**](BE_RULES.md).
-
-**Scope Boundary (Backend Only)**: Implementation is strictly confined to `apps/factory`. We do **not** connect or modify `apps/cell`, `apps/sf`, or any other workspace package—all Cell and Supervisor interactions are tested purely against the backend HTTP API via black-box `app.request()` tests in `apps/factory/test/`.
-
-Each vertical slice in [`todo/`](todo/README.md) ships, migrates, typechecks, and passes unit, DB, and black-box HTTP tests independently:
-
-| #   | Todo Specification                                                                                       | Plan Sections Covered       | Scope & Deliverables                                                                                                                             | Depends on |
-| :-- | :------------------------------------------------------------------------------------------------------- | :-------------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------- | :--------- |
-| 01  | [`todo/01-foundation-and-db.md`](todo/01-foundation-and-db.md)                                           | §1, §2.2, §7                | Package scaffold, branded IDs, time/events, `bun:sqlite` Drizzle schema (8 tables + 3 partial unique indexes), `immediateTx`, core Hono harness  | —          |
-| 02  | [`todo/02-safe-tokens-and-projects.md`](todo/02-safe-tokens-and-projects.md)                             | §1.1, §1.10, §2.1, §8, §9   | Safe Tokens (`sf_sup_`, `sf_join_`, `sf_cell_`), SHA-256 + `timingSafeEqual` auth adapter, 60s rotation grace window, `/tokens/*`, `/projects`   | 01         |
-| 03  | [`todo/03-plans-orders-and-queue.md`](todo/03-plans-orders-and-queue.md)                                 | §1.2, §1.9, §5, §6.1, §9    | `OrderPlan` & `WorkOrder` CRUD/transitions, `resolveBaseBranch` (5 topology scenarios), markdown `/queue/import`, `/queue/export`, `/actions`    | 02         |
-| 04  | [`todo/04-cells-claims-and-leases.md`](todo/04-cells-claims-and-leases.md)                               | §1.3, §3.1, §3.6, §3.7, §9  | Cell `enroll`, `hello` (`resumedJob` fast reconnect), in-memory long-poll `claims` (`waitMs`), `heartbeats`, lazy lease reaper, `epoch` fencing  | 02, 03     |
-| 05  | [`todo/05-job-execution-and-worktree-lifecycle.md`](todo/05-job-execution-and-worktree-lifecycle.md)     | §1.4–1.8, §3.2–3.5, §6.2, §9| `/jobs/{id}/transitions`: Step 0 `start` (`lineSnapshot`), `complete` (`nextJob`), `line_unavailable`, `worktree_missing`, `deliver`, `stale_base`| 03, 04     |
-| 06  | [`todo/06-incidents-and-sse-stream.md`](todo/06-incidents-and-sse-stream.md)                             | §4.1–4.3, §9                | Incident state machine, Mechanic job dispatch, `/incidents/{id}/resolve`, SSE `/api/v1/stream` (`afterSeq`), `Bun.serve` CLI entrypoint          | 04, 05     |
-
-```mermaid
-flowchart LR
-  S01["01 Foundation & DB"] --> S02["02 Safe Tokens & Projects"]
-  S02 --> S03["03 Plans, Orders & Queue"]
-  S02 & S03 --> S04["04 Cells, Claims & Leases"]
-  S03 & S04 --> S05["05 Job Transitions & Worktree"]
-  S04 & S05 --> S06["06 Incidents, SSE & Server"]
-```
+Routes, request and reply shapes live in `apps/factory/src/contracts`, one file per resource. Token kinds and their scopes are in §8.
 
 ---
 
@@ -810,7 +561,7 @@ flowchart LR
 
 ### 11.1 Scope
 
-An LLM agent running inside a Job reports back through a localhost endpoint of its Cell. The server never sees the agent's token or its HTTP calls. The Cell turns each agent verb into a server call from §9: `POST /api/v1/jobs/{id}/transitions` for station jobs, `POST /api/v1/incidents/{id}/resolve` for Mechanic jobs.
+An LLM agent running inside a Job reports back through a localhost endpoint of its Cell. The server never sees the agent's token or its HTTP calls. The Cell turns each agent verb into a server call from the routes in `apps/factory/src/contracts`: `POST /api/v1/jobs/{id}/transitions` for station jobs, `POST /api/v1/incidents/{id}/resolve` for Mechanic jobs.
 
 Two roles use the endpoint:
 
