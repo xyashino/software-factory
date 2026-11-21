@@ -12,7 +12,7 @@ import {
 import { startServer } from '../../application/procedures/server/start.procedure';
 import { stopServer } from '../../application/procedures/server/stop.procedure';
 import { createServerToken } from '../../application/procedures/server/token-create.procedure';
-import { printJson, printLine, reportFailure } from './output';
+import { printError, printJson, printLine, reportFailure } from './output';
 import { parsePort } from './validate';
 
 interface Paths {
@@ -69,6 +69,9 @@ const runStop = async (json: boolean): Promise<number> => {
           ? 'server stopped'
           : 'server not running',
       );
+    }
+    if (result.value.outcome === 'not-running' && result.value.warning) {
+      printError(`warning: ${result.value.warning}`);
     }
   }
   return reportFailure(result);

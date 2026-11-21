@@ -1,4 +1,4 @@
-import { spawnSync } from 'node:child_process';
+import { spawn as spawnChild, spawnSync } from 'node:child_process';
 import {
   existsSync,
   mkdirSync,
@@ -98,6 +98,23 @@ const sleeperAt = (sandbox: Sandbox): number => {
   return pid;
 };
 
+const foreignListenerAt = async (port: number): Promise<() => void> => {
+  const script = `require('node:http').createServer((_, res) => res.end('{}')).listen(${port}, '127.0.0.1')`;
+  const child = spawnChild(process.execPath, ['-e', script], {
+    stdio: 'ignore',
+  });
+  for (let attempt = 0; attempt < 100; attempt++) {
+    try {
+      await fetch(`http://127.0.0.1:${port}/`);
+      return () => child.kill('SIGKILL');
+    } catch {
+      await new Promise((done) => setTimeout(done, 50));
+    }
+  }
+  child.kill('SIGKILL');
+  throw new Error('foreign listener did not start');
+};
+
 const recordingServer = (port: number) => {
   const requests: string[] = [];
   const server = createServer((request: IncomingMessage, response) => {
@@ -161,6 +178,23 @@ describe('factory server start and stop', () => {
     expect(result.stderr).toContain('server already running');
   });
 
+  it('refuses to start while a foreign process answers on the port', async () => {
+    // Arrange
+    const sandbox = await createSandbox();
+    const stopForeign = await foreignListenerAt(sandbox.port);
+
+    // Act
+    const result = runCli(sandbox, ['start']);
+    stopForeign();
+
+    // Assert
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      `something already answers on ${sandbox.env.FACTORY_URL}, not started by sf`,
+    );
+    expect(existsSync(pidFileOf(sandbox))).toBe(false);
+  });
+
   it('stops the server process and removes server.pid', async () => {
     // Arrange
     const sandbox = await createSandbox();
@@ -186,6 +220,23 @@ describe('factory server start and stop', () => {
     // Assert
     expect(result.status).toBe(0);
     expect(result.stdout).toContain('server not running');
+  });
+
+  it('warns on stop when a foreign process answers without a pid file', async () => {
+    // Arrange
+    const sandbox = await createSandbox();
+    const stopForeign = await foreignListenerAt(sandbox.port);
+
+    // Act
+    const result = runCli(sandbox, ['stop']);
+    stopForeign();
+
+    // Assert
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('server not running');
+    expect(result.stderr).toContain(
+      `warning: something answers on ${sandbox.env.FACTORY_URL}, not started by sf`,
+    );
   });
 
   it('sends no cells request while stopping the server', async () => {

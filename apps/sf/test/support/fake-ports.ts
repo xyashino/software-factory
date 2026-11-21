@@ -40,6 +40,9 @@ export interface FakeOptions {
   writeOutcome?: 'written' | 'refused';
   slots?: LocalSlot[];
   alivePids?: number[];
+  listening?: 'always' | 'after-spawn';
+  pidFile?: number | null;
+  serverLog?: string;
 }
 
 export interface FakePorts {
@@ -51,6 +54,7 @@ export interface FakePorts {
   terminated: number[];
   slots: LocalSlot[];
   alivePids: Set<number>;
+  pidFile: number | null;
 }
 
 const unused = (): never => {
@@ -75,8 +79,12 @@ export const createFakePorts = (options: FakeOptions = {}): FakePorts => {
   const spawned: DetachedSpec[] = [];
   const terminated: number[] = [];
   const alivePids = new Set<number>(options.alivePids ?? []);
+  const listening = options.listening ?? 'always';
+  const children = new Set<number>();
+  let pidFile: number | null = options.pidFile ?? null;
   let slots: LocalSlot[] = options.slots ?? [];
   let nextPid = 5000;
+  let time = 1_000;
   let connectionConfig = options.connectionConfig ?? EMPTY_CONNECTION_CONFIG;
   const record = (call: ServerCall): unknown => {
     calls.push(call);
@@ -91,7 +99,9 @@ export const createFakePorts = (options: FakeOptions = {}): FakePorts => {
       remove: async (route, token) =>
         record({ method: 'DELETE', route, token }),
       stream: unused,
-      probe: async () => true,
+      probe: async () =>
+        listening === 'always' ||
+        [...children].some((pid) => alivePids.has(pid)),
     },
     connection: {
       url: 'http://127.0.0.1:7070',
@@ -108,7 +118,10 @@ export const createFakePorts = (options: FakeOptions = {}): FakePorts => {
       },
     },
     fs: {
-      readText: async () => {
+      readText: async (path) => {
+        if (path.endsWith('/server.log')) {
+          return options.serverLog ?? '';
+        }
         if (config === null) {
           throw new Error('ENOENT');
         }
@@ -166,6 +179,7 @@ export const createFakePorts = (options: FakeOptions = {}): FakePorts => {
         spawned.push(spec);
         nextPid += 1;
         alivePids.add(nextPid);
+        children.add(nextPid);
         return nextPid;
       },
       isAlive: (pid) => alivePids.has(pid),
@@ -175,14 +189,28 @@ export const createFakePorts = (options: FakeOptions = {}): FakePorts => {
       },
       probeUrl: unused,
     },
-    pidFile: { read: unused, write: unused, acquire: unused, remove: unused },
+    pidFile: {
+      read: async () => pidFile,
+      write: async (_dir, pid) => {
+        pidFile = pid;
+      },
+      acquire: unused,
+      remove: async () => {
+        pidFile = null;
+      },
+    },
     webPidFile: {
       read: unused,
       write: unused,
       acquire: unused,
       remove: unused,
     },
-    clock: { now: () => 1_000, sleep: async () => undefined },
+    clock: {
+      now: () => time,
+      sleep: async (ms) => {
+        time += ms;
+      },
+    },
     cellState: { read: async () => null, write: unused },
     cellServer: {
       health: unused,
@@ -219,6 +247,9 @@ export const createFakePorts = (options: FakeOptions = {}): FakePorts => {
       return slots;
     },
     alivePids,
+    get pidFile() {
+      return pidFile;
+    },
   };
 };
 
