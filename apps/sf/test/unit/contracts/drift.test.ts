@@ -10,7 +10,10 @@ const KIT_CONTRACTS = new URL(
   '../../../../../packages/zod-contract-kit/src/',
   import.meta.url,
 );
-const OPERATOR_DOCS = new URL('../../../docs/OPERATOR.md', import.meta.url);
+const OPERATOR_DOCS = new URL(
+  '../../../../../docs/operator.md',
+  import.meta.url,
+);
 
 const PAIRS: ReadonlyArray<readonly [string, URL | ReadonlyArray<URL>]> = [
   [

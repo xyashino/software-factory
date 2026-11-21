@@ -42,7 +42,7 @@ Stop hand-copying wire contracts. One source per API, imported by server and cli
 
 Each todo = one ADR when done. Package todos stay separate from sf switch: sf step carries drift risk and 28 files.
 
-Whole order with sqlite kit (see `docs/bun-sqlite-kit-plan.md`): bun-sqlite-kit (factory, cell), server-kit (todo not written yet), zod-contract-kit, factory-contracts, cell-contracts. No contracts todo needs server-kit.
+Whole order with sqlite kit (see [`bun-sqlite-kit-plan.md`](./bun-sqlite-kit-plan.md)): bun-sqlite-kit (factory, cell), server-kit (todo not written yet), zod-contract-kit, factory-contracts, cell-contracts. No contracts todo needs server-kit.
 
 ## Risks
 

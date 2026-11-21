@@ -16,7 +16,7 @@ Create `@repo/factory-contracts`: all factory API contracts + the enums they use
 
 ## 🌐 Context & Problem Statement
 
-Factory API contracts live in `apps/factory/src/contracts/`. sf keeps hand copies (`apps/sf/src/contracts/`), enums redefined in sf `common.ts`. Package = single source. sf switch is a separate todo (`sf-adopt-factory-contracts`). See `docs/contracts-plan.md`.
+Factory API contracts live in `apps/factory/src/contracts/`. sf keeps hand copies (`apps/sf/src/contracts/`), enums redefined in sf `common.ts`. Package = single source. sf switch is a separate todo (`sf-adopt-factory-contracts`). See `docs/plans/contracts-plan.md`.
 
 ---
 

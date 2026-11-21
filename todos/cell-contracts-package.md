@@ -16,7 +16,7 @@ Create `@repo/cell-contracts`: cell API contracts + the enums they use. Cell imp
 
 ## 🌐 Context & Problem Statement
 
-Cell API contracts live in `apps/cell/src/contracts/`. sf talks to cell-server with raw route strings and no contract. Package gives sf something to type against (separate todo) and keeps cell contracts independent of cell domain code. See `docs/contracts-plan.md`.
+Cell API contracts live in `apps/cell/src/contracts/`. sf talks to cell-server with raw route strings and no contract. Package gives sf something to type against (separate todo) and keeps cell contracts independent of cell domain code. See `docs/plans/contracts-plan.md`.
 
 ---
 
