@@ -46,4 +46,4 @@ Two todos, not one: package is reviewable alone, factory switch is the behavior 
 
 ## Related
 
-Contract packages and full order: `docs/contracts-plan.md`.
+Contract packages and full order: [`contracts-plan.md`](./contracts-plan.md).

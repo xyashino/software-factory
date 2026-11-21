@@ -1,6 +1,6 @@
-# `@repo/factory` — Backend Hard Rules (`BE_RULES.md`)
+# Engineering rules: `apps/factory` backend
 
-Source of truth for code shape, layering, transactions, and testing in `apps/factory`. When a plan or todo diverges from this file on code shape, **`BE_RULES.md` wins**.
+Source of truth for code shape, layering, transactions, and testing in `apps/factory`. When a plan or todo diverges from this file on code shape, **this file wins**.
 
 ---
 
@@ -131,7 +131,7 @@ apps/factory/
 
 ## 3. Code Style & TypeScript Rules (Repo-Wide Nitpick Compliance)
 
-Shared style rules (`coding-no-barrel-export`, `coding-export-order`, `coding-minimal-comments`, `ts-strict`, `ts-exhaustive`, `ts-unknown-as`) live in [`.nitpick/rules/`](../../../.nitpick/rules/) and apply to this app. Not repeated here.
+Shared style rules (`coding-no-barrel-export`, `coding-export-order`, `coding-minimal-comments`, `ts-strict`, `ts-exhaustive`, `ts-unknown-as`) live in [`.nitpick/rules/`](../.nitpick/rules/) and apply to this app. Not repeated here.
 
 1. **Arrow functions only**: Use `const fn = (...) => ...` everywhere (implementation and tests). `function` declarations are forbidden except where TypeScript requires overload signatures on a single adapter helper.
 2. **Barrel exception**: package root `src/index.ts` (server entrypoint) is exempt from `coding-no-barrel-export`.
@@ -170,7 +170,7 @@ Shared style rules (`coding-no-barrel-export`, `coding-export-order`, `coding-mi
 2. **`immediateTx(db, fn)` for all mutating state transitions**:
    - Every claim (`/cells/claims`), job transition (`/jobs/{id}/transitions`), queue import/action (`/queue/import`, `/queue/actions`), order/plan transition, cell hello/revoke, and incident resolution MUST execute inside a serialized `BEGIN IMMEDIATE` transaction (`db.transaction(..., { behavior: 'immediate' })`).
 3. **Database-enforced single-Cell exclusivity**:
-   - Migrations MUST create the three partial unique indexes from `PLAN.md` §7:
+   - Migrations MUST create the three partial unique indexes from [`factory.md`](./factory.md) §7:
      - `idx_jobs_one_active_per_order ON jobs(order_id) WHERE order_id IS NOT NULL AND status IN ('claimed', 'running')`
      - `idx_jobs_one_active_per_cell ON jobs(cell_id) WHERE cell_id IS NOT NULL AND status IN ('claimed', 'running')`
      - `idx_work_orders_one_active_per_cell ON work_orders(active_cell_id) WHERE active_cell_id IS NOT NULL`

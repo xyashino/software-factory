@@ -1,6 +1,6 @@
 # `@repo/web-demo` — plan
 
-A small Astro SSR web server that shows the factory and lets the Supervisor resume or cancel Work orders. It is a client of [`apps/factory`](../../factory/docs/PLAN.md) and holds no state of its own.
+A small Astro SSR web server that shows the factory and lets the Supervisor resume or cancel Work orders. It is a client of the factory server ([`factory.md`](./factory.md)) and holds no state of its own.
 
 It is a demo UI: one process, read pages, two write actions, no client JavaScript, no database.
 
@@ -34,7 +34,7 @@ Rules:
 
 Open decision: whether the join secret is multi-use for 24 h (simple) or single-use and re-minted on each start (stricter, like `cell_join`). Recommended: single-use, re-minted by the server on each `factory server start`.
 
-Note: `apps/factory/docs/PLAN.md` §11 lists `POST /api/v1/tokens/join` for `cell_join`. The join contract in `apps/factory/src/contracts/tokens.contract.ts` takes a `joinSecret` but has no web client kind yet.
+Note: [`factory.md`](./factory.md) §11 lists `POST /api/v1/tokens/join` for `cell_join`. The join contract in `apps/factory/src/contracts/tokens.contract.ts` takes a `joinSecret` but has no web client kind yet.
 
 ## 3. Security
 
@@ -61,7 +61,7 @@ Note: `apps/factory/docs/PLAN.md` §11 lists `POST /api/v1/tokens/join` for `cel
 ```text
 apps/web-demo/
 ├── astro.config.mjs
-├── docs/PLAN.md
+├── README.md
 ├── src/
 │   ├── lib/          config.ts, factory-schemas.ts, factory-client.ts, auto-register.ts, write-guard.ts
 │   ├── layouts/      Base.astro

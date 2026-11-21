@@ -1,6 +1,6 @@
 # software-factory
 
-Monorepo hosting **SoftwareFactory** ([design docs](apps/sf/docs/PLAN.md), [server](apps/factory/docs/PLAN.md)), an autonomous AI harness that turns
+Monorepo hosting **SoftwareFactory** ([docs](docs/README.md): [architecture](docs/architecture.md), [sf](docs/sf.md), [factory](docs/factory.md)), an autonomous AI harness that turns
 `todos/*.md` work orders into verified Pull Requests via declarative production lines.
 
 ## Main idea
@@ -75,7 +75,7 @@ sf todos import && sf queue                # push todos/*.md, see the queue
 sf server stop
 ```
 
-Run `sf init`, `sf project add` and `sf cell start` in each repository to share one server across repositories. Command reference: [apps/sf/docs/PLAN.md](apps/sf/docs/PLAN.md). The flow is proved end to end by `apps/sf/test/blackbox/standalone-external-repo.test.ts` (runs after `pnpm build:sf`, skipped without build output).
+Run `sf init`, `sf project add` and `sf cell start` in each repository to share one server across repositories. Command reference: [docs/sf.md](docs/sf.md). The flow is proved end to end by `apps/sf/test/blackbox/standalone-external-repo.test.ts` (runs after `pnpm build:sf`, skipped without build output).
 
 ## Credits
 

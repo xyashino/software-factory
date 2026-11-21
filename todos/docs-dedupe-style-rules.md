@@ -22,7 +22,7 @@ App RULES files keep only app-specific rules. Shared style rules link to `.nitpi
 
 ## 📦 Specification / Scope
 
-- **Target**: `apps/factory/docs/BE_RULES.md` (operator rules file is deleted by `operator-retire-app-and-protocol`), `.nitpick/rules/` (only if adding a rule)
+- **Target**: `docs/engineering.md` (operator rules file is deleted by `operator-retire-app-and-protocol`), `.nitpick/rules/` (only if adding a rule)
 - **Classification**: `Universal Tooling`
 - **Dependencies**: none
 - Out: moving files; edits to generated `.agents/`, `AGENTS.md`, `CLAUDE.md`.

@@ -15,7 +15,7 @@ Create `@repo/bun-sqlite-kit`: generic `createDb`, transactions, column helpers,
 
 ## 🌐 Context & Problem Statement
 
-Cell and factory each hold copy of `src/db/client.ts` + `columns.ts`. Copies hide drizzle internals hack (`dialect`/`session` cast) and diverge: only cell does `chmod 0600`. One package = one fix point. See `docs/bun-sqlite-kit-plan.md`.
+Cell and factory each hold copy of `src/db/client.ts` + `columns.ts`. Copies hide drizzle internals hack (`dialect`/`session` cast) and diverge: only cell does `chmod 0600`. One package = one fix point. See `docs/plans/bun-sqlite-kit-plan.md`.
 
 ---
 

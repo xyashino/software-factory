@@ -1,19 +1,8 @@
 # `sf operator` — plan
 
-Source of truth for the endpoint, the verbs' effects and the server rules:
-[`apps/factory/docs/PLAN.md` §11](../../factory/docs/PLAN.md) and
-[`apps/factory/docs/BE_RULES.md`](../../factory/docs/BE_RULES.md). This file describes
+Terms: [glossary](./README.md#glossary). Source of truth for the endpoint, the verbs' effects and the server rules:
+[`factory.md` §11](./factory.md) and [`engineering.md`](./engineering.md). This file describes
 only the client. Wire shapes: `apps/sf/src/contracts/operator.contract.ts`.
-
-## Glossary
-
-| Term         | Meaning                                                                      |
-| :----------- | :--------------------------------------------------------------------------- |
-| **Operator** | The LLM agent running one station of a Line                                  |
-| **Mechanic** | The LLM agent that triages an incident when a Line is blocked                |
-| **Cell**     | The process on a machine that runs the agent and talks to the factory server |
-| **Job**      | One unit of work the server hands to a Cell: a station, or a Mechanic run    |
-| **Incident** | An Andon: a block the normal retries could not fix                           |
 
 ## Client rules
 
