@@ -7,8 +7,16 @@ export interface RunSpec {
   interactive?: boolean;
 }
 
+export interface RunPane {
+  workspaceId: string;
+  tabId: string;
+  paneId: string;
+}
+
 export interface RunHandle {
   id: string;
+  /** the terminal pane a run opened, when it has one */
+  pane?: RunPane;
 }
 
 export interface RunOutcome {

@@ -63,6 +63,7 @@ const RUNNER_FILE = 'runner.json';
 const DECISIONS_DIR = 'decisions/';
 const MAX_DIFF_CHARS = 60_000;
 const MS_PER_MINUTE = 60_000;
+const MS_PER_SECOND = 1000;
 const MECHANIC_DIR = 'mechanic';
 const REPORT_FILE = 'report.md';
 const STEP_ACTIONS: readonly string[] = ['retry_step', 'restart_from_step'];
@@ -157,6 +158,14 @@ const agentOf = (station: StepLine): Agent => ({
 
 const tailOf = (text: string): string => text.slice(-OUTPUT_TAIL_CHARS);
 
+const secondsOf = (ms: number): string => `${Math.round(ms / MS_PER_SECOND)}s`;
+
+const agentDetailOf = (agent: Agent): string =>
+  `runner=${agent.runner ?? '-'} model=${agent.model ?? '-'} headless=${agent.headless}`;
+
+const attemptOf = (job: ClaimedJob, station: StepLine): string =>
+  `(${job.epoch}/${station.maxAttempts})`;
+
 const nextJobOf = (reply: TransitionReply): ClaimedJob | null =>
   'nextJob' in reply ? reply.nextJob : null;
 
@@ -186,13 +195,16 @@ const transition = async (
   runtime: CellRuntime,
   job: ClaimedJob,
   body: TransitionBody<TransitionCommand>,
+  logDetail?: string | null,
 ): Promise<TransitionReply> => {
-  await logLine(
-    runtime,
-    job,
-    body.action,
-    'detail' in body ? body.detail : undefined,
-  );
+  if (logDetail !== null) {
+    await logLine(
+      runtime,
+      job,
+      body.action,
+      logDetail ?? ('detail' in body ? body.detail : undefined),
+    );
+  }
   const commandId = commandIdOf({
     cellId: runtime.session.cellId,
     orderId: job.orderId ?? job.jobId,
@@ -458,13 +470,22 @@ const finishWithFail = async (
   runtime: CellRuntime,
   job: ClaimedJob,
   detail: string,
+  ran?: string,
 ): Promise<ClaimedJob | null> =>
-  nextJobOf(await transition(runtime, job, { action: 'fail', detail }));
+  nextJobOf(
+    await transition(
+      runtime,
+      job,
+      { action: 'fail', detail },
+      ran === undefined ? undefined : `${ran} ${detail}`,
+    ),
+  );
 
 const finishComplete = async (
   runtime: CellRuntime,
   job: ClaimedJob,
   station: StepLine | undefined,
+  ran?: string | null,
 ): Promise<ClaimedJob | null> => {
   const missing = await missingRequiredFiles(runtime, job, station);
   if (missing.length > 0) {
@@ -472,6 +493,7 @@ const finishComplete = async (
       runtime,
       job,
       `missing required files: ${missing.join(', ')}`,
+      ran ?? undefined,
     );
   }
   const produced = station?.requiredFiles ?? [];
@@ -498,14 +520,16 @@ const finishComplete = async (
       runtime,
       job,
       `checkpoint failed: ${errorText(error)}`,
+      ran ?? undefined,
     );
   }
   return nextJobOf(
-    await transition(runtime, job, {
-      action: 'complete',
-      producedFiles: produced,
-      commitSha,
-    }),
+    await transition(
+      runtime,
+      job,
+      { action: 'complete', producedFiles: produced, commitSha },
+      ran,
+    ),
   );
 };
 
@@ -514,6 +538,7 @@ const finish = async (
   job: ClaimedJob,
   station: StepLine | undefined,
   end: RunEnd,
+  ran: string,
 ): Promise<ClaimedJob | null> => {
   switch (end.kind) {
     case 'aborted':
@@ -526,15 +551,17 @@ const finish = async (
         runtime,
         job,
         `station timed out after ${Math.round((station?.timeoutMs ?? 0) / MS_PER_MINUTE)}m`,
+        ran,
       );
     case 'exited':
       return finishWithFail(
         runtime,
         job,
         `runner exited with code ${end.exitCode} before a verdict`,
+        ran,
       );
     case 'operator':
-      return finishOperator(runtime, job, station, end.outcome);
+      return finishOperator(runtime, job, station, end.outcome, ran);
   }
 };
 
@@ -543,22 +570,25 @@ const finishOperator = async (
   job: ClaimedJob,
   station: StepLine | undefined,
   outcome: OperatorOutcome,
+  ran: string,
 ): Promise<ClaimedJob | null> => {
   switch (outcome.kind) {
     case 'done':
-      return finishComplete(runtime, job, station);
+      return finishComplete(runtime, job, station, ran);
     case 'verdict':
       if (outcome.outcome === 'pass') {
-        return finishComplete(runtime, job, station);
+        return finishComplete(runtime, job, station, ran);
       }
       await writeFeedback(runtime, job, station, outcome.feedback);
-      return finishWithFail(runtime, job, outcome.feedback);
+      return finishWithFail(runtime, job, outcome.feedback, ran);
     case 'block':
       return nextJobOf(
-        await transition(runtime, job, {
-          action: 'block',
-          detail: outcome.reason,
-        }),
+        await transition(
+          runtime,
+          job,
+          { action: 'block', detail: outcome.reason },
+          `${ran} ${outcome.reason}`,
+        ),
       );
     case 'incident':
       return finishWithFail(
@@ -575,11 +605,16 @@ const worktreeMissingOf = async (
   missing: { stepId: string; files: string[] },
 ): Promise<ClaimedJob | null> =>
   nextJobOf(
-    await transition(runtime, job, {
-      action: 'worktree_missing',
-      missingStepId: missing.stepId,
-      missingFiles: missing.files,
-    }),
+    await transition(
+      runtime,
+      job,
+      {
+        action: 'worktree_missing',
+        missingStepId: missing.stepId,
+        missingFiles: missing.files,
+      },
+      `missing ${missing.files.join(', ')}`,
+    ),
   );
 
 const beatOnce = async (
@@ -621,6 +656,7 @@ const runShell = async (
   job: ClaimedJob,
   commands: readonly string[],
   logPath: string,
+  attempt?: string,
 ): Promise<string | null> => {
   if (commands.length === 0) {
     return null;
@@ -629,11 +665,28 @@ const runShell = async (
   try {
     return await whileBeating(runtime, job, async () => {
       for (const command of commands) {
+        const startedAt = runtime.ports.clock.now();
+        if (attempt !== undefined) {
+          await logLine(
+            runtime,
+            job,
+            'start',
+            `${attempt} command=${JSON.stringify(command)}`,
+          );
+        }
         const result = await runtime.ports.process.run(
           SHELL,
           ['-lc', command],
           worktreeOf(runtime, job),
         );
+        if (attempt !== undefined) {
+          await logLine(
+            runtime,
+            job,
+            'complete',
+            `${attempt} exit=${result.exitCode} duration=${secondsOf(runtime.ports.clock.now() - startedAt)}`,
+          );
+        }
         const output = `${result.stdout}${result.stderr}`;
         log += `$ ${command}\n${output}\n`;
         if (result.exitCode !== 0) {
@@ -656,7 +709,15 @@ const prepareWorktree = async (
   const worktree = worktreeOf(runtime, job);
   const slug = slugOf(job.orderId);
   try {
-    if (!(await fs.exists(worktree))) {
+    if (await fs.exists(worktree)) {
+      await logLine(runtime, job, 'worktree', `reuse path=${worktree}`);
+    } else {
+      await logLine(
+        runtime,
+        job,
+        'worktree',
+        `create path=${worktree} base=${job.baseBranch}`,
+      );
       await git.worktreeAdd(
         runtime.repoRoot,
         worktree,
@@ -856,9 +917,15 @@ const inspect = async (
     job,
     station.exec,
     joinPath(stepDirOf(runtime, job, station), STEP_LOG),
+    attemptOf(job, station),
   );
   if (failure === null) {
-    return finishComplete(runtime, job, station);
+    return finishComplete(
+      runtime,
+      job,
+      station,
+      station.exec.length > 0 ? null : undefined,
+    );
   }
   await writeFeedback(runtime, job, station, failure);
   return finishWithFail(runtime, job, failure);
@@ -927,9 +994,10 @@ const runOperator = async (
   runtime: CellRuntime,
   job: ClaimedJob,
   run: Run,
-  finishRun: (end: RunEnd) => Promise<ClaimedJob | null>,
+  finishRun: (end: RunEnd, ran: string) => Promise<ClaimedJob | null>,
 ): Promise<ClaimedJob | null> => {
   const { ports } = runtime;
+  const startedAt = ports.clock.now();
   const cycleToken = cycleTokenOf();
   const end = deferred<RunEnd>();
   const endpoint = await ports.operator.open(
@@ -959,13 +1027,19 @@ const runOperator = async (
     joinPath(dirOf(runtime, job, run.dir), RUNNER_FILE),
     `${JSON.stringify(mode)}\n`,
   );
+  const { pane } = handle;
   await logLine(
     runtime,
     job,
     mode.interactive ? 'pane' : 'headless',
-    mode.reason,
+    mode.interactive && pane !== undefined
+      ? `ws=${pane.workspaceId} tab=${pane.tabId} pane=${pane.paneId}`
+      : mode.reason === ''
+        ? undefined
+        : `fallback=${mode.reason}`,
   );
   let ended = false;
+  const exit: { code?: number } = {};
   if (run.timeoutMs) {
     void ports.clock.sleep(run.timeoutMs).then(() => {
       if (ended) return;
@@ -999,8 +1073,14 @@ const runOperator = async (
     },
   });
   void ports.runner.wait(handle).then(
-    (outcome) => end.resolve({ kind: 'exited', exitCode: outcome.exitCode }),
-    () => end.resolve({ kind: 'exited', exitCode: -1 }),
+    (outcome) => {
+      exit.code = outcome.exitCode;
+      end.resolve({ kind: 'exited', exitCode: outcome.exitCode });
+    },
+    () => {
+      exit.code = -1;
+      end.resolve({ kind: 'exited', exitCode: -1 });
+    },
   );
   try {
     const outcome = await end.promise;
@@ -1009,7 +1089,11 @@ const runOperator = async (
     if (mode.interactive && outcome.kind === 'operator') {
       await ports.runner.abort(handle);
     }
-    return await finishRun(outcome);
+    // A runner that reported a verb may still be shutting down: its exit is not known yet.
+    return await finishRun(
+      outcome,
+      `exit=${exit.code ?? 'pending'} duration=${secondsOf(ports.clock.now() - startedAt)}`,
+    );
   } finally {
     heartbeat.stop();
     await ports.operator.close();
@@ -1031,7 +1115,7 @@ const execute = async (
       timeoutMs: station.timeoutMs,
       serving: null,
     },
-    (end) => finish(runtime, job, station, end),
+    (end, ran) => finish(runtime, job, station, end, ran),
   );
 
 const mechanicStateOf = async (
@@ -1104,6 +1188,7 @@ const resolveIncidentOf = async (
   runtime: CellRuntime,
   job: ClaimedJob,
   outcome: IncidentOutcome,
+  ran: string,
 ): Promise<ClaimedJob | null> => {
   const incidentId = job.incidentId;
   if (incidentId === null || incidentId === undefined) {
@@ -1113,7 +1198,7 @@ const resolveIncidentOf = async (
     joinPath(dirOf(runtime, job, MECHANIC_DIR), REPORT_FILE),
     `# Diagnosis\n\n${outcome.diagnosis}\n\n# Tried\n\n${outcome.tried}\n\n${outcome.report}\n`,
   );
-  await logLine(runtime, job, 'incident', outcome.action);
+  await logLine(runtime, job, 'incident', `${outcome.action} ${ran}`);
   await sendWithRetry(runtime, () =>
     runtime.ports.server.call(
       `/api/v1/incidents/${encodeURIComponent(incidentId)}/resolve`,
@@ -1135,6 +1220,7 @@ const finishMechanic = async (
   job: ClaimedJob,
   timeoutMs: number,
   end: RunEnd,
+  ran: string,
 ): Promise<ClaimedJob | null> => {
   switch (end.kind) {
     case 'aborted':
@@ -1147,17 +1233,24 @@ const finishMechanic = async (
         runtime,
         job,
         `mechanic timed out after ${Math.round(timeoutMs / MS_PER_MINUTE)}m`,
+        ran,
       );
     case 'exited':
       return finishWithFail(
         runtime,
         job,
         `mechanic exited with code ${end.exitCode} before an incident resolution`,
+        ran,
       );
     case 'operator':
       return end.outcome.kind === 'incident'
-        ? resolveIncidentOf(runtime, job, end.outcome)
-        : finishWithFail(runtime, job, 'mechanic may only resolve an incident');
+        ? resolveIncidentOf(runtime, job, end.outcome, ran)
+        : finishWithFail(
+            runtime,
+            job,
+            'mechanic may only resolve an incident',
+            ran,
+          );
   }
 };
 
@@ -1175,20 +1268,23 @@ const runMechanic = async (
       'line declares no mechanic',
     );
   }
-  const plan = await launchOf(runtime, job, {
+  const agent: Agent = {
     dir: MECHANIC_DIR,
     runner: mechanic.runner,
     model: mechanic.model,
     permission: mechanic.permission,
     headless: mechanic.headless,
-  });
+  };
+  const plan = await launchOf(runtime, job, agent);
   if (plan.kind === 'unavailable') {
     return lineUnavailable(runtime, job, snapshot.name, plan.detail);
   }
-  await transition(runtime, job, {
-    action: 'start',
-    lineSnapshot: wireSnapshotOf(snapshot),
-  });
+  await transition(
+    runtime,
+    job,
+    { action: 'start', lineSnapshot: wireSnapshotOf(snapshot) },
+    agentDetailOf(agent),
+  );
   const worktreeFailure = (await runtime.ports.fs.exists(
     worktreeOf(runtime, job),
   ))
@@ -1214,7 +1310,7 @@ const runMechanic = async (
       timeoutMs: mechanic.timeoutMs,
       serving: servingOf(runtime, job, snapshot),
     },
-    (end) => finishMechanic(runtime, job, mechanic.timeoutMs, end),
+    (end, ran) => finishMechanic(runtime, job, mechanic.timeoutMs, end, ran),
   );
 };
 
@@ -1223,15 +1319,19 @@ export const runJob = async (
   job: ClaimedJob,
 ): Promise<ClaimedJob | null> => {
   const line = await loadLine(runtime, job);
+  const claimDetail = `job=${job.jobId} kind=${job.kind} epoch=${job.epoch}`;
   if (line.kind === 'unavailable') {
+    await logLine(runtime, job, 'claim', claimDetail);
     return lineUnavailable(runtime, job, line.lineName, line.detail);
   }
   const { snapshot, station } = line;
   if (job.kind === 'mechanic') {
     stationNames.set(job, MECHANIC_DIR);
+    await logLine(runtime, job, 'claim', claimDetail);
     return runMechanic(runtime, job, snapshot);
   }
   stationNames.set(job, station?.stationId ?? '-');
+  await logLine(runtime, job, 'claim', claimDetail);
   if (station?.kind === 'deliver') {
     return deliverStation(runtime, job, snapshot);
   }
@@ -1240,10 +1340,12 @@ export const runJob = async (
     if (missing !== null) {
       return worktreeMissingOf(runtime, job, missing);
     }
-    await transition(runtime, job, {
-      action: 'start',
-      lineSnapshot: wireSnapshotOf(snapshot),
-    });
+    await transition(
+      runtime,
+      job,
+      { action: 'start', lineSnapshot: wireSnapshotOf(snapshot) },
+      station.exec.length > 0 ? null : undefined,
+    );
     return inspect(runtime, job, station);
   }
   if (station === undefined) {
@@ -1262,10 +1364,12 @@ export const runJob = async (
   if (missing !== null) {
     return worktreeMissingOf(runtime, job, missing);
   }
-  await transition(runtime, job, {
-    action: 'start',
-    lineSnapshot: wireSnapshotOf(snapshot),
-  });
+  await transition(
+    runtime,
+    job,
+    { action: 'start', lineSnapshot: wireSnapshotOf(snapshot) },
+    agentDetailOf(agentOf(station)),
+  );
   if (job.expectedPriorSteps.length === 0) {
     const failure = await prepareWorktree(runtime, job, snapshot);
     if (failure !== null) {
