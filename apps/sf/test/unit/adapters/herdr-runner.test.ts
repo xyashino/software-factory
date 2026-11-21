@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createHerdrRunner } from '../../../src/adapters/runners/herdr';
 import type {
   ProcessPort,
@@ -326,5 +326,118 @@ describe('herdr pane runner', () => {
     expect(
       calls.some((call) => call[1] === 'tab' && call[2] === 'create'),
     ).toBe(true);
+  });
+});
+
+const AGENT_TREE = ['  100     1', '  200   100', '  300   200'].join('\n');
+
+const processTree = (
+  ignoresTerm: readonly number[] = [],
+  ignoresKill: readonly number[] = [],
+) => {
+  const { port: herdr, calls } = fakeHerdr();
+  const alive = new Set([100, 200, 300]);
+  const kills: string[][] = [];
+  const port: ProcessPort = {
+    ...herdr,
+    run: async (command, args, cwd) => {
+      if (command === 'ps') return { ...OK, stdout: AGENT_TREE };
+      if (command === 'kill') {
+        const [signal, ...pids] = args;
+        kills.push([signal, ...pids]);
+        for (const pid of pids.map(Number)) {
+          const survives =
+            signal === '-KILL'
+              ? ignoresKill.includes(pid)
+              : ignoresTerm.includes(pid);
+          if (!survives) alive.delete(pid);
+        }
+        return OK;
+      }
+      return herdr.run(command, args, cwd);
+    },
+    isAlive: (pid) => alive.has(pid),
+  };
+  return { port, calls, kills };
+};
+
+const startWithPid = async (
+  runner: ReturnType<typeof createHerdrRunner>,
+  dir: string,
+): Promise<{ id: string }> => {
+  const handle = await runner.start(specIn(dir));
+  writeFileSync(join(dir, `${handle.id}.pid`), '100\n');
+  return handle;
+};
+
+describe('herdr pane runner abort', () => {
+  it('stops the whole agent process tree and confirms it is gone', async () => {
+    // Arrange
+    const dir = stepDir();
+    const { port, calls, kills } = processTree();
+    const runner = createHerdrRunner(port, CELL);
+    const handle = await startWithPid(runner, dir);
+
+    // Act
+    const gone = await runner.abort(handle);
+
+    // Assert
+    expect(gone).toBe(true);
+    expect(kills).toEqual([['-TERM', '100', '200', '300']]);
+    expect(calls).toContainEqual(['herdr', 'tab', 'close', 'w1:t7']);
+  });
+
+  it('escalates to SIGKILL when the tree ignores SIGTERM', async () => {
+    // Arrange
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const dir = stepDir();
+    const { port, kills } = processTree([300]);
+    const runner = createHerdrRunner(port, CELL);
+    const handle = await startWithPid(runner, dir);
+
+    // Act
+    const stopped = runner.abort(handle);
+    await vi.advanceTimersByTimeAsync(10_000);
+    const gone = await stopped;
+    vi.useRealTimers();
+
+    // Assert
+    expect(gone).toBe(true);
+    expect(kills).toEqual([
+      ['-TERM', '100', '200', '300'],
+      ['-KILL', '100', '200', '300'],
+    ]);
+  });
+
+  it('reports the run as still alive when its tree survives SIGKILL', async () => {
+    // Arrange
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const dir = stepDir();
+    const { port } = processTree([300], [300]);
+    const runner = createHerdrRunner(port, CELL);
+    const handle = await startWithPid(runner, dir);
+
+    // Act
+    const stopped = runner.abort(handle);
+    await vi.advanceTimersByTimeAsync(20_000);
+    const gone = await stopped;
+    vi.useRealTimers();
+
+    // Assert
+    expect(gone).toBe(false);
+  });
+
+  it('confirms a run as gone when its pid was never recorded', async () => {
+    // Arrange
+    const dir = stepDir();
+    const { port } = processTree();
+    const runner = createHerdrRunner(port, CELL);
+    const handle = await runner.start(specIn(dir));
+
+    // Act
+    const gone = await runner.abort(handle);
+
+    // Assert
+    expect(gone).toBe(true);
   });
 });

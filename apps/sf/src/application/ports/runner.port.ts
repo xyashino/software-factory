@@ -26,7 +26,8 @@ export interface RunOutcome {
 export interface RunnerPort {
   prepare(): Promise<void>;
   start(spec: RunSpec): Promise<RunHandle>;
-  abort(handle: RunHandle): Promise<void>;
+  /** Resolves once the run's processes are gone; false when they outlive the adapter's limit. */
+  abort(handle: RunHandle): Promise<boolean>;
   wait(handle: RunHandle): Promise<RunOutcome>;
   interactiveAvailable(): Promise<boolean>;
 }

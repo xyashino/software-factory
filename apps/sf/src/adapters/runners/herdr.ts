@@ -30,9 +30,12 @@ const WORKSPACE_LABEL_PREFIX = 'factory:';
 const LOGS_LABEL = 'logs';
 const LOG_TAIL_LINES = 200;
 const CLEAR_SCREEN = "printf '\\033[2J\\033[3J\\033[H'";
+const TERM_WAIT_MS = 10_000;
+const KILL_WAIT_MS = 5_000;
 const TAB_ID = /"tab_id"\s*:\s*"([^"]+)"/;
 const PANE_ID = /"pane_id"\s*:\s*"([^"]+)"/;
 const WORKSPACE_ID = /"workspace_id"\s*:\s*"([^"]+)"/;
+const PROCESS_ROW = /^\s*(\d+)\s+(\d+)\s*$/;
 
 const workspaceListSchema = z.object({
   result: z.object({
@@ -71,6 +74,7 @@ interface HerdrRun {
   cwd: string;
   tabId: string;
   exitFile: string;
+  pidFile: string;
   aborted: boolean;
 }
 
@@ -79,10 +83,11 @@ const sleep = (ms: number): Promise<void> =>
 
 const shellQuote = (text: string): string => `'${text.replace(/'/g, `'\\''`)}'`;
 
-const launcherOf = (spec: RunSpec, exitFile: string): string =>
+const launcherOf = (spec: RunSpec, exitFile: string, pidFile: string): string =>
   [
     '#!/bin/bash',
     `cd ${shellQuote(spec.cwd)} || exit 127`,
+    `echo "$$" > ${shellQuote(pidFile)}`,
     ...Object.entries(spec.env).map(
       ([key, value]) => `export ${key}=${shellQuote(value)}`,
     ),
@@ -90,6 +95,90 @@ const launcherOf = (spec: RunSpec, exitFile: string): string =>
       `; echo "$?" > ${shellQuote(exitFile)}`,
     '',
   ].join('\n');
+
+const pidOf = (pidFile: string): number | undefined => {
+  if (!existsSync(pidFile)) return undefined;
+  const pid = Number.parseInt(readFileSync(pidFile, 'utf8'), 10);
+  return Number.isNaN(pid) ? undefined : pid;
+};
+
+const childrenOf = (
+  table: readonly (readonly [number, number])[],
+  parent: number,
+): number[] => table.filter(([, ppid]) => ppid === parent).map(([pid]) => pid);
+
+const treeOf = (
+  table: readonly (readonly [number, number])[],
+  root: number,
+): number[] => {
+  const found = new Set<number>([root]);
+  const queue = [root];
+  for (let next = queue.pop(); next !== undefined; next = queue.pop()) {
+    for (const child of childrenOf(table, next)) {
+      if (found.has(child)) continue;
+      found.add(child);
+      queue.push(child);
+    }
+  }
+  return [...found];
+};
+
+const processTableOf = async (
+  processPort: ProcessPort,
+  cwd: string,
+): Promise<[number, number][]> => {
+  const result = await processPort.run(
+    'ps',
+    ['-A', '-o', 'pid=', '-o', 'ppid='],
+    cwd,
+  );
+  if (result.exitCode !== 0) return [];
+  return result.stdout.split('\n').flatMap((line): [number, number][] => {
+    const match = PROCESS_ROW.exec(line);
+    return match === null ? [] : [[Number(match[1]), Number(match[2])]];
+  });
+};
+
+const signalPids = async (
+  processPort: ProcessPort,
+  cwd: string,
+  signal: 'TERM' | 'KILL',
+  pids: readonly number[],
+): Promise<void> => {
+  if (pids.length === 0) return;
+  await processPort.run('kill', [`-${signal}`, ...pids.map(String)], cwd);
+};
+
+const goneWithin = async (
+  processPort: ProcessPort,
+  pids: readonly number[],
+  limitMs: number,
+): Promise<boolean> => {
+  for (let waited = 0; ; waited += POLL_MS) {
+    if (!pids.some((pid) => processPort.isAlive(pid))) return true;
+    if (waited >= limitMs) return false;
+    await sleep(POLL_MS);
+  }
+};
+
+// Herdr closing a tab does not end the agent behind it, so the launcher's process tree is signalled directly.
+const stopTree = async (
+  processPort: ProcessPort,
+  run: HerdrRun,
+): Promise<boolean> => {
+  const root = pidOf(run.pidFile);
+  if (root === undefined) return true;
+  const known = new Set(
+    treeOf(await processTableOf(processPort, run.cwd), root),
+  );
+  await signalPids(processPort, run.cwd, 'TERM', [...known]);
+  if (await goneWithin(processPort, [...known], TERM_WAIT_MS)) return true;
+  for (const pid of treeOf(await processTableOf(processPort, run.cwd), root)) {
+    known.add(pid);
+  }
+  await signalPids(processPort, run.cwd, 'KILL', [...known]);
+  return goneWithin(processPort, [...known], KILL_WAIT_MS);
+};
 
 const herdrOk = async (
   processPort: ProcessPort,
@@ -224,8 +313,9 @@ export const createHerdrRunner = (
       const stepDir = dirname(spec.logPath);
       mkdirSync(stepDir, { recursive: true });
       const exitFile = join(stepDir, `${id}.exit`);
+      const pidFile = join(stepDir, `${id}.pid`);
       const launcher = join(stepDir, `${id}.sh`);
-      writeFileSync(launcher, launcherOf(spec, exitFile));
+      writeFileSync(launcher, launcherOf(spec, exitFile, pidFile));
       chmodSync(launcher, 0o755);
       if (basename(spec.command) === CLAUDE) {
         acceptClaudeTrust(claudeConfigPathOf(), spec.cwd);
@@ -269,15 +359,23 @@ export const createHerdrRunner = (
         ['pane', 'run', paneId, `bash ${shellQuote(launcher)}`],
         spec.cwd,
       );
-      runs.set(id, { cwd: spec.cwd, tabId, exitFile, aborted: false });
+      runs.set(id, {
+        cwd: spec.cwd,
+        tabId,
+        exitFile,
+        pidFile,
+        aborted: false,
+      });
       previous = { runId: id, tabId };
       return { id, pane: { workspaceId, tabId, paneId } };
     },
     abort: async (handle) => {
       const run = runs.get(handle.id);
-      if (run === undefined) return;
+      if (run === undefined) return true;
       run.aborted = true;
+      const gone = await stopTree(processPort, run);
       await processPort.run(HERDR, ['tab', 'close', run.tabId], run.cwd);
+      return gone;
     },
     interactiveAvailable: async () =>
       (await processPort.run(HERDR, ['status', 'server'], process.cwd()))

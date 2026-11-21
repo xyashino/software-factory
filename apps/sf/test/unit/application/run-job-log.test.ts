@@ -38,6 +38,7 @@ interface Control {
 interface Harness {
   runtime: CellRuntime;
   lines: () => string[];
+  routes: () => string[];
   control: Control;
   sleepers: Sleeper[];
   advance: (ms: number) => void;
@@ -188,9 +189,7 @@ const harness = (options: { interactive: boolean }): Harness => {
         control.env = spec.env;
         return PANE;
       },
-      abort: async () => {
-        if (control.refuseAbort) throw new Error('runner refused abort');
-      },
+      abort: async () => !control.refuseAbort,
       wait: (): Promise<RunOutcome> =>
         new Promise((done) => {
           control.exit = done;
@@ -232,6 +231,7 @@ const harness = (options: { interactive: boolean }): Harness => {
     },
     lines: () =>
       log.map((text) => text.replace(ANSI, '').trim().replace(/\s+/g, ' ')),
+    routes: () => fake.calls.map((call) => call.route),
     control,
     sleepers,
     advance,
@@ -411,6 +411,23 @@ describe('cell run outcome log', () => {
     expect(h.lines()).toContainEqual(
       expect.stringMatching(/build abort reason=timeout confirmed=no$/),
     );
+  });
+
+  it('stops the cell from claiming while a stopped runner is still alive', async () => {
+    const h = harness({ interactive: true });
+    h.control.refuseAbort = true;
+    const job = runJob(h.runtime, jobOf({}));
+    await paneLogged(h);
+
+    await fireAfter(h, BUILD_TIMEOUT_MS);
+    await job;
+
+    expect(h.lines()).toContainEqual(
+      expect.stringMatching(
+        /build fail .*runner still alive after abort, Cell left without claiming$/,
+      ),
+    );
+    expect(h.routes()).toContain(LEAVE_ROUTE);
   });
 
   it('logs the drain-force end and the abort of the runner', async () => {
