@@ -17,14 +17,14 @@ operators:
   builder:
     profile: builder
     runner: claude
-    model: sonnet
+    model: haiku
     timeout: 60m
     headless: false
     permission: write
   doctor:
     profile: doctor
-    runner: claude
-    model: sonnet
+    runner: antigravity
+    model: gemini-3.8-flash-medium
     timeout: 20m
     headless: false
     permission: read
@@ -47,8 +47,6 @@ stations:
     kind: inspection
     timeout: 15m
     exec:
-      # The commit hook's own check (`ci:verify`, the same one husky pre-commit runs), so the tests run once here.
-      # The decision-log ADR is checked at delivery (`requireAdr`), not here: it needs a staged file this gate does not make.
       - pnpm ci:verify
     onFail:
       retry: build

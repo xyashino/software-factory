@@ -60,8 +60,6 @@ stations:
     kind: inspection
     timeout: 15m
     exec:
-      # The commit hook's own check (`ci:verify`, the same one husky pre-commit runs), so the tests run once here.
-      # The decision-log ADR is checked at delivery (`requireAdr`), not here: it needs a staged file this gate does not make.
       - pnpm ci:verify
     onFail:
       retry: build
