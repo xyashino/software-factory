@@ -2,11 +2,27 @@ import { hostname } from 'node:os';
 import { resolve } from 'node:path';
 import { defineCommand } from 'citty';
 import { buildContext } from '../../bootstrap/context';
-import { run, settle } from '../../bootstrap/run';
-import { JOIN_TOKEN_ENV, cellLogPathOf } from '../../config';
+import { run, runWithoutToken, settle } from '../../bootstrap/run';
+import {
+  CELL_LINES_ENV,
+  IS_COMPILED,
+  JOIN_TOKEN_ENV,
+  cellLogPathOf,
+  cellWorkerLauncherOf,
+} from '../../config';
 import { Refused } from '../../application/core/errors';
 import { startCell } from '../../application/procedures/cell/start.procedure';
-import { listCells } from '../../application/procedures/cell/list.procedure';
+import { createLocalCells } from '../../application/procedures/cell/local-create.procedure';
+import {
+  type LocalSlotRow,
+  listCellsWithLocal,
+  listLocalSlots,
+} from '../../application/procedures/cell/local-list.procedure';
+import { removeLocalCell } from '../../application/procedures/cell/local-rm.procedure';
+import {
+  stopAllLocalCells,
+  stopLocalCell,
+} from '../../application/procedures/cell/local-stop.procedure';
 import { revokeCell } from '../../application/procedures/cell/revoke.procedure';
 import { stopCell } from '../../application/procedures/cell/stop.procedure';
 import { cellNameOf } from '../../domain/cell/cell-name';
@@ -16,24 +32,26 @@ import {
   migrateLegacyCellState,
   releaseCellSlot,
 } from '../fs/cell-slot';
-import {
-  createCells,
-  listCells as listLocalCells,
-  removeCell as removeLocalCell,
-  stopAllCells,
-  stopCell as stopLocalCell,
-} from '../../application/procedures/cell-server/cells.procedure';
-import type { Cell } from '../../application/procedures/cell-server/shapes';
 import { cellServerCommand } from './cell-server.command';
-import { runCellServer } from './cell-server-run';
 import { printJson, printLine, printTable, reportFailure } from './output';
 
-const HEADERS = ['id', 'project', 'state', 'active job', 'last heartbeat'];
+const HEADERS = [
+  'id',
+  'project',
+  'state',
+  'active job',
+  'last heartbeat',
+  'pid',
+];
+const LOCAL_HEADERS = ['id', 'name', 'factory', 'state', 'pid', 'repo'];
 const SUPERSEDED_LINE =
   'cell left: the server had already moved its job, nothing handed over';
 const MIGRATED_LINE = 'migrated legacy .factory-local/cell.json to this cell';
 
 const orDash = (value: string | null): string => value ?? '-';
+
+const pidText = (pid: number | null): string =>
+  pid === null ? '-' : String(pid);
 
 const heartbeatText = (ms: number | null): string =>
   ms === null ? '-' : new Date(ms).toISOString();
@@ -42,6 +60,14 @@ const cliError = (message: string): Error => {
   const error = new Error(message);
   error.name = 'CLIError';
   return error;
+};
+
+const linesOf = (raw: string | undefined): string[] | undefined => {
+  const lines = raw
+    ?.split(',')
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+  return lines === undefined || lines.length === 0 ? undefined : lines;
 };
 
 const claimSlot = async (
@@ -85,6 +111,7 @@ const runStart = async (requested: string | undefined): Promise<number> => {
         cellName: name,
         logPath: resolve(cwd, cellLogPathOf(name)),
         joinToken: process.env[JOIN_TOKEN_ENV],
+        lines: linesOf(process.env[CELL_LINES_ENV]),
         signal: controller.signal,
       }),
     );
@@ -97,28 +124,18 @@ const runStart = async (requested: string | undefined): Promise<number> => {
   }
 };
 
-const LOCAL_HEADERS = ['id', 'name', 'factory', 'state', 'pid', 'repo'];
-
-const localSlotIds = async (): Promise<string[]> => {
-  const result = await runCellServer(listLocalCells, {});
-  return result.kind === 'ok' ? result.value.map((cell) => cell.slotId) : [];
-};
-
-const localRows = (cells: Cell[]): string[][] =>
-  cells.map((cell) => [
-    cell.slotId,
-    cell.name,
-    cell.factoryName,
-    cell.runtimeStatus,
-    cell.pid === null ? '-' : String(cell.pid),
-    cell.repoRoot,
+const localRows = (slots: LocalSlotRow[]): string[][] =>
+  slots.map((slot) => [
+    slot.slotId,
+    slot.name,
+    slot.factory,
+    slot.state,
+    pidText(slot.pid),
+    slot.repoRoot,
   ]);
 
-const runLocalStopAll = async (
-  force: boolean,
-  json: boolean,
-): Promise<number> => {
-  const result = await runCellServer(stopAllCells, { force });
+const runLocalList = async (json: boolean): Promise<number> => {
+  const result = await runWithoutToken(listLocalSlots, {}, buildContext());
   if (result.kind !== 'ok') {
     return reportFailure(result);
   }
@@ -130,21 +147,68 @@ const runLocalStopAll = async (
   return EXIT.ok;
 };
 
-const runLocalStop = async (
-  slotId: string,
-  force: boolean,
-  json: boolean,
-): Promise<number> => {
-  const result = await runCellServer(stopLocalCell, { slotId, force });
+const runList = async (json: boolean, here: boolean): Promise<number> => {
+  if (here) {
+    return runLocalList(json);
+  }
+  const result = await run(listCellsWithLocal, {}, 'supervisor');
+  if (result.kind !== 'ok') {
+    return reportFailure(result);
+  }
+  if (json) {
+    printJson(result.value);
+    return EXIT.ok;
+  }
+  printTable(
+    HEADERS,
+    result.value.map((row) => [
+      row.cellId,
+      row.projectId,
+      row.status,
+      orDash(row.activeJobId),
+      heartbeatText(row.lastHeartbeatAt),
+      pidText(row.pid),
+    ]),
+  );
+  return EXIT.ok;
+};
+
+const runStopAll = async (force: boolean, json: boolean): Promise<number> => {
+  const result = await run(stopAllLocalCells, { force }, 'supervisor');
   if (result.kind !== 'ok') {
     return reportFailure(result);
   }
   if (json) {
     printJson(result.value);
   } else {
-    printLine(`cell ${result.value.slotId} ${result.value.runtimeStatus}`);
+    printTable(LOCAL_HEADERS, localRows(result.value));
   }
   return EXIT.ok;
+};
+
+const runStopOne = async (
+  id: string,
+  force: boolean,
+  json: boolean,
+): Promise<number> => {
+  const local = await run(stopLocalCell, { id, force }, 'supervisor');
+  if (local.kind !== 'ok') {
+    return reportFailure(local);
+  }
+  if (local.value !== null) {
+    if (json) {
+      printJson(local.value);
+    } else {
+      printLine(`cell ${local.value.slotId} ${local.value.state}`);
+    }
+    return EXIT.ok;
+  }
+  const remote = await run(stopCell, { id, force }, 'supervisor');
+  if (remote.kind === 'ok') {
+    printLine(`cell ${remote.value.cellId} ${remote.value.status}`);
+    return EXIT.ok;
+  }
+  return reportFailure(remote);
 };
 
 const runStop = async (
@@ -152,58 +216,12 @@ const runStop = async (
   options: { all: boolean; force: boolean; json: boolean },
 ): Promise<number> => {
   if (options.all) {
-    return runLocalStopAll(options.force, options.json);
+    return runStopAll(options.force, options.json);
   }
   if (id === undefined) {
     throw cliError('cell id required, or --all');
   }
-  if ((await localSlotIds()).includes(id)) {
-    return runLocalStop(id, options.force, options.json);
-  }
-  const result = await run(
-    stopCell,
-    { id, force: options.force },
-    'supervisor',
-  );
-  if (result.kind === 'ok') {
-    printLine(`cell ${result.value.cellId} ${result.value.status}`);
-    return EXIT.ok;
-  }
-  return reportFailure(result);
-};
-
-const runList = async (json: boolean, local: boolean): Promise<number> => {
-  if (local) {
-    const result = await runCellServer(listLocalCells, {});
-    if (result.kind !== 'ok') {
-      return reportFailure(result);
-    }
-    if (json) {
-      printJson(result.value);
-    } else {
-      printTable(LOCAL_HEADERS, localRows(result.value));
-    }
-    return EXIT.ok;
-  }
-  const result = await run(listCells, {}, 'supervisor');
-  if (result.kind !== 'ok') {
-    return reportFailure(result);
-  }
-  if (json) {
-    printJson(result.value.rows);
-    return EXIT.ok;
-  }
-  printTable(
-    HEADERS,
-    result.value.rows.map((row) => [
-      row.cellId,
-      row.projectId,
-      row.status,
-      orDash(row.activeJobId),
-      heartbeatText(row.lastHeartbeatAt),
-    ]),
-  );
-  return EXIT.ok;
+  return runStopOne(id, options.force, options.json);
 };
 
 const runCreate = async (options: {
@@ -211,16 +229,20 @@ const runCreate = async (options: {
   name: string | undefined;
   count: string;
   lines: string | undefined;
-  factory: string | undefined;
   json: boolean;
 }): Promise<number> => {
-  const result = await runCellServer(createCells, {
-    repoRoot: resolve(options.repo),
-    factory: options.factory,
-    count: Number(options.count),
-    name: options.name,
-    allowedLines: options.lines?.split(',').map((line) => line.trim()),
-  });
+  const result = await run(
+    createLocalCells,
+    {
+      repoRoot: resolve(options.repo),
+      count: Number(options.count),
+      name: options.name,
+      baseName: cellNameOf(hostname()),
+      lines: linesOf(options.lines),
+      launcher: cellWorkerLauncherOf(IS_COMPILED, process.argv[1] ?? ''),
+    },
+    'supervisor',
+  );
   if (result.kind !== 'ok') {
     return reportFailure(result);
   }
@@ -233,7 +255,11 @@ const runCreate = async (options: {
 };
 
 const runRemove = async (slotId: string, json: boolean): Promise<number> => {
-  const result = await runCellServer(removeLocalCell, { slotId });
+  const result = await runWithoutToken(
+    removeLocalCell,
+    { id: slotId },
+    buildContext(),
+  );
   if (result.kind !== 'ok') {
     return reportFailure(result);
   }
@@ -275,28 +301,32 @@ const listCommand = defineCommand({
   meta: { name: 'list', description: 'Show registered Cells' },
   args: {
     json: { type: 'boolean', default: false },
+    here: {
+      type: 'boolean',
+      default: false,
+      description: 'Show only the local slots on this machine',
+    },
     local: {
       type: 'boolean',
       default: false,
-      description: 'Show local slots managed by the cell server',
+      description: 'Alias of --here',
     },
   },
   run: async ({ args }) => {
-    process.exitCode = await runList(args.json, args.local);
+    process.exitCode = await runList(args.json, args.here || args.local);
   },
 });
 
 const createCommand = defineCommand({
   meta: {
     name: 'create',
-    description: 'Start local Cell slots through the cell server',
+    description: 'Start local Cell slots on this machine',
   },
   args: {
     repo: { type: 'string', default: '.', description: 'Repository root' },
     name: { type: 'string', description: 'Slot name (count 1 only)' },
     count: { type: 'string', default: '1', description: 'Number of slots' },
     lines: { type: 'string', description: 'Comma-separated line names' },
-    factory: { type: 'string', description: 'Saved Factory target name' },
     json: { type: 'boolean', default: false },
   },
   run: async ({ args }) => {
@@ -308,7 +338,7 @@ const stopCommand = defineCommand({
   meta: {
     name: 'stop',
     description:
-      'Drain a Cell: local slots via the cell server, otherwise via the Factory',
+      'Stop a Cell: local slots directly, otherwise drain it via the Factory',
   },
   args: {
     slot: { type: 'positional', required: false, description: 'Cell id' },

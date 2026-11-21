@@ -20,6 +20,7 @@ export interface StartInput {
   cellName: string;
   logPath: string;
   joinToken: string | undefined;
+  lines: readonly string[] | undefined;
   signal: AbortSignal;
 }
 
@@ -67,10 +68,9 @@ export const startCell = async (
     ports,
     joinPath(input.repoRoot, REPO_CONFIG_PATH),
   );
-  const allowedLines = await lineNamesOf(
-    ports,
-    joinPath(input.repoRoot, LINES_DIR),
-  );
+  const allowedLines = (
+    await lineNamesOf(ports, joinPath(input.repoRoot, LINES_DIR))
+  ).filter((name) => input.lines === undefined || input.lines.includes(name));
   if (allowedLines.length === 0) {
     throw new ArgumentError(`no line files in ${LINES_DIR}`);
   }

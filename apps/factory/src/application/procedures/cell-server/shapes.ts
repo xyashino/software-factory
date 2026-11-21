@@ -25,29 +25,12 @@ export const FactorySchema = z.object({
   hasSupervisorToken: z.boolean(),
 });
 
-export const CellSchema = z.object({
-  slotId: z.string(),
-  name: z.string(),
-  projectId: z.string().nullable(),
-  cellId: z.string().nullable(),
-  factoryName: z.string(),
-  repoRoot: z.string(),
-  desiredState: z.string(),
-  runtimeStatus: z.string(),
-  pid: z.number().nullable(),
-  logPath: z.string().nullable(),
-  lastError: z.string().nullable(),
-});
-
 export const SettingsReplySchema = z.object({ settings: SettingsSchema });
 export const FactoryReplySchema = z.object({ factory: FactorySchema });
 export const FactoriesReplySchema = z.object({
   factories: z.array(FactorySchema),
 });
-export const CellReplySchema = z.object({ cell: CellSchema });
-export const CellsReplySchema = z.object({ cells: z.array(CellSchema) });
 
 export type SettingKey = (typeof SETTING_KEYS)[number];
 export type Settings = z.infer<typeof SettingsSchema>;
 export type Factory = z.infer<typeof FactorySchema>;
-export type Cell = z.infer<typeof CellSchema>;

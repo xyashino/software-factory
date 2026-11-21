@@ -11,6 +11,7 @@ import { createGitAdapter } from '../adapters/git/git';
 import { createPrAdapter } from '../adapters/git/gh';
 import { createCellServerAdapter } from '../adapters/http/cell-server.adapter';
 import { createServerClient } from '../adapters/http/server-client';
+import { createLocalSlotStore } from '../adapters/fs/local-slot-store';
 import { createLoopbackEndpoint } from '../adapters/operator-endpoint/loopback';
 import { createRunnerCatalog } from '../adapters/runners/catalog';
 import { createHeadlessRunner } from '../adapters/runners/headless';
@@ -27,6 +28,7 @@ import {
   DEFAULT_FACTORY_URL,
   GLOBAL_CONFIG_PATH,
   LEGACY_TOKEN_PATH,
+  LOCAL_CELLS_DIR,
   SUPERVISOR_TOKEN_PATH,
   cellLogPathOf,
   cellStatePathOf,
@@ -104,5 +106,6 @@ export const buildContext = (cellName?: string): Ports => {
       baseUrl: process.env.CELL_SERVER_URL ?? DEFAULT_CELL_SERVER_URL,
     }),
     cellServerPidFile: createPidFile('cell-server.pid'),
+    localSlots: createLocalSlotStore(LOCAL_CELLS_DIR),
   };
 };

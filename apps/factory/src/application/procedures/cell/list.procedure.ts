@@ -10,6 +10,7 @@ const ListSchema = z.object({}).strict();
 export interface CellRow {
   cellId: string;
   projectId: string;
+  name: string;
   status: string;
   activeJobId: string | null;
   lastHeartbeatAt: number | null;
@@ -30,6 +31,7 @@ export const listCells = define({ kind: 'supervisor' })(
     rows: reply.cells.map((cell) => ({
       cellId: cell.cellId,
       projectId: cell.projectId,
+      name: cell.name,
       status: cell.status,
       activeJobId: cell.activeJobId,
       lastHeartbeatAt: cell.lastHeartbeatAt,

@@ -1,9 +1,11 @@
 import type { Ports, Procedure } from '../../src/application/core/procedure';
+import type { DetachedSpec } from '../../src/application/ports/process.port';
 import type { Access } from '../../src/domain/access';
 import {
   EMPTY_CONNECTION_CONFIG,
   type ConnectionConfig,
 } from '../../src/domain/connection/connection-config';
+import type { LocalSlot } from '../../src/domain/cell/local-slot';
 
 export interface ServerCall {
   method: 'GET' | 'POST' | 'DELETE';
@@ -20,6 +22,8 @@ export interface FakeOptions {
   todos?: Record<string, string>;
   reply?: (call: ServerCall) => unknown;
   writeOutcome?: 'written' | 'refused';
+  slots?: LocalSlot[];
+  alivePids?: number[];
 }
 
 export interface FakePorts {
@@ -27,6 +31,10 @@ export interface FakePorts {
   calls: ServerCall[];
   writes: { dir: string; filename: string; force: boolean }[];
   savedConnections: ConnectionConfig[];
+  spawned: DetachedSpec[];
+  terminated: number[];
+  slots: LocalSlot[];
+  alivePids: Set<number>;
 }
 
 const unused = (): never => {
@@ -48,6 +56,11 @@ export const createFakePorts = (options: FakeOptions = {}): FakePorts => {
   const calls: ServerCall[] = [];
   const writes: FakePorts['writes'] = [];
   const savedConnections: ConnectionConfig[] = [];
+  const spawned: DetachedSpec[] = [];
+  const terminated: number[] = [];
+  const alivePids = new Set<number>(options.alivePids ?? []);
+  let slots: LocalSlot[] = options.slots ?? [];
+  let nextPid = 5000;
   let connectionConfig = options.connectionConfig ?? EMPTY_CONNECTION_CONFIG;
   const record = (call: ServerCall): unknown => {
     calls.push(call);
@@ -131,9 +144,17 @@ export const createFakePorts = (options: FakeOptions = {}): FakePorts => {
     pr: { publish: unused },
     process: {
       run: unused,
-      spawnDetached: unused,
-      isAlive: unused,
-      terminate: unused,
+      spawnDetached: async (spec) => {
+        spawned.push(spec);
+        nextPid += 1;
+        alivePids.add(nextPid);
+        return nextPid;
+      },
+      isAlive: (pid) => alivePids.has(pid),
+      terminate: (pid) => {
+        terminated.push(pid);
+        alivePids.delete(pid);
+      },
       probeUrl: unused,
     },
     pidFile: { read: unused, write: unused, acquire: unused, remove: unused },
@@ -143,7 +164,7 @@ export const createFakePorts = (options: FakeOptions = {}): FakePorts => {
       acquire: unused,
       remove: unused,
     },
-    clock: { now: unused, sleep: unused },
+    clock: { now: () => 1_000, sleep: async () => undefined },
     cellState: { read: async () => null, write: unused },
     cellServer: {
       health: unused,
@@ -158,8 +179,29 @@ export const createFakePorts = (options: FakeOptions = {}): FakePorts => {
       acquire: unused,
       remove: unused,
     },
+    localSlots: {
+      read: async () => slots,
+      write: async (next) => {
+        slots = next;
+      },
+      remove: async (slotId) => {
+        slots = slots.filter((slot) => slot.slotId !== slotId);
+      },
+      logPathOf: (slotId) => `/fake/cells/${slotId}.log`,
+    },
   };
-  return { ports, calls, writes, savedConnections };
+  return {
+    ports,
+    calls,
+    writes,
+    savedConnections,
+    spawned,
+    terminated,
+    get slots() {
+      return slots;
+    },
+    alivePids,
+  };
 };
 
 export const runProcedure = <I, O>(

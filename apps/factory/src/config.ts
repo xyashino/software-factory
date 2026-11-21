@@ -40,9 +40,11 @@ export const OPERATORS_DIR = '.factory/operators';
 export const WORKTREES_DIR = '.worktrees';
 export const PR_TEMPLATE_PATH = '.factory/templates/pr/body.md';
 export const CELLS_DIR = '.factory-local/cells';
+export const LOCAL_CELLS_DIR = join(DEFAULT_DATA_DIR, 'cells');
 export const LEGACY_CELL_STATE_PATH = '.factory-local/cell.json';
 export const SUPERVISOR_TOKEN_PATH = '.factory-local/supervisor.token';
 export const JOIN_TOKEN_ENV = 'FACTORY_JOIN_TOKEN';
+export const CELL_LINES_ENV = 'CELL_LINES';
 export const DEFAULT_TODO_DIR = 'todos';
 export const DEFAULT_WEB_HOST = '127.0.0.1';
 export const DEFAULT_WEB_PORT = 4321;
@@ -84,6 +86,11 @@ export const serverArgsOf = (compiled: boolean): string[] =>
 
 export const cellServerArgsOf = (compiled: boolean): string[] =>
   compiled ? [CELL_SERVER_MARKER] : [CELL_SERVER_ENTRY];
+
+export const cellWorkerLauncherOf = (
+  compiled: boolean,
+  cliEntry: string,
+): string[] => (compiled ? [] : [resolve(cliEntry)]);
 
 export const webArgsOf = (compiled: boolean, entry: string): string[] =>
   compiled ? [WEB_MARKER, entry] : [entry];
