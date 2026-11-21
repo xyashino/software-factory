@@ -8,9 +8,11 @@ import {
   createFakeFactoryClient,
   createFakeRepoInspector,
   createFakeSupervisor,
+  createFakeWorkspace,
   type FakeFactoryClient,
   type FakeRepoInspector,
   type FakeSupervisor,
+  type FakeWorkspace,
 } from './fakes';
 import { createFakeClock, type FakeClock } from './test-transport';
 
@@ -24,6 +26,7 @@ export type TestContext = {
   supervisor: FakeSupervisor;
   factoryClient: FakeFactoryClient;
   repoInspector: FakeRepoInspector;
+  workspace: FakeWorkspace;
 };
 
 export const createTestApp = (): TestContext => {
@@ -33,6 +36,7 @@ export const createTestApp = (): TestContext => {
   const supervisor = createFakeSupervisor();
   const factoryClient = createFakeFactoryClient();
   const repoInspector = createFakeRepoInspector();
+  const workspace = createFakeWorkspace();
   const app = createApp(
     createTransport({
       db,
@@ -41,6 +45,7 @@ export const createTestApp = (): TestContext => {
       supervisor,
       factoryClient,
       repoInspector,
+      workspace,
     }),
   );
   return {
@@ -51,6 +56,7 @@ export const createTestApp = (): TestContext => {
     supervisor,
     factoryClient,
     repoInspector,
+    workspace,
   };
 };
 

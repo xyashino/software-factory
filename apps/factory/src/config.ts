@@ -41,6 +41,7 @@ export const WORKTREES_DIR = '.worktrees';
 export const PR_TEMPLATE_PATH = '.factory/templates/pr/body.md';
 export const CELLS_DIR = '.factory-local/cells';
 export const LOCAL_CELLS_DIR = join(DEFAULT_DATA_DIR, 'cells');
+export const WORKSPACES_DIR = join(DEFAULT_DATA_DIR, 'workspaces');
 export const LEGACY_CELL_STATE_PATH = '.factory-local/cell.json';
 export const SUPERVISOR_TOKEN_PATH = '.factory-local/supervisor.token';
 export const JOIN_TOKEN_ENV = 'FACTORY_JOIN_TOKEN';

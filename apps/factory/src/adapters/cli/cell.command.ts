@@ -34,6 +34,7 @@ import {
 } from '../fs/cell-slot';
 import { cellServerCommand } from './cell-server.command';
 import { printJson, printLine, printTable, reportFailure } from './output';
+import { promptSelect } from './prompt-select';
 
 const HEADERS = [
   'id',
@@ -90,7 +91,13 @@ const claimSlot = async (
   }
 };
 
-const runStart = async (requested: string | undefined): Promise<number> => {
+const chooserOf = (): typeof promptSelect | undefined =>
+  process.stdin.isTTY ? promptSelect : undefined;
+
+const runStart = async (
+  requested: string | undefined,
+  project: string | undefined,
+): Promise<number> => {
   const cwd = process.cwd();
   const claim = await settle(() => claimSlot(cwd, requested));
   if (claim.kind === 'failed') {
@@ -112,6 +119,8 @@ const runStart = async (requested: string | undefined): Promise<number> => {
         logPath: resolve(cwd, cellLogPathOf(name)),
         joinToken: process.env[JOIN_TOKEN_ENV],
         lines: linesOf(process.env[CELL_LINES_ENV]),
+        project,
+        choose: chooserOf(),
         signal: controller.signal,
       }),
     );
@@ -226,6 +235,7 @@ const runStop = async (
 
 const runCreate = async (options: {
   repo: string;
+  project: string | undefined;
   name: string | undefined;
   count: string;
   lines: string | undefined;
@@ -235,6 +245,8 @@ const runCreate = async (options: {
     createLocalCells,
     {
       repoRoot: resolve(options.repo),
+      project: options.project,
+      choose: chooserOf(),
       count: Number(options.count),
       name: options.name,
       baseName: cellNameOf(hostname()),
@@ -291,9 +303,17 @@ const startCommand = defineCommand({
       description:
         'Cell name, unique while running (default: hostname, then hostname-2, ...)',
     },
+    project: {
+      type: 'string',
+      description:
+        'Factory project id, required outside a repo with .factory/config.json',
+    },
   },
   run: async ({ args }) => {
-    process.exitCode = await runStart(args.name ?? process.env.CELL_NAME);
+    process.exitCode = await runStart(
+      args.name ?? process.env.CELL_NAME,
+      args.project,
+    );
   },
 });
 
@@ -324,6 +344,11 @@ const createCommand = defineCommand({
   },
   args: {
     repo: { type: 'string', default: '.', description: 'Repository root' },
+    project: {
+      type: 'string',
+      description:
+        'Factory project id, required outside a repo with .factory/config.json',
+    },
     name: { type: 'string', description: 'Slot name (count 1 only)' },
     count: { type: 'string', default: '1', description: 'Number of slots' },
     lines: { type: 'string', description: 'Comma-separated line names' },

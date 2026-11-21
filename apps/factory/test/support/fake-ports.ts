@@ -7,6 +7,22 @@ import {
 } from '../../src/domain/connection/connection-config';
 import type { LocalSlot } from '../../src/domain/cell/local-slot';
 
+export const PROJECTS_ROUTE = '/api/v1/projects';
+
+export const PROJECTS_REPLY = {
+  code: 200,
+  projects: [
+    {
+      projectId: 'software-factory',
+      repoUrl: 'https://example.test/software-factory.git',
+      defaultBaseBranch: 'main',
+      maxRunning: 5,
+      createdAt: 1,
+      updatedAt: 1,
+    },
+  ],
+};
+
 export interface ServerCall {
   method: 'GET' | 'POST' | 'DELETE';
   route: string;
@@ -140,6 +156,8 @@ export const createFakePorts = (options: FakeOptions = {}): FakePorts => {
       push: unused,
       headSha: unused,
       status: unused,
+      clone: unused,
+      originUrl: unused,
     },
     pr: { publish: unused },
     process: {

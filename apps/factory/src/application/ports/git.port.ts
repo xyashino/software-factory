@@ -13,4 +13,6 @@ export interface GitPort {
   push(cwd: string, branch: string): Promise<void>;
   headSha(cwd: string): Promise<string>;
   status(cwd: string): Promise<string>;
+  clone(url: string, dest: string): Promise<void>;
+  originUrl(cwd: string): Promise<string | null>;
 }

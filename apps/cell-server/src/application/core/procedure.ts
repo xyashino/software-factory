@@ -4,6 +4,7 @@ import type { EventBusPort } from '../ports/event-bus.port';
 import type { FactoryClientPort } from '../ports/factory-client.port';
 import type { RepoInspectorPort } from '../ports/repo-inspector.port';
 import type { SupervisorPort } from '../ports/supervisor.port';
+import type { WorkspacePort } from '../ports/workspace.port';
 import { withZodSchema } from './schema/zod';
 import type {
   ContractInput,
@@ -19,6 +20,7 @@ export type TransportContext = {
   supervisor: SupervisorPort;
   factoryClient: FactoryClientPort;
   repoInspector: RepoInspectorPort;
+  workspace: WorkspacePort;
   signal: AbortSignal;
   remoteAddress: string | null;
 };

@@ -64,6 +64,30 @@ const joinCredentialOf = (
   );
 };
 
+const provisionWorkspace = async (
+  ctx: TransportContext,
+  projectId: string | undefined,
+  factoryRef: string | undefined,
+): Promise<string> => {
+  if (projectId === undefined)
+    throw new BadRequest('repoRoot or projectId is required');
+  const factory = resolveFactory(ctx, factoryRef);
+  if (factory.supervisorToken === null)
+    throw new BadRequest(
+      `factory ${factory.name} has no supervisor token to list projects`,
+    );
+  const projects = await ctx.factoryClient.listProjects(
+    factory.url,
+    factory.supervisorToken,
+  );
+  const project = projects.find((item) => item.projectId === projectId);
+  if (project === undefined)
+    throw new NotFound(
+      `project ${projectId} is not registered on factory ${factory.name}\nfix: sf project add ${projectId} --repo <url>`,
+    );
+  return ctx.workspace.ensure(project.projectId, project.repoUrl);
+};
+
 const takenNames = (ctx: TransportContext, repoRoot: string): string[] =>
   ctx.db
     .select({ name: cells.name })
@@ -77,10 +101,17 @@ export const createCellsProcedure = publicProcedure(createCellsContract)(async (
   ctx,
 ) => {
   const body = input.body;
-  const repo = ctx.repoInspector.inspect(body.repoRoot);
+  const repoRoot =
+    body.repoRoot ??
+    (await provisionWorkspace(ctx, body.projectId, body.factory));
+  const repo = ctx.repoInspector.inspect(repoRoot);
   if (repo === null)
     throw new BadRequest(
       'repoRoot needs .factory/config.json and .factory/lines/*.yml',
+    );
+  if (body.projectId !== undefined && repo.projectId !== body.projectId)
+    throw new Conflict(
+      `repo at ${repoRoot} belongs to project ${repo.projectId}, not ${body.projectId}`,
     );
   const settings = readSettings(ctx.db);
   const count = body.count ?? 1;
@@ -89,7 +120,7 @@ export const createCellsProcedure = publicProcedure(createCellsContract)(async (
     throw new BadRequest('name is only allowed with count 1');
 
   const factory = resolveFactory(ctx, body.factory);
-  const taken = takenNames(ctx, body.repoRoot);
+  const taken = takenNames(ctx, repoRoot);
   if (body.name !== undefined && taken.includes(body.name))
     throw new Conflict(`cell name already exists: ${body.name}`);
   const names =
@@ -119,7 +150,7 @@ export const createCellsProcedure = publicProcedure(createCellsContract)(async (
           cellId: cell.cellId,
           factoryId: factory.factoryId,
           projectId: repo.projectId,
-          repoRoot: body.repoRoot,
+          repoRoot,
           name: cell.name,
           desiredState: 'stopped',
           runtimeStatus: 'stopped',
