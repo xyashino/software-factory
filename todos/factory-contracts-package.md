@@ -27,7 +27,7 @@ Factory API contracts live in `apps/factory/src/contracts/`. sf keeps hand copie
 - **Dependencies**:
   - `zod: catalog:`
   - `@repo/zod-contract-kit: workspace:*`
-  - dev: same toolchain set as `packages/operator-protocol`
+  - dev: same toolchain set as `packages/prompt`
 - Out: sf, web-demo, domain logic (state machines, transitions), server runtime.
 
 ---

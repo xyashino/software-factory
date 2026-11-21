@@ -32,7 +32,7 @@ Create `@repo/zod-contract-kit`: contract types, shared field schemas, `errorRes
 
 ## 🛠️ Implementation Plan
 
-1. **Initialize File Structure** (mirror `packages/operator-protocol`):
+1. **Initialize File Structure** (mirror `packages/prompt`):
    - `package.json` (`@repo/zod-contract-kit`, `exports {"./*": "./src/*.ts"}`, scripts `check-types`, `lint`, `test` = `bun --bun vitest run`), `tsconfig.json`, `eslint.config.mjs`, `vitest.config.ts`.
    - `src/types.ts`, `src/http-status.ts`, `src/reply.ts`, `src/fields.ts`, tests in `src/__tests__/`.
 2. **Core Logic & Behavior**:

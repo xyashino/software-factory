@@ -1,6 +1,13 @@
 import { z } from 'zod';
 
-const tokenField = { token: z.string().trim().min(1) };
+const TOKEN_MIN_CHARS = 16;
+const TOKEN_MAX_CHARS = 256;
+const REASON_MAX_CHARS = 8192;
+const TEXT_MAX_CHARS = 65536;
+
+const tokenField = {
+  token: z.string().trim().min(TOKEN_MIN_CHARS).max(TOKEN_MAX_CHARS),
+};
 
 export const doneVerb = z
   .object({ verb: z.literal('done'), ...tokenField })
@@ -10,7 +17,7 @@ export const verdictVerb = z
   .object({
     verb: z.literal('verdict'),
     outcome: z.enum(['pass', 'fail']),
-    feedback: z.string().min(1).optional(),
+    feedback: z.string().min(1).max(TEXT_MAX_CHARS).optional(),
     ...tokenField,
   })
   .strict()
@@ -27,8 +34,8 @@ export const verdictVerb = z
 export const blockVerb = z
   .object({
     verb: z.literal('block'),
-    reason: z.string().trim().min(1),
-    handover: z.string().min(1),
+    reason: z.string().trim().min(1).max(REASON_MAX_CHARS),
+    handover: z.string().min(1).max(TEXT_MAX_CHARS),
     ...tokenField,
   })
   .strict();
@@ -54,7 +61,7 @@ export const incidentVerb = z
     step: z.string().trim().min(1).optional(),
     diagnosis: z.string().trim().min(1),
     outcome: z.string().trim().min(1),
-    report: z.string().min(1),
+    report: z.string().min(1).max(TEXT_MAX_CHARS),
     ...tokenField,
   })
   .strict()

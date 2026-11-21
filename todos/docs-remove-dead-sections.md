@@ -22,7 +22,7 @@ Remove content that is dead, stale or a copy of code. Keep design only.
 
 ## 📦 Specification / Scope
 
-- **Target**: `apps/factory/docs`, `apps/web-demo/docs`, `apps/operator/docs`
+- **Target**: `apps/factory/docs`, `apps/web-demo/docs`, `apps/sf/docs`
 - **Classification**: `Universal Tooling`
 - **Dependencies**: none
 - Out: moving files, style-rule sections (separate todo).

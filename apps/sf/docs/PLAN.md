@@ -34,7 +34,7 @@ sf web stop && sf server stop
 
 Source of truth for server behaviour: [`apps/factory/docs/PLAN.md`](../../factory/docs/PLAN.md),
 especially §3 (Cell lifecycle) and §11 (agent reporting). Operator CLI spec:
-[`apps/operator/docs/PLAN.md`](../../operator/docs/PLAN.md).
+[`OPERATOR.md`](./OPERATOR.md).
 
 ## 1. Command tree
 
@@ -236,7 +236,7 @@ Open:
 
 1. **Drain.** The server needs a `leave` or `drain` endpoint, so `cell stop` can hand over a Job
    cleanly instead of waiting for the lease to expire.
-2. **Operator verbs.** The verbs in `apps/operator/docs/PLAN.md` §3 are the target. `answer`, `context`
+2. **Operator verbs.** The verbs in [`OPERATOR.md`](./OPERATOR.md) §3 are the target. `answer`, `context`
    and `tell` stay open, as in factory-server §11.6.
 
 ## 9. Not in this plan

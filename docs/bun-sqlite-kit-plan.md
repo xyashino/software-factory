@@ -15,7 +15,7 @@ One shared package for opening and configuring SQLite via Bun + drizzle. Factory
 
 - Name `@repo/bun-sqlite-kit`, dir `packages/bun-sqlite-kit`. Not agnostic: only SQLite on Bun used, no second driver to design against.
 - No `db-cell` / `db-factory` packages: one consumer each, schema + migrations + `drizzle.config.ts` belong to app.
-- No barrel. Subpath exports `"./*": "./src/*.ts"` like `packages/operator-protocol`.
+- No barrel. Subpath exports `"./*": "./src/*.ts"` like `packages/prompt`.
 - Kit owns plumbing only. No schema, no migration files, no queries, no repositories.
 - `MigrationMeta` comes from public `drizzle-orm/migrator`. Only `dialect` and `session` are private drizzle fields.
 
