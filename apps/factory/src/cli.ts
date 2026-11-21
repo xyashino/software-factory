@@ -9,10 +9,11 @@ import { orderCommand } from './adapters/cli/order.command';
 import { printError } from './adapters/cli/output';
 import { projectCommand } from './adapters/cli/project.command';
 import { queueCommand } from './adapters/cli/queue.command';
-import { resolveCommand } from './adapters/cli/resolve-command';
+import { argsOf, resolveCommand } from './adapters/cli/resolve-command';
 import { serverCommand } from './adapters/cli/server.command';
 import { todosCommand } from './adapters/cli/todos.command';
 import { tokenCommand } from './adapters/cli/token.command';
+import { assertValidArgs } from './adapters/cli/validate';
 import { watchCommand } from './adapters/cli/watch.command';
 import { webCommand } from './adapters/cli/web.command';
 import { Refused, Unreachable } from './application/core/errors';
@@ -73,11 +74,12 @@ try {
       await showUsage(main);
       process.exit(EXIT.ok);
     }
-    const { cmd, parent, unknownToken } = resolveCommand(main, rawArgs);
+    const { cmd, parent, unknownToken, rest } = resolveCommand(main, rawArgs);
     if (helpRequested(rawArgs) && !unknownToken) {
       await showUsage(cmd, parent);
       process.exit(EXIT.ok);
     }
+    assertValidArgs(argsOf(cmd), rest, !unknownToken);
     await runCommand(main, { rawArgs });
     process.exit(process.exitCode ?? EXIT.ok);
   }

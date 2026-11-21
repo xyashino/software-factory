@@ -1,4 +1,4 @@
-import type { CommandDef } from 'citty';
+import type { ArgsDef, CommandDef } from 'citty';
 
 type Command = CommandDef;
 
@@ -6,6 +6,7 @@ export type ResolvedCommand = {
   cmd: Command;
   parent: Command | undefined;
   unknownToken: boolean;
+  rest: string[];
 };
 
 const subCommandsOf = (cmd: Command): Record<string, Command> | undefined => {
@@ -56,12 +57,27 @@ const takesValue = (cmd: Command, flag: string): boolean => {
   );
 };
 
+export const argsOf = (cmd: Command): ArgsDef => {
+  const { args } = cmd;
+  if (typeof args !== 'object' || args === null || args instanceof Promise) {
+    return {};
+  }
+  return args;
+};
+
 export const resolveCommand = (
   main: Command,
   rawArgs: readonly string[],
 ): ResolvedCommand => {
   let cmd = main;
   let parent: Command | undefined;
+  let restFrom = 0;
+  const result = (unknownToken: boolean): ResolvedCommand => ({
+    cmd,
+    parent,
+    unknownToken,
+    rest: rawArgs.slice(restFrom),
+  });
   for (let index = 0; index < rawArgs.length; index += 1) {
     const token = rawArgs[index] ?? '';
     if (token === '--') {
@@ -77,9 +93,10 @@ export const resolveCommand = (
     if (sub !== undefined) {
       parent = cmd;
       cmd = sub;
+      restFrom = index + 1;
       continue;
     }
-    return { cmd, parent, unknownToken: subCommandsOf(cmd) !== undefined };
+    return result(subCommandsOf(cmd) !== undefined);
   }
-  return { cmd, parent, unknownToken: false };
+  return result(false);
 };

@@ -1,6 +1,6 @@
 import { defineCommand } from 'citty';
 import { buildContext } from '../../bootstrap/context';
-import { type RunResult, runWithoutToken } from '../../bootstrap/run';
+import { runWithoutToken } from '../../bootstrap/run';
 import {
   DEFAULT_DATA_DIR,
   DEFAULT_DB_PATH,
@@ -11,8 +11,8 @@ import {
 import { startServer } from '../../application/procedures/server/start.procedure';
 import { stopServer } from '../../application/procedures/server/stop.procedure';
 import { createServerToken } from '../../application/procedures/server/token-create.procedure';
-import { EXIT } from '../../domain/exit-codes';
-import { printError, printJson, printLine } from './output';
+import { printJson, printLine, reportFailure } from './output';
+import { parsePort } from './validate';
 
 interface Paths {
   dataDir: string;
@@ -24,16 +24,12 @@ const pathsFromEnv = (): Paths => ({
   dbPath: process.env.FACTORY_DB_PATH ?? DEFAULT_DB_PATH,
 });
 
-const reportFailure = <O>(result: RunResult<O>): number => {
-  if (result.kind === 'ok') {
-    return EXIT.ok;
-  }
-  printError(result.message);
-  return result.exitCode;
-};
-
 const runStart = async (json: boolean): Promise<number> => {
   const paths = pathsFromEnv();
+  const port = parsePort(
+    process.env.FACTORY_PORT ?? DEFAULT_PORT,
+    'FACTORY_PORT',
+  );
   const result = await runWithoutToken(
     startServer,
     {
@@ -41,10 +37,10 @@ const runStart = async (json: boolean): Promise<number> => {
       serverArgs: serverArgsOf(IS_COMPILED),
       dataDir: paths.dataDir,
       dbPath: paths.dbPath,
-      port: Number(process.env.FACTORY_PORT ?? DEFAULT_PORT),
+      port,
       host: process.env.FACTORY_HOST || undefined,
     },
-    buildContext(),
+    () => buildContext(),
   );
   if (result.kind === 'ok') {
     if (json) {
@@ -60,7 +56,7 @@ const runStop = async (json: boolean): Promise<number> => {
   const result = await runWithoutToken(
     stopServer,
     { dataDir: pathsFromEnv().dataDir },
-    buildContext(),
+    () => buildContext(),
   );
   if (result.kind === 'ok') {
     if (json) {
@@ -89,7 +85,7 @@ const runTokenCreate = async (
       dbPath: pathsFromEnv().dbPath,
       save,
     },
-    buildContext(),
+    () => buildContext(),
   );
   if (result.kind === 'ok' && result.value.token !== null) {
     if (json) {

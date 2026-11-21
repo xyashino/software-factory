@@ -51,22 +51,6 @@ const requiredText = (value: string | undefined, flag: string): string => {
   return value;
 };
 
-// citty drops unknown flags silently; a verb must refuse them before sending.
-const assertKnownFlags = (
-  rawArgs: readonly string[],
-  flags: readonly string[],
-): void => {
-  for (const arg of rawArgs) {
-    if (!arg.startsWith('--')) {
-      continue;
-    }
-    const name = arg.slice(2).split('=')[0];
-    if (!flags.some((flag) => flag === name)) {
-      throw new ArgumentError(`unknown option ${arg}`);
-    }
-  }
-};
-
 const isIncidentAction = (value: string): value is IncidentAction =>
   INCIDENT_ACTIONS.some((action) => action === value);
 
@@ -127,16 +111,10 @@ const failure = (error: unknown): number => {
   return EXIT.unreachable;
 };
 
-// Syntax and file checks run before the environment is read, so a bad flag
-// never needs the Cell's variables and nothing is sent when a check fails.
-const runVerb = async (
-  rawArgs: readonly string[],
-  flags: readonly string[],
-  prepare: Prepare,
-  show: Show,
-): Promise<number> => {
+// File checks run before the environment is read, so a bad flag never needs
+// the Cell's variables and nothing is sent when a check fails.
+const runVerb = async (prepare: Prepare, show: Show): Promise<number> => {
   try {
-    assertKnownFlags(rawArgs, flags);
     const send = prepare();
     const client = clientFromEnv();
     return report(await send(client), show);
@@ -147,15 +125,15 @@ const runVerb = async (
 
 const doneCommand = defineCommand({
   meta: { name: 'done', description: 'Station finished' },
-  run: async ({ rawArgs }) => {
-    process.exitCode = await runVerb(rawArgs, [], () => sendDone, 'ok');
+  run: async () => {
+    process.exitCode = await runVerb(() => sendDone, 'ok');
   },
 });
 
 const verdictPassCommand = defineCommand({
   meta: { name: 'pass', description: 'Review station passes' },
-  run: async ({ rawArgs }) => {
-    process.exitCode = await runVerb(rawArgs, [], () => sendVerdictPass, 'ok');
+  run: async () => {
+    process.exitCode = await runVerb(() => sendVerdictPass, 'ok');
   },
 });
 
@@ -167,19 +145,14 @@ const verdictFailCommand = defineCommand({
       description: 'Feedback file, - reads stdin',
     },
   },
-  run: async ({ args, rawArgs }) => {
-    process.exitCode = await runVerb(
-      rawArgs,
-      ['feedback'],
-      () => {
-        const feedback = readOperatorFile(
-          requiredText(args.feedback, '--feedback'),
-          '--feedback',
-        );
-        return (client) => sendVerdictFail(client, feedback);
-      },
-      'ok',
-    );
+  run: async ({ args }) => {
+    process.exitCode = await runVerb(() => {
+      const feedback = readOperatorFile(
+        requiredText(args.feedback, '--feedback'),
+        '--feedback',
+      );
+      return (client) => sendVerdictFail(client, feedback);
+    }, 'ok');
   },
 });
 
@@ -194,27 +167,22 @@ const blockCommand = defineCommand({
     reason: { type: 'string', description: 'Why the job stops' },
     handover: { type: 'string', description: 'Handover file, - reads stdin' },
   },
-  run: async ({ args, rawArgs }) => {
-    process.exitCode = await runVerb(
-      rawArgs,
-      ['reason', 'handover'],
-      () => {
-        const reason = requiredText(args.reason, '--reason');
-        const handover = readOperatorFile(
-          requiredText(args.handover, '--handover'),
-          '--handover',
-        );
-        return (client) => sendBlock(client, reason, handover);
-      },
-      'ok',
-    );
+  run: async ({ args }) => {
+    process.exitCode = await runVerb(() => {
+      const reason = requiredText(args.reason, '--reason');
+      const handover = readOperatorFile(
+        requiredText(args.handover, '--handover'),
+        '--handover',
+      );
+      return (client) => sendBlock(client, reason, handover);
+    }, 'ok');
   },
 });
 
 const contextCommand = defineCommand({
   meta: { name: 'context', description: "Print the job's inputs and outputs" },
-  run: async ({ rawArgs }) => {
-    process.exitCode = await runVerb(rawArgs, [], () => sendContext, 'body');
+  run: async () => {
+    process.exitCode = await runVerb(() => sendContext, 'body');
   },
 });
 
@@ -223,8 +191,8 @@ const readCommand = defineCommand({
     name: 'read',
     description: 'Print the incident, step states and logs',
   },
-  run: async ({ rawArgs }) => {
-    process.exitCode = await runVerb(rawArgs, [], () => sendRead, 'body');
+  run: async () => {
+    process.exitCode = await runVerb(() => sendRead, 'body');
   },
 });
 
@@ -240,16 +208,11 @@ const incidentCommand = defineCommand({
     outcome: { type: 'string', description: 'What was tried' },
     report: { type: 'string', description: 'Report file, - reads stdin' },
   },
-  run: async ({ args, rawArgs }) => {
-    process.exitCode = await runVerb(
-      rawArgs,
-      ['action', 'step', 'diagnosis', 'outcome', 'report'],
-      () => {
-        const fields = incidentFields(args);
-        return (client) => sendIncident(client, fields);
-      },
-      'ok',
-    );
+  run: async ({ args }) => {
+    process.exitCode = await runVerb(() => {
+      const fields = incidentFields(args);
+      return (client) => sendIncident(client, fields);
+    }, 'ok');
   },
 });
 

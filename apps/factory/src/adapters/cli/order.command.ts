@@ -11,6 +11,7 @@ import {
 } from '../../application/procedures/work-orders/transition.procedure';
 import { EXIT } from '../../domain/exit-codes';
 import { printJson, printLine, printTable, reportFailure } from './output';
+import { requiredPositional } from './validate';
 
 type TransitionAction = (typeof TRANSITION_ACTIONS)[number];
 
@@ -94,9 +95,15 @@ const showCommand = defineCommand({
     description:
       'Show one work order with steps, jobs and incidents. Needs scope supervisor:read',
   },
-  args: { json: { type: 'boolean', default: false } },
+  args: {
+    id: { type: 'positional', required: true, description: 'Work order id' },
+    json: { type: 'boolean', default: false },
+  },
   run: async ({ args }) => {
-    process.exitCode = await runShow(String(args._[0] ?? ''), args.json);
+    process.exitCode = await runShow(
+      requiredPositional(args.id, 'work order id'),
+      args.json,
+    );
   },
 });
 
@@ -104,6 +111,7 @@ const transitionCommand = (action: TransitionAction, description: string) =>
   defineCommand({
     meta: { name: action, description },
     args: {
+      id: { type: 'positional', required: true, description: 'Work order id' },
       json: { type: 'boolean', default: false },
       yes: {
         type: 'boolean',
@@ -112,10 +120,11 @@ const transitionCommand = (action: TransitionAction, description: string) =>
       },
     },
     run: async ({ args }) => {
-      process.exitCode = await runTransition(action, String(args._[0] ?? ''), {
-        yes: args.yes,
-        json: args.json,
-      });
+      process.exitCode = await runTransition(
+        action,
+        requiredPositional(args.id, 'work order id'),
+        { yes: args.yes, json: args.json },
+      );
     },
   });
 

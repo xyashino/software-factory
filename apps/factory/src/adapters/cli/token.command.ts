@@ -1,16 +1,7 @@
 import { defineCommand } from 'citty';
-import { type RunResult, run } from '../../bootstrap/run';
+import { run } from '../../bootstrap/run';
 import { createToken } from '../../application/procedures/tokens/token-create.procedure';
-import { EXIT } from '../../domain/exit-codes';
-import { printError, printJson, printLine } from './output';
-
-const reportFailure = <O>(result: RunResult<O>): number => {
-  if (result.kind === 'ok') {
-    return EXIT.ok;
-  }
-  printError(result.message);
-  return result.exitCode;
-};
+import { printJson, printLine, reportFailure } from './output';
 
 const runCreate = async (
   input: { kind: string; name: string },
