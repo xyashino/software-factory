@@ -45,8 +45,10 @@ const enrolledCellName =
     return session.cellId;
   };
 
+const pathLookup = process.platform === 'win32' ? 'where' : 'which';
+
 const binaryOnPath = async (binary: string): Promise<boolean> =>
-  (await processPort.run('which', [binary], process.cwd())).exitCode === 0;
+  (await processPort.run(pathLookup, [binary], process.cwd())).exitCode === 0;
 
 export const buildContext = (cellName?: string): Ports => {
   const name = cellNameOf(cellName ?? hostname());

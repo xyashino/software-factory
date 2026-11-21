@@ -21,6 +21,7 @@ const collect = (
     const child = spawn(command, args, {
       cwd,
       env: { ...process.env, ...env },
+      windowsHide: true,
     });
     let stdout = '';
     let stderr = '';
@@ -52,6 +53,7 @@ export const createProcessAdapter = (): ProcessPort => ({
       detached: true,
       stdio: ['ignore', logFd, logFd],
       env: { ...process.env, ...env },
+      windowsHide: true,
     });
     child.on('error', () => undefined);
     child.unref();
