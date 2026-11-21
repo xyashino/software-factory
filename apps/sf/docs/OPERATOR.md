@@ -33,7 +33,7 @@ It does three things:
 3. Send one request to `$FACTORY_OPERATOR_URL` with the token from `$FACTORY_CYCLE_TOKEN`, and print the reply.
 
 It never decides what happens next. The Cell checks local facts, and the server decides every state
-change (factory-server §11.3).
+change (`apps/factory` PLAN §11.3).
 
 ## 2. Callers
 
@@ -101,7 +101,7 @@ File contents go in the request body as UTF-8 text. The CLI never sends a file p
 
 ## 7. Not in the CLI
 
-- `answer` for the Supervisor. The Supervisor uses `factory answer`, if that exists (factory-server §11.6).
+- `answer` for the Supervisor. The Supervisor uses `sf answer`, if that exists (`apps/factory` PLAN §11.6).
 - `ask` and `tell`. Not in the current design (§8).
 - `--change`. The Mechanic does not edit files or config (decision `20261113-230000`).
 - `resume`, `nudge`, `repair`. Not in the new core.
@@ -109,7 +109,7 @@ File contents go in the request body as UTF-8 text. The CLI never sends a file p
 
 ## 8. Open
 
-These are decided in factory-server §11.6. The CLI follows that decision.
+These are decided in `apps/factory` PLAN §11.6. The CLI follows that decision.
 
 1. `answer` (Mechanic): no question exists in the new core. Included only if a question entity is added.
 2. `context` (Operator): keep or drop.

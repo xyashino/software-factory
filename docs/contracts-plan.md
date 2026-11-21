@@ -17,6 +17,8 @@ Stop hand-copying wire contracts. One source per API, imported by server and cli
 - web-demo imports zero contracts. Own `lib/factory-schemas.ts` (13 `z.object`) = likely third copy. Not compared.
 - sf `operator.contract.ts` is the only operator contract. The orphaned operator app and protocol package were retired by `operator-retire-app-and-protocol`.
 - `apps/sf/test/unit/contracts/drift.test.ts` already compares sf contract field names with factory contracts (crude). Goes away with the sf copies.
+- No rule forbids the `factory-` prefix in package names. The only match was the operator boundaries test (`FORBIDDEN_PACKAGE`, bans operator imports of `@repo/factory*`), removed with `apps/operator`. Names `@repo/factory-contracts` and `@repo/cell-contracts` stand.
+- `apps/cell/eslint.config.mjs` `LEGACY` rule bans cell imports of `@repo/factory-*` and `@repo/cell-*`. `@repo/cell-contracts` matches it, so the `cell-contracts-package` step must change that rule.
 
 ## Decisions
 

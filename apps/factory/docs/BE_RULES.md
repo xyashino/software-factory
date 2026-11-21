@@ -16,7 +16,7 @@ Source of truth for code shape, layering, transactions, and testing in `apps/fac
 
 ---
 
-## 2. Directory Layout & Layering (`omino-api` Shape)
+## 2. Directory Layout & Layering
 
 ```text
 apps/factory/

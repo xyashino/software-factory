@@ -1,6 +1,6 @@
-# `factory` CLI — plan
+# `sf` CLI — plan
 
-One binary: `sf`. It runs alongside the old `factory` CLI (`apps/cli`) and serves the Supervisor (you),
+One binary: `sf`. It is the only CLI (the old `factory` CLI, `apps/cli`, was removed) and serves the Supervisor (you),
 the Cell daemon (each machine that runs work), and the Operator and Mechanic verbs (agents inside a job).
 
 ## 0. Install and quickstart
@@ -69,7 +69,7 @@ Open verbs (`answer`, `context` for the Operator, `tell`) follow the decisions i
 
 ## 2. Layout
 
-The layout follows `.tmp/omino-api` and `apps/factory/docs/BE_RULES.md`:
+The layout follows `apps/factory/docs/BE_RULES.md`:
 `domain -> contracts -> application (ports + procedures) -> adapters -> bootstrap -> tests`.
 Each command is a procedure. Adapters are the only code that does I/O.
 
@@ -111,9 +111,9 @@ apps/sf/
 │   │   ├── http/                   # server client (supervisor token, cell token), retries via commandId
 │   │   ├── fs/                     # .factory-local/cell.json (0600), pid file, .cell/ files
 │   │   ├── git/                    # worktree, checkpoint commit, push
-│   │   ├── process/                # spawn factory-server, spawn runner
+│   │   ├── process/                # spawn factory server, spawn runner
 │   │   ├── runners/                # claude, codex, cursor, antigravity, opencode (one file each)
-│   │   ├── operator-endpoint/      # loopback listener per job (Hono, like factory-server)
+│   │   ├── operator-endpoint/      # loopback listener per job (Hono, like `apps/factory`)
 │   │   └── memory/                 # clock, in-memory waiters for tests
 │   └── bootstrap/
 │       ├── context.ts              # builds the port set for supervisor, cell, or operator mode
@@ -124,7 +124,7 @@ apps/sf/
     └── unit/                       # domain and contracts only
 ```
 
-Rules carried over from factory-server:
+Rules carried over from `apps/factory`:
 
 - `domain/` imports nothing from `application/`, `adapters/` or `bootstrap/`.
 - `application/procedures/` imports ports, never adapters. An adapter is picked in `bootstrap/`.
@@ -132,8 +132,7 @@ Rules carried over from factory-server:
   the same files, or a shared package later (§7).
 - The operator verbs have their own procedures. `sf operator` never reads `.factory/` or the
   supervisor token.
-- No barrel files. `.tmp/omino-api` has `index.ts` re-exports; this repo's rules forbid them, so
-  imports name the concrete file.
+- No barrel files. Imports name the concrete file (`coding-no-barrel-export`).
 
 ## 3. How a Cell works under the hood
 
@@ -179,7 +178,7 @@ Job or let the lease expire. See §8.
 ## 4. Operator endpoint
 
 - The Cell opens `127.0.0.1` on an OS-assigned port when a Job starts, and closes it when the Job
-  ends (factory-server §11.2).
+  ends (`apps/factory` PLAN §11.2).
 - The token is random, per Job, held only in Cell memory.
 - The Cell maps the token to `{ jobId, role, incidentId?, epoch }`, and refuses verbs the role
   cannot use.
@@ -211,8 +210,7 @@ Job or let the lease expire. See §8.
 
 The server, the CLI, the Cell and the operator all parse the same request and reply shapes. During
 implementation, each app keeps its own copy of the schemas. A later step moves them into one shared
-package (name not yet chosen, and it must not start with `factory-`, because the operator boundary
-rule forbids that prefix). The server's BE_RULES need an explicit exception when that happens.
+package. Names and scope are in [`docs/contracts-plan.md`](../../../docs/contracts-plan.md): `@repo/factory-contracts` and `@repo/cell-contracts`. No naming rule forbids the `factory-` prefix. The server's BE_RULES need an explicit exception when that happens.
 
 ## 8. Decisions and open questions
 
@@ -220,13 +218,16 @@ Decided:
 
 1. **Name.** `sf cell`. Not `call`.
 2. **One binary, named `sf`.**
-   The Cell daemon lives in `apps/sf/src/cell`. The legacy Cell app was removed. This
-   reverses the earlier plan to keep it separate.
+   The Cell daemon (`sf cell start`) lives in `apps/sf/src/application/procedures/cell/`, with helpers
+   in `apps/sf/src/cell/`. `apps/cell` (`@repo/cell`) is not legacy: it is the live cell-server, run by
+   `sf cell server start|stop|status` as a detached process (`CELL_SERVER_URL`, default
+   `http://127.0.0.1:7071`). sf calls its HTTP API for projects, factories, settings and cells. It stays
+   a separate app; the Cell daemon is in sf.
 3. **Coexistence.** The new approach is built alongside the current implementation, which stays until
    cut-over. The new one is cleaner, so nothing is migrated from the old code.
 4. **`server stop` does not stop Cells.** It stops only the server process. Cells keep running and
    retry their requests with the same `commandId`. If the server stays down past the self-fence window
-   (45 s), a Cell aborts its runner, and its Job is lost once the lease ends (factory-server §3.7).
+   (45 s), a Cell aborts its runner, and its Job is lost once the lease ends (`apps/factory` PLAN §3.7).
    `sf server start` brings the server back, and Cells resume.
 5. **Cell token storage.** Not important for now. Keep the simplest option that works.
 6. **Runners in v2.0.** All five ship: `claude`, `codex`, `cursor`, `antigravity`, `opencode`. They match
@@ -237,7 +238,7 @@ Open:
 1. **Drain.** The server needs a `leave` or `drain` endpoint, so `cell stop` can hand over a Job
    cleanly instead of waiting for the lease to expire.
 2. **Operator verbs.** The verbs in [`OPERATOR.md`](./OPERATOR.md) §3 are the target. `answer`, `context`
-   and `tell` stay open, as in factory-server §11.6.
+   and `tell` stay open, as in `apps/factory` PLAN §11.6.
 
 ## 9. Not in this plan
 
