@@ -46,10 +46,11 @@ const isPermissionError = (error: unknown): boolean =>
 
 export const createProcessAdapter = (): ProcessPort => ({
   run: collect,
-  spawnDetached: async ({ command, args, env, logPath }: DetachedSpec) => {
+  spawnDetached: async ({ command, args, env, logPath, cwd }: DetachedSpec) => {
     mkdirSync(dirname(logPath), { recursive: true });
     const logFd = openSync(logPath, 'a');
     const child = spawn(command, args, {
+      cwd,
       detached: true,
       stdio: ['ignore', logFd, logFd],
       env: { ...process.env, ...env },

@@ -8,11 +8,16 @@ import { createSystemClock } from './adapters/memory/system-clock.adapter';
 import { createRepoInspector } from './adapters/fs/repo-inspector.adapter';
 import { createCellSupervisor } from './adapters/supervisor/cell-supervisor.adapter';
 import { createTransport } from './bootstrap/transport';
-import { DEFAULT_DB_PATH, readMachineSettings } from './config';
+import {
+  DEFAULT_DB_PATH,
+  readMachineSettings,
+  readSharedTarget,
+} from './config';
 import { createDb } from './db/client';
 import { cells } from './db/schema/cells';
 import { reconcileRunningSlots } from './application/procedures/cells/reconcile-running-slots';
 import { readSettings } from './application/procedures/cells/cell-views';
+import { syncSharedFactory } from './application/procedures/factories/sync-shared-factory';
 
 const { host, port } = readMachineSettings(process.env);
 mkdirSync(dirname(DEFAULT_DB_PATH), { recursive: true });
@@ -20,8 +25,11 @@ const db = createDb(DEFAULT_DB_PATH);
 const clock = createSystemClock();
 const eventBus = createEventBus();
 
+const shared = readSharedTarget(process.env);
+if (shared !== null) syncSharedFactory(db, clock.now(), shared);
+
 const supervisor = createCellSupervisor({
-  command: ['factory-cell'],
+  command: ['sf', 'cell', 'start'],
   restartBackoffMs: () => readSettings(db).restart_backoff_ms,
   onStatus: (slotId, report) => {
     db.update(cells)

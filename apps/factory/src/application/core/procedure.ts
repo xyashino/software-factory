@@ -6,6 +6,7 @@ import type { ConnectionStorePort } from '../ports/connection-store.port';
 import type { ClockPort } from '../ports/clock.port';
 import type { FsPort } from '../ports/fs.port';
 import type { GitPort } from '../ports/git.port';
+import type { LocalSlotStorePort } from '../ports/local-slot-store.port';
 import type { OperatorEndpointPort } from '../ports/operator-endpoint.port';
 import type { PidFilePort } from '../ports/pid-file.port';
 import type { PrPort } from '../ports/pr.port';
@@ -38,6 +39,7 @@ export interface Ports {
   cellState: CellStatePort;
   cellServer: CellServerPort;
   cellServerPidFile: PidFilePort;
+  localSlots: LocalSlotStorePort;
 }
 
 export type Context<A extends Access> = Ports & {

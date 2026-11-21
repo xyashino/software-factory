@@ -79,7 +79,7 @@ describe('cell stop routing', () => {
     expect(result.stderr).toContain('No token stored');
   });
 
-  it('reports the local cell server as unreachable for --all', async () => {
+  it('needs a Factory token for --all without contacting a cell server', async () => {
     // Arrange
     const env = await sandboxEnv();
 
@@ -87,7 +87,7 @@ describe('cell stop routing', () => {
     const result = runSf(env, ['cell', 'stop', '--all']);
 
     // Assert
-    expect(result.status).toBe(EXIT.unreachable);
-    expect(result.stderr).toContain('cannot reach cell server');
+    expect(result.status).toBe(EXIT.refused);
+    expect(result.stderr).toContain('No token stored');
   });
 });

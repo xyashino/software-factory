@@ -630,6 +630,7 @@ describe('cell lifecycle', () => {
       {
         cellId: CELL_ID,
         projectId: PROJECT,
+        name: 'dev-box',
         status: 'busy',
         activeJobId: 'job-1',
         lastHeartbeatAt: 0,

@@ -9,6 +9,7 @@ export interface DetachedSpec {
   args: readonly string[];
   env: Readonly<Record<string, string>>;
   logPath: string;
+  cwd?: string;
 }
 
 export interface ProcessPort {
