@@ -3,6 +3,7 @@ import type { OperatorEndpointPort } from '../../application/ports/operator-endp
 const HOST = '127.0.0.1';
 const OK_STATUS = 200;
 const BAD_REQUEST = 400;
+const MAX_BODY_BYTES = 1024 * 1024;
 
 type Server = ReturnType<typeof Bun.serve>;
 
@@ -27,6 +28,7 @@ export const createLoopbackEndpoint = (): OperatorEndpointPort => {
       server = Bun.serve({
         hostname: HOST,
         port: 0,
+        maxRequestBodySize: MAX_BODY_BYTES,
         fetch: async (request) => {
           const body = await readJson(request);
           if (body === null) {

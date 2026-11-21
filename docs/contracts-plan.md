@@ -15,7 +15,7 @@ Stop hand-copying wire contracts. One source per API, imported by server and cli
 - sf calls cell-server (`/api/v1/factories`, etc.) with raw route strings via `ctx.cellServer`. No cell contracts used. So cell-contracts for sf = new typing, not dedupe.
 - sf `mapReply` returns unvalidated body, maps error status to `Refused` / `Unauthorized` / `Unreachable`. Does not validate against contract.
 - web-demo imports zero contracts. Own `lib/factory-schemas.ts` (13 `z.object`) = likely third copy. Not compared.
-- sf `operator.contract.ts` drifted from `packages/operator-protocol` (token trim min 1 vs 16-256, no `.strict()`). App + package are orphaned; retired by `operator-retire-app-and-protocol`.
+- sf `operator.contract.ts` is the only operator contract. The orphaned operator app and protocol package were retired by `operator-retire-app-and-protocol`.
 - `apps/sf/test/unit/contracts/drift.test.ts` already compares sf contract field names with factory contracts (crude). Goes away with the sf copies.
 
 ## Decisions
@@ -23,7 +23,7 @@ Stop hand-copying wire contracts. One source per API, imported by server and cli
 - `@repo/zod-contract-kit`: pure. Contract types, shared field schemas, `errorResponse`, `parseReply`. No Hono, no `BaseError`, no server runtime. `withZodSchema` stays server-side (goes to future `server-kit`).
 - `@repo/factory-contracts`, `@repo/cell-contracts`: schemas + enums only. Server is source of truth; on drift sf follows factory.
 - Wire enums move from app domain into contracts package. Domain imports from package (right direction). Domain logic stays in app.
-- Naming `*-contracts`. `operator-protocol` is retired, not renamed.
+- Naming `*-contracts`. The old operator protocol package is retired, not renamed.
 - No barrel. Subpath exports `"./*": "./src/*.ts"`.
 - Contracts carry no method/path. Route-typed client = out of scope.
 

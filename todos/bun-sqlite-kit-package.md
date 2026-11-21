@@ -32,7 +32,7 @@ Cell and factory each hold copy of `src/db/client.ts` + `columns.ts`. Copies hid
 
 ## 🛠️ Implementation Plan
 
-1. **Initialize File Structure** (mirror `packages/operator-protocol`):
+1. **Initialize File Structure** (mirror `packages/prompt`):
    - `package.json`: `name @repo/bun-sqlite-kit`, `type module`, `private`, `exports {"./*": "./src/*.ts"}`, scripts `check-types`, `lint`, `test` = `bun --bun vitest run`.
    - `tsconfig.json`, `eslint.config.mjs`, `vitest.config.ts`.
    - `src/create-db.ts`, `src/immediate-tx.ts`, `src/columns.ts`, `src/embedded-migrations.ts`.

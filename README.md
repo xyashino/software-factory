@@ -18,10 +18,8 @@ The system is modeled as an automated software factory:
 | `apps/factory`               | Factory HTTP server and storage                                 |
 | `apps/cell`                  | Cell server: runs Cell slots for a Factory                      |
 | `apps/web-demo`              | Web UI served by `sf web start`                                 |
-| `apps/operator`              | Operator verbs used by agents inside a Cell                     |
 | `packages/nitpick`           | Rules/skills engine; generates `.agents/` from `.nitpick/`      |
 | `packages/prompt`            | Prompt building blocks                                          |
-| `packages/operator-protocol` | Shared operator protocol contracts                              |
 | `packages/eslint-config`     | Shared ESLint config                                            |
 | `packages/typescript-config` | Shared tsconfig presets                                         |
 

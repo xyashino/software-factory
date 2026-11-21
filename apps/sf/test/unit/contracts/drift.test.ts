@@ -6,10 +6,7 @@ const SERVER_CONTRACTS = new URL(
   '../../../../factory/src/contracts/',
   import.meta.url,
 );
-const OPERATOR_DOCS = new URL(
-  '../../../../operator/docs/PLAN.md',
-  import.meta.url,
-);
+const OPERATOR_DOCS = new URL('../../../docs/OPERATOR.md', import.meta.url);
 
 const PAIRS: ReadonlyArray<readonly [string, URL]> = [
   ['common.ts', new URL('common.ts', SERVER_CONTRACTS)],

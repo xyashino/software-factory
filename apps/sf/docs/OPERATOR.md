@@ -1,9 +1,26 @@
-# `operator` CLI — plan
+# `sf operator` — plan
 
-Source of truth for the protocol, the endpoint, the verbs' effects and the server rules:
+Source of truth for the endpoint, the verbs' effects and the server rules:
 [`apps/factory/docs/PLAN.md` §11](../../factory/docs/PLAN.md) and
 [`apps/factory/docs/BE_RULES.md`](../../factory/docs/BE_RULES.md). This file describes
-only the CLI.
+only the client. Wire shapes: `apps/sf/src/contracts/operator.contract.ts`.
+
+## Glossary
+
+| Term         | Meaning                                                                      |
+| :----------- | :--------------------------------------------------------------------------- |
+| **Operator** | The LLM agent running one station of a Line                                  |
+| **Mechanic** | The LLM agent that triages an incident when a Line is blocked                |
+| **Cell**     | The process on a machine that runs the agent and talks to the factory server |
+| **Job**      | One unit of work the server hands to a Cell: a station, or a Mechanic run    |
+| **Incident** | An Andon: a block the normal retries could not fix                           |
+
+## Client rules
+
+- Thin client: parse, read named files, send one request, print the reply. No Line rules.
+- Localhost only: talks only to `$FACTORY_OPERATOR_URL`.
+- Never write the token to disk or logs; never print it.
+- One request per invocation, no retry. The agent decides whether to send again.
 
 ## 1. Role
 
@@ -102,5 +119,4 @@ These are decided in factory-server §11.6. The CLI follows that decision.
 
 ## 9. Name
 
-The binary is `operator` in these docs. The package is `apps/operator-cli` today, under the name
-`factory-operator`. The rename is a separate change.
+The command is `sf operator`. Renaming `FACTORY_CYCLE_TOKEN` / `FACTORY_OPERATOR_URL` is a separate change.
