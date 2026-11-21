@@ -15,6 +15,7 @@ const IS_WINDOWS = process.platform === 'win32';
 interface HeadlessRun {
   exit: Promise<number>;
   stop: () => Promise<boolean>;
+  pid: number | undefined;
 }
 
 const spawnHeadless = (spec: RunSpec): HeadlessRun => {
@@ -63,6 +64,7 @@ const spawnHeadless = (spec: RunSpec): HeadlessRun => {
       signalTree('SIGKILL');
       return exitWithin(KILL_AFTER_MS);
     },
+    pid,
   };
 };
 
@@ -74,8 +76,9 @@ export const createHeadlessRunner = (): RunnerPort => {
     start: async (spec: RunSpec): Promise<RunHandle> => {
       started += 1;
       const id = `headless-${started}`;
-      runs.set(id, spawnHeadless(spec));
-      return { id };
+      const run = spawnHeadless(spec);
+      runs.set(id, run);
+      return { id, pid: run.pid };
     },
     abort: async (handle) => runs.get(handle.id)?.stop() ?? true,
     wait: async (handle): Promise<RunOutcome> => {
