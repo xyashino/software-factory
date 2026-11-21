@@ -1,6 +1,6 @@
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 import type { PlanId, ProjectId } from '../../domain/common/brand';
-import { timestamps } from '../columns';
+import { timestamps } from '@repo/bun-sqlite-kit/columns';
 import { projects } from './projects';
 
 export const PLAN_STATES = [
