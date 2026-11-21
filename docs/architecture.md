@@ -34,3 +34,5 @@ flowchart LR
 ```
 
 Factory is the single control point. Cells are replaceable and can disconnect without losing finished work.
+
+Cell internals, which code runs a Cell, and the cell-server slot model: [cell.md](./cell.md).
