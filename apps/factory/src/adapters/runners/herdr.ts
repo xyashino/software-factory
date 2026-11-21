@@ -239,13 +239,14 @@ export const createHerdrRunner = (
           spec.cwd,
         );
       }
+      const workspaceId = await cellWorkspace(spec.cwd);
       const created = await herdrOk(
         processPort,
         [
           'tab',
           'create',
           '--workspace',
-          await cellWorkspace(spec.cwd),
+          workspaceId,
           '--cwd',
           spec.cwd,
           '--label',
@@ -266,7 +267,7 @@ export const createHerdrRunner = (
       );
       runs.set(id, { cwd: spec.cwd, tabId, exitFile, aborted: false });
       previous = { runId: id, tabId };
-      return { id };
+      return { id, pane: { workspaceId, tabId, paneId } };
     },
     abort: async (handle) => {
       const run = runs.get(handle.id);
