@@ -5,8 +5,8 @@ import { describe, expect, it } from 'vitest';
 const OPERATOR_SRC = join(import.meta.dirname, '..');
 
 const FORBIDDEN_PATH =
-  /\/(apps\/(cell|factory-server|server|worker|operator-cli)|packages\/factory-)[^/]*\//;
-const FORBIDDEN_PACKAGE = /^@repo\/factory-/;
+  /\/(apps\/(cell|factory|sf|web-demo|server|worker|operator-cli)|packages\/factory-)[^/]*\//;
+const FORBIDDEN_PACKAGE = /^@repo\/(factory|sf|cell|web-demo)(-|\/|$)/;
 
 const IMPORT_SPECIFIER =
   /(?:\bfrom\s+|\bimport\s*\(\s*|\bimport\s+)['"]([^'"]+)['"]/g;

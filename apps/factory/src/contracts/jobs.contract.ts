@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { errorReplies, idParams } from './common';
+import { idParams } from './common';
 import { claimedJobDto } from './cells.contract';
 
 const commandSchema = z.object({
@@ -7,51 +7,42 @@ const commandSchema = z.object({
   epoch: z.number().int(),
 });
 
-const startSchema = commandSchema
-  .extend({
-    action: z.literal('start'),
-    lineSnapshot: z.unknown().optional(),
-  })
-  .strict();
+const startSchema = commandSchema.extend({
+  action: z.literal('start'),
+  lineSnapshot: z.unknown().optional(),
+});
 
-const completeSchema = commandSchema
-  .extend({
-    action: z.literal('complete'),
-    producedFiles: z.array(z.string().trim().min(1)),
-    commitSha: z.string().trim().min(1).optional(),
-  })
-  .strict();
+const completeSchema = commandSchema.extend({
+  action: z.literal('complete'),
+  producedFiles: z.array(z.string().trim().min(1)),
+  commitSha: z.string().trim().min(1).optional(),
+  output: z.record(z.string(), z.unknown()).optional(),
+});
 
-const failSchema = commandSchema
-  .extend({
-    action: z.literal('fail'),
-    detail: z.string().trim().min(1),
-  })
-  .strict();
+const failSchema = commandSchema.extend({
+  action: z.literal('fail'),
+  detail: z.string().trim().min(1),
+  output: z.record(z.string(), z.unknown()).optional(),
+  workspaceFailed: z.boolean().optional(),
+});
 
-const blockSchema = commandSchema
-  .extend({
-    action: z.literal('block'),
-    detail: z.string().trim().min(1),
-    handoverFile: z.string().trim().min(1).optional(),
-  })
-  .strict();
+const blockSchema = commandSchema.extend({
+  action: z.literal('block'),
+  detail: z.string().trim().min(1),
+  handoverFile: z.string().trim().min(1).optional(),
+});
 
-const worktreeMissingSchema = commandSchema
-  .extend({
-    action: z.literal('worktree_missing'),
-    missingStepId: z.string().trim().min(1),
-    missingFiles: z.array(z.string().trim().min(1)),
-  })
-  .strict();
+const worktreeMissingSchema = commandSchema.extend({
+  action: z.literal('worktree_missing'),
+  missingStepId: z.string().trim().min(1),
+  missingFiles: z.array(z.string().trim().min(1)),
+});
 
-const lineUnavailableSchema = commandSchema
-  .extend({
-    action: z.literal('line_unavailable'),
-    lineName: z.string().trim().min(1),
-    detail: z.string().trim().min(1),
-  })
-  .strict();
+const lineUnavailableSchema = commandSchema.extend({
+  action: z.literal('line_unavailable'),
+  lineName: z.string().trim().min(1),
+  detail: z.string().trim().min(1),
+});
 
 const startedDto = z.object({
   code: z.literal(200),
@@ -114,6 +105,5 @@ export const transitionJobContract = {
       resetDto,
       lineUnavailableDto,
     ]),
-    ...errorReplies,
   },
 };

@@ -1,111 +1,106 @@
-import type { Access } from '../../domain/access';
-import type { Connection } from '../../domain/connection/connection-config';
-import type { CellServerPort } from '../ports/cell-server.port';
-import type { CellStatePort } from '../ports/cell-state.port';
-import type { ConnectionStorePort } from '../ports/connection-store.port';
+import type { Db } from '../../db/client';
+import type { AuthPort, Principal, TokenScope } from '../ports/auth.port';
+import type { ClaimWaitersPort } from '../ports/claim-waiters.port';
 import type { ClockPort } from '../ports/clock.port';
-import type { FsPort } from '../ports/fs.port';
-import type { GitPort } from '../ports/git.port';
-import type { LocalSlotStorePort } from '../ports/local-slot-store.port';
-import type { OperatorEndpointPort } from '../ports/operator-endpoint.port';
-import type { PidFilePort } from '../ports/pid-file.port';
-import type { PrPort } from '../ports/pr.port';
-import type { ProcessPort } from '../ports/process.port';
-import type { RunnerCatalogPort } from '../ports/runner-catalog.port';
-import type { RunnerPort } from '../ports/runner.port';
-import type { ServerPort } from '../ports/server.port';
-import type { TodoFilesPort } from '../ports/todo-files.port';
-import type { TokenStorePort } from '../ports/token-store.port';
-import { ArgumentError, Refused } from './errors';
+import type { TransitionBusPort } from '../ports/transition-bus.port';
+import { Forbidden, Unauthorized } from './error-handling';
+import { withZodSchema } from './schema/zod';
+import type {
+  ContractInput,
+  ProcedureResponse,
+  RawInput,
+  ZodContract,
+} from './schema/types';
 
-const REFUSAL_MESSAGE = 'Token cannot run this procedure';
-
-export interface Ports {
-  server: ServerPort;
-  connection: Connection;
-  connections: ConnectionStorePort;
-  fs: FsPort;
-  todoFiles: TodoFilesPort;
-  tokens: TokenStorePort;
-  operator: OperatorEndpointPort;
-  runner: RunnerPort;
-  runners: RunnerCatalogPort;
-  git: GitPort;
-  pr: PrPort;
-  process: ProcessPort;
-  pidFile: PidFilePort;
-  webPidFile: PidFilePort;
+export type TransportContext = {
+  db: Db;
   clock: ClockPort;
-  cellState: CellStatePort;
-  cellServer: CellServerPort;
-  cellServerPidFile: PidFilePort;
-  localSlots: LocalSlotStorePort;
-}
-
-export type Context<A extends Access> = Ports & {
-  token: Access;
-  principal: A;
+  auth: AuthPort;
+  claimWaiters: ClaimWaitersPort;
+  transitionBus: TransitionBusPort;
+  bearer: string | null;
+  signal: AbortSignal;
+  remoteAddress: string | null;
 };
 
-export interface Schema<I> {
-  parse(raw: unknown): I;
-}
+export type AuthenticatedContext = TransportContext & { principal: Principal };
 
-export interface Procedure<I, O> {
-  access: Access;
-  parse: (raw: unknown) => I;
-  execute: (raw: unknown, ctx: Context<Access>) => Promise<O>;
-}
+export type Access =
+  | { kind: 'public' }
+  | { kind: 'all'; scopes: readonly TokenScope[] }
+  | { kind: 'any'; scopes: readonly TokenScope[] };
 
-const isAllowed = (access: Access, token: Access): boolean => {
-  switch (access.kind) {
-    case 'supervisor':
-      return token.kind === 'supervisor';
-    case 'cell':
-      return token.kind === 'cell' && token.cellId === access.cellId;
-    case 'job':
-      return (
-        token.kind === 'job' &&
-        token.jobId === access.jobId &&
-        token.role === access.role &&
-        token.epoch === access.epoch
-      );
-  }
+export type ContextFor<A extends Access> = A extends { kind: 'public' }
+  ? TransportContext
+  : AuthenticatedContext;
+
+export type Procedure = {
+  readonly access: Access;
+  readonly contract: ZodContract;
+  execute(raw: RawInput, ctx: TransportContext): Promise<ProcedureResponse>;
 };
 
-const authorize = (access: Access, token: Access): void => {
-  if (!isAllowed(access, token)) {
-    throw new Refused(REFUSAL_MESSAGE);
-  }
+const authenticate = async (ctx: TransportContext): Promise<Principal> => {
+  const principal =
+    ctx.bearer === null ? null : await ctx.auth.verify(ctx.bearer);
+  if (principal === null)
+    throw new Unauthorized('Missing or invalid bearer token');
+  return principal;
 };
 
-const checkAccess = <A extends Access>(
+const checkAccess = async <A extends Access>(
   access: A,
-  ctx: Context<Access>,
-): Context<A> => {
-  authorize(access, ctx.token);
-  return { ...ctx, principal: ctx.token as A };
-};
-
-const parseWith = <I>(schema: Schema<I>, raw: unknown): I => {
-  try {
-    return schema.parse(raw);
-  } catch (error) {
-    throw new ArgumentError(
-      error instanceof Error ? error.message : 'invalid argument',
-    );
+  ctx: TransportContext,
+): Promise<ContextFor<A>> => {
+  if (access.kind === 'public') return ctx as ContextFor<A>;
+  const principal = await authenticate(ctx);
+  switch (access.kind) {
+    case 'all': {
+      const missing = access.scopes.filter(
+        (scope) => !principal.scopes.includes(scope),
+      );
+      if (missing.length > 0)
+        throw new Forbidden(`Token lacks scope: ${missing.join(', ')}`);
+      break;
+    }
+    case 'any':
+      if (!access.scopes.some((scope) => principal.scopes.includes(scope)))
+        throw new Forbidden(`Token needs one of: ${access.scopes.join(', ')}`);
+      break;
+    default: {
+      const exhausted: never = access;
+      return exhausted;
+    }
   }
+  return { ...ctx, principal } as ContextFor<A>;
 };
 
-export const define =
+const define =
   <A extends Access>(access: A) =>
-  <I>(schema: Schema<I>) =>
-  <O>(handler: (input: I, ctx: Context<A>) => Promise<O>): Procedure<I, O> => ({
-    access,
-    parse: (raw) => parseWith(schema, raw),
-    execute: async (raw, ctx) => {
-      const scoped = checkAccess(access, ctx);
-      const input = parseWith(schema, raw);
-      return handler(input, scoped);
-    },
-  });
+  <C extends ZodContract>(contract: C) =>
+  <R extends ProcedureResponse>(
+    handler: (input: ContractInput<C>, ctx: ContextFor<A>) => R | Promise<R>,
+  ): Procedure => {
+    const run = withZodSchema(contract)(handler);
+    return {
+      access,
+      contract,
+      execute: async (raw, ctx) => run(raw, await checkAccess(access, ctx)),
+    };
+  };
+
+export const authorize = (
+  ctx: TransportContext,
+  requiredScopes: readonly TokenScope[],
+): Promise<AuthenticatedContext> =>
+  checkAccess({ kind: 'all', scopes: requiredScopes }, ctx);
+
+export const publicProcedure = define({ kind: 'public' });
+
+export const scopedProcedure = (requiredScopes: readonly TokenScope[]) =>
+  define({ kind: 'all', scopes: requiredScopes });
+
+export const anyScopedProcedure = (allowedScopes: readonly TokenScope[]) =>
+  define({ kind: 'any', scopes: allowedScopes });
+
+export const authenticatedProcedure = scopedProcedure([]);

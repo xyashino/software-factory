@@ -1,8 +1,8 @@
 # `operator` CLI — plan
 
 Source of truth for the protocol, the endpoint, the verbs' effects and the server rules:
-[`apps/factory-server/docs/PLAN.md` §11](../../factory-server/docs/PLAN.md) and
-[`apps/factory-server/docs/BE_RULES.md`](../../factory-server/docs/BE_RULES.md). This file describes
+[`apps/factory/docs/PLAN.md` §11](../../factory/docs/PLAN.md) and
+[`apps/factory/docs/BE_RULES.md`](../../factory/docs/BE_RULES.md). This file describes
 only the CLI.
 
 ## 1. Role

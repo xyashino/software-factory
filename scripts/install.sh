@@ -8,8 +8,8 @@ DESTDIR="${DESTDIR:-}"
 BIN_DIR="${DESTDIR}${PREFIX}/bin"
 WEB_DIR="${SF_WEB_DIR:-${DESTDIR}${PREFIX}/share/sf/web}"
 
-SF_BIN="$ROOT/apps/factory/dist/sf"
-WEB_DIST="$ROOT/apps/factory-web-demo/dist"
+SF_BIN="$ROOT/apps/sf/dist/sf"
+WEB_DIST="$ROOT/apps/web-demo/dist"
 WEB_DEPS="$WEB_DIST/sf-deps/node_modules"
 
 require() {

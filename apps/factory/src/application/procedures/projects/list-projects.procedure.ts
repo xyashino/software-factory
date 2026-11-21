@@ -1,25 +1,15 @@
-import { z } from 'zod';
-import {
+import { asc } from 'drizzle-orm';
+import { projects } from '../../../db/schema/projects';
+import { listProjectsContract } from '../../../contracts/projects.contract';
+import { scopedProcedure } from '../../core/procedure';
+
+export const listProjectsProcedure = scopedProcedure(['supervisor:read'])(
   listProjectsContract,
-  projectDto,
-} from '../../../contracts/projects.contract';
-import { define } from '../../core/procedure';
-import { readSecret } from '../../core/repo-access';
-
-const PROJECTS_ROUTE = '/api/v1/projects';
-
-const ListSchema = z.object({}).strict();
-
-export interface ListProjectsResult {
-  projects: z.infer<typeof projectDto>[];
-}
-
-export const listProjects = define({ kind: 'supervisor' })(
-  ListSchema,
-)<ListProjectsResult>(async (_input, ctx) => {
-  const secret = await readSecret(ctx);
-  const reply = listProjectsContract.out[200].parse(
-    await ctx.server.get(PROJECTS_ROUTE, {}, secret),
-  );
-  return { projects: reply.projects };
-});
+)((_input, ctx) => ({
+  code: 200 as const,
+  projects: ctx.db
+    .select()
+    .from(projects)
+    .orderBy(asc(projects.projectId))
+    .all(),
+}));
