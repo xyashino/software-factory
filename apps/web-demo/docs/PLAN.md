@@ -22,7 +22,7 @@ It is a demo UI: one process, read pages, two write actions, no client JavaScrip
 
 ## 2. Auto-registration on localhost
 
-Goal: when the demo runs on the same machine as factory-server, it registers itself without the Supervisor copying a token by hand, the way a Cell enrolls.
+Goal: when the demo runs on the same machine as the factory server (`apps/factory`), it registers itself without the Supervisor copying a token by hand, the way a Cell enrolls.
 
 Rules:
 
@@ -79,7 +79,7 @@ apps/web-demo/
 | 01 | [`web-demo-01-skeleton`](../../../todos/web-demo-01-skeleton.md): package, Astro SSR, config, layout, `/` placeholder | none |
 | 02 | [`web-demo-02-factory-client`](../../../todos/web-demo-02-factory-client.md): schemas and HTTP client with bearer token | 01 |
 | 03 | [`web-demo-03-read-pages`](../../../todos/web-demo-03-read-pages.md): overview, cells preview, work orders, incidents | 02 |
-| 04 | [`web-demo-04-server-web-join`](../../../todos/web-demo-04-server-web-join.md): factory-server join secret and `POST /api/v1/tokens/join` for the web client | 03 |
+| 04 | [`web-demo-04-server-web-join`](../../../todos/web-demo-04-server-web-join.md): factory server join secret and `POST /api/v1/tokens/join` for the web client | 03 |
 | 05 | [`web-demo-05-auto-register`](../../../todos/web-demo-05-auto-register.md): loopback auto-registration and session rotation | 04 |
 | 06 | [`web-demo-06-write-actions`](../../../todos/web-demo-06-write-actions.md): resume and delete-as-cancel with Origin guard | 05 |
 

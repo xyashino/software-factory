@@ -1,11 +1,11 @@
 # `@repo/factory` — Implementation Todos (`todo/`)
 
-Source: [PLAN.md](./PLAN.md) + [BE_RULES.md](./BE_RULES.md) + `.tmp/omino-api` reference architecture.
+Source: [PLAN.md](./PLAN.md) + [BE_RULES.md](./BE_RULES.md).
 Rule: `BE_RULES.md` always wins on code shape (`domain -> db -> contracts -> application (ports + procedures) -> adapters/hono -> bootstrap -> tests`).
 
 ## Vertical Slices
 
-**Scope Boundary (Backend Only)**: Every todo below is strictly scoped to `apps/factory/`. Do **not** connect or modify `apps/cell`, `apps/sf`, or any `packages/factory-*` packages. All Cell/Supervisor flows (`enroll`, `hello`, `claims`, `heartbeats`, `jobs/:id/transitions`, `incidents/:id/resolve`) are verified via black-box HTTP requests (`app.request()`) inside `apps/factory/test/`.
+**Scope Boundary (Backend Only)**: Every todo below is strictly scoped to `apps/factory/`. Do **not** connect or modify `apps/cell`, `apps/sf`, or any other workspace package. All Cell/Supervisor flows (`enroll`, `hello`, `claims`, `heartbeats`, `jobs/:id/transitions`, `incidents/:id/resolve`) are verified via black-box HTTP requests (`app.request()`) inside `apps/factory/test/`.
 
 Each step is a self-contained vertical slice that migrates, typechecks, lints, and passes unit + black-box tests independently.
 
