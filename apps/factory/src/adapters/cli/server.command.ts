@@ -4,6 +4,7 @@ import { runWithoutToken } from '../../bootstrap/run';
 import {
   DEFAULT_DATA_DIR,
   DEFAULT_DB_PATH,
+  DEFAULT_FACTORY_URL,
   DEFAULT_PORT,
   IS_COMPILED,
   serverArgsOf,
@@ -35,6 +36,7 @@ const runStart = async (json: boolean): Promise<number> => {
     {
       bin: process.execPath,
       serverArgs: serverArgsOf(IS_COMPILED),
+      cwd: process.cwd(),
       dataDir: paths.dataDir,
       dbPath: paths.dbPath,
       port,
@@ -75,6 +77,7 @@ const runStop = async (json: boolean): Promise<number> => {
 const runTokenCreate = async (
   json: boolean,
   save: boolean,
+  global: boolean,
 ): Promise<number> => {
   const result = await runWithoutToken(
     createServerToken,
@@ -83,7 +86,9 @@ const runTokenCreate = async (
       serverArgs: serverArgsOf(IS_COMPILED),
       cwd: process.cwd(),
       dbPath: pathsFromEnv().dbPath,
+      url: process.env.FACTORY_URL ?? DEFAULT_FACTORY_URL,
       save,
+      global,
     },
     () => buildContext(),
   );
@@ -133,11 +138,21 @@ export const serverCommand = defineCommand({
             save: {
               type: 'boolean',
               default: false,
-              description: 'Write the token to the token file, print nothing',
+              description:
+                'Save the token (repo token file, or global config outside a factory repo), print nothing',
+            },
+            global: {
+              type: 'boolean',
+              default: false,
+              description: 'Save the token in the global config',
             },
           },
           run: async ({ args }) => {
-            process.exitCode = await runTokenCreate(args.json, args.save);
+            process.exitCode = await runTokenCreate(
+              args.json,
+              args.save,
+              args.global,
+            );
           },
         }),
       },

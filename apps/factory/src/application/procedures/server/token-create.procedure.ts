@@ -1,6 +1,8 @@
 import { z } from 'zod';
-import { Refused } from '../../core/errors';
+import { REPO_CONFIG_PATH } from '../../../config';
+import { joinPath } from '../../../domain/common/path';
 import { define } from '../../core/procedure';
+import { mintSupervisorToken, saveLocalTarget } from './local-token';
 
 const TokenCreateSchema = z
   .object({
@@ -8,7 +10,9 @@ const TokenCreateSchema = z
     serverArgs: z.array(z.string().min(1)).min(1),
     cwd: z.string().min(1),
     dbPath: z.string().min(1),
+    url: z.string().url(),
     save: z.boolean(),
+    global: z.boolean(),
   })
   .strict();
 
@@ -19,19 +23,15 @@ export interface TokenCreateResult {
 export const createServerToken = define({ kind: 'supervisor' })(
   TokenCreateSchema,
 )<TokenCreateResult>(async (input, ctx) => {
-  const result = await ctx.process.run(
-    input.bin,
-    [...input.serverArgs, 'admin', 'token', 'create'],
-    input.cwd,
-    { FACTORY_DB_PATH: input.dbPath },
-  );
-  const token = result.stdout.trim();
-  if (result.exitCode !== 0 || token.length === 0) {
-    throw new Refused(`token create failed with exit ${result.exitCode}`);
+  const token = await mintSupervisorToken(ctx, input);
+  if (!input.save) {
+    return { token };
   }
-  if (input.save) {
+  const inRepo = await ctx.fs.exists(joinPath(input.cwd, REPO_CONFIG_PATH));
+  if (input.global || !inRepo) {
+    saveLocalTarget(ctx, input.url, token);
+  } else {
     await ctx.tokens.write(token);
-    return { token: null };
   }
-  return { token };
+  return { token: null };
 });

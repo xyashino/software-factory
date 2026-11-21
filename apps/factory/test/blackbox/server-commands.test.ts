@@ -60,6 +60,7 @@ const createSandbox = async (): Promise<Sandbox> => {
       FACTORY_DB_PATH: join(home, 'factory.db'),
       FACTORY_PORT: String(port),
       FACTORY_URL: `http://127.0.0.1:${port}`,
+      XDG_CONFIG_HOME: join(home, 'config'),
     },
   };
   sandboxes.push(sandbox);
@@ -275,18 +276,22 @@ describe('factory server token create', () => {
     expect(result.stderr).not.toContain(lines[0]);
   });
 
-  it('writes the token file with --save and prints nothing', async () => {
+  it('writes the global config with --save outside a factory repo and prints nothing', async () => {
     // Arrange
     const sandbox = await createSandbox();
-    const tokenFile = join(sandbox.home, '.factory-local', 'supervisor.token');
+    const configFile = join(sandbox.home, 'config', 'sf', 'config.json');
 
     // Act
     const result = runCli(sandbox, ['token', 'create', '--save']);
 
     // Assert
+    const config = JSON.parse(readFileSync(configFile, 'utf8'));
     expect(result.status).toBe(0);
     expect(result.stdout).toBe('');
-    expect(readFileSync(tokenFile, 'utf8').trim().length).toBeGreaterThan(0);
-    expect(statSync(tokenFile).mode & 0o777).toBe(PID_MODE);
+    expect(config.current).toBe('local');
+    expect(config.targets.local.url).toBe(sandbox.env.FACTORY_URL);
+    expect(config.targets.local.token.length).toBeGreaterThan(0);
+    expect(statSync(configFile).mode & 0o777).toBe(PID_MODE);
+    expect(existsSync(join(sandbox.home, '.factory-local'))).toBe(false);
   });
 });

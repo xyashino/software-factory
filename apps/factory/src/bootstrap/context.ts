@@ -1,7 +1,8 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
-import { homedir, hostname } from 'node:os';
-import { join, resolve } from 'node:path';
+import { hostname } from 'node:os';
+import { resolve } from 'node:path';
 import { createCellStateFile } from '../adapters/fs/cell-state';
+import { createConnectionStore } from '../adapters/fs/connection-store';
 import { createPidFile } from '../adapters/fs/pid-file';
 import { createTodoFiles } from '../adapters/fs/todo-files';
 import { createTokenFile } from '../adapters/fs/token-file';
@@ -20,17 +21,18 @@ import { createSystemClock } from '../adapters/process/system-clock';
 import type { Ports } from '../application/core/procedure';
 import type { CellStatePort } from '../application/ports/cell-state.port';
 import { cellNameOf } from '../domain/cell/cell-name';
+import { resolveConnection } from '../domain/connection/connection-config';
 import {
   DEFAULT_CELL_SERVER_URL,
   DEFAULT_FACTORY_URL,
+  GLOBAL_CONFIG_PATH,
+  LEGACY_TOKEN_PATH,
   SUPERVISOR_TOKEN_PATH,
   cellLogPathOf,
   cellStatePathOf,
 } from '../config';
 
 export type Mode = 'supervisor' | 'cell' | 'operator';
-
-const TOKEN_PATH = join(homedir(), '.config', 'factory', 'token');
 
 const notWired = (): never => {
   throw new Error('port not wired');
@@ -50,15 +52,28 @@ const pathLookup = process.platform === 'win32' ? 'where' : 'which';
 const binaryOnPath = async (binary: string): Promise<boolean> =>
   (await processPort.run(pathLookup, [binary], process.cwd())).exitCode === 0;
 
+const readOptional = (path: string): string | undefined =>
+  existsSync(path) ? readFileSync(path, 'utf8') : undefined;
+
 export const buildContext = (cellName?: string): Ports => {
   const name = cellNameOf(cellName ?? hostname());
   const cellState = createCellStateFile(
     resolve(process.cwd(), cellStatePathOf(name)),
   );
+  const connections = createConnectionStore(GLOBAL_CONFIG_PATH);
+  const repoTokenPath = resolve(process.cwd(), SUPERVISOR_TOKEN_PATH);
+  const connection = resolveConnection({
+    envUrl: process.env.FACTORY_URL,
+    envToken: process.env.FACTORY_TOKEN,
+    repoToken: readOptional(repoTokenPath),
+    legacyToken: readOptional(LEGACY_TOKEN_PATH),
+    config: connections.read(),
+    defaultUrl: DEFAULT_FACTORY_URL,
+  });
   return {
-    server: createServerClient({
-      baseUrl: process.env.FACTORY_URL ?? DEFAULT_FACTORY_URL,
-    }),
+    server: createServerClient({ baseUrl: connection.url }),
+    connection,
+    connections,
     fs: {
       readText: async (path) => readFileSync(path, 'utf8'),
       writeText: writeTextFile,
@@ -68,10 +83,7 @@ export const buildContext = (cellName?: string): Ports => {
       readStdin: notWired,
     },
     todoFiles: createTodoFiles(),
-    tokens: createTokenFile([
-      resolve(process.cwd(), SUPERVISOR_TOKEN_PATH),
-      TOKEN_PATH,
-    ]),
+    tokens: createTokenFile(connection, repoTokenPath),
     operator: createLoopbackEndpoint(),
     runner: createRoutingRunner(
       createHeadlessRunner(),

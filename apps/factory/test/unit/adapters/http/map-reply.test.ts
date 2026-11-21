@@ -1,9 +1,27 @@
 import { describe, expect, it } from 'vitest';
-import { Refused, Unreachable } from '../../../../src/application/core/errors';
+import {
+  Refused,
+  Unauthorized,
+  Unreachable,
+} from '../../../../src/application/core/errors';
 import { mapReply } from '../../../../src/adapters/http/map-reply';
 
 const errorBody = (code: number, message: string): string =>
   JSON.stringify({ code, type: 'error', message });
+
+describe('unauthorized reply mapping', () => {
+  it('refuses a 401 reply as unauthorized with the server message', () => {
+    // Arrange
+    const body = errorBody(401, 'Missing or invalid bearer token');
+
+    // Act
+    const attempt = () => mapReply(401, body);
+
+    // Assert
+    expect(attempt).toThrow(Unauthorized);
+    expect(attempt).toThrow('401: Missing or invalid bearer token');
+  });
+});
 
 describe('reply mapping', () => {
   it('returns the parsed body for a 200 reply', () => {

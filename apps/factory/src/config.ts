@@ -8,6 +8,11 @@ export const XDG_DATA_HOME =
   (process.platform === 'win32'
     ? process.env.LOCALAPPDATA || join(homedir(), 'AppData', 'Local')
     : join(homedir(), '.local', 'share'));
+export const XDG_CONFIG_HOME =
+  process.env.XDG_CONFIG_HOME || join(homedir(), '.config');
+export const DEFAULT_CONFIG_DIR = join(XDG_CONFIG_HOME, 'sf');
+export const GLOBAL_CONFIG_PATH = join(DEFAULT_CONFIG_DIR, 'config.json');
+export const LEGACY_TOKEN_PATH = join(homedir(), '.config', 'factory', 'token');
 export const DEFAULT_FACTORY_URL = 'http://127.0.0.1:7070';
 export const DEFAULT_CELL_SERVER_URL = 'http://127.0.0.1:7071';
 export const DEFAULT_PORT = 7070;

@@ -1,7 +1,12 @@
 import { z } from 'zod';
-import { Refused, Unreachable } from '../../application/core/errors';
+import {
+  Refused,
+  Unauthorized,
+  Unreachable,
+} from '../../application/core/errors';
 
 const SUCCESS_STATUSES: readonly number[] = [200, 201];
+const UNAUTHORIZED = 401;
 
 const ErrorBodySchema = z.object({
   code: z.union([z.number(), z.string()]),
@@ -22,8 +27,11 @@ export const mapReply = (status: number, text: string): unknown => {
     return body;
   }
   const error = ErrorBodySchema.safeParse(body);
-  if (error.success) {
-    throw new Refused(`${error.data.code}: ${error.data.message}`, body);
+  const message = error.success
+    ? `${error.data.code}: ${error.data.message}`
+    : `HTTP ${status}`;
+  if (status === UNAUTHORIZED) {
+    throw new Unauthorized(message, body);
   }
-  throw new Refused(`HTTP ${status}`);
+  throw new Refused(message, error.success ? body : undefined);
 };
