@@ -1,7 +1,7 @@
 import { and, asc, eq, gt } from 'drizzle-orm';
 import { Hono, type Context } from 'hono';
 import { type SSEStreamingApi, streamSSE } from 'hono/streaming';
-import { streamQuery } from '../../../contracts/stream.contract';
+import { streamQuery } from '@repo/factory-contracts/stream.contract';
 import { stateTransitions } from '../../../db/schema/transitions';
 import { asCommandId, asProjectId } from '../../../domain/common/brand';
 import type { StateTransitionRecord } from '../../../domain/common/events';

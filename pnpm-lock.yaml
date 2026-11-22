@@ -332,6 +332,9 @@ importers:
       '@repo/bun-sqlite-kit':
         specifier: workspace:*
         version: link:../../packages/bun-sqlite-kit
+      '@repo/factory-contracts':
+        specifier: workspace:*
+        version: link:../../packages/factory-contracts
       '@repo/zod-contract-kit':
         specifier: workspace:*
         version: link:../../packages/zod-contract-kit
@@ -378,6 +381,9 @@ importers:
       '@repo/cell-contracts':
         specifier: workspace:*
         version: link:../../packages/cell-contracts
+      '@repo/factory-contracts':
+        specifier: workspace:*
+        version: link:../../packages/factory-contracts
       '@repo/zod-contract-kit':
         specifier: workspace:*
         version: link:../../packages/zod-contract-kit
@@ -541,6 +547,34 @@ importers:
       typescript-eslint:
         specifier: 'catalog:'
         version: 8.72.2(eslint@9.39.5(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.3)
+
+  packages/factory-contracts:
+    dependencies:
+      '@repo/zod-contract-kit':
+        specifier: workspace:*
+        version: link:../zod-contract-kit
+      zod:
+        specifier: 'catalog:'
+        version: 4.6.7
+    devDependencies:
+      '@repo/eslint-config':
+        specifier: workspace:*
+        version: link:../eslint-config
+      '@repo/typescript-config':
+        specifier: workspace:*
+        version: link:../typescript-config
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.6.4
+      eslint:
+        specifier: 'catalog:'
+        version: 9.39.5(supports-color@7.2.0)
+      typescript:
+        specifier: 'catalog:'
+        version: 6.0.3
+      vitest:
+        specifier: 'catalog:'
+        version: 5.1.0(@types/node@26.6.4)(@vitest/coverage-v8@5.1.0)(msw@3.0.3(@types/node@26.6.4)(supports-color@7.2.0)(typescript@6.0.3)(vite@8.3.8(@types/node@26.6.4)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)))(vite@8.3.8(@types/node@26.6.4)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
 
   packages/nitpick:
     devDependencies:

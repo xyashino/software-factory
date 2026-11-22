@@ -4,6 +4,10 @@ import {
   text,
   type AnySQLiteColumn,
 } from 'drizzle-orm/sqlite-core';
+import {
+  INCIDENT_REASONS,
+  INCIDENT_STATUSES,
+} from '@repo/factory-contracts/enums/incidents';
 import type {
   IncidentId,
   JobId,
@@ -14,24 +18,6 @@ import type {
 import { orderSteps, workOrders } from './orders';
 import { projects } from './projects';
 import { jobs } from './jobs';
-
-export const INCIDENT_REASONS = [
-  'line_unavailable',
-  'step_retries_exhausted',
-  'operator_blocked',
-  'workspace_failed',
-  'worktree_reset_limit',
-  'delivery_failed',
-  'parent_rebased',
-] as const;
-
-export const INCIDENT_STATUSES = [
-  'open',
-  'triaging',
-  'resolved',
-  'escalated',
-  'cancelled',
-] as const;
 
 export const incidents = sqliteTable('incidents', {
   incidentId: text('incident_id').$type<IncidentId>().primaryKey(),

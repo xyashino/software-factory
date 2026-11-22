@@ -15,7 +15,7 @@ import {
   PR_TEMPLATE_PATH,
   REPO_CONFIG_PATH,
 } from '../../../config';
-import { slugSchema } from '../../../contracts/common';
+import { slugSchema } from '@repo/zod-contract-kit/fields';
 import { ArgumentError } from '../../core/errors';
 import { define, type Ports } from '../../core/procedure';
 

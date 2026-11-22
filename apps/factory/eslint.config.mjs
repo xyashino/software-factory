@@ -43,7 +43,6 @@ export default [
           'node:*',
           '**/db/**',
           '**/application/**',
-          '**/contracts/**',
         ],
         message:
           'Domain is pure: no I/O, no DB, no Hono, no application code (BE_RULES §2).',
@@ -53,18 +52,6 @@ export default [
   {
     files: ['src/application/**/*.ts'],
     rules: restricted([HTTP, ADAPTERS, BOOTSTRAP]),
-  },
-  {
-    files: ['src/contracts/**/*.ts'],
-    rules: restricted([
-      HTTP,
-      ADAPTERS,
-      BOOTSTRAP,
-      {
-        group: ['**/application/**', '**/db/**'],
-        message: 'Contracts depend on zod and domain types only (BE_RULES §2).',
-      },
-    ]),
   },
   {
     files: ['src/db/**/*.ts'],

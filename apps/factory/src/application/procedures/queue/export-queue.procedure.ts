@@ -1,5 +1,5 @@
 import { eq } from 'drizzle-orm';
-import { exportQueueContract } from '../../../contracts/queue.contract';
+import { exportQueueContract } from '@repo/factory-contracts/queue.contract';
 import { orderPlans } from '../../../db/schema/plans';
 import { workOrders } from '../../../db/schema/orders';
 import type { WorkOrderState } from '../../../domain/orders/order-state';

@@ -1,7 +1,7 @@
 import { timingSafeEqual } from 'node:crypto';
 import { and, eq, isNull } from 'drizzle-orm';
 import { WEB_SESSION_TTL_MS } from '../../../config';
-import { joinTokenContract } from '../../../contracts/tokens.contract';
+import { joinTokenContract } from '@repo/factory-contracts/tokens.contract';
 import { immediateTx } from '../../../db/client';
 import { safeTokens } from '../../../db/schema/tokens';
 import { WEB_SESSION_SCOPES } from '../../../domain/tokens/web-session';

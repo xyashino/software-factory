@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { transitionDto } from '../../../contracts/stream.contract';
+import { transitionDto } from '@repo/factory-contracts/stream.contract';
 import { Refused, Unreachable } from '../../core/errors';
 import { define } from '../../core/procedure';
 import { readProjectId, readSecret } from '../../core/repo-access';

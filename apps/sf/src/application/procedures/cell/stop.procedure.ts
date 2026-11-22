@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { drainCellContract } from '../../../contracts/cells.contract';
+import { drainCellContract } from '@repo/factory-contracts/cells.contract';
 import { define } from '../../core/procedure';
 import { readSecret } from '../../core/repo-access';
 

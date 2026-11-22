@@ -1,20 +1,8 @@
+import {
+  ACTOR_KINDS,
+  ENTITY_TYPES,
+} from '@repo/factory-contracts/enums/events';
 import type { CommandId, ProjectId } from './brand';
-
-export const ENTITY_TYPES = [
-  'order_plan',
-  'work_order',
-  'order_step',
-  'job',
-  'incident',
-  'cell',
-] as const;
-
-export const ACTOR_KINDS = [
-  'supervisor',
-  'mechanic',
-  'cell',
-  'system',
-] as const;
 
 export type EntityType = (typeof ENTITY_TYPES)[number];
 

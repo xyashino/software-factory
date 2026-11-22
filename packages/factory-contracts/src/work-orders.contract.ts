@@ -1,14 +1,16 @@
 import { z } from 'zod';
 import {
+  idParams,
+  slugSchema,
+  titleSchema,
+} from '@repo/zod-contract-kit/fields';
+import { projectIdSchema } from './common';
+import {
   ORDER_TYPES,
   PRIORITIES,
   WORK_ORDER_ACTIONS,
   WORK_ORDER_STATES,
-  errorReplies,
-  idParams,
-  projectIdSchema,
-  slugSchema,
-} from './common';
+} from './enums/orders';
 
 export const workOrderDto = z.object({
   orderId: z.string(),
@@ -60,6 +62,25 @@ const incidentDto = z.object({
   status: z.string(),
 });
 
+export const createWorkOrderContract = {
+  in: {
+    body: z.object({
+      projectId: projectIdSchema,
+      slug: slugSchema,
+      title: titleSchema,
+      type: z.enum(ORDER_TYPES),
+      description: z.string().trim().default(''),
+      lineName: slugSchema,
+      priority: z.enum(PRIORITIES).default('medium'),
+      planSlug: slugSchema.nullish(),
+      parentSlug: slugSchema.nullish(),
+    }),
+  },
+  out: {
+    201: z.object({ code: z.literal(201), order: workOrderDto }),
+  },
+};
+
 export const listWorkOrdersContract = {
   in: {
     query: z.object({
@@ -72,7 +93,6 @@ export const listWorkOrdersContract = {
   },
   out: {
     200: z.object({ code: z.literal(200), items: z.array(workOrderDto) }),
-    ...errorReplies,
   },
 };
 
@@ -86,17 +106,15 @@ export const getWorkOrderContract = {
       jobs: z.array(jobDto),
       incidents: z.array(incidentDto),
     }),
-    ...errorReplies,
   },
 };
 
 export const transitionWorkOrderContract = {
   in: {
     params: idParams,
-    body: z.object({ action: z.enum(WORK_ORDER_ACTIONS) }).strict(),
+    body: z.object({ action: z.enum(WORK_ORDER_ACTIONS) }),
   },
   out: {
     200: z.object({ code: z.literal(200), order: workOrderDto }),
-    ...errorReplies,
   },
 };

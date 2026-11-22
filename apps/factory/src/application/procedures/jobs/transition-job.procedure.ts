@@ -7,7 +7,7 @@ import { jobs } from '../../../db/schema/jobs';
 import { orderSteps, workOrders } from '../../../db/schema/orders';
 import { orderPlans } from '../../../db/schema/plans';
 import { stateTransitions } from '../../../db/schema/transitions';
-import { transitionJobContract } from '../../../contracts/jobs.contract';
+import { transitionJobContract } from '@repo/factory-contracts/jobs.contract';
 import {
   asCellId,
   asCommandId,

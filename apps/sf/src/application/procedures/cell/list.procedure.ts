@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { listCellsContract } from '../../../contracts/cells.contract';
+import { listCellsContract } from '@repo/factory-contracts/cells.contract';
 import { define } from '../../core/procedure';
 import { readSecret } from '../../core/repo-access';
 

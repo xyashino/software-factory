@@ -3,7 +3,7 @@ import { immediateTx, type DbTx } from '../../../db/client';
 import { cells } from '../../../db/schema/cells';
 import { safeTokens } from '../../../db/schema/tokens';
 import { CELL_SESSION_TTL_MS } from '../../../config';
-import { enrollCellContract } from '../../../contracts/cells.contract';
+import { enrollCellContract } from '@repo/factory-contracts/cells.contract';
 import { asCellId, asTokenId, type CellId } from '../../../domain/common/brand';
 import { scopedId } from '../../../domain/common/scoped-id';
 import { addMs } from '../../../domain/common/time';

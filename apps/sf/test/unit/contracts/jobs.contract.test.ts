@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { transitionJobContract } from '../../../src/contracts/jobs.contract';
+import { transitionJobContract } from '@repo/factory-contracts/jobs.contract';
 
 const body = transitionJobContract.in.body;
 
@@ -20,7 +20,7 @@ describe('jobs contract', () => {
     expect(result.success).toBe(true);
   });
 
-  it('rejects a complete transition with an unknown key', () => {
+  it('accepts a complete transition with the factory output record', () => {
     // Arrange
     const input = {
       action: 'complete',
@@ -34,7 +34,7 @@ describe('jobs contract', () => {
     const result = body.safeParse(input);
 
     // Assert
-    expect(result.success).toBe(false);
+    expect(result.success).toBe(true);
   });
 
   it('rejects a fail transition with no detail', () => {

@@ -4,7 +4,7 @@ import { cells } from '../../../db/schema/cells';
 import { jobs } from '../../../db/schema/jobs';
 import { workOrders } from '../../../db/schema/orders';
 import { safeTokens } from '../../../db/schema/tokens';
-import { revokeCellContract } from '../../../contracts/cells.contract';
+import { revokeCellContract } from '@repo/factory-contracts/cells.contract';
 import { asCellId, type CellId } from '../../../domain/common/brand';
 import { NotFound } from '../../core/error-handling';
 import { scopedProcedure } from '../../core/procedure';

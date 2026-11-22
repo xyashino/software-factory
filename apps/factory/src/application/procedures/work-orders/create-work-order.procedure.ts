@@ -1,5 +1,5 @@
 import { immediateTx } from '../../../db/client';
-import { createWorkOrderContract } from '../../../contracts/work-orders.contract';
+import { createWorkOrderContract } from '@repo/factory-contracts/work-orders.contract';
 import { asOrderId } from '../../../domain/common/brand';
 import { scopedId } from '../../../domain/common/scoped-id';
 import { orderBranchOf } from '../../../domain/topology/branch-names';

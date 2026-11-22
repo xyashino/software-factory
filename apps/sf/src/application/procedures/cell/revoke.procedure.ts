@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { revokeCellContract } from '../../../contracts/cells.contract';
+import { revokeCellContract } from '@repo/factory-contracts/cells.contract';
 import { ArgumentError } from '../../core/errors';
 import { define } from '../../core/procedure';
 import { readSecret } from '../../core/repo-access';

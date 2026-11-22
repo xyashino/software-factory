@@ -1,6 +1,6 @@
 import { and, asc, eq, inArray } from 'drizzle-orm';
 import type { z } from 'zod';
-import { resolveIncidentContract } from '../../../contracts/incidents.contract';
+import { resolveIncidentContract } from '@repo/factory-contracts/incidents.contract';
 import { immediateTx, type DbTx } from '../../../db/client';
 import { incidents } from '../../../db/schema/incidents';
 import { jobs } from '../../../db/schema/jobs';

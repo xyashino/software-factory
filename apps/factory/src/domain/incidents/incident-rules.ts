@@ -1,27 +1,13 @@
+import {
+  INCIDENT_REASONS,
+  INCIDENT_STATUSES,
+} from '@repo/factory-contracts/enums/incidents';
 import { MAX_MECHANIC_RUNS } from '../../config';
 import {
   UnprocessableTransition,
   type OrderStep,
 } from '../orders/job-transitions';
 import type { WorkOrderState } from '../orders/order-state';
-
-export const INCIDENT_REASONS = [
-  'line_unavailable',
-  'step_retries_exhausted',
-  'operator_blocked',
-  'workspace_failed',
-  'worktree_reset_limit',
-  'delivery_failed',
-  'parent_rebased',
-] as const;
-
-export const INCIDENT_STATUSES = [
-  'open',
-  'triaging',
-  'resolved',
-  'escalated',
-  'cancelled',
-] as const;
 
 export type IncidentReason = (typeof INCIDENT_REASONS)[number];
 

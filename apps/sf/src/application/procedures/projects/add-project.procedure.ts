@@ -1,9 +1,9 @@
-import { z } from 'zod';
 import {
   projectDto,
   upsertProjectContract,
-} from '../../../contracts/projects.contract';
-import { slugSchema } from '../../../contracts/common';
+} from '@repo/factory-contracts/projects.contract';
+import { slugSchema } from '@repo/zod-contract-kit/fields';
+import { z } from 'zod';
 import { define } from '../../core/procedure';
 import { readSecret } from '../../core/repo-access';
 
