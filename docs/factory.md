@@ -2,7 +2,7 @@
 
 ## 0. Abstract Flow (At a Glance)
 
-This section is the high-level summary. Sections 1–9 and 11 give the detailed rules, and [BE_RULES.md](BE_RULES.md) defines hard code-shape rules.
+This section is the high-level summary. Sections 1–9 and 11 give the detailed rules, and [engineering.md](./engineering.md) defines hard code-shape rules.
 
 ```mermaid
 flowchart TD

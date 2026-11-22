@@ -32,9 +32,9 @@ sf todos import && sf queue
 sf web stop && sf server stop
 ```
 
-Source of truth for server behaviour: [`apps/factory/docs/PLAN.md`](../../factory/docs/PLAN.md),
+Source of truth for server behaviour: [`factory.md`](./factory.md),
 especially §3 (Cell lifecycle) and §11 (agent reporting). Operator CLI spec:
-[`OPERATOR.md`](./OPERATOR.md).
+[`operator.md`](./operator.md).
 
 ## 1. Command tree
 
@@ -65,17 +65,17 @@ especially §3 (Cell lifecycle) and §11 (agent reporting). Operator CLI spec:
 | operator | `sf operator read \| incident` | Agent in a Mechanic job | `incidents/{id}/resolve` through its Cell |
 
 Open verbs (`answer`, `context` for the Operator, `tell`) follow the decisions in
-[`apps/factory/docs/PLAN.md` §11.6](../../factory/docs/PLAN.md).
+[`factory.md` §11.6](./factory.md).
 
 ## 2. Layout
 
-The layout follows `apps/factory/docs/BE_RULES.md`:
+The layout follows [`engineering.md`](./engineering.md):
 `domain -> contracts -> application (ports + procedures) -> adapters -> bootstrap -> tests`.
 Each command is a procedure. Adapters are the only code that does I/O.
 
 ```text
 apps/sf/
-├── docs/PLAN.md
+├── README.md
 ├── src/
 │   ├── cli.ts                      # entrypoint: citty root, registers adapters/cli groups
 │   ├── config.ts                   # env and timing constants (FACTORY_URL, waitMs 25000, 10s heartbeat)
@@ -210,7 +210,7 @@ Job or let the lease expire. See §8.
 
 The server, the CLI, the Cell and the operator all parse the same request and reply shapes. During
 implementation, each app keeps its own copy of the schemas. A later step moves them into one shared
-package. Names and scope are in [`docs/contracts-plan.md`](../../../docs/contracts-plan.md): `@repo/factory-contracts` and `@repo/cell-contracts`. No naming rule forbids the `factory-` prefix. The server's BE_RULES need an explicit exception when that happens.
+package. Names and scope are in [`plans/contracts-plan.md`](./plans/contracts-plan.md): `@repo/factory-contracts` and `@repo/cell-contracts`. No naming rule forbids the `factory-` prefix. The server's [`engineering.md`](./engineering.md) would need an explicit exception when that happens.
 
 ## 8. Decisions and open questions
 
@@ -237,8 +237,8 @@ Open:
 
 1. **Drain.** The server needs a `leave` or `drain` endpoint, so `cell stop` can hand over a Job
    cleanly instead of waiting for the lease to expire.
-2. **Operator verbs.** The verbs in [`OPERATOR.md`](./OPERATOR.md) §3 are the target. `answer`, `context`
-   and `tell` stay open, as in `apps/factory` PLAN §11.6.
+2. **Operator verbs.** The verbs in [`operator.md`](./operator.md) §3 are the target. `answer`, `context`
+   and `tell` stay open, as in [`factory.md` §11.6](./factory.md).
 
 ## 9. Not in this plan
 

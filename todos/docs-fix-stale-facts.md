@@ -16,7 +16,7 @@ Docs match the repo: real app and package names, real cell status, resolved `fac
 
 ## 🌐 Context & Problem Statement
 
-sf PLAN says Cell app removed; `apps/cell` exists. sf PLAN §7 cites a "no `factory-` prefix" operator boundary rule not found in operator docs; it blocks the name `@repo/factory-contracts`. Wrong docs mislead agents. See `docs/docs-plan.md`.
+sf PLAN says Cell app removed; `apps/cell` exists. sf PLAN §7 cites a "no `factory-` prefix" operator boundary rule not found in operator docs; it blocks the name `@repo/factory-contracts`. Wrong docs mislead agents. See `docs/plans/docs-plan.md`.
 
 ---
 
@@ -37,8 +37,8 @@ sf PLAN says Cell app removed; `apps/cell` exists. sf PLAN §7 cites a "no `fact
    - Remove `.tmp/omino-api` and `packages/factory-*` mentions in factory docs; fix operator README "step-01..07" todo reference.
    - sf `PLAN.md` title says "`factory` CLI": fix to `sf`.
 2. **Cell status**: read `apps/cell/src`, `apps/sf/src/cell`, `git log --oneline -- apps/cell apps/sf/src/cell`. Decide from code: is `apps/cell` (cell-server) live, optional, or legacy. Fix sf PLAN §8 decision 2 and any "legacy Cell app removed" text. Note in ADR what was found.
-3. **`factory-` prefix rule**: search `git log -S"forbids that prefix"`, `todos` history, `.nitpick`, eslint config for the rule. Found: document it where it lives and state exact scope. Not found: remove the claim from sf PLAN §7. Record outcome for `docs/contracts-plan.md`; update its package-name text if rule is real.
-4. **sf PLAN §7**: point to `docs/contracts-plan.md` instead of "name not yet chosen".
+3. **`factory-` prefix rule**: search `git log -S"forbids that prefix"`, `todos` history, `.nitpick`, eslint config for the rule. Found: document it where it lives and state exact scope. Not found: remove the claim from sf PLAN §7. Record outcome for `docs/plans/contracts-plan.md`; update its package-name text if rule is real.
+4. **sf PLAN §7**: point to `docs/plans/contracts-plan.md` instead of "name not yet chosen".
 
 ---
 

@@ -15,7 +15,7 @@ Never activate automatically. Only when user asks to install `sf`, onboard a rep
 - Never print or store tokens, credentials or `gh` auth data. Never log in for the user (`gh auth login` etc.: tell user to run it).
 - Never commit, push or open a PR unless asked.
 - Do not guess paths or repo URL: ask, or read from env/`git remote`.
-- Reference: `README.md` (Install, Use `sf`), `apps/sf/docs/PLAN.md`.
+- Reference: `README.md` (Install, Use `sf`), `docs/sf.md`.
 
 ## 1. Prerequisites
 

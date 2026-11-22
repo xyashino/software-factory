@@ -15,7 +15,7 @@ Create `@repo/zod-contract-kit`: contract types, shared field schemas, `errorRes
 
 ## 🌐 Context & Problem Statement
 
-`schema/types.ts` byte-identical in cell and factory. `errorResponse` duplicated in both `contracts/common.ts`. Clients (sf `mapReply`, web-demo `factory-client`) parse replies by hand, no contract. Kit must be client-safe: no Hono, no `BaseError`, no server runtime. See `docs/contracts-plan.md`.
+`schema/types.ts` byte-identical in cell and factory. `errorResponse` duplicated in both `contracts/common.ts`. Clients (sf `mapReply`, web-demo `factory-client`) parse replies by hand, no contract. Kit must be client-safe: no Hono, no `BaseError`, no server runtime. See `docs/plans/contracts-plan.md`.
 
 ---
 
