@@ -1,4 +1,4 @@
-import { startCellContract } from '../../../contracts/cells.contract';
+import { startCellContract } from '@repo/cell-contracts/cells.contract';
 import { canStart } from '../../../domain/cells/cell-slot';
 import { Conflict } from '../../core/error-handling';
 import { publicProcedure } from '../../core/procedure';

@@ -1,12 +1,6 @@
-export const DESIRED_STATES = ['running', 'stopped'] as const;
+import { RUNTIME_STATUSES } from '@repo/cell-contracts/enums/cells';
 
-export const RUNTIME_STATUSES = [
-  'starting',
-  'running',
-  'stopping',
-  'stopped',
-  'failed',
-] as const;
+export const DESIRED_STATES = ['running', 'stopped'] as const;
 
 const LIVE_STATUSES: readonly RuntimeStatus[] = [
   'starting',

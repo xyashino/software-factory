@@ -11,6 +11,7 @@
     "test": "bun --bun vitest run"
   },
   "dependencies": {
+    "@repo/cell-contracts": "workspace:*",
     "@repo/zod-contract-kit": "workspace:*",
     "drizzle-orm": "catalog:",
     "hono": "catalog:",

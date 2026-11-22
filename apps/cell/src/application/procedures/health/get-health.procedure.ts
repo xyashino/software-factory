@@ -1,11 +1,9 @@
 import { eq, sql } from 'drizzle-orm';
 import { cells } from '../../../db/schema/cells';
 import { factories } from '../../../db/schema/factories';
-import { getHealthContract } from '../../../contracts/health.contract';
-import {
-  RUNTIME_STATUSES,
-  type RuntimeStatus,
-} from '../../../domain/cells/cell-slot';
+import { getHealthContract } from '@repo/cell-contracts/health.contract';
+import { RUNTIME_STATUSES } from '@repo/cell-contracts/enums/cells';
+import type { RuntimeStatus } from '../../../domain/cells/cell-slot';
 import { publicProcedure } from '../../core/procedure';
 
 type StatusCount = { runtimeStatus: RuntimeStatus; n: number };

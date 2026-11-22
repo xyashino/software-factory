@@ -1,5 +1,5 @@
 import { eq } from 'drizzle-orm';
-import { removeCellContract } from '../../../contracts/cells.contract';
+import { removeCellContract } from '@repo/cell-contracts/cells.contract';
 import { cells } from '../../../db/schema/cells';
 import { canRemove } from '../../../domain/cells/cell-slot';
 import { Conflict } from '../../core/error-handling';

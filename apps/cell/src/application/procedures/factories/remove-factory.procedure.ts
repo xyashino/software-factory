@@ -1,5 +1,5 @@
 import { count, eq } from 'drizzle-orm';
-import { removeFactoryContract } from '../../../contracts/factories.contract';
+import { removeFactoryContract } from '@repo/cell-contracts/factories.contract';
 import { immediateTx } from '../../../db/client';
 import { cells } from '../../../db/schema/cells';
 import { factories } from '../../../db/schema/factories';

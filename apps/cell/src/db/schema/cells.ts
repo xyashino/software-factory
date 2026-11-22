@@ -6,7 +6,8 @@ import {
   uniqueIndex,
 } from 'drizzle-orm/sqlite-core';
 import type { FactoryId, SlotId } from '../../domain/common/brand';
-import { DESIRED_STATES, RUNTIME_STATUSES } from '../../domain/cells/cell-slot';
+import { RUNTIME_STATUSES } from '@repo/cell-contracts/enums/cells';
+import { DESIRED_STATES } from '../../domain/cells/cell-slot';
 import { idText, timestamps } from '../columns';
 import { factories } from './factories';
 

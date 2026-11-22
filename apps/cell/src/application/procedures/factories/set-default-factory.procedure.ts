@@ -1,5 +1,5 @@
 import { eq } from 'drizzle-orm';
-import { setDefaultFactoryContract } from '../../../contracts/factories.contract';
+import { setDefaultFactoryContract } from '@repo/cell-contracts/factories.contract';
 import { immediateTx } from '../../../db/client';
 import { factories } from '../../../db/schema/factories';
 import { asFactoryId } from '../../../domain/common/brand';

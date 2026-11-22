@@ -1,5 +1,5 @@
 import { asc, desc } from 'drizzle-orm';
-import { listFactoriesContract } from '../../../contracts/factories.contract';
+import { listFactoriesContract } from '@repo/cell-contracts/factories.contract';
 import { factories } from '../../../db/schema/factories';
 import { publicProcedure } from '../../core/procedure';
 import { toFactoryDto } from './factory-dto';

@@ -1,4 +1,4 @@
-import { stopAllCellsContract } from '../../../contracts/cells.contract';
+import { stopAllCellsContract } from '@repo/cell-contracts/cells.contract';
 import { publicProcedure } from '../../core/procedure';
 import { listRecords, toCellDto } from './cell-views';
 import { stopSlot } from './slot-runtime';
