@@ -1,7 +1,10 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { hostname } from 'node:os';
 import { resolve } from 'node:path';
-import { createCellStateFile } from '../adapters/fs/cell-state';
+import {
+  createCellStateFile,
+  createMemoryCellState,
+} from '../adapters/fs/cell-state';
 import { createConnectionStore } from '../adapters/fs/connection-store';
 import { createFactoryCredentialStore } from '../adapters/fs/factory-credential';
 import { createPidFile } from '../adapters/fs/pid-file';
@@ -34,6 +37,7 @@ import {
   SUPERVISOR_TOKEN_PATH,
   cellLogPathOf,
   cellStatePathOf,
+  isRelayedOf,
 } from '../config';
 
 export type Mode = 'supervisor' | 'cell' | 'operator';
@@ -57,9 +61,9 @@ const readOptional = (path: string): string | undefined =>
 
 export const buildContext = (cellName?: string): Ports => {
   const name = cellNameOf(cellName ?? hostname());
-  const cellState = createCellStateFile(
-    resolve(process.cwd(), cellStatePathOf(name)),
-  );
+  const cellState = isRelayedOf(process.env)
+    ? createMemoryCellState()
+    : createCellStateFile(resolve(process.cwd(), cellStatePathOf(name)));
   const connections = createConnectionStore(GLOBAL_CONFIG_PATH);
   const repoTokenPath = resolve(process.cwd(), SUPERVISOR_TOKEN_PATH);
   const connection = resolveConnection({

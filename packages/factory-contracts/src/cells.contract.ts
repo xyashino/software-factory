@@ -175,6 +175,7 @@ const cellDto = z.object({
   activeJobId: z.string().nullable(),
   lastHeartbeatAt: z.number().int().nullable(),
   leaseExpiresAt: z.number().int().nullable(),
+  factoryId: z.string().nullable(),
 });
 
 export const listCellsContract = {

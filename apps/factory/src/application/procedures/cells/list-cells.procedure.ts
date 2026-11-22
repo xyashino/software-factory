@@ -53,6 +53,7 @@ export const listCellsProcedure = scopedProcedure(['supervisor:read'])(
         row.activeJobId === null
           ? null
           : (outcome.leaseByJob.get(row.activeJobId) ?? null),
+      factoryId: row.factoryId,
     })),
   };
 });

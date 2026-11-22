@@ -84,6 +84,9 @@ export const cellStatePathOf = (name: string): string =>
 export const cellLogPathOf = (name: string): string =>
   join(CELLS_DIR, `${name}.log`);
 export const cellPidNameOf = (name: string): string => `${name}.pid`;
+export const isRelayedOf = (
+  env: Readonly<Record<string, string | undefined>>,
+): boolean => env[FACTORY_PID_ENV] !== undefined;
 
 export const webEntryPath = (): string =>
   firstExisting([

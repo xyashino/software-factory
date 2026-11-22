@@ -24,6 +24,7 @@ export interface StartInput {
   logPath: string;
   joinToken: string | undefined;
   lines: readonly string[] | undefined;
+  relayed: boolean;
   project?: string;
   choose?: ProjectChooser;
   signal: AbortSignal;
@@ -61,6 +62,21 @@ const mintJoinToken = async (
   return minted.token;
 };
 
+// A relayed Cell's bearer is its local token; the Factory relay swaps it for the HQ session.
+const enrollTokenOf = async (
+  ports: Ports,
+  input: StartInput,
+  name: string,
+): Promise<string | undefined> => {
+  if (input.relayed) {
+    return ports.connection.token ?? undefined;
+  }
+  if (input.joinToken === undefined || input.joinToken === '') {
+    return mintJoinToken(ports, name);
+  }
+  return input.joinToken;
+};
+
 export const startCell = async (
   ports: Ports,
   input: StartInput,
@@ -69,6 +85,7 @@ export const startCell = async (
     repoRoot: input.repoRoot,
     requested: input.project,
     choose: input.choose,
+    relayed: input.relayed,
   });
   const { projectId, repoRoot } = target;
   const runners = await installedRunnersOf(ports);
@@ -84,10 +101,7 @@ export const startCell = async (
   let session = await ports.cellState.read();
   if (session === null) {
     const name = cellNameOf(input.cellName);
-    const joinToken =
-      input.joinToken === undefined || input.joinToken === ''
-        ? await mintJoinToken(ports, name)
-        : input.joinToken;
+    const joinToken = await enrollTokenOf(ports, input, name);
     if (joinToken === undefined) {
       throw new Refused(`no cell session, set ${JOIN_TOKEN_ENV} to enroll`);
     }

@@ -1,6 +1,12 @@
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
-import type { CellId, JobId, ProjectId } from '../../domain/common/brand';
+import type {
+  CellId,
+  FactoryId,
+  JobId,
+  ProjectId,
+} from '../../domain/common/brand';
 import { jsonColumn } from '@repo/bun-sqlite-kit/columns';
+import { factories } from './factories';
 import { projects } from './projects';
 
 export const CELL_STATUSES = [
@@ -26,6 +32,9 @@ export const cells = sqliteTable('cells', {
     'local_worktrees_json',
   ).notNull(),
   activeJobId: text('active_job_id').$type<JobId>(),
+  factoryId: text('factory_id')
+    .$type<FactoryId>()
+    .references(() => factories.factoryId),
   drainForce: integer('drain_force', { mode: 'boolean' })
     .notNull()
     .default(false),
