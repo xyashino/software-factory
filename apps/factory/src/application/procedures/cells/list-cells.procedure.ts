@@ -2,7 +2,7 @@ import { inArray } from 'drizzle-orm';
 import { immediateTx } from '../../../db/client';
 import { cells } from '../../../db/schema/cells';
 import { jobs } from '../../../db/schema/jobs';
-import { listCellsContract } from '../../../contracts/cells.contract';
+import { listCellsContract } from '@repo/factory-contracts/cells.contract';
 import { scopedProcedure } from '../../core/procedure';
 import {
   flushTransitions,

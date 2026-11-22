@@ -1,6 +1,6 @@
 import { TransactionRollbackError, eq } from 'drizzle-orm';
 import { z } from 'zod';
-import { importQueueContract } from '../../../contracts/queue.contract';
+import { importQueueContract } from '@repo/factory-contracts/queue.contract';
 import { immediateTx, type DbTx } from '../../../db/client';
 import { workOrders } from '../../../db/schema/orders';
 import { stateTransitions } from '../../../db/schema/transitions';

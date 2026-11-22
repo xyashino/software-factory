@@ -1,16 +1,16 @@
 import { z } from 'zod';
 import {
-  ORDER_TYPES,
-  PRIORITIES,
-  WORK_ORDER_ACTIONS,
-  WORK_ORDER_STATES,
-} from '../domain/orders/order-state';
-import {
   idParams,
   slugSchema,
   titleSchema,
 } from '@repo/zod-contract-kit/fields';
 import { projectIdSchema } from './common';
+import {
+  ORDER_TYPES,
+  PRIORITIES,
+  WORK_ORDER_ACTIONS,
+  WORK_ORDER_STATES,
+} from './enums/orders';
 
 export const workOrderDto = z.object({
   orderId: z.string(),

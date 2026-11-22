@@ -3,7 +3,7 @@ import { immediateTx, type DbTx } from '../../../db/client';
 import { cells } from '../../../db/schema/cells';
 import { jobs } from '../../../db/schema/jobs';
 import { LEASE_TTL_MS } from '../../../config';
-import { helloCellContract } from '../../../contracts/cells.contract';
+import { helloCellContract } from '@repo/factory-contracts/cells.contract';
 import type {
   CellId,
   JobId,

@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { ACTOR_KINDS, ENTITY_TYPES } from '../domain/common/events';
 import { projectIdSchema } from './common';
+import { ACTOR_KINDS, ENTITY_TYPES } from './enums/events';
 
 export const streamQuery = z.object({
   projectId: projectIdSchema.optional(),

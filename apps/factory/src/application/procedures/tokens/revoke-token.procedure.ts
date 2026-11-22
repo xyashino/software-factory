@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm';
 import { immediateTx } from '../../../db/client';
 import { safeTokens } from '../../../db/schema/tokens';
-import { revokeTokenContract } from '../../../contracts/tokens.contract';
+import { revokeTokenContract } from '@repo/factory-contracts/tokens.contract';
 import { asTokenId } from '../../../domain/common/brand';
 import { NotFound } from '../../core/error-handling';
 import { scopedProcedure } from '../../core/procedure';

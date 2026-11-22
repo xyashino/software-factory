@@ -1,53 +1,11 @@
-export const PLAN_STATES = [
-  'draft',
-  'branching',
-  'active',
-  'ready',
-  'completed',
-  'failed',
-  'cancelled',
-] as const;
-
-export const WORK_ORDER_STATES = [
-  'waiting_parent',
-  'queued',
-  'paused',
-  'running',
-  'delivering',
-  'delivered',
-  'completed',
-  'line_unavailable',
-  'blocked',
-  'cancelled',
-] as const;
-
-export const PRIORITIES = ['high', 'medium', 'low'] as const;
-
-export const ORDER_TYPES = [
-  'feat',
-  'fix',
-  'refactor',
-  'chore',
-  'docs',
-  'test',
-] as const;
-
-export const PLAN_ACTIONS = [
-  'activate',
-  'retry',
-  'complete',
-  'cancel',
-] as const;
-
-export const WORK_ORDER_ACTIONS = [
-  'pause',
-  'unpause',
-  'resume',
-  'reset_to_scratch',
-  'reopen',
-  'complete',
-  'cancel',
-] as const;
+import {
+  ORDER_TYPES,
+  PLAN_ACTIONS,
+  PLAN_STATES,
+  PRIORITIES,
+  WORK_ORDER_ACTIONS,
+  WORK_ORDER_STATES,
+} from '@repo/factory-contracts/enums/orders';
 
 export type PlanState = (typeof PLAN_STATES)[number];
 export type WorkOrderState = (typeof WORK_ORDER_STATES)[number];

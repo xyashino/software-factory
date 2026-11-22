@@ -1,5 +1,5 @@
 import { asc, eq } from 'drizzle-orm';
-import { getWorkOrderContract } from '../../../contracts/work-orders.contract';
+import { getWorkOrderContract } from '@repo/factory-contracts/work-orders.contract';
 import { incidents } from '../../../db/schema/incidents';
 import { jobs } from '../../../db/schema/jobs';
 import { orderSteps } from '../../../db/schema/orders';

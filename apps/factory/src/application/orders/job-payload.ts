@@ -1,5 +1,5 @@
 import type { z } from 'zod';
-import type { stepJobPayloadDto } from '../../contracts/cells.contract';
+import type { stepJobPayloadDto } from '@repo/factory-contracts/cells.contract';
 import type { WorkOrderRow } from './order-views';
 
 export const stepJobPayload = (
