@@ -1,5 +1,4 @@
-export type HttpStatus =
-  200 | 201 | 400 | 401 | 403 | 404 | 409 | 413 | 422 | 500;
+import type { HttpStatus } from '@repo/zod-contract-kit/http-status';
 
 export class BaseError extends Error {
   readonly status: HttpStatus;

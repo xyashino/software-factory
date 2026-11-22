@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { idParams } from './common';
+import { idParams } from '@repo/zod-contract-kit/fields';
 import { claimedJobDto } from './cells.contract';
 
 const commandSchema = z.object({

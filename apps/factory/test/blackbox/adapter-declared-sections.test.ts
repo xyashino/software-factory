@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { honoAdapter } from '../../src/adapters/hono/adapter';
 import { publicProcedure } from '../../src/application/core/procedure';
-import { errorResponse } from '../../src/contracts/common';
+import { errorResponse } from '@repo/zod-contract-kit/reply';
 import { createTestApp, postJson } from '../support/test-app';
 
 const echoContract = {

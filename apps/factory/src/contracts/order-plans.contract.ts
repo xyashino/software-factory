@@ -1,6 +1,11 @@
 import { z } from 'zod';
 import { PLAN_ACTIONS, PLAN_STATES } from '../domain/orders/order-state';
-import { idParams, projectIdSchema, slugSchema, titleSchema } from './common';
+import {
+  idParams,
+  slugSchema,
+  titleSchema,
+} from '@repo/zod-contract-kit/fields';
+import { projectIdSchema } from './common';
 import { workOrderDto } from './work-orders.contract';
 
 export const orderPlanDto = z.object({

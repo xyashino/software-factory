@@ -3,7 +3,7 @@ import { queueActionsContract } from '../../../contracts/queue.contract';
 import type { WorkOrderAction } from '../../../domain/orders/order-state';
 import { nextWorkOrderState } from '../../../domain/orders/order-state';
 import { Conflict } from '../../core/error-handling';
-import type { ContractInput } from '../../core/schema/types';
+import type { ContractInput } from '@repo/zod-contract-kit/types';
 import { scopedProcedure } from '../../core/procedure';
 import {
   flushTransitions,

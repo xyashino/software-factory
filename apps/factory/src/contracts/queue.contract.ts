@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { PRIORITIES, WORK_ORDER_STATES } from '../domain/orders/order-state';
-import { projectIdSchema, slugSchema } from './common';
+import { slugSchema } from '@repo/zod-contract-kit/fields';
+import { projectIdSchema } from './common';
 
 const importErrorDto = z.object({
   filename: z.string(),

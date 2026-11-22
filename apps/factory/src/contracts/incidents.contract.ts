@@ -3,7 +3,8 @@ import {
   INCIDENT_REASONS,
   INCIDENT_STATUSES,
 } from '../domain/incidents/incident-rules';
-import { idParams, projectIdSchema } from './common';
+import { idParams } from '@repo/zod-contract-kit/fields';
+import { projectIdSchema } from './common';
 import { workOrderDto } from './work-orders.contract';
 
 const incidentDto = z.object({

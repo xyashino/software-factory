@@ -1,12 +1,12 @@
 import type { z } from 'zod';
-import { BadRequest, InternalServer } from '../error-handling';
 import type {
   ContractIn,
   ContractInput,
   ProcedureResponse,
   RawInput,
   ZodContract,
-} from './types';
+} from '@repo/zod-contract-kit/types';
+import { BadRequest, InternalServer } from '../error-handling';
 
 type Section = keyof ContractIn;
 

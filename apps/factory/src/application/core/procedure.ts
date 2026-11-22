@@ -4,13 +4,13 @@ import type { ClaimWaitersPort } from '../ports/claim-waiters.port';
 import type { ClockPort } from '../ports/clock.port';
 import type { TransitionBusPort } from '../ports/transition-bus.port';
 import { Forbidden, Unauthorized } from './error-handling';
-import { withZodSchema } from './schema/zod';
 import type {
   ContractInput,
   ProcedureResponse,
   RawInput,
   ZodContract,
-} from './schema/types';
+} from '@repo/zod-contract-kit/types';
+import { withZodSchema } from './schema/zod';
 
 export type TransportContext = {
   db: Db;
