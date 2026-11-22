@@ -26,6 +26,21 @@
         "!**/node_modules/**"
       ]
     },
+    "//#docs:check": {
+      "inputs": [
+        "scripts/check-doc-links.ts",
+        "README.md",
+        "docs/**/*.md",
+        "apps/*/README.md",
+        "packages/*/README.md"
+      ]
+    },
+    "//#docs:test": {
+      "inputs": ["scripts/check-doc-links*.ts"]
+    },
+    "//#scripts:check-types": {
+      "inputs": ["scripts/**"]
+    },
     "build": {
       "dependsOn": ["^build"],
       "outputs": ["dist/**", ".astro/**"]
