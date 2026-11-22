@@ -4,4 +4,5 @@ export const RUNNERS = [
   'cursor',
   'antigravity',
   'opencode',
+  'copilot',
 ] as const;

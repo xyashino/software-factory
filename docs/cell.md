@@ -47,7 +47,7 @@ Transitions (`application/procedures/cells/slot-runtime.ts`, `adapters/superviso
 
 `sf cell start`, in repo root (`apps/sf/src/application/procedures/cell/start.procedure.ts`):
 
-1. Resolve project from `.factory/config.json`. Refuse if no runner installed (`claude`, `codex`, `cursor`, `antigravity`, `opencode`).
+1. Resolve project from `.factory/config.json`. Refuse if no runner installed (`claude`, `codex`, `cursor`, `antigravity`, `opencode`, `copilot`).
 2. Lines = `.factory/lines/*.yml`, filtered by `CELL_LINES`. None → error.
 3. Session = `.factory-local/cells/<name>.json`. Missing → enroll with `FACTORY_JOIN_TOKEN`, or mint `cell_join` from supervisor token. Session holds `cellId` + `sf_cell_` token.
 4. `POST /api/v1/cells/hello`: projectId, lines, runners.
@@ -91,7 +91,7 @@ Gap, from code: `sf cell start` reads only `CELL_NAME`, `FACTORY_URL` (via conne
 | Key | Default | Range / values |
 | :--- | :--- | :--- |
 | `herdr_enabled` | `false` | bool. Passed to child as `HERDR_ENABLED` |
-| `default_runner` | `claude` | `claude`, `codex`, `cursor`, `antigravity`, `opencode` |
+| `default_runner` | `claude` | `claude`, `codex`, `cursor`, `antigravity`, `opencode`, `copilot` |
 | `restart_backoff_ms` | `1000` | 0 … 600000 |
 | `max_local_cells` | `4` | 0 … 64 |
 | `git_fetch_on_worktree` | `true` | bool. Stored; no reader found in code |

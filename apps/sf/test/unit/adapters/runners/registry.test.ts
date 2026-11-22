@@ -6,9 +6,16 @@ import {
 } from '../../../../src/adapters/runners/registry';
 
 describe('runner registry', () => {
-  it('registers exactly the five v2.0 runners in order', () => {
+  it('registers exactly the six runners in order', () => {
     // Arrange
-    const expected = ['claude', 'codex', 'cursor', 'antigravity', 'opencode'];
+    const expected = [
+      'claude',
+      'codex',
+      'cursor',
+      'antigravity',
+      'opencode',
+      'copilot',
+    ];
 
     // Act
     const names = [...RUNNER_NAMES];
