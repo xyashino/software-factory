@@ -1,107 +1,73 @@
 import { z } from 'zod';
+import { listCellsContract } from '@repo/factory-contracts/cells.contract';
+import { listIncidentsContract } from '@repo/factory-contracts/incidents.contract';
+import {
+  getWorkOrderContract,
+  workOrderDto,
+} from '@repo/factory-contracts/work-orders.contract';
 
-const cellDto = z.object({
-  cellId: z.string(),
-  projectId: z.string(),
-  name: z.string(),
-  status: z.string(),
-  allowedLines: z.array(z.string()),
-  runners: z.array(z.string()),
-  activeJobId: z.string().nullable(),
-  lastHeartbeatAt: z.number().nullable(),
-  leaseExpiresAt: z.number().nullable(),
+// The pages read only these fields; the factory wire carries more.
+const orderSummaryDto = workOrderDto.pick({
+  orderId: true,
+  projectId: true,
+  slug: true,
+  title: true,
+  type: true,
+  lineName: true,
+  priority: true,
+  state: true,
+  branch: true,
+  staleBase: true,
+  currentStepIndex: true,
+  pinnedCellId: true,
+  activeCellId: true,
+  activeJobId: true,
+  version: true,
+  updatedAt: true,
 });
 
-const workOrderDto = z.object({
-  orderId: z.string(),
-  projectId: z.string(),
-  slug: z.string(),
-  title: z.string(),
-  type: z.string(),
-  lineName: z.string(),
-  priority: z.string(),
-  state: z.string(),
-  branch: z.string(),
-  staleBase: z.boolean(),
-  currentStepIndex: z.number(),
-  pinnedCellId: z.string().nullable(),
-  activeCellId: z.string().nullable(),
-  activeJobId: z.string().nullable(),
-  version: z.number(),
-  updatedAt: z.number(),
+const jobSummaryDto = getWorkOrderContract.out[200].shape.jobs.element.pick({
+  jobId: true,
+  kind: true,
+  status: true,
+  cellId: true,
 });
 
-const stepDto = z.object({
-  stepId: z.string(),
-  stepIndex: z.number(),
-  stationId: z.string(),
-  kind: z.string(),
-  state: z.string(),
-});
+const incidentSummaryDto =
+  listIncidentsContract.out[200].shape.items.element.pick({
+    incidentId: true,
+    projectId: true,
+    orderId: true,
+    failedStepId: true,
+    reason: true,
+    detail: true,
+    status: true,
+    triageOwner: true,
+    createdAt: true,
+    resolvedAt: true,
+  });
 
-const jobDto = z.object({
-  jobId: z.string(),
-  kind: z.string(),
-  status: z.string(),
-  cellId: z.string().nullable(),
-});
-
-const workOrderIncidentDto = z.object({
-  incidentId: z.string(),
-  reason: z.string(),
-  status: z.string(),
-});
-
-const incidentDto = z.object({
-  incidentId: z.string(),
-  projectId: z.string(),
-  orderId: z.string(),
-  failedStepId: z.string().nullable(),
-  reason: z.string(),
-  detail: z.string(),
-  status: z.string(),
-  triageOwner: z.string(),
-  createdAt: z.number(),
-  resolvedAt: z.number().nullable(),
-});
-
-const projectDto = z.object({
-  projectId: z.string(),
-  repoUrl: z.string(),
-  defaultBaseBranch: z.string(),
-  maxRunning: z.number(),
-  updatedAt: z.number(),
-});
-
-export const cellsReply = z.object({
-  code: z.literal(200),
-  cells: z.array(cellDto),
-});
+export const cellsReply = listCellsContract.out[200];
 
 export const workOrdersReply = z.object({
   code: z.literal(200),
-  items: z.array(workOrderDto),
+  items: z.array(orderSummaryDto),
 });
 
 export const workOrderDetailReply = z.object({
   code: z.literal(200),
-  order: workOrderDto,
-  steps: z.array(stepDto),
-  jobs: z.array(jobDto),
-  incidents: z.array(workOrderIncidentDto),
+  order: orderSummaryDto,
+  steps: getWorkOrderContract.out[200].shape.steps,
+  jobs: z.array(jobSummaryDto),
+  incidents: getWorkOrderContract.out[200].shape.incidents,
 });
 
 export const incidentsReply = z.object({
   code: z.literal(200),
-  items: z.array(incidentDto),
-});
-
-export const projectsReply = z.object({
-  code: z.literal(200),
-  projects: z.array(projectDto),
+  items: z.array(incidentSummaryDto),
 });
 
 export const transitionReply = z.object({
   code: z.literal(200),
-  order: workOrderDto,
+  order: orderSummaryDto,
 });

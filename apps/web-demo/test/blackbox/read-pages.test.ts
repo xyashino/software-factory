@@ -51,7 +51,7 @@ const incident = {
   projectId: 'project-1',
   orderId: 'order-1',
   failedStepId: null,
-  reason: 'tests_failed',
+  reason: 'step_retries_exhausted',
   detail: 'unit tests red',
   status: 'open',
   triageOwner: 'supervisor',
