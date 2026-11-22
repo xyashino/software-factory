@@ -66,6 +66,69 @@ System-wide Linux install: `pnpm build:sf && sudo scripts/install.sh` (`/usr/loc
 
 State lives in `$XDG_DATA_HOME/sf` (default `~/.local/share/sf` on Linux, `%LOCALAPPDATA%\sf` on Windows).
 
+## Set up a VPS (headless)
+
+Fresh Linux VPS, SSH only, no desktop. Run everything as your normal user, not root.
+
+Prerequisites:
+
+- Git, `mise` (Node 24, pnpm 12.15.0), Bun.
+- `gh auth login` done: `sf setup` warns until PR delivery can use `gh`.
+- Runner CLIs named in `.factory/lines/*.yml` on `PATH` (starter lines use `claude`).
+- `herdr` only if a line has a non-headless station; `sf doctor` says when.
+
+Install from a checkout:
+
+```bash
+git clone <repo-url> software-factory && cd software-factory
+mise install && pnpm install
+pnpm build:sf                                     # apps/sf/dist/sf + web UI
+node scripts/install.mjs --source apps/sf/dist    # ~/.local/bin/sf (see troubleshooting)
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+Set up the repo the factory will work on:
+
+```bash
+cd path/to/your-repo
+sf doctor                 # read-only check: git, gh, runners, server, token, project
+sf setup                  # doctor, init, server start, project add (idempotent)
+sf todos import --dry-run # preview todos/*.md before pushing
+```
+
+`sf setup` refuses until every runner is installed. The repo needs a git `origin` for the project step; setup fails there, after init and server start.
+
+Log in to each runner CLI on the VPS: run it once in your SSH session, as the same user that runs `sf`, and finish its sign-in. `sf doctor` only checks that the binary is on `PATH`.
+
+Web UI from your laptop, without opening a port on the VPS:
+
+```bash
+sf web start                              # VPS, 127.0.0.1:4321
+ssh -L 4321:127.0.0.1:4321 <user>@<vps>   # laptop
+# open http://127.0.0.1:4321 on the laptop
+```
+
+The server listens on loopback by default. Set `FACTORY_HOST` (for example a Tailscale address) only behind Tailscale or TLS: it exposes the factory API to the network.
+
+Keep a Cell running after you log out. `sf service install` is not available yet, so use `tmux`:
+
+```bash
+tmux new -s cell-vps-1
+sf cell start --name vps-1                # runs in the foreground
+# detach: Ctrl-b d    reattach: tmux attach -t cell-vps-1
+```
+
+Troubleshooting:
+
+| Symptom | Check | Fix |
+| --- | --- | --- |
+| Install fails: `missing .../apps/factory/dist/sf: run pnpm build:sf first` even after `pnpm build:sf` | `ls apps/sf/dist/sf` exists | Installer default source is stale. Pass it: `node scripts/install.mjs --source apps/sf/dist` |
+| Port 7070 in use: `sf server start` prints `server started`, or `sf doctor` shows `token rejected` on a server you did not start | `ss -ltnp 'sport = :7070'`: owner is not your factory server | Stop the owner: `kill <pid>`. `sf server stop` only stops the process in the pid file, not a leaked one. Then `sf server start` |
+| 401 after `sf server token create`: `401: Missing or invalid bearer token` | Read `token source:` in the error. `fix:` always prints `--global`, which is wrong for a repo token | `repo:.factory-local/supervisor.token`: `sf server token create --save` (the repo file wins over global). `env:FACTORY_TOKEN`: unset it or set the new token. `config:<name>`: `sf server token create --save --global` |
+| Missing runner: `missing: runner <name> not installed` in `sf doctor`; `sf setup` refuses | `command -v <name>` prints nothing | Install the CLI, put it on `PATH` for non-login shells too, sign in (see above), then `sf doctor` |
+
+Test runs on the same VPS: set `FACTORY_PORT` and `FACTORY_URL` together, or the probe and the doctor check still hit port 7070.
+
 ## Use `sf` in any repository
 
 Works in any git repository, not only this monorepo:
