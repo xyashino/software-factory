@@ -1,5 +1,7 @@
 import { z } from 'zod';
+import { getSettingsContract } from '@repo/cell-contracts/settings.contract';
 import { define } from '../../core/procedure';
+import { checkedReply } from './checked-reply';
 import { isAnswering } from './probe';
 import { type Settings, SettingsReplySchema } from './shapes';
 
@@ -19,8 +21,12 @@ export const statusCellServer = define({ kind: 'supervisor' })(
   const alive = pid !== null && ctx.process.isAlive(pid);
   const healthy = await isAnswering(ctx);
   const settings = healthy
-    ? SettingsReplySchema.parse(await ctx.cellServer.get('/api/v1/settings'))
-        .settings
+    ? checkedReply(
+        '/api/v1/settings',
+        getSettingsContract,
+        SettingsReplySchema,
+        await ctx.cellServer.get('/api/v1/settings'),
+      ).settings
     : null;
   return { pid, alive, healthy, settings };
 });
