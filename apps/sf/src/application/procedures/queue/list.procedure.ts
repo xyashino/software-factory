@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import { WORK_ORDER_STATES, slugSchema } from '../../../contracts/common';
+import { WORK_ORDER_STATES } from '@repo/factory-contracts/enums/orders';
+import { slugSchema } from '@repo/zod-contract-kit/fields';
 import { ArgumentError } from '../../core/errors';
 import { define } from '../../core/procedure';
 import { readProjectId, readSecret } from '../../core/repo-access';

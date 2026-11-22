@@ -381,6 +381,9 @@ importers:
       '@repo/cell-contracts':
         specifier: workspace:*
         version: link:../../packages/cell-contracts
+      '@repo/factory-contracts':
+        specifier: workspace:*
+        version: link:../../packages/factory-contracts
       '@repo/zod-contract-kit':
         specifier: workspace:*
         version: link:../../packages/zod-contract-kit

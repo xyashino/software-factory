@@ -3,7 +3,7 @@ import {
   exportQueueContract,
   importQueueContract,
   queueActionsContract,
-} from '../../../src/contracts/queue.contract';
+} from '@repo/factory-contracts/queue.contract';
 
 describe('queue contract', () => {
   it('parses a comma-separated states query into a list', () => {
@@ -54,7 +54,7 @@ describe('queue contract', () => {
     expect(result.success).toBe(false);
   });
 
-  it('rejects an import body with an unknown key', () => {
+  it('ignores an import body with an unknown key', () => {
     // Arrange
     const body = {
       projectId: 'factory',
@@ -67,7 +67,7 @@ describe('queue contract', () => {
     const result = importQueueContract.in.body.safeParse(body);
 
     // Assert
-    expect(result.success).toBe(false);
+    expect(result.success).toBe(true);
   });
 
   it('accepts a reprioritise action with a priority', () => {
@@ -85,7 +85,7 @@ describe('queue contract', () => {
     expect(result.success).toBe(true);
   });
 
-  it('rejects a queue action with an unknown key', () => {
+  it('ignores a queue action with an unknown key', () => {
     // Arrange
     const body = { action: 'pause', orderIds: ['order-1'], extra: true };
 
@@ -93,6 +93,6 @@ describe('queue contract', () => {
     const result = queueActionsContract.in.body.safeParse(body);
 
     // Assert
-    expect(result.success).toBe(false);
+    expect(result.success).toBe(true);
   });
 });

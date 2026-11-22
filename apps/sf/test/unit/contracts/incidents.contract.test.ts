@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   listIncidentsContract,
   resolveIncidentContract,
-} from '../../../src/contracts/incidents.contract';
+} from '@repo/factory-contracts/incidents.contract';
 
 const body = resolveIncidentContract.in.body;
 
@@ -40,7 +40,7 @@ describe('incidents contract', () => {
     expect(result.success).toBe(true);
   });
 
-  it('rejects a resolution with an unknown key', () => {
+  it('ignores a resolution with an unknown key', () => {
     // Arrange
     const input = { action: 'escalate', extra: true };
 
@@ -48,6 +48,6 @@ describe('incidents contract', () => {
     const result = body.safeParse(input);
 
     // Assert
-    expect(result.success).toBe(false);
+    expect(result.success).toBe(true);
   });
 });

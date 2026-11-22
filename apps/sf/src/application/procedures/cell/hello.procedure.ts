@@ -1,4 +1,4 @@
-import { helloCellContract } from '../../../contracts/cells.contract';
+import { helloCellContract } from '@repo/factory-contracts/cells.contract';
 import type { Ports } from '../../core/procedure';
 import type { CellSession } from '../../ports/cell-state.port';
 

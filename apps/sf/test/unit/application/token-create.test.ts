@@ -38,6 +38,22 @@ describe('token create', () => {
     ]);
   });
 
+  it('refuses a token name that spans several lines', async () => {
+    // Arrange
+    const fake = createFakePorts({ reply: () => ISSUED });
+
+    // Act
+    const attempt = runProcedure(
+      createToken,
+      { kind: 'cell_join', name: 'worker\n1' },
+      fake,
+    );
+
+    // Assert
+    await expect(attempt).rejects.toThrow();
+    expect(fake.calls).toEqual([]);
+  });
+
   it('refuses to mint a token without a stored supervisor token', async () => {
     // Arrange
     const fake = createFakePorts({ secret: null, reply: () => ISSUED });

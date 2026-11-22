@@ -1,4 +1,4 @@
-import { leaveCellContract } from '../../../contracts/cells.contract';
+import { leaveCellContract } from '@repo/factory-contracts/cells.contract';
 import { commandIdOf } from '../../../domain/cell/command-id';
 import { Refused } from '../../core/errors';
 import {

@@ -1,4 +1,4 @@
-import { enrollCellContract } from '../../../contracts/cells.contract';
+import { enrollCellContract } from '@repo/factory-contracts/cells.contract';
 import type { Ports } from '../../core/procedure';
 import type { CellSession } from '../../ports/cell-state.port';
 

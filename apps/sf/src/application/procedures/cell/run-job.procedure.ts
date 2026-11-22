@@ -10,10 +10,10 @@ import {
 } from '../../../config';
 import {
   heartbeatCellContract,
-  stepPayloadSchema,
-} from '../../../contracts/cells.contract';
-import { slugSchema } from '../../../contracts/common';
-import { transitionJobContract } from '../../../contracts/jobs.contract';
+  stepJobPayloadDto,
+} from '@repo/factory-contracts/cells.contract';
+import { transitionJobContract } from '@repo/factory-contracts/jobs.contract';
+import { slugSchema } from '@repo/zod-contract-kit/fields';
 import { operatorRequest } from '../../../contracts/operator.contract';
 import type { RunHandle } from '../../ports/runner.port';
 import { commandIdOf } from '../../../domain/cell/command-id';
@@ -73,6 +73,8 @@ const MS_PER_SECOND = 1000;
 const MECHANIC_DIR = 'mechanic';
 const REPORT_FILE = 'report.md';
 const STEP_ACTIONS: readonly string[] = ['retry_step', 'restart_from_step'];
+// Mechanic and plan_branch payloads carry no step fields.
+const stepPayloadSchema = stepJobPayloadDto.partial();
 // The station a claimed job runs, for log lines; set once its line is loaded.
 const stationNames = new WeakMap<ClaimedJob, string>();
 

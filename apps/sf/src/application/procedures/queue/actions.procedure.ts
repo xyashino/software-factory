@@ -1,5 +1,8 @@
 import { z } from 'zod';
-import { PRIORITIES, WORK_ORDER_STATES } from '../../../contracts/common';
+import {
+  PRIORITIES,
+  WORK_ORDER_STATES,
+} from '@repo/factory-contracts/enums/orders';
 import { ArgumentError } from '../../core/errors';
 import { define } from '../../core/procedure';
 import { readSecret } from '../../core/repo-access';
