@@ -28,6 +28,8 @@ const scale = createScale({
   gate: () => hqGateOf(hq.state()),
   spawn: cells.spawn,
   stop: cells.stop,
+  exists: (path) => ports.fs.exists(path),
+  lose: cells.lose,
 });
 const hq = createHqLink({
   credential,

@@ -47,6 +47,7 @@ interface ProjectsBody {
 const relayStub: Relay = {
   issue: (cellId) => `token-${cellId}`,
   hqCellIdOf: () => null,
+  reportWorktreeMissing: async () => false,
   handle: async () => new Response(null, { status: NOT_FOUND }),
 };
 
@@ -70,6 +71,8 @@ const daemonOf = (): Daemon => {
     gate: () => hqGateOf(hq.state()),
     spawn: cells.spawn,
     stop: cells.stop,
+    exists: async () => true,
+    lose: cells.lose,
   });
   const handle = createFactoryRoutes({
     ports: fake.ports,

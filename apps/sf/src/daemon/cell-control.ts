@@ -16,6 +16,7 @@ import type { CellSpec } from './scale';
 import type { CellRecord, Supervisor } from './supervisor';
 
 const RELAY_URL = `${FACTORY_DAEMON_URL}${RELAY_PATH}`;
+const LOST_LINE = 'worktree deleted, cell stopped';
 const cellLauncher = cellWorkerLauncherOf(IS_COMPILED, CLI_ENTRY);
 
 export interface CellControlDeps {
@@ -27,6 +28,7 @@ export interface CellControlDeps {
 export interface CellControl {
   spawn(spec: CellSpec): Promise<CellRecord>;
   stop(cellId: string): Promise<void>;
+  lose(cellId: string, worktree: string): Promise<void>;
 }
 
 const workerEnvOf = (
@@ -63,6 +65,39 @@ const goneInHq = async (
   }
 };
 
+const goneOf = async (deps: CellControlDeps, cellId: string): Promise<void> => {
+  const hqCellId = deps.relay.hqCellIdOf(cellId);
+  if (hqCellId !== null) {
+    await goneInHq(deps, hqCellId);
+  }
+};
+
+const noteLost = async (
+  deps: CellControlDeps,
+  cellId: string,
+): Promise<void> => {
+  try {
+    await deps.ports.fs.appendText(
+      deps.supervisor.logPath(cellId),
+      `${LOST_LINE}\n`,
+    );
+  } catch {
+    // The kill already happened; a missing log line must not block the report.
+  }
+};
+
+const reportLost = async (
+  deps: CellControlDeps,
+  cellId: string,
+  worktree: string,
+): Promise<void> => {
+  try {
+    await deps.relay.reportWorktreeMissing(cellId, [worktree]);
+  } catch {
+    // HQ failure is not retried: the lease reaper requeues the job.
+  }
+};
+
 export const createCellControl = (deps: CellControlDeps): CellControl => ({
   spawn: (spec) =>
     deps.supervisor.spawn({
@@ -76,9 +111,13 @@ export const createCellControl = (deps: CellControlDeps): CellControl => ({
     }),
   stop: async (cellId) => {
     await deps.supervisor.kill(cellId);
-    const hqCellId = deps.relay.hqCellIdOf(cellId);
-    if (hqCellId !== null) {
-      await goneInHq(deps, hqCellId);
-    }
+    await goneOf(deps, cellId);
+  },
+  // The kill is confirmed before the report, so HQ never requeues a job a live Cell still holds.
+  lose: async (cellId, worktree) => {
+    await deps.supervisor.kill(cellId);
+    await noteLost(deps, cellId);
+    await reportLost(deps, cellId, worktree);
+    await goneOf(deps, cellId);
   },
 });

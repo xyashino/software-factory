@@ -5,7 +5,6 @@ import {
   HEARTBEAT_INTERVAL_MS,
   LINES_DIR,
   OPERATORS_DIR,
-  WORKTREES_DIR,
   operatorCommandOf,
 } from '../../../config';
 import {
@@ -28,6 +27,7 @@ import {
 import { toJobId } from '../../../domain/common/brand';
 import { joinPath } from '../../../domain/common/path';
 import { factoryBranchOf, slugOf } from '../../../domain/git/branch-names';
+import { worktreeRelOf } from '../../../domain/git/worktree-path';
 import {
   profileArtifacts,
   renderOperatorPrompt,
@@ -146,7 +146,7 @@ const errorText = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
 
 const worktreeOf = (runtime: CellRuntime, job: ClaimedJob): string =>
-  joinPath(runtime.repoRoot, WORKTREES_DIR, slugOf(job.orderId));
+  joinPath(runtime.repoRoot, worktreeRelOf(job.orderId));
 
 const dirOf = (runtime: CellRuntime, job: ClaimedJob, dir: string): string =>
   joinPath(worktreeOf(runtime, job), CELL_DIR, dir);

@@ -55,6 +55,7 @@ export interface FakePorts {
   ports: Ports;
   calls: ServerCall[];
   writes: { dir: string; filename: string; force: boolean }[];
+  appended: { path: string; text: string }[];
   savedConnections: ConnectionConfig[];
   spawned: DetachedSpec[];
   terminated: number[];
@@ -81,6 +82,7 @@ export const createFakePorts = (options: FakeOptions = {}): FakePorts => {
   const reply = options.reply ?? noReply;
   const calls: ServerCall[] = [];
   const writes: FakePorts['writes'] = [];
+  const appended: FakePorts['appended'] = [];
   const savedConnections: ConnectionConfig[] = [];
   const spawned: DetachedSpec[] = [];
   const terminated: number[] = [];
@@ -139,7 +141,9 @@ export const createFakePorts = (options: FakeOptions = {}): FakePorts => {
         return config;
       },
       writeText: unused,
-      appendText: unused,
+      appendText: async (path, text) => {
+        appended.push({ path, text });
+      },
       exists: async () => config !== null,
       list: unused,
       readStdin: unused,
@@ -249,6 +253,7 @@ export const createFakePorts = (options: FakeOptions = {}): FakePorts => {
     ports,
     calls,
     writes,
+    appended,
     savedConnections,
     spawned,
     terminated,

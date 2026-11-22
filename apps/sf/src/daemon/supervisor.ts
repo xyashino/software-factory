@@ -33,6 +33,7 @@ export interface Supervisor {
   has(cellId: string): boolean;
   kill(cellId: string): Promise<boolean>;
   killAll(): Promise<void>;
+  logPath(cellId: string): string;
 }
 
 interface Entry {
@@ -88,6 +89,8 @@ export const createSupervisor = (
 ): Supervisor => {
   const entries = new Map<string, Entry>();
 
+  const logPathOf = (cellId: string): string => join(logDir, `${cellId}.log`);
+
   const isLive = (entry: Entry): boolean =>
     entry.pid === null || ports.process.isAlive(entry.pid);
 
@@ -140,7 +143,7 @@ export const createSupervisor = (
         args: start.args,
         env: start.env,
         cwd: input.repoRoot,
-        logPath: join(logDir, `${entry.cellId}.log`),
+        logPath: logPathOf(entry.cellId),
       });
     } catch (error) {
       entries.delete(entry.cellId);
@@ -167,5 +170,6 @@ export const createSupervisor = (
     killAll: async () => {
       await Promise.all([...entries.keys()].map((cellId) => kill(cellId)));
     },
+    logPath: logPathOf,
   };
 };
