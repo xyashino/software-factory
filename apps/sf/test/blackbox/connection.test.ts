@@ -271,9 +271,94 @@ describe('sf connection precedence and 401 diagnostics', () => {
     expect(result.stderr).toContain(`target: ${factoryUrl} (config:lab)`);
     expect(result.stderr).toContain('token source: env:FACTORY_TOKEN');
     expect(result.stderr).toContain(
-      'fix: sf server token create --save --global',
+      'fix: unset FACTORY_TOKEN, or set it to a token the server accepts',
     );
     expect(result.stderr).not.toContain(STALE_TOKEN);
+  });
+
+  it('says the server rejected the token and hints at a port owner', async () => {
+    // Arrange
+    const sandbox = createSandbox();
+    await connectLab(sandbox, ['--default']);
+
+    // Act
+    const result = await runCli(sandbox, ['project', 'ls'], {
+      env: { FACTORY_TOKEN: STALE_TOKEN },
+    });
+
+    // Assert
+    expect(result.stderr).toContain(
+      `server at ${factoryUrl} rejected the token`,
+    );
+    expect(result.stderr).toContain(
+      'another server may own this port (check what listens on it)',
+    );
+  });
+
+  it('suggests minting a global token when the saved target token is stale', async () => {
+    // Arrange
+    const sandbox = createSandbox();
+    await connectLab(sandbox, ['--default']);
+    const saved = readFileSync(sandbox.configPath, 'utf8');
+    writeFileSync(sandbox.configPath, saved.replace(TOKEN, STALE_TOKEN));
+
+    // Act
+    const result = await runCli(sandbox, ['project', 'ls']);
+
+    // Assert
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('token source: config:lab');
+    expect(result.stderr).toContain(
+      'fix: sf server token create --save --global',
+    );
+  });
+
+  it('suggests replacing the repo token file when it is stale', async () => {
+    // Arrange
+    const sandbox = createSandbox();
+    await connectLab(sandbox, ['--default']);
+    mkdirSync(join(sandbox.cwd, '.factory-local'));
+    writeFileSync(
+      join(sandbox.cwd, '.factory-local', 'supervisor.token'),
+      `${STALE_TOKEN}\n`,
+    );
+
+    // Act
+    const result = await runCli(sandbox, ['project', 'ls']);
+
+    // Assert
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      'token source: repo:.factory-local/supervisor.token',
+    );
+    expect(result.stderr).toContain(
+      'fix: rm .factory-local/supervisor.token && sf server token create --save',
+    );
+    expect(result.stderr).not.toContain('--global');
+  });
+
+  it('suggests fixing the legacy home token when it is stale', async () => {
+    // Arrange
+    const sandbox = createSandbox();
+    mkdirSync(join(sandbox.home, '.config', 'factory'), { recursive: true });
+    writeFileSync(
+      join(sandbox.home, '.config', 'factory', 'token'),
+      `${STALE_TOKEN}\n`,
+    );
+
+    // Act
+    const result = await runCli(sandbox, ['project', 'ls'], {
+      env: { FACTORY_URL: factoryUrl },
+    });
+
+    // Assert
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      'token source: legacy:~/.config/factory/token',
+    );
+    expect(result.stderr).toContain(
+      'fix: sf server token create --save --global',
+    );
   });
 
   it('prefers the repo token file over the saved target token', async () => {

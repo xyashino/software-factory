@@ -7,7 +7,10 @@ import {
 import type { Context, Ports, Procedure } from '../application/core/procedure';
 import type { Access } from '../domain/access';
 import type { Connection } from '../domain/connection/connection-config';
-import { recoveryCommandOf } from '../domain/connection/connection-config';
+import {
+  recoveryCommandOf,
+  tokenFixOf,
+} from '../domain/connection/connection-config';
 import { EXIT, type ExitCode } from '../domain/exit-codes';
 import { buildContext, type Mode } from './context';
 
@@ -19,9 +22,11 @@ const noTokenMessage = (connection: Connection): string =>
 const unauthorizedMessage = (connection: Connection, reason: string): string =>
   [
     reason,
+    `server at ${connection.url} rejected the token`,
     `target: ${connection.url} (${connection.urlSource})`,
     `token source: ${connection.tokenSource ?? 'none'}`,
-    `fix: ${recoveryCommandOf(connection.url)}`,
+    `fix: ${tokenFixOf(connection)}`,
+    'another server may own this port (check what listens on it)',
   ].join('\n');
 
 export type RunResult<O> =
