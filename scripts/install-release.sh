@@ -65,6 +65,8 @@ case ":$PATH:" in
   *":$bin_dir:"*) ;;
   *) echo "add to PATH: export PATH=\"$bin_dir:\$PATH\"" ;;
 esac
-if [ "$web_dir" != "${XDG_DATA_HOME:-${HOME:-}/.local/share}/sf/web" ]; then
+home="${HOME:-}"
+default_data_home="${XDG_DATA_HOME:-$home/.local/share}"
+if [ "$web_dir" != "$default_data_home/sf/web" ]; then
   echo "set SF_WEB_DIR=$web_dir when running sf"
 fi
