@@ -4,20 +4,31 @@ import { cells } from '../../../db/schema/cells';
 import { safeTokens } from '../../../db/schema/tokens';
 import { CELL_SESSION_TTL_MS } from '../../../config';
 import { enrollCellContract } from '@repo/factory-contracts/cells.contract';
-import { asCellId, asTokenId, type CellId } from '../../../domain/common/brand';
+import {
+  asCellId,
+  asTokenId,
+  type CellId,
+  type FactoryId,
+  type TokenId,
+} from '../../../domain/common/brand';
 import { scopedId } from '../../../domain/common/scoped-id';
 import { addMs } from '../../../domain/common/time';
 import { Forbidden } from '../../core/error-handling';
-import { scopedProcedure } from '../../core/procedure';
+import { anyScopedProcedure } from '../../core/procedure';
 import { requireProject } from '../../orders/order-writes';
 import { hashToken, mintToken, TOKEN_PREFIXES } from '../../tokens/token-hash';
 
 const findCell = (tx: DbTx, cellId: CellId) =>
   tx.select().from(cells).where(eq(cells.cellId, cellId)).get();
 
-export const enrollCellProcedure = scopedProcedure(['cell:enroll'])(
-  enrollCellContract,
-)((input, ctx) => {
+const factoryOf = (tx: DbTx, tokenId: TokenId): FactoryId | null =>
+  tx.select().from(safeTokens).where(eq(safeTokens.tokenId, tokenId)).get()
+    ?.factoryId ?? null;
+
+export const enrollCellProcedure = anyScopedProcedure([
+  'cell:enroll',
+  'factory:worker',
+])(enrollCellContract)((input, ctx) => {
   const body = input.body;
   const now = ctx.clock.now();
   const cellId = asCellId(scopedId(body.projectId, body.name));
@@ -29,6 +40,9 @@ export const enrollCellProcedure = scopedProcedure(['cell:enroll'])(
     const existing = findCell(tx, cellId);
     if (existing?.status === 'revoked')
       throw new Forbidden(`Cell ${body.name} is revoked`);
+    const factoryId = ctx.principal.scopes.includes('factory:worker')
+      ? factoryOf(tx, ctx.principal.tokenId)
+      : null;
 
     if (existing === undefined) {
       tx.insert(cells)
@@ -40,6 +54,7 @@ export const enrollCellProcedure = scopedProcedure(['cell:enroll'])(
           status: 'online',
           runnersJson: body.runners,
           localWorktreesJson: [],
+          factoryId,
           createdAt: now,
         })
         .run();
@@ -49,6 +64,7 @@ export const enrollCellProcedure = scopedProcedure(['cell:enroll'])(
           allowedLinesJson: body.allowedLines,
           runnersJson: body.runners,
           status: 'online',
+          factoryId,
         })
         .where(eq(cells.cellId, cellId))
         .run();
@@ -63,6 +79,7 @@ export const enrollCellProcedure = scopedProcedure(['cell:enroll'])(
         name: `${body.name} session`,
         scopesJson: ['cell:worker'],
         cellId,
+        factoryId,
         expiresAt,
         createdAt: now,
       })

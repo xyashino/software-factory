@@ -32,6 +32,16 @@ const parseSession = (text: string): CellSession => {
   }
 };
 
+export const createMemoryCellState = (): CellStatePort => {
+  let session: CellSession | null = null;
+  return {
+    read: async () => session,
+    write: async (next) => {
+      session = sessionSchema.parse(next);
+    },
+  };
+};
+
 export const createCellStateFile = (path: string): CellStatePort => ({
   read: async () =>
     existsSync(path) ? parseSession(readFileSync(path, 'utf8')) : null,

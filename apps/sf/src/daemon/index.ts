@@ -5,6 +5,7 @@ import {
   LOCAL_CELLS_DIR,
 } from '../config';
 import { HQ_TICK_MS, createHqLink } from './hq-link';
+import { createRelay } from './relay';
 import { createFactoryRoutes } from './routes';
 import { createSupervisor } from './supervisor';
 
@@ -21,6 +22,11 @@ const hq = createHqLink({
 });
 await hq.tick();
 const timer = setInterval(() => void hq.tick(), HQ_TICK_MS);
+const relay = createRelay({
+  credential: () => ports.factoryCredential.read(),
+  alive: (cellId) => supervisor.has(cellId),
+  kill: (cellId) => supervisor.kill(cellId),
+});
 const server = Bun.serve({
   hostname: HOST,
   port: FACTORY_DAEMON_PORT,
@@ -28,6 +34,7 @@ const server = Bun.serve({
     ports,
     supervisor,
     hq,
+    relay,
     identity:
       credential === null
         ? null

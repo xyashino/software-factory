@@ -25,6 +25,7 @@ const cell = {
   activeJobId: 'job-7',
   lastHeartbeatAt: Date.UTC(2026, 10, 19, 11, 59, 0),
   leaseExpiresAt: Date.UTC(2026, 10, 19, 12, 5, 0),
+  factoryId: null,
 };
 
 const order = {

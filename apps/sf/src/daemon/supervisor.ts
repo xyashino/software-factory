@@ -24,12 +24,13 @@ export interface SpawnInput {
   repoRoot: string;
   name: string | undefined;
   baseName: string;
-  start: (name: string) => Promise<CellStart>;
+  start: (name: string, cellId: string) => Promise<CellStart>;
 }
 
 export interface Supervisor {
   spawn(input: SpawnInput): Promise<CellRecord>;
   list(): CellRecord[];
+  has(cellId: string): boolean;
   kill(cellId: string): Promise<boolean>;
   killAll(): Promise<void>;
 }
@@ -133,7 +134,7 @@ export const createSupervisor = (
     };
     entries.set(entry.cellId, entry);
     try {
-      const start = await input.start(name);
+      const start = await input.start(name, entry.cellId);
       entry.pid = await ports.process.spawnDetached({
         command: process.execPath,
         args: start.args,
@@ -161,6 +162,7 @@ export const createSupervisor = (
   return {
     spawn,
     list: () => runningOf().map(recordOf),
+    has: (cellId) => pruneDead().some((entry) => entry.cellId === cellId),
     kill,
     killAll: async () => {
       await Promise.all([...entries.keys()].map((cellId) => kill(cellId)));

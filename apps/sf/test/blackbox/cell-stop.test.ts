@@ -269,6 +269,7 @@ const runScenario = async (scenario: Scenario) => {
     repoRoot: REPO,
     cellName: 'dev-box',
     joinToken: undefined,
+    relayed: false,
     signal: controller.signal,
   });
   return { calls: fake.calls, runs, aborts, outcome };

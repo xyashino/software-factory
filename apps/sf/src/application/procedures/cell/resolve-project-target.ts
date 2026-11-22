@@ -28,6 +28,7 @@ export interface CellTargetInput {
   repoRoot: string;
   requested: string | undefined;
   choose: ProjectChooser | undefined;
+  relayed: boolean;
 }
 
 interface PickInput {
@@ -104,8 +105,9 @@ export const resolveCellTarget = async (
   input: CellTargetInput,
 ): Promise<CellTarget> => {
   const repoProject = await repoProjectOf(ctx, input.repoRoot);
-  // Join-token-only workers cannot list projects; the repo config is trusted there.
-  if (repoProject !== null && (await ctx.tokens.secret()) === null) {
+  // Join-token-only and relayed workers cannot list projects; the repo config is trusted there.
+  const trustsRepo = input.relayed || (await ctx.tokens.secret()) === null;
+  if (repoProject !== null && trustsRepo) {
     return { projectId: repoProject, repoRoot: input.repoRoot };
   }
   const project = await pickProject({

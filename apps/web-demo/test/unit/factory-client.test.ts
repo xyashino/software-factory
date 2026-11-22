@@ -37,6 +37,7 @@ const cellReply = {
       activeJobId: null,
       lastHeartbeatAt: 1,
       leaseExpiresAt: null,
+      factoryId: null,
     },
   ],
 };
