@@ -212,6 +212,23 @@ describe('herdr pane runner', () => {
     ]);
   });
 
+  it('creates the cell log before the logs tab follows it', async () => {
+    // Arrange
+    const { port, calls } = fakeHerdr();
+    const runner = createHerdrRunner(port, CELL, LOG_OPTIONS);
+
+    // Act
+    await finish(runner, stepDir());
+
+    // Assert
+    const follow = calls.find(
+      (call) => call[1] === 'pane' && call[2] === 'run',
+    );
+    expect(follow?.[4]).toMatch(
+      /^mkdir -p '\/repo\/\.factory-local\/cells' && touch '\/repo\/\.factory-local\/cells\/omarchy\.log' && .*exec tail/,
+    );
+  });
+
   it('leaves an existing logs tab alone', async () => {
     // Arrange
     const { port, calls } = fakeHerdr(0, CELL_WORKSPACE('w9'), TABS('logs'));

@@ -174,7 +174,7 @@ const ensureLogsTab = async (
         'pane',
         'run',
         pane.pane_id,
-        `${CLEAR_SCREEN} && exec tail -n ${LOG_TAIL_LINES} -F ${shellQuote(options.logPath)}`,
+        `mkdir -p ${shellQuote(dirname(options.logPath))} && touch ${shellQuote(options.logPath)} && ${CLEAR_SCREEN} && exec tail -n ${LOG_TAIL_LINES} -F ${shellQuote(options.logPath)}`,
       ],
       options.home,
     );
