@@ -5,7 +5,6 @@ import {
   EMPTY_CONNECTION_CONFIG,
   type ConnectionConfig,
 } from '../../src/domain/connection/connection-config';
-import type { LocalSlot } from '../../src/domain/cell/local-slot';
 
 export const PROJECTS_ROUTE = '/api/v1/projects';
 
@@ -38,11 +37,18 @@ export interface FakeOptions {
   todos?: Record<string, string>;
   reply?: (call: ServerCall) => unknown;
   writeOutcome?: 'written' | 'refused';
-  slots?: LocalSlot[];
+  daemon?: (call: DaemonCall) => unknown;
+  parentPid?: number;
   alivePids?: number[];
   listening?: 'always' | 'after-spawn';
   pidFile?: number | null;
   serverLog?: string;
+}
+
+export interface DaemonCall {
+  method: 'GET' | 'POST' | 'DELETE';
+  route: string;
+  body?: unknown;
 }
 
 export interface FakePorts {
@@ -52,7 +58,7 @@ export interface FakePorts {
   savedConnections: ConnectionConfig[];
   spawned: DetachedSpec[];
   terminated: number[];
-  slots: LocalSlot[];
+  daemonCalls: DaemonCall[];
   alivePids: Set<number>;
   pidFile: number | null;
 }
@@ -82,7 +88,12 @@ export const createFakePorts = (options: FakeOptions = {}): FakePorts => {
   const listening = options.listening ?? 'always';
   const children = new Set<number>();
   let pidFile: number | null = options.pidFile ?? null;
-  let slots: LocalSlot[] = options.slots ?? [];
+  const daemonCalls: DaemonCall[] = [];
+  const daemonReply = options.daemon ?? noReply;
+  const recordDaemon = (call: DaemonCall): unknown => {
+    daemonCalls.push(call);
+    return daemonReply(call);
+  };
   let nextPid = 5000;
   let time = 1_000;
   let connectionConfig = options.connectionConfig ?? EMPTY_CONNECTION_CONFIG;
@@ -183,8 +194,12 @@ export const createFakePorts = (options: FakeOptions = {}): FakePorts => {
         return nextPid;
       },
       isAlive: (pid) => alivePids.has(pid),
+      parentPid: () => options.parentPid ?? 1,
       terminate: (pid) => {
         terminated.push(pid);
+        alivePids.delete(pid);
+      },
+      forceKill: (pid) => {
         alivePids.delete(pid);
       },
       probeUrl: unused,
@@ -212,28 +227,21 @@ export const createFakePorts = (options: FakeOptions = {}): FakePorts => {
       },
     },
     cellState: { read: async () => null, write: unused },
-    cellServer: {
-      health: unused,
-      get: unused,
-      post: unused,
-      patch: unused,
-      delete: unused,
+    factoryDaemon: {
+      get: async (route) => recordDaemon({ method: 'GET', route }),
+      post: async (route, body) =>
+        recordDaemon({ method: 'POST', route, body }),
+      delete: async (route) => recordDaemon({ method: 'DELETE', route }),
     },
-    cellServerPidFile: {
-      read: unused,
-      write: unused,
+    factoryPidFile: {
+      read: async () => pidFile,
+      write: async (_dir, pid) => {
+        pidFile = pid;
+      },
       acquire: unused,
-      remove: unused,
-    },
-    localSlots: {
-      read: async () => slots,
-      write: async (next) => {
-        slots = next;
+      remove: async () => {
+        pidFile = null;
       },
-      remove: async (slotId) => {
-        slots = slots.filter((slot) => slot.slotId !== slotId);
-      },
-      logPathOf: (slotId) => `/fake/cells/${slotId}.log`,
     },
   };
   return {
@@ -243,9 +251,7 @@ export const createFakePorts = (options: FakeOptions = {}): FakePorts => {
     savedConnections,
     spawned,
     terminated,
-    get slots() {
-      return slots;
-    },
+    daemonCalls,
     alivePids,
     get pidFile() {
       return pidFile;

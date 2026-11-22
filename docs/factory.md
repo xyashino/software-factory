@@ -631,7 +631,7 @@ The Cell never decides which transition follows. It checks local facts and forwa
 
 ### 11.5 Replies
 
-The Cell's reply codes are the ones `apps/cell/src/operator-socket.ts` already sends: `200 ok`, `400 invalid`, `401 unauthorized`, `409 rejected | stale_epoch | not_live | precondition`, `500 internal`. The server errors map to them as follows:
+The Cell's reply codes are the ones the removed Cell operator socket sent: `200 ok`, `400 invalid`, `401 unauthorized`, `409 rejected | stale_epoch | not_live | precondition`, `500 internal`. The server errors map to them as follows:
 
 | Server error (`application/core/error-handling.ts`) | HTTP | Cell reply `code` |
 | :--- | :--- | :--- |
@@ -659,4 +659,4 @@ The Cell's reply codes are the ones `apps/cell/src/operator-socket.ts` already s
 5. **Whether `tell` exists.** It is not in the current list.
 6. **Transport.** Loopback TCP works on every OS. A Unix socket with `0600` is tighter on Linux and macOS.
 7. **Environment names.** `FACTORY_OPERATOR_URL` and `FACTORY_CYCLE_TOKEN` are provisional.
-8. **Token length.** This section says 256 bits, but `newCycleToken()` in `apps/cell/src/operator-socket.ts` uses `randomBytes(24)`, which is 192 bits. Change the code to 32 bytes or change this text.
+8. **Token length.** This section says 256 bits, but `newCycleToken()` in the removed Cell operator socket used `randomBytes(24)`, which is 192 bits. Change the code to 32 bytes or change this text.

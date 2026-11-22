@@ -15,8 +15,16 @@ export const SYSTEMD_USER_DIR = join(XDG_CONFIG_HOME, 'systemd', 'user');
 export const GLOBAL_CONFIG_PATH = join(DEFAULT_CONFIG_DIR, 'config.json');
 export const LEGACY_TOKEN_PATH = join(homedir(), '.config', 'factory', 'token');
 export const DEFAULT_FACTORY_URL = 'http://127.0.0.1:7070';
-export const DEFAULT_CELL_SERVER_URL = 'http://127.0.0.1:7071';
 export const DEFAULT_PORT = 7070;
+export const DEFAULT_FACTORY_PORT = 7072;
+export const FACTORY_PORT_ENV = 'SF_FACTORY_PORT';
+export const FACTORY_PID_ENV = 'SF_FACTORY_PID';
+export const FACTORY_PID_FILE = 'factory.pid';
+export const FACTORY_LOG_FILE = 'factory.log';
+export const FACTORY_DAEMON_PORT = Number(
+  process.env[FACTORY_PORT_ENV] ?? DEFAULT_FACTORY_PORT,
+);
+export const FACTORY_DAEMON_URL = `http://127.0.0.1:${FACTORY_DAEMON_PORT}`;
 export const DEFAULT_DATA_DIR = join(XDG_DATA_HOME, 'sf');
 export const DEFAULT_DB_PATH = join(DEFAULT_DATA_DIR, 'factory.db');
 export const SERVER_ENTRY = fileURLToPath(
@@ -24,12 +32,13 @@ export const SERVER_ENTRY = fileURLToPath(
 );
 export const COMPILED_URL_PATTERN = /\/(\$bunfs|~BUN)\//;
 export const IS_COMPILED = COMPILED_URL_PATTERN.test(import.meta.url);
-export const CELL_SERVER_ENTRY = fileURLToPath(
-  new URL('../../cell/src/index.ts', import.meta.url),
+export const CLI_ENTRY = fileURLToPath(new URL('./cli.ts', import.meta.url));
+export const FACTORY_DAEMON_ENTRY = fileURLToPath(
+  new URL('./daemon/index.ts', import.meta.url),
 );
 export const SERVER_MARKER = '__server';
 export const WEB_MARKER = '__web';
-export const CELL_SERVER_MARKER = '__cell-server';
+export const FACTORY_DAEMON_MARKER = '__factory-daemon';
 export const CLAIM_WAIT_MS = 25_000;
 export const HEARTBEAT_INTERVAL_MS = 10_000;
 export const SELF_FENCE_MS = 45_000;
@@ -86,8 +95,8 @@ export const webEntryPath = (): string =>
 export const serverArgsOf = (compiled: boolean): string[] =>
   compiled ? [SERVER_MARKER] : [SERVER_ENTRY];
 
-export const cellServerArgsOf = (compiled: boolean): string[] =>
-  compiled ? [CELL_SERVER_MARKER] : [CELL_SERVER_ENTRY];
+export const factoryDaemonArgsOf = (compiled: boolean): string[] =>
+  compiled ? [FACTORY_DAEMON_MARKER] : [FACTORY_DAEMON_ENTRY];
 
 export const cellWorkerLauncherOf = (
   compiled: boolean,

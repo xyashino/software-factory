@@ -72,9 +72,17 @@ export const createProcessAdapter = (): ProcessPort => ({
       return isPermissionError(error);
     }
   },
+  parentPid: () => process.ppid,
   terminate: (pid) => {
     try {
       process.kill(pid, 'SIGTERM');
+    } catch {
+      return;
+    }
+  },
+  forceKill: (pid) => {
+    try {
+      process.kill(pid, 'SIGKILL');
     } catch {
       return;
     }

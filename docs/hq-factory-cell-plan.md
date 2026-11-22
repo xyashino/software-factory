@@ -134,8 +134,8 @@ Kill is immediate. Cleanup as above. No capacity cap. HQ shows count per Factory
 
 | Plan | Today |
 | --- | --- |
-| Factory daemon | None. `sf cell create` spawns slots (ADR `20261121-143000`). `apps/cell` Cell Server (port 7071) still exists |
-| Factory entity in HQ | None. In `apps/cell`, "factories" means HQ targets |
+| Factory daemon | `sf factory start\|stop\|status` on `127.0.0.1:7072`; spawns and kills Cells in memory. Replaces `apps/cell` and `slots.json` (ADR `20261122-165116`) |
+| Factory entity in HQ | None. "Factories" in the removed `apps/cell` meant HQ targets |
 | `sf cell scale N` | `sf cell create --count N`, `stop`, `rm`; slots in `slots.json` |
 | Random Cell id, no token | `projectId` + name, stored, 30 day token |
 | Builder-only commit | Every operator step commits and pushes |
@@ -146,7 +146,6 @@ Kill is immediate. Cleanup as above. No capacity cap. HQ shows count per Factory
 
 ## Open
 
-- Factory in `sf` (delete `apps/cell`, recommended) or revive `apps/cell`.
 - `loseJob` bumps `epoch`? Not read.
 - SQLite table rebuild for FK changes? Not checked.
 - Cleanup of worktrees of cancelled or delivered orders: no code removes them today (`worktreeRemove` is unused in `apps/sf`).

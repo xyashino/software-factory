@@ -1,21 +1,16 @@
-import { execFileSync, spawn } from 'node:child_process';
-import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  rmSync,
-  writeFileSync,
-} from 'node:fs';
+import { spawn } from 'node:child_process';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer, type Server, type ServerResponse } from 'node:http';
-import { createServer as createNetServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { EXIT } from '../../src/domain/exit-codes';
+import { freePort, runFactoryCommand } from '../support/factory-daemon';
 
 const CLI_PATH = fileURLToPath(new URL('../../src/cli.ts', import.meta.url));
 const COMMAND_TIMEOUT_MS = 30_000;
+const TEST_TIMEOUT_MS = 60_000;
 const TOKEN = 'sf_supervisor_stub';
 const FEATURE_LINE = 'name: feature\nstations: []\n';
 const PROJECT_ID = 'software-factory';
@@ -30,36 +25,15 @@ interface RegisteredProject {
 const dirs: string[] = [];
 let factory: Server;
 let factoryUrl: string;
-let remoteUrl: string;
 let registered: RegisteredProject[] = [];
+let env: Record<string, string>;
+let home: string;
 
-const GIT_ENV = {
-  ...process.env,
-  GIT_AUTHOR_NAME: 'sf-test',
-  GIT_AUTHOR_EMAIL: 'sf-test@example.test',
-  GIT_COMMITTER_NAME: 'sf-test',
-  GIT_COMMITTER_EMAIL: 'sf-test@example.test',
-};
-
-const git = (cwd: string, args: string[]): void => {
-  execFileSync('git', args, { cwd, env: GIT_ENV, stdio: 'ignore' });
-};
-
-const closedPort = (): Promise<number> =>
-  new Promise((resolve, reject) => {
-    const probe = createNetServer();
-    probe.once('error', reject);
-    probe.listen(0, '127.0.0.1', () => {
-      const address = probe.address();
-      probe.close(() => {
-        if (address === null || typeof address === 'string') {
-          reject(new Error('no free port'));
-          return;
-        }
-        resolve(address.port);
-      });
-    });
-  });
+interface CliResult {
+  status: number;
+  stdout: string;
+  stderr: string;
+}
 
 const replyJson = (
   status: number,
@@ -70,65 +44,18 @@ const replyJson = (
   response.end(JSON.stringify(body));
 };
 
-const seedRemote = (): string => {
-  const root = mkdtempSync(join(tmpdir(), 'sf-project-remote-'));
-  dirs.push(root);
-  const remote = join(root, `${PROJECT_ID}.git`);
-  const seed = join(root, 'seed');
-  git(root, ['init', '--bare', '--initial-branch=main', remote]);
-  mkdirSync(join(seed, '.factory', 'lines'), { recursive: true });
-  writeFileSync(
-    join(seed, '.factory', 'config.json'),
-    JSON.stringify({ project: PROJECT_ID }),
-  );
-  writeFileSync(join(seed, '.factory', 'lines', 'feature.yml'), FEATURE_LINE);
-  git(seed, ['init', '--initial-branch=main']);
-  git(seed, ['add', '.']);
-  git(seed, ['commit', '-m', 'seed']);
-  git(seed, ['push', remote, 'main']);
-  return remote;
-};
-
-const sandbox = async (): Promise<{
-  env: Record<string, string>;
-  home: string;
-}> => {
-  const home = mkdtempSync(join(tmpdir(), 'sf-project-target-'));
-  dirs.push(home);
-  return {
-    home,
-    env: {
-      PATH: process.env.PATH ?? '',
-      HOME: home,
-      XDG_DATA_HOME: join(home, 'data'),
-      FACTORY_URL: factoryUrl,
-      FACTORY_TOKEN: TOKEN,
-      CELL_SERVER_URL: `http://127.0.0.1:${await closedPort()}`,
-    },
-  };
-};
-
-const repoWithConfig = (home: string): string => {
-  const repo = join(home, 'repo');
+const repoWithConfig = (root: string, project: string): string => {
+  const repo = join(root, 'repo');
   mkdirSync(join(repo, '.factory', 'lines'), { recursive: true });
   writeFileSync(
     join(repo, '.factory', 'config.json'),
-    JSON.stringify({ project: PROJECT_ID }),
+    JSON.stringify({ project }),
   );
   writeFileSync(join(repo, '.factory', 'lines', 'feature.yml'), FEATURE_LINE);
   return repo;
 };
 
-interface CliResult {
-  status: number;
-  stdout: string;
-  stderr: string;
-}
-
-const runSf = (
-  env: Record<string, string>,
-  args: readonly string[],
-): Promise<CliResult> =>
+const runSf = (args: readonly string[]): Promise<CliResult> =>
   new Promise((resolve) => {
     const child = spawn(process.execPath, [CLI_PATH, ...args], {
       cwd: env.HOME,
@@ -145,30 +72,26 @@ const runSf = (
     });
   });
 
-const createdSlot = async (
-  env: Record<string, string>,
-  args: readonly string[],
-): Promise<{ result: CliResult; slotId: string; repoRoot: string }> => {
-  const result = await runSf(env, ['cell', 'create', ...args, '--json']);
-  const [slot] = JSON.parse(result.stdout || '[]') as {
-    slotId: string;
-    repoRoot: string;
-  }[];
-  return { result, slotId: slot?.slotId ?? '', repoRoot: slot?.repoRoot ?? '' };
-};
-
-const removeSlot = async (
-  env: Record<string, string>,
-  slotId: string,
-): Promise<void> => {
-  await runSf(env, ['cell', 'stop', slotId]);
-  await runSf(env, ['cell', 'rm', slotId]);
-};
+const listen = (server: Server): Promise<string> =>
+  new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address();
+      if (address === null || typeof address === 'string') {
+        reject(new Error('stub did not bind'));
+        return;
+      }
+      resolve(`http://127.0.0.1:${address.port}`);
+    });
+  });
 
 beforeAll(async () => {
-  remoteUrl = seedRemote();
   registered = [
-    { projectId: PROJECT_ID, repoUrl: remoteUrl, defaultBaseBranch: 'main' },
+    {
+      projectId: PROJECT_ID,
+      repoUrl: 'https://example.test/software-factory.git',
+      defaultBaseBranch: 'main',
+    },
   ];
   factory = createServer((request, response) => {
     if (request.method === 'GET' && request.url === PROJECTS_ROUTE) {
@@ -202,23 +125,25 @@ beforeAll(async () => {
       );
       return;
     }
-    if (request.method === 'GET' && request.url === '/api/v1/cells') {
-      replyJson(200, { code: 200, cells: [] }, response);
-      return;
-    }
     replyJson(404, { code: 404, message: 'not stubbed' }, response);
   });
-  await new Promise<void>((resolve) => {
-    factory.listen(0, '127.0.0.1', () => resolve());
-  });
-  const address = factory.address();
-  if (address === null || typeof address === 'string') {
-    throw new Error('factory stub did not bind');
-  }
-  factoryUrl = `http://127.0.0.1:${address.port}`;
+  factoryUrl = await listen(factory);
+
+  home = mkdtempSync(join(tmpdir(), 'sf-project-target-'));
+  dirs.push(home);
+  env = {
+    PATH: process.env.PATH ?? '',
+    HOME: home,
+    XDG_DATA_HOME: join(home, 'data'),
+    SF_FACTORY_PORT: String(await freePort()),
+    FACTORY_URL: factoryUrl,
+    FACTORY_TOKEN: TOKEN,
+  };
+  expect(await runFactoryCommand(env, 'start')).toBe(EXIT.ok);
 });
 
 afterAll(async () => {
+  await runFactoryCommand(env, 'stop');
   await new Promise<void>((resolve) => factory.close(() => resolve()));
   for (const dir of dirs) {
     rmSync(dir, { recursive: true, force: true });
@@ -226,98 +151,102 @@ afterAll(async () => {
 });
 
 describe('cell project target', () => {
-  it('auto-assigns the project of a repo config without asking', async () => {
-    // Arrange
-    const { env, home } = await sandbox();
-    const repo = repoWithConfig(home);
+  it(
+    'takes the project of the repo config without asking',
+    async () => {
+      // Arrange
+      const repo = repoWithConfig(home, PROJECT_ID);
 
-    // Act
-    const { result, slotId, repoRoot } = await createdSlot(env, [
-      '--repo',
-      repo,
-    ]);
-
-    // Assert
-    expect(result.status).toBe(EXIT.ok);
-    expect(repoRoot).toBe(repo);
-    await removeSlot(env, slotId);
-  });
-
-  it('asks for --project outside a repo without a terminal and lists the ids', async () => {
-    // Arrange
-    const { env, home } = await sandbox();
-
-    // Act
-    const { result } = await createdSlot(env, ['--repo', home]);
-
-    // Assert
-    expect(result.status).toBe(EXIT.argument);
-    expect(result.stderr).toContain(PROJECT_ID);
-  });
-
-  it('refuses an unregistered --project and hints at sf project add', async () => {
-    // Arrange
-    const { env, home } = await sandbox();
-
-    // Act
-    const { result } = await createdSlot(env, [
-      '--repo',
-      home,
-      '--project',
-      'ghost',
-    ]);
-
-    // Assert
-    expect(result.status).toBe(EXIT.refused);
-    expect(result.stderr).toContain('sf project add ghost');
-  });
-
-  it('clones a registered --project into the workspace outside a repo', async () => {
-    // Arrange
-    const { env, home } = await sandbox();
-    const workspace = join(home, 'data', 'sf', 'workspaces', PROJECT_ID);
-
-    // Act
-    const { result, slotId, repoRoot } = await createdSlot(env, [
-      '--repo',
-      home,
-      '--project',
-      PROJECT_ID,
-    ]);
-
-    // Assert
-    expect(result.status).toBe(EXIT.ok);
-    expect(repoRoot).toBe(workspace);
-    expect(
-      existsSync(join(workspace, '.factory', 'lines', 'feature.yml')),
-    ).toBe(true);
-    await removeSlot(env, slotId);
-  });
-
-  it('refuses to create a cell when no project is registered', async () => {
-    // Arrange
-    const { env, home } = await sandbox();
-    const before = registered;
-    registered = [];
-
-    try {
       // Act
-      const { result } = await createdSlot(env, ['--repo', home]);
+      const result = await runSf(['cell', 'create', '--repo', repo, '--json']);
+      const [cell] = JSON.parse(result.stdout || '[]') as {
+        cellId: string;
+        repoRoot: string;
+      }[];
+      await runSf(['cell', 'rm', cell?.cellId ?? '']);
+
+      // Assert
+      expect(result.status).toBe(EXIT.ok);
+      expect(cell?.repoRoot).toBe(repo);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    'refuses to start a cell outside a project repo',
+    async () => {
+      // Arrange
+      const outside = mkdtempSync(join(tmpdir(), 'sf-no-repo-'));
+      dirs.push(outside);
+
+      // Act
+      const result = await runSf(['cell', 'create', '--repo', outside]);
 
       // Assert
       expect(result.status).toBe(EXIT.refused);
-      expect(result.stderr).toContain('sf project add');
-    } finally {
-      registered = before;
-    }
-  });
+      expect(result.stderr).toContain(
+        'a Cell starts only inside a project repo',
+      );
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    'refuses a repo config that names an unregistered project',
+    async () => {
+      // Arrange
+      const repo = repoWithConfig(home, 'ghost');
+
+      // Act
+      const result = await runSf(['cell', 'create', '--repo', repo]);
+
+      // Assert
+      expect(result.status).toBe(EXIT.refused);
+      expect(result.stderr).toContain('sf project add ghost');
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    'refuses to create a cell when no project is registered',
+    async () => {
+      // Arrange
+      const repo = repoWithConfig(home, PROJECT_ID);
+      const before = registered;
+      registered = [];
+
+      try {
+        // Act
+        const result = await runSf(['cell', 'create', '--repo', repo]);
+
+        // Assert
+        expect(result.status).toBe(EXIT.refused);
+        expect(result.stderr).toContain('sf project add');
+      } finally {
+        registered = before;
+      }
+    },
+    TEST_TIMEOUT_MS,
+  );
 
   it('exits 2 when cell start runs outside a repo without --project', async () => {
     // Arrange
-    const { env } = await sandbox();
+    const outside = mkdtempSync(join(tmpdir(), 'sf-no-repo-'));
+    dirs.push(outside);
+    const outsideEnv = { ...env, HOME: outside };
 
     // Act
-    const result = await runSf(env, ['cell', 'start']);
+    const result = await new Promise<CliResult>((resolve) => {
+      const child = spawn(process.execPath, [CLI_PATH, 'cell', 'start'], {
+        cwd: outside,
+        env: outsideEnv,
+      });
+      let stderr = '';
+      child.stderr.on('data', (chunk: Buffer) => (stderr += chunk.toString()));
+      child.on('close', (code) =>
+        resolve({ status: code ?? -1, stdout: '', stderr }),
+      );
+    });
 
     // Assert
     expect(result.status).toBe(EXIT.argument);

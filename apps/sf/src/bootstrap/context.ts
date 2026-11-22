@@ -9,9 +9,8 @@ import { createTokenFile } from '../adapters/fs/token-file';
 import { appendTextFile, writeTextFile } from '../adapters/fs/write-text';
 import { createGitAdapter } from '../adapters/git/git';
 import { createPrAdapter } from '../adapters/git/gh';
-import { createCellServerAdapter } from '../adapters/http/cell-server.adapter';
+import { createFactoryDaemonAdapter } from '../adapters/http/factory-daemon.adapter';
 import { createServerClient } from '../adapters/http/server-client';
-import { createLocalSlotStore } from '../adapters/fs/local-slot-store';
 import { createLoopbackEndpoint } from '../adapters/operator-endpoint/loopback';
 import { createRunnerCatalog } from '../adapters/runners/catalog';
 import { createHeadlessRunner } from '../adapters/runners/headless';
@@ -24,11 +23,11 @@ import type { CellStatePort } from '../application/ports/cell-state.port';
 import { cellNameOf } from '../domain/cell/cell-name';
 import { resolveConnection } from '../domain/connection/connection-config';
 import {
-  DEFAULT_CELL_SERVER_URL,
   DEFAULT_FACTORY_URL,
+  FACTORY_DAEMON_URL,
+  FACTORY_PID_FILE,
   GLOBAL_CONFIG_PATH,
   LEGACY_TOKEN_PATH,
-  LOCAL_CELLS_DIR,
   SUPERVISOR_TOKEN_PATH,
   cellLogPathOf,
   cellStatePathOf,
@@ -102,10 +101,7 @@ export const buildContext = (cellName?: string): Ports => {
     webPidFile: createPidFile('web.pid'),
     clock: createSystemClock(),
     cellState,
-    cellServer: createCellServerAdapter({
-      baseUrl: process.env.CELL_SERVER_URL ?? DEFAULT_CELL_SERVER_URL,
-    }),
-    cellServerPidFile: createPidFile('cell-server.pid'),
-    localSlots: createLocalSlotStore(LOCAL_CELLS_DIR),
+    factoryDaemon: createFactoryDaemonAdapter({ baseUrl: FACTORY_DAEMON_URL }),
+    factoryPidFile: createPidFile(FACTORY_PID_FILE),
   };
 };
