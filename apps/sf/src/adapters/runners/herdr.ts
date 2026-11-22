@@ -1,4 +1,5 @@
 import {
+  appendFileSync,
   existsSync,
   mkdirSync,
   readFileSync,
@@ -159,6 +160,9 @@ const ensureLogsTab = async (
     ).result;
     const pane = panes.find((item) => item.tab_id === first.tab_id);
     if (pane === undefined) return;
+    // The Cell creates its log lazily; create it here so tail -F does not warn about a missing file.
+    mkdirSync(dirname(options.logPath), { recursive: true });
+    appendFileSync(options.logPath, '');
     await herdrOk(
       processPort,
       ['tab', 'rename', first.tab_id, LOGS_LABEL],

@@ -1,6 +1,6 @@
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { createHerdrRunner } from '../../../src/adapters/runners/herdr';
 import type {
@@ -25,10 +25,11 @@ interface FakeHerdr {
 const TABS = (label: string): string =>
   `{"result":{"tabs":[{"tab_id":"w9:t1","label":"${label}","number":1}]}}`;
 const PANES = '{"result":{"panes":[{"pane_id":"w9:p1","tab_id":"w9:t1"}]}}';
-const LOG_OPTIONS = {
+const logOptionsIn = (dir: string) => ({
   home: '/repo',
-  logPath: '/repo/.factory-local/cells/omarchy.log',
-};
+  logPath: join(dir, 'cells', 'omarchy.log'),
+});
+const LOG_OPTIONS = logOptionsIn(mkdtempSync(join(tmpdir(), 'herdr-logs-')));
 
 const fakeHerdr = (
   statusCode = 0,
@@ -198,9 +199,7 @@ describe('herdr pane runner', () => {
       (call) => call[1] === 'pane' && call[2] === 'run',
     );
     expect(follow?.[3]).toBe('w9:p1');
-    expect(follow?.[4]).toContain(
-      "tail -n 200 -F '/repo/.factory-local/cells/omarchy.log'",
-    );
+    expect(follow?.[4]).toContain(`tail -n 200 -F '${LOG_OPTIONS.logPath}'`);
     expect(calls).toContainEqual([
       'herdr',
       'workspace',
@@ -252,6 +251,34 @@ describe('herdr pane runner', () => {
     expect(
       calls.some((call) => call[1] === 'tab' && call[2] === 'create'),
     ).toBe(false);
+  });
+
+  it('creates the cell log before the logs tab follows it, so tail starts without a missing-file warning', async () => {
+    // Arrange
+    const options = logOptionsIn(stepDir());
+    const { port } = fakeHerdr();
+    const runner = createHerdrRunner(port, CELL, options);
+
+    // Act
+    await runner.prepare();
+
+    // Assert
+    expect(readFileSync(options.logPath, 'utf8')).toBe('');
+  });
+
+  it('keeps the cell log content that already exists when the logs tab opens', async () => {
+    // Arrange
+    const options = logOptionsIn(stepDir());
+    mkdirSync(dirname(options.logPath), { recursive: true });
+    writeFileSync(options.logPath, 'earlier line\n');
+    const { port } = fakeHerdr();
+    const runner = createHerdrRunner(port, CELL, options);
+
+    // Act
+    await runner.prepare();
+
+    // Assert
+    expect(readFileSync(options.logPath, 'utf8')).toBe('earlier line\n');
   });
 
   it('resolves prepare when herdr is down and retries on the first run', async () => {
