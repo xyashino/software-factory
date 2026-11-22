@@ -425,7 +425,7 @@ describe('cell revoke', () => {
 });
 
 describe('lease expiry handover', () => {
-  it('hands an expired lease to another cell and fences the late heartbeat', async () => {
+  it('hands an expired lease to another cell and deletes the silent cell', async () => {
     const { app, clock, db } = setup();
     const tokenA = await enrollCell(app, 'cell-a', ['web']);
     const parked = claim(app, tokenA, LONG_WAIT_MS);
@@ -452,8 +452,7 @@ describe('lease expiry handover', () => {
     expect(resumed.resumedJob).toMatchObject({ jobId, epoch: 2 });
     expect(takeover.body.job).toMatchObject({ orderId: 'proj-1:web-one' });
     expect(jobRow(db, jobId)?.status).toBe('lost');
-    expect(cellRow(db, 'proj-1:cell-a')?.status).toBe('offline');
-    expect(late.status).toBe(409);
-    expect(late.body).toMatchObject({ type: 'stale-lease-epoch' });
+    expect(cellRow(db, 'proj-1:cell-a')).toBeUndefined();
+    expect(late.status).toBe(401);
   });
 });

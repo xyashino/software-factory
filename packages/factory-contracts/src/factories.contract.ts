@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { titleSchema } from '@repo/zod-contract-kit/fields';
+import { idParams, titleSchema } from '@repo/zod-contract-kit/fields';
 
 const factoryDto = z.object({
   factoryId: z.string(),
@@ -25,6 +25,13 @@ export const enrollFactoryContract = {
 export const heartbeatFactoryContract = {
   out: {
     200: z.object({ code: z.literal(200), factoryId: z.string() }),
+  },
+};
+
+export const goneCellContract = {
+  in: { params: idParams },
+  out: {
+    200: z.object({ code: z.literal(200), cellId: z.string() }),
   },
 };
 
