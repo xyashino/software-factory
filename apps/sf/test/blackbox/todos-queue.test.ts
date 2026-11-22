@@ -1,5 +1,11 @@
 import { execFile } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readdirSync, writeFileSync } from 'node:fs';
+import {
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  writeFileSync,
+} from 'node:fs';
 import { type AddressInfo } from 'node:net';
 import { createServer, type Server } from 'node:http';
 import { tmpdir } from 'node:os';
@@ -144,6 +150,23 @@ describe('todos and queue commands', () => {
     expect(result.stdout).toContain('dry run: would send 1 file(s)');
     expect(result.stdout).toContain('skip cli-06.md: no line');
     expect(fixture.current?.hits.count).toBe(hitsBefore);
+  });
+
+  it('counts paused work orders on todos import --paused --dry-run and leaves files unchanged', async () => {
+    // Arrange
+    const cwd = fixture.current?.cwd ?? '';
+    const hitsBefore = fixture.current?.hits.count ?? 0;
+
+    // Act
+    const result = await runCli(['todos', 'import', '--paused', '--dry-run']);
+
+    // Assert
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain('paused 1');
+    expect(fixture.current?.hits.count).toBe(hitsBefore);
+    expect(readFileSync(join(cwd, 'todos', 'cli-05.md'), 'utf8')).toBe(
+      READY_TODO,
+    );
   });
 
   it('exits 2 and sends nothing for queue cancel without --yes', async () => {

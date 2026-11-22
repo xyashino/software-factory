@@ -1,17 +1,22 @@
 import { z } from 'zod';
 import { parseTodo } from '../../../domain/todo/parse-todo';
+import type { Todo } from '../../../domain/todo/todo';
+import { renderTodo } from '../../../domain/todo/render-todo';
 import { Refused } from '../../core/errors';
 import { define } from '../../core/procedure';
 import { readProjectId, readSecret } from '../../core/repo-access';
 import type { ServerPort } from '../../ports/server.port';
 
 const IMPORT_ROUTE = '/api/v1/queue/import';
+const PAUSED = 'paused';
+const CANCELLED = 'cancelled';
 
 const ImportSchema = z
   .object({
     configPath: z.string().min(1),
     dir: z.string().min(1),
     dryRun: z.boolean(),
+    paused: z.boolean().default(false),
   })
   .strict();
 
@@ -44,6 +49,7 @@ export interface ImportResult {
   created: number;
   updated: number;
   unchanged: number;
+  paused: number;
   errors: ImportError[];
 }
 
@@ -64,6 +70,17 @@ const errorText = (error: unknown): string =>
 
 const hasLine = (frontmatter: Record<string, unknown>): boolean =>
   typeof frontmatter.line === 'string' && frontmatter.line.trim() !== '';
+
+const isPausable = (todo: Todo): boolean =>
+  todo.frontmatter.status !== CANCELLED;
+
+const sentMarkdown = (text: string, todo: Todo, paused: boolean): string =>
+  paused && isPausable(todo)
+    ? renderTodo({
+        ...todo,
+        frontmatter: { ...todo.frontmatter, status: PAUSED },
+      })
+    : text;
 
 const sendBatch = async (
   server: ServerPort,
@@ -96,6 +113,7 @@ export const importTodos = define({ kind: 'supervisor' })(
   const projectId = await readProjectId(ctx, input.configPath);
   const sent: SentFile[] = [];
   const skipped: SkippedTodo[] = [];
+  let paused = 0;
   for (const file of await ctx.todoFiles.list(input.dir)) {
     try {
       const todo = parseTodo(file.text);
@@ -103,7 +121,13 @@ export const importTodos = define({ kind: 'supervisor' })(
         skipped.push({ filename: file.filename, reason: 'no line' });
         continue;
       }
-      sent.push({ filename: file.filename, markdown: file.text });
+      if (input.paused && isPausable(todo)) {
+        paused += 1;
+      }
+      sent.push({
+        filename: file.filename,
+        markdown: sentMarkdown(file.text, todo, input.paused),
+      });
     } catch (error) {
       skipped.push({ filename: file.filename, reason: errorText(error) });
     }
@@ -112,6 +136,7 @@ export const importTodos = define({ kind: 'supervisor' })(
     projectId,
     sent: sent.map((file) => file.filename),
     skipped,
+    paused,
   };
   if (input.dryRun) {
     return {
