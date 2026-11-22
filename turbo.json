@@ -26,6 +26,12 @@
         "!**/node_modules/**"
       ]
     },
+    "//#docs:check": {
+      "cache": false
+    },
+    "//#docs:test": {
+      "inputs": ["scripts/check-doc-links*.ts"]
+    },
     "build": {
       "dependsOn": ["^build"],
       "outputs": ["dist/**", ".astro/**"]

@@ -1,6 +1,7 @@
 {
   "name": "software-factory",
   "private": true,
+  "type": "module",
   "scripts": {
     "build": "turbo run build",
     "build:sf": "pnpm --filter @repo/sf build:sf && pnpm --filter @repo/web-demo build && pnpm --filter @repo/web-demo deploy --prod --force apps/web-demo/dist/sf-deps",
@@ -12,7 +13,9 @@
     "format": "prettier --write \"**/*.{ts,tsx,json,yaml,css,js,jsx}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,json,yaml,css,js,jsx}\"",
     "ci:format": "lint-staged",
-    "ci:verify": "turbo run //#format:check lint check-types db:check test build --ui=stream",
+    "ci:verify": "turbo run //#format:check //#docs:check //#docs:test lint check-types db:check test build --ui=stream",
+    "docs:check": "node scripts/check-doc-links.ts",
+    "docs:test": "node --test scripts/check-doc-links.test.ts",
     "nitpick:check": "pnpm nitpick --check",
     "nitpick:sync": "pnpm nitpick --sync",
     "prepare": "node scripts/prepare.mjs"
