@@ -6,6 +6,8 @@ export const TOKEN_SCOPES = [
   'admin:tokens',
   'cell:enroll',
   'cell:worker',
+  'factory:enroll',
+  'factory:worker',
 ] as const;
 
 export type TokenScope = (typeof TOKEN_SCOPES)[number];

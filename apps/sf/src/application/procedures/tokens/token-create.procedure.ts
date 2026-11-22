@@ -8,14 +8,19 @@ const TOKENS_ROUTE = '/api/v1/tokens';
 
 const TokenCreateSchema = z
   .object({
-    kind: z.enum(['cell_join', 'supervisor']),
+    kind: z.enum(['cell_join', 'factory_join', 'supervisor']),
     name: titleSchema,
   })
   .strict();
 
 export interface TokenCreateResult {
   tokenId: string;
-  kind: 'supervisor' | 'cell_join' | 'cell_session';
+  kind:
+    | 'supervisor'
+    | 'cell_join'
+    | 'cell_session'
+    | 'factory_join'
+    | 'factory_session';
   token: string;
   scopes: string[];
   expiresAt: number | null;

@@ -2,10 +2,12 @@ import { embeddedMigrationsOf as buildMigrations } from '@repo/bun-sqlite-kit/em
 import journal from './meta/_journal.json';
 import init from './0000_init.sql' with { type: 'text' };
 import cellDrainLeave from './0001_cell_drain_leave.sql' with { type: 'text' };
+import factoriesLink from './0002_common_the_renegades.sql' with { type: 'text' };
 
 const SQL_BY_TAG: Record<string, string> = {
   '0000_init': init,
   '0001_cell_drain_leave': cellDrainLeave,
+  '0002_common_the_renegades': factoriesLink,
 };
 
 export const embeddedMigrationsOf = () =>

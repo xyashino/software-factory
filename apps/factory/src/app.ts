@@ -9,6 +9,7 @@ import {
   transportMiddleware,
 } from './adapters/hono/middlewares';
 import { cellsRoute } from './adapters/hono/routes/cells.route';
+import { factoriesRoute } from './adapters/hono/routes/factories.route';
 import { incidentsRoute } from './adapters/hono/routes/incidents.route';
 import { jobsRoute } from './adapters/hono/routes/jobs.route';
 import { orderPlansRoute } from './adapters/hono/routes/order-plans.route';
@@ -33,6 +34,7 @@ export const createApp = (createTransport: CreateTransport) => {
   app.route('/api/v1/work-orders', workOrdersRoute);
   app.route('/api/v1/queue', queueRoute);
   app.route('/api/v1/cells', cellsRoute);
+  app.route('/api/v1/factories', factoriesRoute);
   app.route('/api/v1/jobs', jobsRoute);
   app.route('/api/v1/incidents', incidentsRoute);
   app.route('/api/v1/stream', streamRoute);

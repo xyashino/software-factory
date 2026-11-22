@@ -20,6 +20,8 @@ import {
 import type { Ports } from '../application/core/procedure';
 import { resolveCellTarget } from '../application/procedures/cell/resolve-project-target';
 import { createToken } from '../application/procedures/tokens/token-create.procedure';
+import type { DaemonStatus, HqState } from '../domain/factory/hq-state';
+import type { HqLink } from './hq-link';
 import type { CellRecord, Supervisor } from './supervisor';
 
 const SUPERVISOR: Access = { kind: 'supervisor' };
@@ -44,7 +46,22 @@ const CreateSchema = z
 export interface RouteDeps {
   ports: Ports;
   supervisor: Supervisor;
+  hq: HqLink;
+  identity: { url: string; factoryId: string } | null;
 }
+
+const hqGateOf = (state: HqState): string | null => {
+  switch (state.kind) {
+    case 'ok':
+      return null;
+    case 'not_connected':
+      return 'factory not connected: run "sf factory connect"';
+    case 'unreachable':
+      return 'HQ unreachable: no Cell starts until HQ answers';
+    case 'rejected':
+      return 'HQ rejected the credential: run "sf factory connect"';
+  }
+};
 
 const reply = (status: number, body: unknown): Response =>
   Response.json(body, { status });
@@ -108,6 +125,10 @@ const createCell = async (
     requested: undefined,
     choose: undefined,
   });
+  const gate = hqGateOf(deps.hq.state());
+  if (gate !== null) {
+    throw new Refused(gate);
+  }
   return deps.supervisor.spawn({
     repoRoot: target.repoRoot,
     name: input.name,
@@ -130,6 +151,16 @@ const handle = async (deps: RouteDeps, request: Request): Promise<Response> => {
   const cellId = CELL_ROUTE.exec(pathname)?.[1];
   if (request.method === 'GET' && pathname === '/health') {
     return reply(OK, { pid: process.pid });
+  }
+  if (request.method === 'GET' && pathname === '/status') {
+    const status: DaemonStatus = {
+      pid: process.pid,
+      hq: deps.hq.state(),
+      url: deps.identity?.url ?? null,
+      factoryId: deps.identity?.factoryId ?? null,
+      cells: deps.supervisor.list().length,
+    };
+    return reply(OK, status);
   }
   if (request.method === 'GET' && pathname === '/cells') {
     return reply(OK, { cells: deps.supervisor.list() });
