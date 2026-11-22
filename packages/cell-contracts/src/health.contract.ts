@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { RUNTIME_STATUSES } from '../domain/cells/cell-slot';
+import { RUNTIME_STATUSES } from './enums/cells';
 
 const countOf = z.number().int().nonnegative();
 

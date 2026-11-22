@@ -6,6 +6,8 @@ const LEGACY = {
     '@repo/factory-*/*',
     '@repo/cell-*',
     '@repo/cell-*/*',
+    '!@repo/cell-contracts',
+    '!@repo/cell-contracts/**',
   ],
   message:
     'cell owns its domain, schema and contracts; it must not import legacy factory or Cell packages (BE_RULES §1.2).',
@@ -69,19 +71,6 @@ export default [
   {
     files: ['src/application/**/*.ts'],
     rules: restricted([LEGACY, HTTP, ADAPTERS, BOOTSTRAP]),
-  },
-  {
-    files: ['src/contracts/**/*.ts'],
-    rules: restricted([
-      LEGACY,
-      HTTP,
-      ADAPTERS,
-      BOOTSTRAP,
-      {
-        group: ['**/application/**', '**/db/**'],
-        message: 'Contracts depend on zod and domain types only (BE_RULES §2).',
-      },
-    ]),
   },
   {
     files: ['src/db/**/*.ts'],

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { errorResponse } from '@repo/zod-contract-kit/reply';
+import { RUNTIME_STATUSES } from './enums/cells';
 
 const slotIdParams = z.object({ id: z.string().min(1) });
 
@@ -13,13 +14,7 @@ const cellDto = z.object({
   factoryName: z.string(),
   repoRoot: z.string(),
   desiredState: z.enum(['running', 'stopped']),
-  runtimeStatus: z.enum([
-    'starting',
-    'running',
-    'stopping',
-    'stopped',
-    'failed',
-  ]),
+  runtimeStatus: z.enum(RUNTIME_STATUSES),
   pid: z.number().int().nullable(),
   logPath: z.string().nullable(),
   lastError: z.string().nullable(),

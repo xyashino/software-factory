@@ -1,4 +1,4 @@
-import { patchSettingsContract } from '../../../contracts/settings.contract';
+import { patchSettingsContract } from '@repo/cell-contracts/settings.contract';
 import { immediateTx } from '../../../db/client';
 import { settings } from '../../../db/schema/settings';
 import { validateSettingsPatch } from '../../../domain/settings/preferences';

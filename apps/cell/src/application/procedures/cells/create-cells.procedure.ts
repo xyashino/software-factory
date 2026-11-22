@@ -2,7 +2,7 @@ import { hostname } from 'node:os';
 import { join } from 'node:path';
 import { eq, inArray } from 'drizzle-orm';
 import { CELL_LOG_DIR } from '../../../config';
-import { createCellsContract } from '../../../contracts/cells.contract';
+import { createCellsContract } from '@repo/cell-contracts/cells.contract';
 import { immediateTx } from '../../../db/client';
 import { cells } from '../../../db/schema/cells';
 import { factories } from '../../../db/schema/factories';

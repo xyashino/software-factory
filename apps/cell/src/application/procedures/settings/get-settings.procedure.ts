@@ -1,4 +1,4 @@
-import { getSettingsContract } from '../../../contracts/settings.contract';
+import { getSettingsContract } from '@repo/cell-contracts/settings.contract';
 import { settings } from '../../../db/schema/settings';
 import { publicProcedure } from '../../core/procedure';
 import { resolveSettings } from './resolve-settings';

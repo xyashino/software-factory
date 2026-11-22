@@ -1,4 +1,4 @@
-import { listCellsContract } from '../../../contracts/cells.contract';
+import { listCellsContract } from '@repo/cell-contracts/cells.contract';
 import { publicProcedure } from '../../core/procedure';
 import { listRecords, toCellDto } from './cell-views';
 

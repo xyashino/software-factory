@@ -1,10 +1,4 @@
-export const RUNNERS = [
-  'claude',
-  'codex',
-  'cursor',
-  'antigravity',
-  'opencode',
-] as const;
+import { RUNNERS } from '@repo/cell-contracts/enums/settings';
 
 export const SETTING_KEYS = [
   'herdr_enabled',

@@ -1,5 +1,5 @@
 import { eq } from 'drizzle-orm';
-import { stopCellContract } from '../../../contracts/cells.contract';
+import { stopCellContract } from '@repo/cell-contracts/cells.contract';
 import { cells } from '../../../db/schema/cells';
 import { publicProcedure } from '../../core/procedure';
 import { findRecord, listRecords, toCellDto } from './cell-views';

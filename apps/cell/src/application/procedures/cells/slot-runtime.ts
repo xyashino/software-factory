@@ -2,7 +2,7 @@ import { eq } from 'drizzle-orm';
 import { cells } from '../../../db/schema/cells';
 import { canStop, type RuntimeStatus } from '../../../domain/cells/cell-slot';
 import type { SlotId } from '../../../domain/common/brand';
-import type { CellEvent } from '../../../contracts/stream.contract';
+import type { CellEvent } from '@repo/cell-contracts/stream.contract';
 import type { TransportContext } from '../../core/procedure';
 import { readSettings, launchOf, type CellRecord } from './cell-views';
 

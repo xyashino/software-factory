@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { errorResponse } from '@repo/zod-contract-kit/reply';
-import { RUNNERS } from '../domain/settings/preferences';
+import { RUNNERS } from './enums/settings';
 
 const settingsDto = z.object({
   herdr_enabled: z.boolean(),
