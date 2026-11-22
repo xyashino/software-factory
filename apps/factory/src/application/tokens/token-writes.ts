@@ -2,7 +2,7 @@ import { eq } from 'drizzle-orm';
 import type { Db, DbTx } from '../../db/client';
 import type { TOKEN_KINDS } from '../../db/schema/tokens';
 import { safeTokens } from '../../db/schema/tokens';
-import type { CellId, TokenId } from '../../domain/common/brand';
+import type { CellId, FactoryId, TokenId } from '../../domain/common/brand';
 import { asTokenId } from '../../domain/common/brand';
 import type { TokenScope } from '../ports/auth.port';
 import {
@@ -12,11 +12,14 @@ import {
   type TokenPrefix,
 } from './token-hash';
 
-export const DEFAULT_SCOPES: Record<'supervisor' | 'cell_join', TokenScope[]> =
-  {
-    supervisor: ['supervisor:read', 'supervisor:write', 'admin:tokens'],
-    cell_join: ['cell:enroll'],
-  };
+export const DEFAULT_SCOPES: Record<
+  'supervisor' | 'cell_join' | 'factory_join',
+  TokenScope[]
+> = {
+  supervisor: ['supervisor:read', 'supervisor:write', 'admin:tokens'],
+  cell_join: ['cell:enroll'],
+  factory_join: ['factory:enroll'],
+};
 
 const PREFIX_BY_KIND: Record<TokenKind, TokenPrefix> = {
   supervisor: TOKEN_PREFIXES.supervisor,
@@ -24,6 +27,8 @@ const PREFIX_BY_KIND: Record<TokenKind, TokenPrefix> = {
   cell_session: TOKEN_PREFIXES.cell,
   web_join: TOKEN_PREFIXES.join,
   web_session: TOKEN_PREFIXES.supervisor,
+  factory_join: TOKEN_PREFIXES.join,
+  factory_session: TOKEN_PREFIXES.factory,
 };
 
 type TokenKind = (typeof TOKEN_KINDS)[number];
@@ -36,6 +41,7 @@ export type NewSafeToken = {
   name: string;
   scopes: readonly string[];
   cellId: CellId | null;
+  factoryId?: FactoryId | null;
   rotatedFromId: TokenId | null;
   expiresAt: number | null;
   now: number;
@@ -64,6 +70,7 @@ export const insertSafeToken = (
       name: input.name,
       scopesJson: [...input.scopes],
       cellId: input.cellId,
+      factoryId: input.factoryId ?? null,
       rotatedFromId: input.rotatedFromId,
       expiresAt: input.expiresAt,
       createdAt: input.now,

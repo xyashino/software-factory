@@ -3,8 +3,10 @@ import type { Connection } from '../../domain/connection/connection-config';
 import type { CellStatePort } from '../ports/cell-state.port';
 import type { ConnectionStorePort } from '../ports/connection-store.port';
 import type { ClockPort } from '../ports/clock.port';
+import type { FactoryCredentialPort } from '../ports/factory-credential.port';
 import type { FactoryDaemonPort } from '../ports/factory-daemon.port';
 import type { FsPort } from '../ports/fs.port';
+import type { HqClientPort } from '../ports/hq-client.port';
 import type { GitPort } from '../ports/git.port';
 import type { OperatorEndpointPort } from '../ports/operator-endpoint.port';
 import type { PidFilePort } from '../ports/pid-file.port';
@@ -38,6 +40,8 @@ export interface Ports {
   cellState: CellStatePort;
   factoryDaemon: FactoryDaemonPort;
   factoryPidFile: PidFilePort;
+  factoryCredential: FactoryCredentialPort;
+  hq: HqClientPort;
 }
 
 export type Context<A extends Access> = Ports & {

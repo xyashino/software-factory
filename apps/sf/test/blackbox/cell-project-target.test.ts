@@ -110,6 +110,13 @@ beforeAll(async () => {
       );
       return;
     }
+    if (
+      request.method === 'POST' &&
+      request.url === '/api/v1/factories/heartbeat'
+    ) {
+      replyJson(200, { code: 200, factoryId: 'factory-stub' }, response);
+      return;
+    }
     if (request.method === 'POST' && request.url === '/api/v1/tokens') {
       replyJson(
         201,
@@ -131,9 +138,20 @@ beforeAll(async () => {
 
   home = mkdtempSync(join(tmpdir(), 'sf-project-target-'));
   dirs.push(home);
+  mkdirSync(join(home, 'config', 'sf'), { recursive: true });
+  writeFileSync(
+    join(home, 'config', 'sf', 'factory.json'),
+    JSON.stringify({
+      url: factoryUrl,
+      factoryId: 'factory-stub',
+      sessionToken: 'sf_factory_session_stub',
+    }),
+    { mode: 0o600 },
+  );
   env = {
     PATH: process.env.PATH ?? '',
     HOME: home,
+    XDG_CONFIG_HOME: join(home, 'config'),
     XDG_DATA_HOME: join(home, 'data'),
     SF_FACTORY_PORT: String(await freePort()),
     FACTORY_URL: factoryUrl,

@@ -33,7 +33,7 @@ export const tokenCommand = defineCommand({
         kind: {
           type: 'string',
           required: true,
-          description: 'cell_join or supervisor',
+          description: 'cell_join, factory_join or supervisor',
         },
         name: { type: 'string', required: true, description: 'Token label' },
         json: { type: 'boolean', default: false },

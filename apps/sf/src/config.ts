@@ -20,6 +20,7 @@ export const DEFAULT_FACTORY_PORT = 7072;
 export const FACTORY_PORT_ENV = 'SF_FACTORY_PORT';
 export const FACTORY_PID_ENV = 'SF_FACTORY_PID';
 export const FACTORY_PID_FILE = 'factory.pid';
+export const FACTORY_CREDENTIAL_PATH = join(DEFAULT_CONFIG_DIR, 'factory.json');
 export const FACTORY_LOG_FILE = 'factory.log';
 export const FACTORY_DAEMON_PORT = Number(
   process.env[FACTORY_PORT_ENV] ?? DEFAULT_FACTORY_PORT,

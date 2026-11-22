@@ -1,5 +1,9 @@
 import { z } from 'zod';
-import { define } from '../../core/procedure';
+import {
+  DaemonStatusSchema,
+  type DaemonStatus,
+} from '../../../domain/factory/hq-state';
+import { define, type Ports } from '../../core/procedure';
 import { healthPidOf } from './daemon-health';
 
 const StatusSchema = z.object({ dataDir: z.string().min(1) }).strict();
@@ -8,7 +12,18 @@ export interface StatusFactoryResult {
   running: boolean;
   healthy: boolean;
   pid: number | null;
+  daemon: DaemonStatus | null;
 }
+
+const daemonStatusOf = async (
+  ctx: Pick<Ports, 'factoryDaemon'>,
+): Promise<DaemonStatus | null> => {
+  try {
+    return DaemonStatusSchema.parse(await ctx.factoryDaemon.get('/status'));
+  } catch {
+    return null;
+  }
+};
 
 export const statusFactory = define({ kind: 'supervisor' })(
   StatusSchema,
@@ -21,5 +36,6 @@ export const statusFactory = define({ kind: 'supervisor' })(
     running,
     healthy: healthPid !== null,
     pid: running ? filePid : null,
+    daemon: running ? await daemonStatusOf(ctx) : null,
   };
 });
