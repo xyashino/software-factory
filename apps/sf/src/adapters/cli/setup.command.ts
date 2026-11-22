@@ -9,7 +9,6 @@ import {
   IS_COMPILED,
   LINES_DIR,
   REPO_CONFIG_PATH,
-  cellWorkerLauncherOf,
   serverArgsOf,
 } from '../../config';
 import {
@@ -52,7 +51,6 @@ const runSetupCommand = async (options: {
       host: process.env.FACTORY_HOST || undefined,
       bin: process.execPath,
       serverArgs: serverArgsOf(IS_COMPILED),
-      launcher: cellWorkerLauncherOf(IS_COMPILED, process.argv[1] ?? ''),
       project: options.project,
       cell: options.cell,
       reconnect: () => buildContext(),

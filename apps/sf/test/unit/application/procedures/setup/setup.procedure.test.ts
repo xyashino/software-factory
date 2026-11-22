@@ -6,7 +6,6 @@ import {
   type SetupStep,
 } from '../../../../../src/application/procedures/setup/setup.procedure';
 import type { Access } from '../../../../../src/domain/access';
-import type { LocalSlot } from '../../../../../src/domain/cell/local-slot';
 import { createFakePorts } from '../../../../support/fake-ports';
 
 const REPO = '/repo';
@@ -18,7 +17,6 @@ const ORIGIN = 'https://example.test/software-factory.git';
 const PROJECT = 'software-factory';
 const MINTED = 'minted-supervisor-token';
 const SERVER_ARG = '/src/server.ts';
-const CLI_ARG = '/src/cli.ts';
 const SUPERVISOR: Access = { kind: 'supervisor' };
 
 interface Machine {
@@ -26,7 +24,7 @@ interface Machine {
   serverUp: boolean;
   secret: string | null;
   projects: string[];
-  slots: LocalSlot[];
+  cells: { cellId: string; name: string; repoRoot: string; pid: number }[];
   gitMissing: boolean;
   actions: string[];
 }
@@ -51,7 +49,7 @@ const arrange = (overrides: Partial<Machine> = {}): Arrangement => {
     serverUp: false,
     secret: null,
     projects: [],
-    slots: [],
+    cells: [],
     gitMissing: false,
     actions: [],
     ...overrides,
@@ -125,11 +123,8 @@ const arrange = (overrides: Partial<Machine> = {}): Arrangement => {
       },
       spawnDetached: async (spec) => {
         const pid = await fake.ports.process.spawnDetached(spec);
-        const isCell = spec.args.includes(CLI_ARG);
-        machine.actions.push(isCell ? 'spawn:cell' : 'spawn:server');
-        if (!isCell) {
-          machine.serverUp = true;
-        }
+        machine.actions.push('spawn:server');
+        machine.serverUp = true;
         return pid;
       },
     },
@@ -144,11 +139,22 @@ const arrange = (overrides: Partial<Machine> = {}): Arrangement => {
       read: async () => (machine.secret === null ? null : SUPERVISOR),
       secret: async () => machine.secret,
     },
-    localSlots: {
-      ...fake.ports.localSlots,
-      read: async () => machine.slots,
-      write: async (next) => {
-        machine.slots = next;
+    factoryDaemon: {
+      get: async () => ({ cells: machine.cells }),
+      post: async (_route, body) => {
+        const { name } = body as { name: string };
+        const cell = {
+          cellId: `id-${name}`,
+          name,
+          repoRoot: REPO,
+          pid: machine.cells.length + 1,
+        };
+        machine.cells.push(cell);
+        machine.actions.push('spawn:cell');
+        return cell;
+      },
+      delete: async () => {
+        throw new Refused('not used by setup');
       },
     },
   };
@@ -170,7 +176,6 @@ const runSetupOn = (
       port: 7070,
       bin: '/usr/bin/bun',
       serverArgs: [SERVER_ARG],
-      launcher: [CLI_ARG],
       reconnect: () => ports,
       ...overrides,
     },

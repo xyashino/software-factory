@@ -4,8 +4,7 @@ import { cellNameOf } from '../../../domain/cell/cell-name';
 import { ArgumentError, Refused } from '../../core/errors';
 import { define, type Context, type Ports } from '../../core/procedure';
 import { readProjectId } from '../../core/repo-access';
-import { createLocalCells } from '../cell/local-create.procedure';
-import { listLocalSlots } from '../cell/local-list.procedure';
+import { createFactoryCell, listFactoryCells } from '../cell/factory-cells';
 import { runDoctor, type DoctorCheck } from '../doctor/doctor.procedure';
 import { initProject } from '../init/init.procedure';
 import { addProject } from '../projects/add-project.procedure';
@@ -30,7 +29,6 @@ const SetupSchema = z
     host: z.string().min(1).optional(),
     bin: z.string().min(1),
     serverArgs: z.array(z.string().min(1)).min(1),
-    launcher: z.array(z.string()),
     project: z.string().min(1).optional(),
     cell: z.string().min(1).optional(),
     reconnect: z.custom<() => Ports>((value) => typeof value === 'function'),
@@ -157,20 +155,14 @@ export const runSetup = define({ kind: 'supervisor' })(
 
   if (input.cell !== undefined) {
     const name = cellNameOf(input.cell);
-    const live = (await listLocalSlots.execute({}, fresh)).some(
-      (slot) => slot.name === name && slot.pid !== null,
+    const live = (await listFactoryCells.execute({}, fresh)).some(
+      (cell) => cell.name === name,
     );
     if (live) {
       steps.push({ step: 'cell', outcome: 'skipped' });
     } else {
-      await createLocalCells.execute(
-        {
-          repoRoot: input.repoRoot,
-          baseName: name,
-          name,
-          count: 1,
-          launcher: input.launcher,
-        },
+      await createFactoryCell.execute(
+        { repoRoot: input.repoRoot, name },
         fresh,
       );
       steps.push({ step: 'cell', outcome: 'done' });

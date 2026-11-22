@@ -24,6 +24,7 @@ import type {
 import { HEARTBEAT_INTERVAL_MS } from '../../src/config';
 import { commandIdOf } from '../../src/domain/cell/command-id';
 import { EXIT } from '../../src/domain/exit-codes';
+import { freePort, runFactoryCommand } from '../support/factory-daemon';
 import {
   createFakePorts,
   PROJECTS_REPLY,
@@ -313,6 +314,7 @@ const runCli = (
 
 const fixture: {
   stub?: { url: string; calls: string[]; server: Server };
+  daemonPort?: number;
   cwd: string;
   drainReply: {
     code: number;
@@ -325,11 +327,25 @@ const fixture: {
   drainReply: { code: 200, status: 'draining', force: false, offline: false },
 };
 
+const stopEnv = (): Record<string, string> => {
+  const stub = fixture.stub as NonNullable<typeof fixture.stub>;
+  return {
+    PATH: process.env.PATH ?? '',
+    HOME: fixture.cwd,
+    FACTORY_URL: stub.url,
+    FACTORY_TOKEN: 'supervisor-stub-value',
+    SF_FACTORY_PORT: String(fixture.daemonPort),
+  };
+};
+
 beforeAll(async () => {
   fixture.stub = await stubServer();
+  fixture.daemonPort = await freePort();
+  expect(await runFactoryCommand(stopEnv(), 'start')).toBe(EXIT.ok);
 });
 
-afterAll(() => {
+afterAll(async () => {
+  await runFactoryCommand(stopEnv(), 'stop');
   fixture.stub?.server.close();
 });
 
@@ -526,16 +542,6 @@ describe('cell drain on the Cell side', () => {
 });
 
 describe('cell stop command', () => {
-  const stopEnv = (): Record<string, string> => {
-    const stub = fixture.stub as NonNullable<typeof fixture.stub>;
-    return {
-      PATH: process.env.PATH ?? '',
-      HOME: fixture.cwd,
-      FACTORY_URL: stub.url,
-      FACTORY_TOKEN: 'supervisor-stub-value',
-    };
-  };
-
   it('prints the graceful drain line with one drain request', async () => {
     // Arrange
     const stub = fixture.stub as NonNullable<typeof fixture.stub>;

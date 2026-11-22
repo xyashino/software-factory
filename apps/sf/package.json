@@ -14,7 +14,6 @@
     "build:sf": "bun build --compile src/cli.ts --outfile dist/sf"
   },
   "dependencies": {
-    "@repo/cell-contracts": "workspace:*",
     "@repo/factory-contracts": "workspace:*",
     "@repo/zod-contract-kit": "workspace:*",
     "citty": "catalog:",
