@@ -33,7 +33,13 @@ import {
   releaseCellSlot,
 } from '../fs/cell-slot';
 import { cellServerCommand } from './cell-server.command';
-import { printJson, printLine, printTable, reportFailure } from './output';
+import {
+  printError,
+  printJson,
+  printLine,
+  printTable,
+  reportFailure,
+} from './output';
 import { promptSelect } from './prompt-select';
 
 const HEADERS = [
@@ -48,6 +54,8 @@ const LOCAL_HEADERS = ['id', 'name', 'factory', 'state', 'pid', 'repo'];
 const SUPERSEDED_LINE =
   'cell left: the server had already moved its job, nothing handed over';
 const MIGRATED_LINE = 'migrated legacy .factory-local/cell.json to this cell';
+const OFFLINE_LINE =
+  'Cell is offline, no heartbeat will deliver this; check the process or `sf cell revoke`';
 
 const orDash = (value: string | null): string => value ?? '-';
 
@@ -56,6 +64,11 @@ const pidText = (pid: number | null): string =>
 
 const heartbeatText = (ms: number | null): string =>
   ms === null ? '-' : new Date(ms).toISOString();
+
+const drainText = (force: boolean): string =>
+  force
+    ? 'draining (force): current station is aborted at the next heartbeat'
+    : 'draining: leaves after the current station; use --force to abort it now';
 
 const cliError = (message: string): Error => {
   const error = new Error(message);
@@ -214,7 +227,8 @@ const runStopOne = async (
   }
   const remote = await run(stopCell, { id, force }, 'supervisor');
   if (remote.kind === 'ok') {
-    printLine(`cell ${remote.value.cellId} ${remote.value.status}`);
+    printLine(`cell ${remote.value.cellId} ${drainText(remote.value.force)}`);
+    if (remote.value.offline) printError(OFFLINE_LINE);
     return EXIT.ok;
   }
   return reportFailure(remote);

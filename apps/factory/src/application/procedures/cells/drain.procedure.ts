@@ -33,8 +33,20 @@ export const drainCellProcedure = scopedProcedure(['supervisor:write'])(
   const outcome = immediateTx(ctx.db, (tx) => {
     const cell = findCell(tx, cellId);
     if (cell === undefined) throw new NotFound(`Cell ${cellId} not found`);
-    if (isCommandReplay(tx, cellId, commandId) || cell.status === 'draining')
-      return { force: cell.drainForce, records: [] };
+    if (isCommandReplay(tx, cellId, commandId))
+      return { force: cell.drainForce, offline: false, records: [] };
+    if (cell.status === 'draining') {
+      if (requestedForce && !cell.drainForce)
+        tx.update(cells)
+          .set({ drainForce: true })
+          .where(eq(cells.cellId, cellId))
+          .run();
+      return {
+        force: cell.drainForce || requestedForce,
+        offline: false,
+        records: [],
+      };
+    }
     if (cell.status === 'revoked' || cell.status === 'left')
       throw new Conflict(`Cell ${cellId} is ${cell.status}`);
 
@@ -62,6 +74,7 @@ export const drainCellProcedure = scopedProcedure(['supervisor:write'])(
           };
     return {
       force: requestedForce,
+      offline: cell.status === 'offline',
       records: flushTransitions(tx, log, command),
     };
   });
@@ -71,5 +84,6 @@ export const drainCellProcedure = scopedProcedure(['supervisor:write'])(
     code: 200 as const,
     status: 'draining' as const,
     force: outcome.force,
+    offline: outcome.offline,
   };
 });

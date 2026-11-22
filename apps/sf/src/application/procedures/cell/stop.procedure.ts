@@ -14,6 +14,7 @@ export interface StopResult {
   cellId: string;
   status: 'draining';
   force: boolean;
+  offline: boolean;
 }
 
 export const stopCell = define({ kind: 'supervisor' })(StopSchema)<StopResult>(
@@ -26,6 +27,11 @@ export const stopCell = define({ kind: 'supervisor' })(StopSchema)<StopResult>(
         secret,
       ),
     );
-    return { cellId: input.id, status: reply.status, force: reply.force };
+    return {
+      cellId: input.id,
+      status: reply.status,
+      force: reply.force,
+      offline: reply.offline,
+    };
   },
 );
