@@ -6,7 +6,7 @@ Fresh machine (VPS) to a running factory in few commands, with clear errors. Tod
 
 ## Verified facts
 
-- `scripts/install.mjs:19` `DEFAULT_SOURCE = apps/factory/dist`. Binary is built to `apps/sf/dist/sf` (`build:sf`). `scripts/install.sh` uses the right path. Regression from the dirs rename (#191). `pnpm install:sf` fails: "missing .../apps/factory/dist/sf".
+- `scripts/install.mjs:19` `DEFAULT_SOURCE` pointed at a stale dist dir after the dirs rename. Fixed to `apps/sf/dist`, where `build:sf` writes the binary and `scripts/install.sh` already reads it.
 - `pr-ci.yml` runs `turbo run ... build`: package `build` scripts only, not `build:sf` compiled binary. `apps/sf/test/blackbox/standalone-external-repo.test.ts` needs `apps/sf/dist/sf` + web build, is skipped without them, and installs via `install.sh`. So CI never runs `install.mjs` or the quickstart.
 - `startServer` already waits up to 10 s for `ctx.server.probe()` and already auto-mints and saves a global supervisor token when no local target exists. Probe accepts ANY listener on the port, so a stale server answers for the one that just died. Pid file then holds a dead pid. `stopServer` trusts only the pid file.
 - Incident on the VPS: leaked `bun src/index.ts` (up 2d 11h) from an agent e2e run in a `web-demo-05-auto-register` worktree held port 7070 with a throwaway DB. Result: 401 on every call.
