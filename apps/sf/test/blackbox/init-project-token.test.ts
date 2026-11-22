@@ -239,6 +239,77 @@ describe('sf project', () => {
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain('lowercase slug');
   });
+
+  it('registers the repo config project with the origin url when run without args', async () => {
+    // Arrange
+    const repo = freshRepo();
+    await runCli(repo, ['init']);
+
+    // Act
+    const result = await runCli(repo, ['project', 'add', '--json']);
+
+    // Assert
+    expect(result.status).toBe(0);
+    expect(requests.at(-1)?.body).toMatchObject({
+      projectId: 'widgets',
+      repoUrl: 'https://github.com/acme/widgets.git',
+    });
+  });
+
+  it('keeps explicit args and warns when the id differs from the repo config', async () => {
+    // Arrange
+    const repo = freshRepo();
+    await runCli(repo, ['init']);
+
+    // Act
+    const result = await runCli(repo, [
+      'project',
+      'add',
+      'gadgets',
+      '--repo',
+      'https://github.com/acme/gadgets.git',
+      '--json',
+    ]);
+
+    // Assert
+    expect(result.status).toBe(0);
+    expect(result.stderr).toContain('differs from .factory/config.json');
+    expect(requests.at(-1)?.body).toMatchObject({
+      projectId: 'gadgets',
+      repoUrl: 'https://github.com/acme/gadgets.git',
+    });
+  });
+
+  it('refuses to add a project outside a repo when no id is given', async () => {
+    // Arrange
+    const dir = mkdtempSync(join(tmpdir(), 'sf-plain-'));
+    dirs.push(dir);
+    const before = requests.length;
+
+    // Act
+    const result = await runCli(dir, ['project', 'add']);
+
+    // Assert
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain('no project id');
+    expect(requests.length).toBe(before);
+  });
+
+  it('refuses to add a project from a repo without origin when no --repo is given', async () => {
+    // Arrange
+    const dir = mkdtempSync(join(tmpdir(), 'sf-no-origin-'));
+    dirs.push(dir);
+    spawnSync('git', ['init', '-q', dir]);
+    const before = requests.length;
+
+    // Act
+    const result = await runCli(dir, ['project', 'add', 'widgets']);
+
+    // Assert
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain('no origin remote');
+    expect(requests.length).toBe(before);
+  });
 });
 
 describe('sf token', () => {
