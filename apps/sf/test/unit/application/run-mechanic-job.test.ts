@@ -127,6 +127,14 @@ const harness = (
       appendText: async (_path, text) => {
         log.push(text);
       },
+      remove: async (path) => {
+        files.delete(path);
+      },
+      list: async (dir) =>
+        [...files.keys()]
+          .filter((path) => path.startsWith(`${dir}/`))
+          .map((path) => path.slice(dir.length + 1))
+          .filter((name) => !name.includes('/')),
       exists: async (path) => files.has(path),
     },
     runner: {

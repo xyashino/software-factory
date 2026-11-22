@@ -1,4 +1,11 @@
-import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
+import {
+  appendFileSync,
+  chmodSync,
+  mkdirSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { dirname } from 'node:path';
 
 export const writeTextFile = async (
@@ -7,7 +14,13 @@ export const writeTextFile = async (
   mode?: number,
 ): Promise<void> => {
   mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, text, { mode });
+  const staging = `${path}.tmp-${process.pid}`;
+  writeFileSync(staging, text, { mode });
+  // umask can strip bits from the mode given at create time, so set it explicitly.
+  if (mode !== undefined) {
+    chmodSync(staging, mode);
+  }
+  renameSync(staging, path);
 };
 
 export const appendTextFile = async (
@@ -16,4 +29,8 @@ export const appendTextFile = async (
 ): Promise<void> => {
   mkdirSync(dirname(path), { recursive: true });
   appendFileSync(path, text);
+};
+
+export const removeFile = async (path: string): Promise<void> => {
+  rmSync(path, { force: true });
 };
