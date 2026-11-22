@@ -5,7 +5,7 @@ export interface HeartbeatOptions {
   clock: ClockPort;
   intervalMs: number;
   beat: () => Promise<readonly string[]>;
-  onAbort: () => void;
+  onAbort: (failures: number) => void;
 }
 
 export interface Heartbeat {
@@ -35,7 +35,7 @@ export const startHeartbeat = (options: HeartbeatOptions): Heartbeat => {
       }
       if ((await tick()) === 'abort') {
         stopped = true;
-        options.onAbort();
+        options.onAbort(failures);
         return;
       }
     }
