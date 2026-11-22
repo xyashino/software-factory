@@ -262,6 +262,12 @@ importers:
       '@repo/nitpick':
         specifier: workspace:*
         version: link:packages/nitpick
+      '@types/bun':
+        specifier: 'catalog:'
+        version: 1.4.4
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.6.4
       husky:
         specifier: 'catalog:'
         version: 9.1.7
@@ -274,6 +280,9 @@ importers:
       turbo:
         specifier: 'catalog:'
         version: 2.11.10
+      typescript:
+        specifier: 'catalog:'
+        version: 6.0.3
 
   apps/cell:
     dependencies:

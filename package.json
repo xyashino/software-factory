@@ -4,6 +4,9 @@
   "type": "module",
   "scripts": {
     "build": "turbo run build",
+    "check-types:scripts": "tsc --noEmit -p scripts/tsconfig.json",
+    "test:scripts": "bun test scripts",
+    "todo:lint": "bun scripts/lint-todos.ts",
     "build:sf": "pnpm --filter @repo/sf build:sf && pnpm --filter @repo/web-demo build && pnpm --filter @repo/web-demo deploy --prod --force apps/web-demo/dist/sf-deps",
     "install:sf": "pnpm build:sf && node scripts/install.mjs",
     "lint": "turbo run lint",
@@ -13,7 +16,7 @@
     "format": "prettier --write \"**/*.{ts,tsx,json,yaml,css,js,jsx}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,json,yaml,css,js,jsx}\"",
     "ci:format": "lint-staged",
-    "ci:verify": "turbo run //#format:check //#docs:check //#docs:test lint check-types db:check test build --ui=stream",
+    "ci:verify": "turbo run //#format:check //#docs:check //#docs:test //#todo:lint //#check-types:scripts //#test:scripts lint check-types db:check test build --ui=stream",
     "docs:check": "node scripts/check-doc-links.ts",
     "docs:test": "node --test scripts/check-doc-links.test.ts",
     "nitpick:check": "pnpm nitpick --check",
@@ -22,10 +25,13 @@
   },
   "devDependencies": {
     "@repo/nitpick": "workspace:*",
+    "@types/bun": "catalog:",
+    "@types/node": "catalog:",
     "husky": "catalog:",
     "lint-staged": "catalog:",
     "prettier": "catalog:",
-    "turbo": "catalog:"
+    "turbo": "catalog:",
+    "typescript": "catalog:"
   },
   "packageManager": "pnpm@12.15.0",
   "engines": {

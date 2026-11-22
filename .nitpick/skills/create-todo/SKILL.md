@@ -72,15 +72,10 @@ Markdown follows `general-caveman-markdown` and `general-prefer-ascii`: short, p
 
 ## Validate before finishing
 
-No script yet (see `todos/todo-lint-script.md`). Check by hand, per file:
+Run `pnpm todo:lint`. It parses every `todos/*.md` with the factory importer parser and also checks the line file exists, `depends_on` names a todo in `todos/`, and the chain has no cycle. Fix every reported `file: message` line, then run it again.
 
-- [ ] Starts with `---` frontmatter block, valid YAML.
-- [ ] `line` set and `.factory/lines/<line>.yml` exists.
-- [ ] `type` set and valid.
-- [ ] `depends_on` has at most one slug and that todo exists.
-- [ ] Heading is `# <slug>: <title>` and slug equals file name.
-- [ ] No cycle in the chain.
-- [ ] Every path and number in the body was verified, or sits under "Verify first".
+- [ ] `pnpm todo:lint` passes.
+- [ ] Every path and number in the body was verified, or sits under "Verify first". The script cannot check this.
 
 ## Guardrails
 
