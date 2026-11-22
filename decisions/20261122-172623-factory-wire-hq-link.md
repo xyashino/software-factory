@@ -1,6 +1,6 @@
 ---
 scope: factory
-summary: Factory enrolls with HQ via one-time join token; daemon heartbeats and kills Cells when HQ is silent or rejects
+summary: Factory enrolls with HQ; daemon kills Cells when HQ is silent
 why: Factory must hold the only HQ credential and stop Cells before HQ reaps its lease (60 s); join must be single use
 date: 2026-11-22
 tags: [factory, hq, enroll, heartbeat, fence, credential]
