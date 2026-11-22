@@ -3,16 +3,22 @@ import type { claimedJobDto } from '@repo/factory-contracts/cells.contract';
 import type { DrainState } from '../../../cell/drain-signal';
 import { Unreachable } from '../../core/errors';
 import type { Ports } from '../../core/procedure';
-import type { CellSession } from '../../ports/cell-state.port';
 
 const RETRY_DELAYS_MS = [200, 400, 800];
 
 export type ClaimedJob = z.infer<typeof claimedJobDto>;
 
+export interface CellSession {
+  cellId: string;
+  sessionToken: string;
+}
+
 export interface CellRuntime {
   ports: Ports;
   session: CellSession;
   projectId: string;
+  allowedLines: readonly string[];
+  runners: readonly string[];
   repoRoot: string;
   logPath: string;
   signal: AbortSignal;

@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { FactoryUnavailable } from './factory-error';
 import {
-  cellsReply,
+  factoriesReply,
   incidentsReply,
   transitionReply,
   workOrderDetailReply,
@@ -26,7 +26,7 @@ export type WorkOrderFilter = {
   planId?: string;
   lineName?: string;
   state?: string;
-  pinnedCellId?: string;
+  pinnedFactoryId?: string;
 };
 
 export type IncidentFilter = {
@@ -93,7 +93,7 @@ export const createFactoryClient = (options: FactoryClientOptions) => {
     request(options, 'GET', path, schema);
 
   return {
-    listCells: () => get('/api/v1/cells', cellsReply),
+    listFactories: () => get('/api/v1/factories', factoriesReply),
     listWorkOrders: (filter: WorkOrderFilter) =>
       get(`/api/v1/work-orders${toQuery(filter)}`, workOrdersReply),
     getWorkOrder: (id: string) =>

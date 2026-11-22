@@ -23,7 +23,6 @@ export const writeWebJoinFile = (
       kind: 'web_join',
       name: 'web-demo join',
       scopes: [],
-      cellId: null,
       rotatedFromId: null,
       expiresAt: null,
       now: clock.now(),

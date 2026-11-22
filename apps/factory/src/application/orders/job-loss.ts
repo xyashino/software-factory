@@ -1,6 +1,5 @@
 import { eq } from 'drizzle-orm';
 import type { DbTx } from '../../db/client';
-import { cells } from '../../db/schema/cells';
 import { jobs } from '../../db/schema/jobs';
 import { workOrders } from '../../db/schema/orders';
 import { orderPlans } from '../../db/schema/plans';
@@ -64,23 +63,6 @@ const requeuePlanBranch = (tx: DbTx, job: JobRow, now: number): void => {
   insertPlanBranchJob(tx, plan, job.repoUrl, now);
 };
 
-const releaseCell = (tx: DbTx, job: JobRow): void => {
-  if (job.cellId === null) return;
-  const cell = tx
-    .select()
-    .from(cells)
-    .where(eq(cells.cellId, job.cellId))
-    .get();
-  if (cell === undefined || cell.activeJobId !== job.jobId) return;
-  tx.update(cells)
-    .set({
-      activeJobId: null,
-      status: cell.status === 'busy' ? 'online' : cell.status,
-    })
-    .where(eq(cells.cellId, cell.cellId))
-    .run();
-};
-
 export const loseJob = (
   tx: DbTx,
   job: JobRow,
@@ -94,5 +76,4 @@ export const loseJob = (
     .run();
   requeueOrder(tx, job, now, actor, log);
   requeuePlanBranch(tx, job, now);
-  releaseCell(tx, job);
 };

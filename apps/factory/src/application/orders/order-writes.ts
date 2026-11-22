@@ -1,6 +1,5 @@
 import { and, eq } from 'drizzle-orm';
 import type { Db, DbTx } from '../../db/client';
-import { cells } from '../../db/schema/cells';
 import { jobs } from '../../db/schema/jobs';
 import { workOrders } from '../../db/schema/orders';
 import { orderPlans } from '../../db/schema/plans';
@@ -11,7 +10,6 @@ import {
   asOrderId,
   asPlanId,
   asProjectId,
-  type CellId,
   type CommandId,
   type ProjectId,
 } from '../../domain/common/brand';
@@ -249,11 +247,6 @@ const releaseLease = (tx: DbTx, row: WorkOrderRow, now: number): void => {
       .set({ status: 'cancelled', finishedAt: now })
       .where(eq(jobs.jobId, asJobId(row.activeJobId)))
       .run();
-  if (row.activeCellId !== null)
-    tx.update(cells)
-      .set({ activeJobId: null })
-      .where(eq(cells.cellId, row.activeCellId))
-      .run();
 };
 
 const unlockChildren = (
@@ -304,11 +297,11 @@ export const moveOrder = (
     releaseLease(tx, row, now);
     patch.activeJobId = null;
     patch.activeCellId = null;
-    patch.pinnedCellId = null;
+    patch.pinnedFactoryId = null;
   }
   if (action === 'reset_to_scratch') {
     patch.currentStepIndex = 0;
-    patch.unavailableLineCellsJson = [];
+    patch.unavailableLineFactoriesJson = [];
   }
   const updated = updateWorkOrder(tx, row, patch, now);
   log.push(
@@ -352,18 +345,6 @@ export const publishCommitted = (
     )
   )
     ctx.claimWaiters.wakeAll();
-};
-
-export const releaseCell = (tx: DbTx, cellId: CellId): void => {
-  const cell = tx.select().from(cells).where(eq(cells.cellId, cellId)).get();
-  if (cell === undefined) return;
-  tx.update(cells)
-    .set({
-      activeJobId: null,
-      status: cell.status === 'busy' ? 'online' : cell.status,
-    })
-    .where(eq(cells.cellId, cellId))
-    .run();
 };
 
 export const settle = <T>(run: () => T): T => {

@@ -2,27 +2,23 @@ import { eq } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import { LEASE_TTL_MS } from '../../src/config';
 import type { Db } from '../../src/db/client';
-import { cells } from '../../src/db/schema/cells';
 import { jobs } from '../../src/db/schema/jobs';
 import { workOrders } from '../../src/db/schema/orders';
-import { safeTokens } from '../../src/db/schema/tokens';
-import {
-  hashToken,
-  TOKEN_PREFIXES,
-} from '../../src/application/tokens/token-hash';
-import {
-  asCellId,
-  asJobId,
-  asOrderId,
-  asTokenId,
-} from '../../src/domain/common/brand';
+import { asJobId, asOrderId } from '../../src/domain/common/brand';
 import { createTestApp, postJson, type TestApp } from '../support/test-app';
 import { seedBaseline } from '../support/test-db';
+import {
+  claimBody,
+  factoryHeaders,
+  FACTORY_TOKEN,
+  seedFactory,
+} from '../support/factory-session';
 
 const PROJECT_ID = 'proj-1';
-const FACTORY_JOIN = 'sf_join_gone-factory-join';
-const OTHER_FACTORY_JOIN = 'sf_join_gone-other-factory-join';
-const CELL_JOIN = 'sf_join_gone-cell-join';
+const SECOND_FACTORY_TOKEN = 'sf_factory_second-token';
+const CELL_A = 'cell-aaaaaaaa';
+const CELL_B = 'cell-bbbbbbbb';
+const CELL_IDLE = 'cell-iiiiiiii';
 
 type ClaimBody = {
   code: number;
@@ -33,108 +29,60 @@ type ClaimBody = {
   };
 };
 
-const bearer = (token: string) => ({ authorization: `Bearer ${token}` });
-
 const setup = () => {
   const { app, clock, db } = createTestApp({ safeTokenAuth: true });
   seedBaseline(db);
-  db.insert(safeTokens)
-    .values([
-      {
-        tokenId: asTokenId('factory-join-gone'),
-        tokenHash: hashToken(FACTORY_JOIN),
-        prefix: TOKEN_PREFIXES.join,
-        kind: 'factory_join',
-        name: 'factory join',
-        scopesJson: ['factory:enroll'],
-        createdAt: clock.now(),
-      },
-      {
-        tokenId: asTokenId('other-factory-join-gone'),
-        tokenHash: hashToken(OTHER_FACTORY_JOIN),
-        prefix: TOKEN_PREFIXES.join,
-        kind: 'factory_join',
-        name: 'other factory join',
-        scopesJson: ['factory:enroll'],
-        createdAt: clock.now(),
-      },
-      {
-        tokenId: asTokenId('cell-join-gone'),
-        tokenHash: hashToken(CELL_JOIN),
-        prefix: TOKEN_PREFIXES.join,
-        kind: 'cell_join',
-        name: 'cell join',
-        scopesJson: ['cell:enroll'],
-        createdAt: clock.now(),
-      },
-    ])
-    .run();
+  seedFactory(db, 'factory-2', SECOND_FACTORY_TOKEN, clock.now());
   return { app, clock, db };
 };
 
-const enrollFactory = async (
+const claim = async (
   app: TestApp,
-  joinToken: string,
-  name: string,
-): Promise<string> => {
-  const response = await postJson(
-    app,
-    '/api/v1/factories/enroll',
-    { name },
-    bearer(joinToken),
-  );
-  return ((await response.json()) as { sessionToken: string }).sessionToken;
-};
-
-const enrollCell = async (
-  app: TestApp,
-  token: string,
-  name: string,
-  allowedLines: string[] = ['feature'],
-): Promise<string> => {
-  const response = await postJson(
-    app,
-    '/api/v1/cells/enroll',
-    { projectId: PROJECT_ID, name, allowedLines, runners: ['claude'] },
-    bearer(token),
-  );
-  return ((await response.json()) as { sessionToken: string }).sessionToken;
-};
-
-const claim = async (app: TestApp, token: string): Promise<ClaimBody> => {
+  cellId: string,
+  token: string = FACTORY_TOKEN,
+  waitMs = 0,
+): Promise<ClaimBody> => {
   const response = await postJson(
     app,
     '/api/v1/cells/claims',
-    {},
-    bearer(token),
+    claimBody({ waitMs }, PROJECT_ID),
+    factoryHeaders(cellId, token),
   );
   return (await response.json()) as ClaimBody;
 };
 
-const goneCell = (app: TestApp, factorySession: string, cellId: string) =>
+const goneCell = (
+  app: TestApp,
+  cellId: string,
+  token: string = FACTORY_TOKEN,
+) =>
   postJson(
     app,
     `/api/v1/factories/cells/${encodeURIComponent(cellId)}/gone`,
     undefined,
-    bearer(factorySession),
+    { authorization: `Bearer ${token}` },
   );
 
 const heartbeatJob = (
   app: TestApp,
-  token: string,
+  cellId: string,
   jobId: string,
   epoch: number,
-) => postJson(app, '/api/v1/cells/heartbeats', { jobId, epoch }, bearer(token));
+) =>
+  postJson(
+    app,
+    '/api/v1/cells/heartbeats',
+    { jobId, epoch },
+    factoryHeaders(cellId),
+  );
 
-const heartbeatFactory = (app: TestApp, session: string) =>
-  postJson(app, '/api/v1/factories/heartbeat', undefined, bearer(session));
-
-const cellRow = (db: Db, cellId: string) =>
-  db
-    .select()
-    .from(cells)
-    .where(eq(cells.cellId, asCellId(cellId)))
-    .get();
+const heartbeatFactory = (app: TestApp, token: string = FACTORY_TOKEN) =>
+  postJson(
+    app,
+    '/api/v1/factories/heartbeat',
+    { projects: [] },
+    { authorization: `Bearer ${token}` },
+  );
 
 const jobRow = (db: Db, jobId: string) =>
   db
@@ -150,235 +98,160 @@ const orderState = (db: Db, orderId: string) =>
     .where(eq(workOrders.orderId, asOrderId(orderId)))
     .get();
 
-const tokenCountOf = (db: Db, cellId: string): number =>
-  db
-    .select()
-    .from(safeTokens)
-    .where(eq(safeTokens.cellId, asCellId(cellId)))
-    .all().length;
-
 describe('cell gone', () => {
-  it('gone cell mid-job re-queues its order for another cell', async () => {
-    // Arrange
+  it('gone cell mid-job re-queues its order for a sibling cell of the same factory', async () => {
     const { app, db } = setup();
-    const factory = await enrollFactory(app, FACTORY_JOIN, 'laptop');
-    const cellA = await enrollCell(app, factory, 'cell-a');
-    await claim(app, cellA);
+    await claim(app, CELL_A);
 
-    // Act
-    const gone = await goneCell(app, factory, 'proj-1:cell-a');
-    const cellB = await enrollCell(app, CELL_JOIN, 'cell-b');
-    const takeover = await claim(app, cellB);
+    const gone = await goneCell(app, CELL_A);
+    const takeover = await claim(app, CELL_B);
 
-    // Assert
     expect(gone.status).toBe(200);
     expect(orderState(db, 'order-1')).toMatchObject({
       state: 'running',
-      activeCellId: 'proj-1:cell-b',
-      pinnedCellId: 'proj-1:cell-b',
+      activeCellId: CELL_B,
+      pinnedFactoryId: 'factory-1',
       epoch: 3,
     });
     expect(takeover.job).toMatchObject({ orderId: 'order-1', epoch: 3 });
   });
 
-  it('gone cell leaves its order unpinned and queued', async () => {
-    // Arrange
+  it('gone cell leaves its order queued and still pinned to its own factory', async () => {
     const { app, db } = setup();
-    const factory = await enrollFactory(app, FACTORY_JOIN, 'laptop');
-    const cellA = await enrollCell(app, factory, 'cell-a');
-    await claim(app, cellA);
+    await claim(app, CELL_A);
 
-    // Act
-    await goneCell(app, factory, 'proj-1:cell-a');
+    await goneCell(app, CELL_A);
 
-    // Assert
     expect(orderState(db, 'order-1')).toMatchObject({
       state: 'queued',
       activeCellId: null,
       activeJobId: null,
-      pinnedCellId: null,
+      pinnedFactoryId: 'factory-1',
       epoch: 2,
     });
   });
 
-  it('gone cell row and tokens are deleted while its old job keeps the cell id', async () => {
-    // Arrange
+  it('gone cell keeps its lost job under the cell id that ran it', async () => {
     const { app, db } = setup();
-    const factory = await enrollFactory(app, FACTORY_JOIN, 'laptop');
-    const cellA = await enrollCell(app, factory, 'cell-a');
-    const lost = await claim(app, cellA);
+    const lost = await claim(app, CELL_A);
 
-    // Act
-    await goneCell(app, factory, 'proj-1:cell-a');
+    await goneCell(app, CELL_A);
 
-    // Assert
-    expect(cellRow(db, 'proj-1:cell-a')).toBeUndefined();
-    expect(tokenCountOf(db, 'proj-1:cell-a')).toBe(0);
     expect(jobRow(db, lost.job?.jobId ?? '')).toMatchObject({
       status: 'lost',
-      cellId: 'proj-1:cell-a',
+      claimedByCellId: CELL_A,
+      claimedByFactoryId: 'factory-1',
     });
   });
 
   it('gone twice is safe', async () => {
-    // Arrange
     const { app } = setup();
-    const factory = await enrollFactory(app, FACTORY_JOIN, 'laptop');
-    await enrollCell(app, factory, 'cell-a');
+    await claim(app, CELL_A);
 
-    // Act
-    const first = await goneCell(app, factory, 'proj-1:cell-a');
-    const second = await goneCell(app, factory, 'proj-1:cell-a');
+    const first = await goneCell(app, CELL_A);
+    const second = await goneCell(app, CELL_A);
 
-    // Assert
     expect(first.status).toBe(200);
     expect(second.status).toBe(200);
   });
 
   it('gone for an unknown cell answers 200', async () => {
-    // Arrange
     const { app } = setup();
-    const factory = await enrollFactory(app, FACTORY_JOIN, 'laptop');
 
-    // Act
-    const response = await goneCell(app, factory, 'proj-1:never-existed');
+    const response = await goneCell(app, 'cell-neverseen');
 
-    // Assert
     expect(response.status).toBe(200);
   });
 
-  it('foreign factory cannot gone another factory cell', async () => {
-    // Arrange
+  it('another factory cannot lose a job it does not own', async () => {
     const { app, db } = setup();
-    const owner = await enrollFactory(app, FACTORY_JOIN, 'laptop-owner');
-    const intruder = await enrollFactory(
-      app,
-      OTHER_FACTORY_JOIN,
-      'laptop-intruder',
-    );
-    await enrollCell(app, owner, 'cell-a');
+    const lost = await claim(app, CELL_A);
 
-    // Act
-    const response = await goneCell(app, intruder, 'proj-1:cell-a');
+    const response = await goneCell(app, CELL_A, SECOND_FACTORY_TOKEN);
 
-    // Assert
-    expect(response.status).toBe(403);
-    expect(cellRow(db, 'proj-1:cell-a')).toBeDefined();
-  });
-
-  it('factory cannot gone a cell enrolled with a join token', async () => {
-    // Arrange
-    const { app, db } = setup();
-    const factory = await enrollFactory(app, FACTORY_JOIN, 'laptop');
-    await enrollCell(app, CELL_JOIN, 'cell-joined');
-
-    // Act
-    const response = await goneCell(app, factory, 'proj-1:cell-joined');
-
-    // Assert
-    expect(response.status).toBe(403);
-    expect(cellRow(db, 'proj-1:cell-joined')).toBeDefined();
+    expect(response.status).toBe(200);
+    expect(jobRow(db, lost.job?.jobId ?? '')?.status).toBe('claimed');
   });
 
   it('gone does not count as a worktree reset', async () => {
-    // Arrange
     const { app, db } = setup();
-    const factory = await enrollFactory(app, FACTORY_JOIN, 'laptop');
-    const cellA = await enrollCell(app, factory, 'cell-a');
-    await claim(app, cellA);
+    await claim(app, CELL_A);
     const resetsBefore = orderState(db, 'order-1')?.worktreeResets;
 
-    // Act
-    await goneCell(app, factory, 'proj-1:cell-a');
+    await goneCell(app, CELL_A);
 
-    // Assert
     expect(orderState(db, 'order-1')?.worktreeResets).toBe(resetsBefore);
   });
 
   it('gone cell cannot send a late result with its old epoch', async () => {
-    // Arrange
     const { app } = setup();
-    const factory = await enrollFactory(app, FACTORY_JOIN, 'laptop');
-    const cellA = await enrollCell(app, factory, 'cell-a');
-    const lost = await claim(app, cellA);
-    await goneCell(app, factory, 'proj-1:cell-a');
-    const cellB = await enrollCell(app, CELL_JOIN, 'cell-b');
-    await claim(app, cellB);
+    const lost = await claim(app, CELL_A);
+    await goneCell(app, CELL_A);
+    await claim(app, CELL_B);
 
-    // Act
     const late = await heartbeatJob(
       app,
-      cellA,
+      CELL_A,
       lost.job?.jobId ?? '',
       lost.job?.epoch ?? -1,
     );
 
-    // Assert
-    expect(late.status).toBe(401);
+    expect(late.status).toBe(409);
   });
 
-  it('live cell with an expired lease is fenced by its old epoch', async () => {
-    // Arrange
+  it('expired lease hands the order to a sibling cell and fences the old one', async () => {
     const { app, clock, db } = setup();
-    const cellA = await enrollCell(app, CELL_JOIN, 'cell-a');
-    const lost = await claim(app, cellA);
+    const lost = await claim(app, CELL_A);
     clock.advance(LEASE_TTL_MS - 1_000);
-    await claim(app, cellA);
+    await claim(app, CELL_A);
     clock.advance(2_000);
-    const cellB = await enrollCell(app, CELL_JOIN, 'cell-b');
 
-    // Act
-    const takeover = await claim(app, cellB);
+    const takeover = await claim(app, CELL_B);
     const late = await heartbeatJob(
       app,
-      cellA,
+      CELL_A,
       lost.job?.jobId ?? '',
       lost.job?.epoch ?? -1,
     );
 
-    // Assert
-    expect(takeover.job).toMatchObject({ orderId: 'order-2' });
+    expect(takeover.job).toMatchObject({ orderId: 'order-1' });
     expect(orderState(db, 'order-1')).toMatchObject({
-      state: 'queued',
-      pinnedCellId: 'proj-1:cell-a',
+      state: 'running',
+      pinnedFactoryId: 'factory-1',
     });
     expect(late.status).toBe(409);
-    expect(cellRow(db, 'proj-1:cell-a')).toMatchObject({ status: 'online' });
   });
 
-  it('silent factory cells are deleted at the lease expiry', async () => {
-    // Arrange
+  it('silent factory unpins its orders and requeues its jobs at the lease expiry', async () => {
     const { app, clock, db } = setup();
-    const factory = await enrollFactory(app, FACTORY_JOIN, 'laptop');
-    const idle = await enrollCell(app, factory, 'cell-idle', ['web']);
-    await claim(app, idle);
-    clock.advance(LEASE_TTL_MS / 2);
-    await claim(app, idle);
-    clock.advance(LEASE_TTL_MS / 2 + 1_000);
+    const lost = await claim(app, CELL_IDLE);
+    clock.advance(LEASE_TTL_MS + 1_000);
 
-    // Act
-    const cellB = await enrollCell(app, CELL_JOIN, 'cell-b');
-    await claim(app, cellB);
+    const takeover = await claim(app, CELL_B, SECOND_FACTORY_TOKEN);
 
-    // Assert
-    expect(cellRow(db, 'proj-1:cell-idle')).toBeUndefined();
+    expect(jobRow(db, lost.job?.jobId ?? '')?.status).toBe('lost');
+    expect(takeover.job).toMatchObject({ orderId: 'order-1', epoch: 3 });
+    expect(orderState(db, 'order-1')).toMatchObject({
+      pinnedFactoryId: 'factory-2',
+      activeCellId: CELL_B,
+    });
   });
 
-  it('idle cell of a live factory is kept while it keeps polling', async () => {
-    // Arrange
+  it('live factory keeps its job while it keeps heartbeating', async () => {
     const { app, clock, db } = setup();
-    const factory = await enrollFactory(app, FACTORY_JOIN, 'laptop');
-    const idle = await enrollCell(app, factory, 'cell-idle', ['web']);
-    await claim(app, idle);
+    const held = await claim(app, CELL_IDLE);
     clock.advance(LEASE_TTL_MS / 2);
-    await heartbeatFactory(app, factory);
-    await claim(app, idle);
+    await heartbeatJob(app, CELL_IDLE, held.job?.jobId ?? '', 1);
+    await heartbeatFactory(app);
     clock.advance(LEASE_TTL_MS / 2 + 1_000);
 
-    // Act
-    await claim(app, await enrollCell(app, CELL_JOIN, 'cell-b'));
+    const other = await claim(app, CELL_B, SECOND_FACTORY_TOKEN);
 
-    // Assert
-    expect(cellRow(db, 'proj-1:cell-idle')).toMatchObject({ status: 'online' });
+    expect(other.job).toMatchObject({ orderId: 'order-2' });
+    expect(jobRow(db, held.job?.jobId ?? '')?.status).toBe('claimed');
+    expect(orderState(db, 'order-1')).toMatchObject({
+      pinnedFactoryId: 'factory-1',
+      activeCellId: CELL_IDLE,
+    });
   });
 });

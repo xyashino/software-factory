@@ -28,8 +28,6 @@ const EXIT_WAIT_MS = 5_000;
 const POLL_MS = 100;
 const TOKEN = 'sf_supervisor_stub';
 const FEATURE_LINE = 'name: feature\nstations: []\n';
-const ENROLL_ROUTE = '/api/v1/cells/enroll';
-const HELLO_ROUTE = '/api/v1/cells/hello';
 const CLAIMS_ROUTE = '/api/v1/cells/claims';
 const TOKENS_ROUTE = '/api/v1/tokens';
 const HEARTBEAT_ROUTE = '/api/v1/factories/heartbeat';
@@ -37,23 +35,30 @@ const GONE_ROUTE = /^\/api\/v1\/factories\/cells\/([^/]+)\/gone$/;
 const FACTORY_ID = 'factory-stub';
 const FACTORY_SESSION = 'sf_factory_session_stub';
 const START_WAIT_MS = 20_000;
-const HQ_SESSION_PREFIX = 'sf_cell_session_';
-const NEVER_EXPIRES_MS = 4_102_444_800_000;
 
 const sandboxes: Sandbox[] = [];
 let factory: Server;
 let factoryUrl: string;
-let sessionCount = 0;
 let goneFailing = false;
-const hqCalls: HqCall[] = [];
+const claimRejected = new Set<string>();
+const claimCalls: ClaimCall[] = [];
 const goneCalls: GoneCall[] = [];
-const helloRejections = new Map<string, number>();
+const heartbeatProjects: HeartbeatCall[] = [];
 
-interface HqCall {
-  route: 'enroll' | 'hello';
-  projectId: string;
-  name: string | undefined;
+interface ClaimCall {
+  cellId: string;
   bearer: string;
+  body: ClaimBody;
+}
+
+interface ClaimBody {
+  projectId: string;
+  allowedLines: string[];
+  runners: string[];
+}
+
+interface HeartbeatCall {
+  projects: { projectId: string; desired: number; running: number }[];
 }
 
 interface GoneCall {
@@ -78,6 +83,7 @@ interface CliResult {
 interface CreatedCell {
   cellId: string;
   name: string;
+  projectId: string;
   pid: number;
 }
 
@@ -219,56 +225,36 @@ const bodyOf = (request: IncomingMessage): Promise<string> =>
 const bearerOf = (request: IncomingMessage): string =>
   (request.headers.authorization ?? '').replace('Bearer ', '');
 
-interface CellBody {
-  projectId: string;
-  name?: string;
-}
+const cellIdOf = (request: IncomingMessage): string =>
+  String(request.headers['x-cell-id'] ?? '');
 
-const cellBodyOf = async (request: IncomingMessage): Promise<CellBody> =>
-  JSON.parse(await bodyOf(request)) as CellBody;
-
-const answerEnroll = async (
+const answerClaim = async (
   request: IncomingMessage,
   response: ServerResponse,
 ): Promise<void> => {
-  const body = await cellBodyOf(request);
-  hqCalls.push({
-    route: 'enroll',
-    projectId: body.projectId,
-    name: body.name,
-    bearer: bearerOf(request),
-  });
-  sessionCount += 1;
-  replyJson(
-    201,
-    {
-      code: 201,
-      cellId: `${body.projectId}:${body.name ?? ''}`,
-      sessionToken: `${HQ_SESSION_PREFIX}${sessionCount}`,
-      expiresAt: NEVER_EXPIRES_MS,
-    },
-    response,
-  );
-};
-
-const answerHello = async (
-  request: IncomingMessage,
-  response: ServerResponse,
-): Promise<void> => {
-  const body = await cellBodyOf(request);
-  hqCalls.push({
-    route: 'hello',
-    projectId: body.projectId,
-    name: undefined,
-    bearer: bearerOf(request),
-  });
-  const rejections = helloRejections.get(body.projectId) ?? 0;
-  if (rejections > 0) {
-    helloRejections.set(body.projectId, rejections - 1);
-    replyJson(401, { code: 401, message: 'session expired' }, response);
+  const cellId = cellIdOf(request);
+  const body = JSON.parse(await bodyOf(request)) as ClaimBody;
+  claimCalls.push({ cellId, bearer: bearerOf(request), body });
+  if (claimRejected.has(cellId)) {
+    replyJson(
+      401,
+      { code: 401, message: 'factory credential rejected' },
+      response,
+    );
     return;
   }
-  replyJson(200, { code: 200, cellId: body.projectId }, response);
+  setTimeout(() => {
+    replyJson(200, { code: 200, job: null, signals: [] }, response);
+  }, 1_000);
+};
+
+const answerHeartbeat = async (
+  request: IncomingMessage,
+  response: ServerResponse,
+): Promise<void> => {
+  const body = JSON.parse(await bodyOf(request)) as HeartbeatCall;
+  heartbeatProjects.push(body);
+  replyJson(200, { code: 200, factoryId: FACTORY_ID }, response);
 };
 
 const answerGone = (
@@ -286,9 +272,6 @@ const answerGone = (
   replyJson(200, { code: 200, cellId }, response);
 };
 
-const goneCallsOf = (projectId: string): GoneCall[] =>
-  goneCalls.filter((call) => call.cellId.startsWith(`${projectId}:`));
-
 const projectOf = (projectId: string) => ({
   projectId,
   repoUrl: `https://example.test/${projectId}.git`,
@@ -298,10 +281,8 @@ const projectOf = (projectId: string) => ({
   updatedAt: 1,
 });
 
-const hqCallsOf = (projectId: string, route: HqCall['route']): HqCall[] =>
-  hqCalls.filter(
-    (call) => call.projectId === projectId && call.route === route,
-  );
+const claimsOf = (cellId: string): ClaimCall[] =>
+  claimCalls.filter((call) => call.cellId === cellId);
 
 const relayUrlOf = (port: number): string => `http://127.0.0.1:${port}/relay`;
 
@@ -327,6 +308,23 @@ const waitFor = async (check: () => boolean): Promise<boolean> => {
   return check();
 };
 
+const createCell = async (
+  env: Record<string, string>,
+  repo: string,
+): Promise<CreatedCell> => {
+  const created = await runSf(env, [
+    'cell',
+    'create',
+    '--repo',
+    repo,
+    '--json',
+  ]);
+  expect(created.status).toBe(EXIT.ok);
+  const [cell] = JSON.parse(created.stdout) as CreatedCell[];
+  if (cell === undefined) throw new Error('no cell created');
+  return cell;
+};
+
 beforeAll(async () => {
   factory = createServer((request, response) => {
     if (request.method === 'GET' && request.url === PROJECTS_ROUTE) {
@@ -349,8 +347,8 @@ beforeAll(async () => {
         {
           code: 201,
           tokenId: 'tok-1',
-          kind: 'cell_join',
-          token: 'sf_cell_join_stub',
+          kind: 'factory_join',
+          token: 'sf_join_stub',
           scopes: [],
           expiresAt: null,
         },
@@ -358,22 +356,12 @@ beforeAll(async () => {
       );
       return;
     }
-    if (request.method === 'POST' && request.url === ENROLL_ROUTE) {
-      void answerEnroll(request, response);
-      return;
-    }
-    if (request.method === 'POST' && request.url === HELLO_ROUTE) {
-      void answerHello(request, response);
+    if (request.method === 'POST' && request.url === CLAIMS_ROUTE) {
+      void answerClaim(request, response);
       return;
     }
     if (request.method === 'POST' && request.url === HEARTBEAT_ROUTE) {
-      replyJson(200, { code: 200, factoryId: FACTORY_ID }, response);
-      return;
-    }
-    if (request.method === 'POST' && request.url === CLAIMS_ROUTE) {
-      setTimeout(() => {
-        replyJson(200, { code: 200, job: null, signals: [] }, response);
-      }, 1_000);
+      void answerHeartbeat(request, response);
       return;
     }
     if (request.method === 'POST' && GONE_ROUTE.test(request.url ?? '')) {
@@ -602,33 +590,40 @@ describe('factory daemon lifecycle', () => {
       // Arrange
       const { env, repo } = await sandbox();
       await startDaemon(env);
-      const created = await runSf(env, [
-        'cell',
-        'create',
-        '--repo',
-        repo,
-        '--json',
-      ]);
-      const [cell] = JSON.parse(created.stdout) as CreatedCell[];
+      const cell = await createCell(env, repo);
 
       // Act
-      const listed = await runSf(env, ['cell', 'list', '--here', '--json']);
-      const stopped = await runSf(env, ['cell', 'stop', cell?.cellId ?? '']);
-      const afterStop = await runSf(env, ['cell', 'list', '--here', '--json']);
-      const removed = await runSf(env, ['cell', 'rm', cell?.cellId ?? '']);
+      const listed = await runSf(env, ['cell', 'list', '--json']);
+      const stopped = await runSf(env, ['cell', 'stop', cell.cellId]);
+      const afterStop = await runSf(env, ['cell', 'list', '--json']);
+      const removed = await runSf(env, ['cell', 'rm', cell.cellId]);
 
       // Assert
       expect(JSON.parse(listed.stdout)).toEqual([
-        expect.objectContaining({ cellId: cell?.cellId, pid: cell?.pid }),
+        expect.objectContaining({ cellId: cell.cellId, pid: cell.pid }),
       ]);
-      expect(stopped.stdout.trim()).toBe(`cell ${cell?.cellId} stopped`);
+      expect(stopped.stdout.trim()).toBe(`cell ${cell.cellId} stopped`);
       expect(JSON.parse(afterStop.stdout)).toEqual([]);
       expect(removed.status).toBe(EXIT.refused);
-      expect(removed.stderr).toContain(`no cell ${cell?.cellId}`);
+      expect(removed.stderr).toContain(`no cell ${cell.cellId}`);
       await stopDaemon(env);
     },
     TEST_TIMEOUT_MS,
   );
+
+  it('refuses a stop of a cell the daemon does not run', async () => {
+    // Arrange
+    const { env } = await sandbox();
+    await startDaemon(env);
+
+    // Act
+    const result = await runSf(env, ['cell', 'stop', 'cell-00000000']);
+
+    // Assert
+    expect(result.status).toBe(EXIT.refused);
+    expect(result.stderr).toContain('no local cell cell-00000000');
+    await stopDaemon(env);
+  });
 
   it('refuses a fixed name for more than one cell', async () => {
     // Arrange
@@ -657,27 +652,19 @@ describe('factory gone calls', () => {
     'stop calls HQ gone for the cell after its process is dead',
     async () => {
       // Arrange
-      const { env, repo, project } = await sandbox();
+      const { env, repo } = await sandbox();
       await startDaemon(env);
-      const created = await runSf(env, [
-        'cell',
-        'create',
-        '--repo',
-        repo,
-        '--json',
-      ]);
-      const [cell] = JSON.parse(created.stdout) as CreatedCell[];
-      await waitFor(() => hqCallsOf(project, 'enroll').length >= 1);
-      const hqName = hqCallsOf(project, 'enroll')[0]?.name ?? '';
+      const cell = await createCell(env, repo);
+      await waitFor(() => claimsOf(cell.cellId).length >= 1);
 
       // Act
-      const stopped = await runSf(env, ['cell', 'stop', cell?.cellId ?? '']);
+      const stopped = await runSf(env, ['cell', 'stop', cell.cellId]);
 
       // Assert
-      expect(stopped.stdout.trim()).toBe(`cell ${cell?.cellId} stopped`);
-      expect(await waitFor(() => !isAlive(cell?.pid ?? 0))).toBe(true);
-      expect(goneCallsOf(project)).toEqual([
-        { cellId: `${project}:${hqName}`, bearer: FACTORY_SESSION },
+      expect(stopped.stdout.trim()).toBe(`cell ${cell.cellId} stopped`);
+      expect(await waitFor(() => !isAlive(cell.pid))).toBe(true);
+      expect(goneCalls.filter((call) => call.cellId === cell.cellId)).toEqual([
+        { cellId: cell.cellId, bearer: FACTORY_SESSION },
       ]);
       await stopDaemon(env);
     },
@@ -688,32 +675,24 @@ describe('factory gone calls', () => {
     'stop still ends the cell when HQ refuses the gone call',
     async () => {
       // Arrange
-      const { env, repo, project } = await sandbox();
+      const { env, repo } = await sandbox();
       await startDaemon(env);
-      const created = await runSf(env, [
-        'cell',
-        'create',
-        '--repo',
-        repo,
-        '--json',
-      ]);
-      const [cell] = JSON.parse(created.stdout) as CreatedCell[];
-      await waitFor(() => hqCallsOf(project, 'enroll').length >= 1);
+      const cell = await createCell(env, repo);
+      await waitFor(() => claimsOf(cell.cellId).length >= 1);
 
       // Act
       goneFailing = true;
       let stopped: CliResult;
       try {
-        stopped = await runSf(env, ['cell', 'stop', cell?.cellId ?? '']);
+        stopped = await runSf(env, ['cell', 'stop', cell.cellId]);
       } finally {
         goneFailing = false;
       }
 
       // Assert
       expect(stopped.status).toBe(EXIT.ok);
-      expect(stopped.stdout.trim()).toBe(`cell ${cell?.cellId} stopped`);
-      expect(await waitFor(() => !isAlive(cell?.pid ?? 0))).toBe(true);
-      expect(goneCallsOf(project)).toHaveLength(1);
+      expect(stopped.stdout.trim()).toBe(`cell ${cell.cellId} stopped`);
+      expect(await waitFor(() => !isAlive(cell.pid))).toBe(true);
       await stopDaemon(env);
     },
     TEST_TIMEOUT_MS,
@@ -722,32 +701,25 @@ describe('factory gone calls', () => {
 
 describe('factory relay', () => {
   it(
-    'relayed cell env has no HQ url or token',
+    'relayed cell env carries its id and the local token, never the HQ url or credential',
     async () => {
       // Arrange
       const { env, repo, port } = await sandbox();
       await startDaemon(env);
-      const created = await runSf(env, [
-        'cell',
-        'create',
-        '--repo',
-        repo,
-        '--json',
-      ]);
-      expect(created.stderr).toBe('');
-      const [cell] = JSON.parse(created.stdout) as CreatedCell[];
 
       // Act
-      const cellEnv = cellEnvOf(cell?.pid ?? 0);
+      const cell = await createCell(env, repo);
+      const cellEnv = cellEnvOf(cell.pid);
       const values = Object.values(cellEnv);
 
       // Assert
-      expect(created.status).toBe(EXIT.ok);
       expect(cellEnv.FACTORY_URL).toBe(relayUrlOf(port));
+      expect(cellEnv.FACTORY_CELL_ID).toBe(cell.cellId);
       expect(values).not.toContain(factoryUrl);
       expect(values).not.toContain(TOKEN);
       expect(values).not.toContain(FACTORY_SESSION);
-      expect(cellEnv.FACTORY_JOIN_TOKEN ?? '').toBe('');
+      expect(cell.cellId).toMatch(/^cell-[0-9a-f]{8}$/);
+      await stopDaemon(env);
     },
     TEST_TIMEOUT_MS,
   );
@@ -760,63 +732,64 @@ describe('factory relay', () => {
       await startDaemon(env);
 
       // Act
-      const response = await fetch(`${relayUrlOf(port)}/api/v1/projects`);
+      const projects = await fetch(`${relayUrlOf(port)}/api/v1/projects`);
+      const enroll = await fetch(`${relayUrlOf(port)}/api/v1/cells/enroll`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${TOKEN}` },
+        body: '{}',
+      });
 
       // Assert
-      expect(response.status).toBe(403);
+      expect(projects.status).toBe(403);
+      expect(enroll.status).toBe(403);
+      await stopDaemon(env);
     },
     TEST_TIMEOUT_MS,
   );
 
   it(
-    'upstream 401 re-enrolls once and retries',
+    'a claim through the relay carries the factory credential and the cell id',
     async () => {
       // Arrange
       const { env, repo, project } = await sandbox();
-      helloRejections.set(project, 1);
       await startDaemon(env);
 
       // Act
-      await runSf(env, ['cell', 'create', '--repo', repo, '--json']);
-      const retried = await waitFor(
-        () => hqCallsOf(project, 'hello').length >= 2,
-      );
+      const cell = await createCell(env, repo);
+      const claimed = await waitFor(() => claimsOf(cell.cellId).length >= 1);
 
       // Assert
-      const enrolls = hqCallsOf(project, 'enroll');
-      expect(retried).toBe(true);
-      expect(enrolls).toHaveLength(2);
-      expect(enrolls[1]?.name).toBe(enrolls[0]?.name);
-      expect(enrolls[0]?.bearer).toBe(FACTORY_SESSION);
+      expect(claimed).toBe(true);
+      expect(claimsOf(cell.cellId)[0]).toMatchObject({
+        cellId: cell.cellId,
+        bearer: FACTORY_SESSION,
+        body: {
+          projectId: project,
+          runners: expect.arrayContaining(['claude']),
+        },
+      });
+      await stopDaemon(env);
     },
     TEST_TIMEOUT_MS,
   );
 
   it(
-    'second upstream 401 kills the cell',
+    'a factory credential rejected by HQ stops the cell',
     async () => {
       // Arrange
-      const { env, repo, project } = await sandbox();
-      helloRejections.set(project, 2);
+      const { env, repo } = await sandbox();
       await startDaemon(env);
-      const created = await runSf(env, [
-        'cell',
-        'create',
-        '--repo',
-        repo,
-        '--json',
-      ]);
-      const [cell] = JSON.parse(created.stdout) as CreatedCell[];
+      const cell = await createCell(env, repo);
+      claimRejected.add(cell.cellId);
 
       // Act
-      const gone = await waitFor(() => !isAlive(cell?.pid ?? 0));
-      const listed = await runSf(env, ['cell', 'list', '--here', '--json']);
+      const gone = await waitFor(() => !isAlive(cell.pid));
+      const listed = await runSf(env, ['cell', 'list', '--json']);
 
       // Assert
       expect(gone).toBe(true);
-      expect(hqCallsOf(project, 'enroll')).toHaveLength(2);
-      expect(hqCallsOf(project, 'hello')).toHaveLength(2);
       expect(JSON.parse(listed.stdout)).toEqual([]);
+      await stopDaemon(env);
     },
     TEST_TIMEOUT_MS,
   );
@@ -825,23 +798,16 @@ describe('factory relay', () => {
     'local token stops working after the cell exits',
     async () => {
       // Arrange
-      const { env, repo, port, project } = await sandbox();
+      const { env, repo, port } = await sandbox();
       await startDaemon(env);
-      const created = await runSf(env, [
-        'cell',
-        'create',
-        '--repo',
-        repo,
-        '--json',
-      ]);
-      const [cell] = JSON.parse(created.stdout) as CreatedCell[];
-      const localToken = cellEnvOf(cell?.pid ?? 0).FACTORY_TOKEN ?? '';
-      await waitFor(() => hqCallsOf(project, 'hello').length >= 1);
+      const cell = await createCell(env, repo);
+      const localToken = cellEnvOf(cell.pid).FACTORY_TOKEN ?? '';
+      await waitFor(() => claimsOf(cell.cellId).length >= 1);
 
       // Act
-      await runSf(env, ['cell', 'stop', cell?.cellId ?? '']);
-      const gone = await waitFor(() => !isAlive(cell?.pid ?? 0));
-      const after = await fetch(`${relayUrlOf(port)}/api/v1/cells/hello`, {
+      await runSf(env, ['cell', 'stop', cell.cellId]);
+      const gone = await waitFor(() => !isAlive(cell.pid));
+      const after = await fetch(`${relayUrlOf(port)}/api/v1/cells/claims`, {
         method: 'POST',
         headers: {
           authorization: `Bearer ${localToken}`,
@@ -853,44 +819,34 @@ describe('factory relay', () => {
       // Assert
       expect(gone).toBe(true);
       expect(after.status).toBe(401);
+      await stopDaemon(env);
     },
     TEST_TIMEOUT_MS,
   );
 
   it(
-    'cell start never reads a stale session file',
+    'the daemon reports each project it runs cells for in its heartbeat',
     async () => {
       // Arrange
       const { env, repo, project } = await sandbox();
-      mkdirSync(join(repo, '.factory-local', 'cells'), { recursive: true });
-      writeFileSync(
-        join(repo, '.factory-local', 'cells', 'relay-fresh.json'),
-        JSON.stringify({ cellId: 'stale-cell', sessionToken: 'sf_stale' }),
-      );
       await startDaemon(env);
 
       // Act
-      const created = await runSf(env, [
-        'cell',
-        'create',
-        '--repo',
-        repo,
-        '--name',
-        'relay-fresh',
-        '--json',
-      ]);
-      const [cell] = JSON.parse(created.stdout) as CreatedCell[];
-      const helloed = await waitFor(
-        () => hqCallsOf(project, 'hello').length >= 1,
+      await createCell(env, repo);
+      const reported = await waitFor(() =>
+        heartbeatProjects.some((beat) =>
+          beat.projects.some(
+            (row) =>
+              row.projectId === project &&
+              row.desired === 1 &&
+              row.running === 1,
+          ),
+        ),
       );
 
       // Assert
-      expect(helloed).toBe(true);
-      expect(hqCallsOf(project, 'enroll')).toHaveLength(1);
-      expect(hqCallsOf(project, 'hello')[0]?.bearer).toMatch(
-        /^sf_cell_session_/,
-      );
-      expect(isAlive(cell?.pid ?? 0)).toBe(true);
+      expect(reported).toBe(true);
+      await stopDaemon(env);
     },
     TEST_TIMEOUT_MS,
   );

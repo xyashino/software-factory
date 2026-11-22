@@ -24,20 +24,15 @@ const captureError = async (
 const client = () =>
   createFactoryClient({ baseUrl: BASE_URL, getToken: () => TOKEN });
 
-const cellReply = {
+const factoriesReply = {
   code: 200,
-  cells: [
+  factories: [
     {
-      cellId: 'cell-1',
-      projectId: 'project-1',
-      name: 'alpha',
-      status: 'online',
-      allowedLines: ['main'],
-      runners: ['claude'],
-      activeJobId: null,
-      lastHeartbeatAt: 1,
-      leaseExpiresAt: null,
-      factoryId: null,
+      factoryId: 'factory-1',
+      name: 'laptop',
+      lastSeenAt: 1,
+      online: true,
+      projects: [{ projectId: 'project-1', desired: 2, running: 1 }],
     },
   ],
 };
@@ -51,14 +46,14 @@ describe('factory client', () => {
     // Arrange
     let authorization: string | null = null;
     server.use(
-      http.get(`${BASE_URL}/api/v1/cells`, ({ request }) => {
+      http.get(`${BASE_URL}/api/v1/factories`, ({ request }) => {
         authorization = request.headers.get('authorization');
-        return HttpResponse.json(cellReply);
+        return HttpResponse.json(factoriesReply);
       }),
     );
 
     // Act
-    await client().listCells();
+    await client().listFactories();
 
     // Assert
     expect(authorization).toBe(`Bearer ${TOKEN}`);
@@ -87,13 +82,13 @@ describe('factory client', () => {
   it('fails when a reply misses a required field', async () => {
     // Arrange
     server.use(
-      http.get(`${BASE_URL}/api/v1/cells`, () =>
-        HttpResponse.json({ code: 200, cells: [{ name: 'alpha' }] }),
+      http.get(`${BASE_URL}/api/v1/factories`, () =>
+        HttpResponse.json({ code: 200, factories: [{ name: 'laptop' }] }),
       ),
     );
 
     // Act
-    const error = await captureError(() => client().listCells());
+    const error = await captureError(() => client().listFactories());
 
     // Assert
     expect(error.status).toBe(502);
@@ -102,7 +97,7 @@ describe('factory client', () => {
   it('throws FactoryUnavailable with the status when the server fails', async () => {
     // Arrange
     server.use(
-      http.get(`${BASE_URL}/api/v1/cells`, () =>
+      http.get(`${BASE_URL}/api/v1/factories`, () =>
         HttpResponse.json(
           { code: 500, type: 'internal-server-error', message: 'boom' },
           { status: 500 },
@@ -111,7 +106,7 @@ describe('factory client', () => {
     );
 
     // Act
-    const error = await captureError(() => client().listCells());
+    const error = await captureError(() => client().listFactories());
 
     // Assert
     expect(error).toBeInstanceOf(FactoryUnavailable);
@@ -122,11 +117,11 @@ describe('factory client', () => {
   it('reports status 0 when the factory cannot be reached', async () => {
     // Arrange
     server.use(
-      http.get(`${BASE_URL}/api/v1/cells`, () => HttpResponse.error()),
+      http.get(`${BASE_URL}/api/v1/factories`, () => HttpResponse.error()),
     );
 
     // Act
-    const error = await captureError(() => client().listCells());
+    const error = await captureError(() => client().listFactories());
 
     // Assert
     expect(error.status).toBe(0);
@@ -177,7 +172,7 @@ describe('factory client', () => {
   it('keeps the token out of the error', async () => {
     // Arrange
     server.use(
-      http.get(`${BASE_URL}/api/v1/cells`, () =>
+      http.get(`${BASE_URL}/api/v1/factories`, () =>
         HttpResponse.json(
           { code: 401, type: 'unauthorized', message: 'bad token' },
           { status: 401 },
@@ -186,7 +181,7 @@ describe('factory client', () => {
     );
 
     // Act
-    const error = await captureError(() => client().listCells());
+    const error = await captureError(() => client().listFactories());
 
     // Assert
     expect(error.message).not.toContain(TOKEN);

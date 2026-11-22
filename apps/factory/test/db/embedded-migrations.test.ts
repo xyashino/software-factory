@@ -38,9 +38,8 @@ describe('embedded migrations', () => {
       sql`SELECT name FROM sqlite_master WHERE type = 'table'`,
     );
     const names = tables.map((table) => table.name);
-    expect(names).toEqual(
-      expect.arrayContaining(['projects', 'jobs', 'cells']),
-    );
+    expect(names).toEqual(expect.arrayContaining(['projects', 'jobs']));
+    expect(names).not.toContain('cells');
   });
 
   it('embeds each journal migration with the SQL on disk', () => {

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { listCellsContract } from '@repo/factory-contracts/cells.contract';
+import { listFactoriesContract } from '@repo/factory-contracts/factories.contract';
 import { listIncidentsContract } from '@repo/factory-contracts/incidents.contract';
 import {
   getWorkOrderContract,
@@ -19,7 +19,7 @@ const orderSummaryDto = workOrderDto.pick({
   branch: true,
   staleBase: true,
   currentStepIndex: true,
-  pinnedCellId: true,
+  pinnedFactoryId: true,
   activeCellId: true,
   activeJobId: true,
   version: true,
@@ -47,7 +47,7 @@ const incidentSummaryDto =
     resolvedAt: true,
   });
 
-export const cellsReply = listCellsContract.out[200];
+export const factoriesReply = listFactoriesContract.out[200];
 
 export const workOrdersReply = z.object({
   code: z.literal(200),

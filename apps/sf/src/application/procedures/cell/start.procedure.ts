@@ -1,28 +1,21 @@
 import { drainStateOf } from '../../../cell/drain-signal';
-import { JOIN_TOKEN_ENV, LINES_DIR } from '../../../config';
-import type { Access } from '../../../domain/access';
-import { cellNameOf } from '../../../domain/cell/cell-name';
-import { joinPath } from '../../../domain/common/path';
+import { LINES_DIR } from '../../../config';
 import { ArgumentError, Refused } from '../../core/errors';
 import type { Ports } from '../../core/procedure';
-import { createToken } from '../tokens/token-create.procedure';
+import { joinPath } from '../../../domain/common/path';
 import { claimLoop } from './claim-loop.procedure';
 import type { CellRuntime } from './cell-runtime';
-import { enrollCell } from './enroll.procedure';
-import { helloCell } from './hello.procedure';
 import {
   resolveCellTarget,
   type ProjectChooser,
 } from './resolve-project-target';
 
 const LINE_SUFFIX = '.yml';
-const SUPERVISOR: Access = { kind: 'supervisor' };
 
 export interface StartInput {
   repoRoot: string;
-  cellName: string;
+  cellId: string | undefined;
   logPath: string;
-  joinToken: string | undefined;
   lines: readonly string[] | undefined;
   relayed: boolean;
   project?: string;
@@ -48,39 +41,17 @@ const lineNamesOf = async (ports: Ports, dir: string): Promise<string[]> =>
     .map((name) => name.slice(0, -LINE_SUFFIX.length))
     .sort();
 
-const mintJoinToken = async (
-  ports: Ports,
-  name: string,
-): Promise<string | undefined> => {
-  if ((await ports.tokens.secret()) === null) {
-    return undefined;
-  }
-  const minted = await createToken.execute(
-    { kind: 'cell_join', name },
-    { ...ports, token: SUPERVISOR, principal: SUPERVISOR },
-  );
-  return minted.token;
-};
-
-// A relayed Cell's bearer is its local token; the Factory relay swaps it for the HQ session.
-const enrollTokenOf = async (
-  ports: Ports,
-  input: StartInput,
-  name: string,
-): Promise<string | undefined> => {
-  if (input.relayed) {
-    return ports.connection.token ?? undefined;
-  }
-  if (input.joinToken === undefined || input.joinToken === '') {
-    return mintJoinToken(ports, name);
-  }
-  return input.joinToken;
-};
-
 export const startCell = async (
   ports: Ports,
   input: StartInput,
 ): Promise<StartOutcome> => {
+  const { cellId } = input;
+  const bearer = ports.connection.token;
+  if (!input.relayed || cellId === undefined || bearer === null) {
+    throw new Refused(
+      'a Cell starts through its Factory daemon: run "sf cell create" in a project repo',
+    );
+  }
   const target = await resolveCellTarget(ports, {
     repoRoot: input.repoRoot,
     requested: input.project,
@@ -98,32 +69,13 @@ export const startCell = async (
   if (allowedLines.length === 0) {
     throw new ArgumentError(`no line files in ${LINES_DIR}`);
   }
-  let session = await ports.cellState.read();
-  if (session === null) {
-    const name = cellNameOf(input.cellName);
-    const joinToken = await enrollTokenOf(ports, input, name);
-    if (joinToken === undefined) {
-      throw new Refused(`no cell session, set ${JOIN_TOKEN_ENV} to enroll`);
-    }
-    session = await enrollCell(ports, {
-      projectId,
-      name,
-      allowedLines,
-      runners,
-      joinToken,
-    });
-  }
-  await helloCell(ports, session, {
-    projectId,
-    allowedLines,
-    runners,
-    localWorktrees: [],
-  });
   await ports.runner.prepare();
   const runtime: CellRuntime = {
     ports,
-    session,
+    session: { cellId, sessionToken: bearer },
     projectId,
+    allowedLines,
+    runners,
     repoRoot,
     logPath: input.logPath,
     signal: input.signal,

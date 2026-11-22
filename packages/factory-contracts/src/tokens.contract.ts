@@ -3,13 +3,7 @@ import { idParams, titleSchema } from '@repo/zod-contract-kit/fields';
 
 const issuedTokenFields = {
   tokenId: z.string(),
-  kind: z.enum([
-    'supervisor',
-    'cell_join',
-    'cell_session',
-    'factory_join',
-    'factory_session',
-  ]),
+  kind: z.enum(['supervisor', 'factory_join', 'factory_session']),
   token: z.string(),
   scopes: z.array(z.string()),
   expiresAt: z.number().int().nullable(),
@@ -18,7 +12,7 @@ const issuedTokenFields = {
 export const issueTokenContract = {
   in: {
     body: z.object({
-      kind: z.enum(['supervisor', 'cell_join', 'factory_join']),
+      kind: z.enum(['supervisor', 'factory_join']),
       name: titleSchema,
       expiresAt: z.number().int().nullable().default(null),
     }),

@@ -139,8 +139,8 @@ sf server start                            # one server per machine
 sf server token create --save              # .factory-local/supervisor.token
 sf project add my-project --repo <url>
 sf web start                               # dashboard at http://127.0.0.1:4321; sf web stop to end
-sf token create --kind cell_join --name worker-1
-FACTORY_JOIN_TOKEN=<token> sf cell start --name worker-1   # one Cell per name
+sf factory connect <hq-url> --token <factory_join>         # once per PC
+sf cell create --repo ~/code/my-project                    # Cells start under the Factory daemon
 sf todos import && sf queue                # push todos/*.md, see the queue
 sf server stop
 ```

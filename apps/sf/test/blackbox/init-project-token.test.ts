@@ -63,9 +63,9 @@ const route = async (
       body: {
         code: 201,
         tokenId: 'tok_1',
-        kind: 'cell_join',
+        kind: 'factory_join',
         token: JOIN_TOKEN,
-        scopes: ['cell:join'],
+        scopes: ['factory:enroll'],
         expiresAt: null,
       },
     };
@@ -313,7 +313,7 @@ describe('sf project', () => {
 });
 
 describe('sf token', () => {
-  it('prints a cell join token the server issues', async () => {
+  it('prints a factory join token the server issues', async () => {
     // Arrange
     const repo = freshRepo();
 
@@ -322,7 +322,7 @@ describe('sf token', () => {
       'token',
       'create',
       '--kind',
-      'cell_join',
+      'factory_join',
       '--name',
       'worker-1',
     ]);

@@ -1,6 +1,6 @@
 import { listFactoriesContract } from '@repo/factory-contracts/factories.contract';
-import { LEASE_TTL_MS } from '../../../config';
 import { factories } from '../../../db/schema/factories';
+import { isSilent } from '../../core/identity';
 import { scopedProcedure } from '../../core/procedure';
 
 export const listFactoriesProcedure = scopedProcedure(['supervisor:read'])(
@@ -14,7 +14,8 @@ export const listFactoriesProcedure = scopedProcedure(['supervisor:read'])(
       factoryId: row.factoryId,
       name: row.name,
       lastSeenAt: row.lastSeenAt,
-      online: now - row.lastSeenAt <= LEASE_TTL_MS,
+      online: !isSilent(row.lastSeenAt, now),
+      projects: row.projectsJson,
     })),
   };
 });

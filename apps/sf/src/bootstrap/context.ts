@@ -1,10 +1,6 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { hostname } from 'node:os';
 import { resolve } from 'node:path';
-import {
-  createCellStateFile,
-  createMemoryCellState,
-} from '../adapters/fs/cell-state';
 import { createConnectionStore } from '../adapters/fs/connection-store';
 import { createFactoryCredentialStore } from '../adapters/fs/factory-credential';
 import { createPidFile } from '../adapters/fs/pid-file';
@@ -24,10 +20,10 @@ import { createRoutingRunner } from '../adapters/runners/routing';
 import { createProcessAdapter } from '../adapters/process/spawn-server';
 import { createSystemClock } from '../adapters/process/system-clock';
 import type { Ports } from '../application/core/procedure';
-import type { CellStatePort } from '../application/ports/cell-state.port';
 import { cellNameOf } from '../domain/cell/cell-name';
 import { resolveConnection } from '../domain/connection/connection-config';
 import {
+  CELL_ID_ENV,
   DEFAULT_FACTORY_URL,
   FACTORY_CREDENTIAL_PATH,
   FACTORY_DAEMON_URL,
@@ -36,20 +32,11 @@ import {
   LEGACY_TOKEN_PATH,
   SUPERVISOR_TOKEN_PATH,
   cellLogPathOf,
-  cellStatePathOf,
-  isRelayedOf,
 } from '../config';
 
 export type Mode = 'supervisor' | 'cell' | 'operator';
 
 const processPort = createProcessAdapter();
-
-const enrolledCellName =
-  (cellState: CellStatePort) => async (): Promise<string> => {
-    const session = await cellState.read();
-    if (session === null) throw new Error('cell is not enrolled');
-    return session.cellId;
-  };
 
 const pathLookup = process.platform === 'win32' ? 'where' : 'which';
 
@@ -61,9 +48,7 @@ const readOptional = (path: string): string | undefined =>
 
 export const buildContext = (cellName?: string): Ports => {
   const name = cellNameOf(cellName ?? hostname());
-  const cellState = isRelayedOf(process.env)
-    ? createMemoryCellState()
-    : createCellStateFile(resolve(process.cwd(), cellStatePathOf(name)));
+  const cellId = process.env[CELL_ID_ENV] ?? name;
   const connections = createConnectionStore(GLOBAL_CONFIG_PATH);
   const repoTokenPath = resolve(process.cwd(), SUPERVISOR_TOKEN_PATH);
   const connection = resolveConnection({
@@ -91,7 +76,7 @@ export const buildContext = (cellName?: string): Ports => {
     operator: createLoopbackEndpoint(),
     runner: createRoutingRunner(
       createHeadlessRunner(),
-      createHerdrRunner(processPort, enrolledCellName(cellState), {
+      createHerdrRunner(processPort, () => Promise.resolve(cellId), {
         home: process.cwd(),
         logPath: resolve(process.cwd(), cellLogPathOf(name)),
       }),
@@ -103,7 +88,6 @@ export const buildContext = (cellName?: string): Ports => {
     pidFile: createPidFile(),
     webPidFile: createPidFile('web.pid'),
     clock: createSystemClock(),
-    cellState,
     factoryDaemon: createFactoryDaemonAdapter({ baseUrl: FACTORY_DAEMON_URL }),
     factoryPidFile: createPidFile(FACTORY_PID_FILE),
     factoryCredential: createFactoryCredentialStore(FACTORY_CREDENTIAL_PATH),

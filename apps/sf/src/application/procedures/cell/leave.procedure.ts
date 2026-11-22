@@ -1,4 +1,4 @@
-import { leaveCellContract } from '@repo/factory-contracts/cells.contract';
+import { z } from 'zod';
 import { commandIdOf } from '../../../domain/cell/command-id';
 import { Refused } from '../../core/errors';
 import {
@@ -8,6 +8,10 @@ import {
 } from './cell-runtime';
 
 const LEAVE_ROUTE = '/api/v1/cells/leave';
+const LeaveReplySchema = z.object({
+  code: z.literal(200),
+  status: z.literal('left'),
+});
 const NO_JOB_ORDER_ID = 'cell';
 const NO_JOB_EPOCH = 0;
 const STALE_EPOCH_TYPE = 'stale-lease-epoch';
@@ -54,7 +58,7 @@ export const leaveCell = async (
   runtime.drain.left = true;
   try {
     await sendWithRetry(runtime, async () =>
-      leaveCellContract.out[200].parse(
+      LeaveReplySchema.parse(
         await runtime.ports.server.call(
           LEAVE_ROUTE,
           leaveBodyOf(runtime.session.cellId, job),

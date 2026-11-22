@@ -2,26 +2,18 @@ import { describe, expect, it } from 'vitest';
 import { orderSteps, workOrders } from '../../src/db/schema/orders';
 import { stateTransitions } from '../../src/db/schema/transitions';
 import { safeTokens } from '../../src/db/schema/tokens';
-import {
-  hashToken,
-  TOKEN_PREFIXES,
-} from '../../src/application/tokens/token-hash';
+import { hashToken } from '../../src/application/tokens/token-hash';
 import {
   asOrderId,
   asProjectId,
   asTokenId,
 } from '../../src/domain/common/brand';
 import type { Db } from '../../src/db/client';
-import {
-  createTestApp,
-  getJson,
-  postJson,
-  type TestApp,
-} from '../support/test-app';
+import { createTestApp, postJson, type TestApp } from '../support/test-app';
 import { seedBaseline } from '../support/test-db';
+import { claimBody, factoryHeaders } from '../support/factory-session';
 
 const PROJECT_ID = 'proj-1';
-const JOIN_TOKEN = 'sf_join_test-join-token';
 const SUPERVISOR_TOKEN = 'supervisor-test-token';
 const ORDER_ID = 'order-1';
 
@@ -56,30 +48,9 @@ type TransitionBody = {
   nextJob?: null | { jobId: string; epoch: number; stepId: string | null };
 };
 
-type CellsBody = {
-  cells: {
-    name: string;
-    status: string;
-    activeJobId: string | null;
-  }[];
-};
-
-const bearer = (token: string) => ({ authorization: `Bearer ${token}` });
-
 const setup = () => {
   const { app, clock, db } = createTestApp({ safeTokenAuth: true });
   seedBaseline(db);
-  db.insert(safeTokens)
-    .values({
-      tokenId: asTokenId('join-1'),
-      tokenHash: hashToken(JOIN_TOKEN),
-      prefix: TOKEN_PREFIXES.join,
-      kind: 'cell_join',
-      name: 'join',
-      scopesJson: ['cell:enroll'],
-      createdAt: clock.now(),
-    })
-    .run();
   db.insert(safeTokens)
     .values({
       tokenId: asTokenId('supervisor-1'),
@@ -94,28 +65,14 @@ const setup = () => {
   return { app, db };
 };
 
-const enrollCell = async (app: TestApp, name: string): Promise<string> => {
-  const response = await postJson(
-    app,
-    '/api/v1/cells/enroll',
-    {
-      projectId: PROJECT_ID,
-      name,
-      allowedLines: ['feature'],
-      runners: ['claude'],
-    },
-    bearer(JOIN_TOKEN),
-  );
-  const body = (await response.json()) as { sessionToken: string };
-  return body.sessionToken;
-};
+const enrollCell = (name: string): string => `cell-${name}`;
 
-const claimJob = async (app: TestApp, token: string): Promise<ClaimedJob> => {
+const claimJob = async (app: TestApp, cellId: string): Promise<ClaimedJob> => {
   const response = await postJson(
     app,
     '/api/v1/cells/claims',
-    {},
-    bearer(token),
+    claimBody({}, PROJECT_ID),
+    factoryHeaders(cellId),
   );
   const body = (await response.json()) as { job: ClaimedJob | null };
   if (body.job === null) throw new Error('expected a claimed job');
@@ -124,7 +81,7 @@ const claimJob = async (app: TestApp, token: string): Promise<ClaimedJob> => {
 
 const transition = async (
   app: TestApp,
-  token: string,
+  cellId: string,
   jobId: string,
   body: Record<string, unknown>,
 ): Promise<{ status: number; body: TransitionBody | ErrorBody }> => {
@@ -132,7 +89,7 @@ const transition = async (
     app,
     `/api/v1/jobs/${jobId}/transitions`,
     body,
-    bearer(token),
+    factoryHeaders(cellId),
   );
   return {
     status: response.status,
@@ -142,11 +99,11 @@ const transition = async (
 
 const startJob = (
   app: TestApp,
-  token: string,
+  cellId: string,
   job: ClaimedJob,
   commandId = `start-${job.jobId}`,
 ) =>
-  transition(app, token, job.jobId, {
+  transition(app, cellId, job.jobId, {
     action: 'start',
     commandId,
     epoch: job.epoch,
@@ -155,28 +112,18 @@ const startJob = (
 
 const completeJob = (
   app: TestApp,
-  token: string,
+  cellId: string,
   job: ClaimedJob,
   producedFiles: string[],
   commandId: string,
 ) =>
-  transition(app, token, job.jobId, {
+  transition(app, cellId, job.jobId, {
     action: 'complete',
     commandId,
     epoch: job.epoch,
     producedFiles,
     commitSha: `sha-${commandId}`,
   });
-
-const cellNamed = async (app: TestApp, name: string) => {
-  const response = await getJson(
-    app,
-    '/api/v1/cells',
-    bearer(SUPERVISOR_TOKEN),
-  );
-  const body = (await response.json()) as CellsBody;
-  return body.cells.find((row) => row.name === name);
-};
 
 const seedChildOrder = (db: Db) => {
   db.insert(workOrders)
@@ -189,7 +136,7 @@ const seedChildOrder = (db: Db) => {
       type: 'feat',
       description: 'waits for parent',
       lineName: 'feature',
-      unavailableLineCellsJson: [],
+      unavailableLineFactoriesJson: [],
       priority: 'medium',
       baseBranch: 'main',
       branch: 'factory/child-1',
@@ -204,10 +151,10 @@ const seedChildOrder = (db: Db) => {
 describe('job start and complete transitions', () => {
   it('start on step 0 materializes the line steps', async () => {
     const { app, db } = setup();
-    const token = await enrollCell(app, 'cell-a');
-    const job = await claimJob(app, token);
+    const cellId = enrollCell('a');
+    const job = await claimJob(app, cellId);
 
-    const { status, body } = await startJob(app, token, job);
+    const { status, body } = await startJob(app, cellId, job);
 
     expect(status).toBe(200);
     expect(body).toMatchObject({ action: 'start', status: 'running' });
@@ -228,13 +175,13 @@ describe('job start and complete transitions', () => {
 
   it('completing an intermediate step returns the next job inline on the same cell', async () => {
     const { app } = setup();
-    const token = await enrollCell(app, 'cell-a');
-    const job = await claimJob(app, token);
-    await startJob(app, token, job);
+    const cellId = enrollCell('a');
+    const job = await claimJob(app, cellId);
+    await startJob(app, cellId, job);
 
     const { status, body } = await completeJob(
       app,
-      token,
+      cellId,
       job,
       ['report.md'],
       'complete-build',
@@ -244,28 +191,25 @@ describe('job start and complete transitions', () => {
     expect(body).toMatchObject({ completed: true });
     const nextJob = (body as TransitionBody).nextJob;
     expect(nextJob).toMatchObject({ epoch: job.epoch + 1 });
-    const cell = await cellNamed(app, 'cell-a');
-    expect(cell).toMatchObject({ status: 'busy' });
-    expect(cell?.activeJobId).toBe(nextJob?.jobId);
   });
 
-  it('completing deliver clears the cell locks and unlocks waiting children', async () => {
+  it('completing deliver unlocks waiting children', async () => {
     const { app, db } = setup();
     seedChildOrder(db);
-    const token = await enrollCell(app, 'cell-a');
-    const job = await claimJob(app, token);
-    await startJob(app, token, job);
-    const build = await completeJob(app, token, job, ['report.md'], 'c-build');
+    const cellId = enrollCell('a');
+    const job = await claimJob(app, cellId);
+    await startJob(app, cellId, job);
+    const build = await completeJob(app, cellId, job, ['report.md'], 'c-build');
     const review = (build.body as TransitionBody).nextJob;
     if (review === null || review === undefined) throw new Error('no review');
-    await transition(app, token, review.jobId, {
+    await transition(app, cellId, review.jobId, {
       action: 'start',
       commandId: 'start-review',
       epoch: review.epoch,
     });
     const reviewed = await completeJob(
       app,
-      token,
+      cellId,
       { jobId: review.jobId, epoch: review.epoch },
       ['review.md'],
       'c-review',
@@ -273,7 +217,7 @@ describe('job start and complete transitions', () => {
     const deliver = (reviewed.body as TransitionBody).nextJob;
     if (deliver === null || deliver === undefined)
       throw new Error('no deliver');
-    await transition(app, token, deliver.jobId, {
+    await transition(app, cellId, deliver.jobId, {
       action: 'start',
       commandId: 'start-deliver',
       epoch: deliver.epoch,
@@ -281,7 +225,7 @@ describe('job start and complete transitions', () => {
 
     const { status, body } = await completeJob(
       app,
-      token,
+      cellId,
       { jobId: deliver.jobId, epoch: deliver.epoch },
       [],
       'c-deliver',
@@ -289,8 +233,6 @@ describe('job start and complete transitions', () => {
 
     expect(status).toBe(200);
     expect(body).toMatchObject({ completed: true, nextJob: null });
-    const cell = await cellNamed(app, 'cell-a');
-    expect(cell).toMatchObject({ status: 'online', activeJobId: null });
     const child = db
       .select()
       .from(workOrders)
@@ -302,10 +244,10 @@ describe('job start and complete transitions', () => {
 
   it('a stale epoch gets 409 StaleLeaseEpoch', async () => {
     const { app } = setup();
-    const token = await enrollCell(app, 'cell-a');
-    const job = await claimJob(app, token);
+    const cellId = enrollCell('a');
+    const job = await claimJob(app, cellId);
 
-    const { status, body } = await transition(app, token, job.jobId, {
+    const { status, body } = await transition(app, cellId, job.jobId, {
       action: 'start',
       commandId: 'start-stale',
       epoch: job.epoch + 1,
@@ -318,8 +260,8 @@ describe('job start and complete transitions', () => {
 
   it('a different cell gets 409 StaleLeaseEpoch', async () => {
     const { app } = setup();
-    const owner = await enrollCell(app, 'cell-a');
-    const other = await enrollCell(app, 'cell-b');
+    const owner = enrollCell('a');
+    const other = enrollCell('b');
     const job = await claimJob(app, owner);
 
     const { status, body } = await startJob(app, other, job);
@@ -330,11 +272,11 @@ describe('job start and complete transitions', () => {
 
   it('repeating a commandId returns the first result without a second transition', async () => {
     const { app, db } = setup();
-    const token = await enrollCell(app, 'cell-a');
-    const job = await claimJob(app, token);
+    const cellId = enrollCell('a');
+    const job = await claimJob(app, cellId);
 
-    const first = await startJob(app, token, job, 'cmd-repeat');
-    const second = await startJob(app, token, job, 'cmd-repeat');
+    const first = await startJob(app, cellId, job, 'cmd-repeat');
+    const second = await startJob(app, cellId, job, 'cmd-repeat');
 
     expect(second.status).toBe(200);
     expect(second.body).toEqual(first.body);
@@ -348,13 +290,13 @@ describe('job start and complete transitions', () => {
 
   it('completing without a required file is rejected with 422', async () => {
     const { app } = setup();
-    const token = await enrollCell(app, 'cell-a');
-    const job = await claimJob(app, token);
-    await startJob(app, token, job);
+    const cellId = enrollCell('a');
+    const job = await claimJob(app, cellId);
+    await startJob(app, cellId, job);
 
     const { status, body } = await completeJob(
       app,
-      token,
+      cellId,
       job,
       [],
       'complete-missing',

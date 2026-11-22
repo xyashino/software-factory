@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { asCellId, asJobId, asOrderId, asProjectId } from '../../common/brand';
+import {
+  asCellId,
+  asFactoryId,
+  asJobId,
+  asOrderId,
+  asProjectId,
+} from '../../common/brand';
 import {
   isEligible,
   selectClaimable,
@@ -9,10 +15,10 @@ import {
 } from '../claim-eligibility';
 
 const cellA: ClaimCell = {
-  cellId: asCellId('cell-a'),
+  cellId: asCellId('cell-aaaaaaaa'),
+  factoryId: asFactoryId('factory-a'),
   projectId: asProjectId('project-1'),
   allowedLines: ['web'],
-  localWorktrees: [],
 };
 
 const openContext: ClaimContext = { runningCount: 0, maxRunning: 2 };
@@ -26,11 +32,11 @@ const makeCandidate = (
   priority: 'medium',
   lineName: 'web',
   createdAt: 1,
-  pinnedCellId: null,
-  pinnedCellUnavailable: false,
+  pinnedFactoryId: null,
+  pinnedFactoryUnavailable: false,
   activeCellId: null,
   activeJobId: null,
-  unavailableLineCells: [],
+  unavailableLineFactories: [],
   ...overrides,
 });
 
@@ -60,33 +66,35 @@ describe('claim eligibility', () => {
     expect(isEligible(candidate, cellA, openContext)).toBe(false);
   });
 
-  it('rejects a candidate when this cell is listed as unavailable for its line', () => {
+  it('rejects a candidate when this factory is listed as unavailable for its line', () => {
     const candidate = makeCandidate({
-      unavailableLineCells: [asCellId('cell-a')],
+      unavailableLineFactories: [asFactoryId('factory-a')],
     });
 
     expect(isEligible(candidate, cellA, openContext)).toBe(false);
   });
 
-  it('rejects a candidate pinned to another cell that is still online', () => {
+  it('rejects a candidate pinned to another factory that is still reachable', () => {
     const candidate = makeCandidate({
-      pinnedCellId: asCellId('cell-b'),
-      pinnedCellUnavailable: false,
+      pinnedFactoryId: asFactoryId('factory-b'),
+      pinnedFactoryUnavailable: false,
     });
 
     expect(isEligible(candidate, cellA, openContext)).toBe(false);
   });
 
-  it('accepts a candidate pinned to this cell', () => {
-    const candidate = makeCandidate({ pinnedCellId: asCellId('cell-a') });
+  it('accepts a candidate pinned to this factory', () => {
+    const candidate = makeCandidate({
+      pinnedFactoryId: asFactoryId('factory-a'),
+    });
 
     expect(isEligible(candidate, cellA, openContext)).toBe(true);
   });
 
-  it('accepts a candidate whose pinned cell lease has expired', () => {
+  it('accepts a candidate whose pinned factory has gone silent', () => {
     const candidate = makeCandidate({
-      pinnedCellId: asCellId('cell-b'),
-      pinnedCellUnavailable: true,
+      pinnedFactoryId: asFactoryId('factory-b'),
+      pinnedFactoryUnavailable: true,
     });
 
     expect(isEligible(candidate, cellA, openContext)).toBe(true);
@@ -113,7 +121,9 @@ describe('claim eligibility', () => {
   });
 
   it('rejects a candidate already held by a cell or job', () => {
-    const heldByCell = makeCandidate({ activeCellId: asCellId('cell-b') });
+    const heldByCell = makeCandidate({
+      activeCellId: asCellId('cell-bbbbbbbb'),
+    });
     const heldByJob = makeCandidate({ activeJobId: asJobId('job-1') });
 
     expect(isEligible(heldByCell, cellA, openContext)).toBe(false);
@@ -122,8 +132,7 @@ describe('claim eligibility', () => {
 });
 
 describe('claim ordering', () => {
-  it('puts a warm worktree ahead of a higher priority cold order', () => {
-    const cell: ClaimCell = { ...cellA, localWorktrees: [asOrderId('warm')] };
+  it('puts an order pinned to this factory ahead of a higher priority cold order', () => {
     const cold = makeCandidate({
       orderId: asOrderId('cold'),
       priority: 'high',
@@ -131,27 +140,12 @@ describe('claim ordering', () => {
     const warm = makeCandidate({
       orderId: asOrderId('warm'),
       priority: 'low',
+      pinnedFactoryId: asFactoryId('factory-a'),
     });
 
-    const claimed = selectClaimable([cold, warm], cell, openContext);
+    const claimed = selectClaimable([cold, warm], cellA, openContext);
 
     expect(claimed.map((c) => c.orderId)).toEqual(['warm', 'cold']);
-  });
-
-  it('treats an order pinned to this cell as warm', () => {
-    const pinned = makeCandidate({
-      orderId: asOrderId('pinned'),
-      priority: 'low',
-      pinnedCellId: asCellId('cell-a'),
-    });
-    const cold = makeCandidate({
-      orderId: asOrderId('cold'),
-      priority: 'high',
-    });
-
-    const claimed = selectClaimable([cold, pinned], cellA, openContext);
-
-    expect(claimed.map((c) => c.orderId)).toEqual(['pinned', 'cold']);
   });
 
   it('orders candidates from high to low priority', () => {

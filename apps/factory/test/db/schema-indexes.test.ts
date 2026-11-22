@@ -14,7 +14,7 @@ import type { Db } from '../../src/db/client';
 const TABLES = [
   'projects',
   'safe_tokens',
-  'cells',
+  'factories',
   'order_plans',
   'work_orders',
   'order_steps',
@@ -59,6 +59,14 @@ describe('database schema', () => {
     const names = schemaObjects(db, 'table').map((row) => row.name);
 
     expect(names).toEqual(expect.arrayContaining(TABLES));
+  });
+
+  it('keeps no cells table because a Cell is never stored in HQ', () => {
+    const db = createTestDb();
+
+    const names = schemaObjects(db, 'table').map((row) => row.name);
+
+    expect(names).not.toContain('cells');
   });
 
   it('declares the three partial unique indexes that cap one active Cell', () => {

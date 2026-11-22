@@ -16,6 +16,7 @@ export interface HqClientPort {
   heartbeat(input: {
     url: string;
     sessionToken: string;
+    projects: { projectId: string; desired: number; running: number }[];
   }): Promise<HqReply<{ factoryId: string }>>;
   goneCell(input: {
     url: string;

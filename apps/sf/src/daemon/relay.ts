@@ -1,50 +1,29 @@
 import { randomBytes } from 'node:crypto';
-import { enrollCellContract } from '@repo/factory-contracts/cells.contract';
 import { z } from 'zod';
 import type { FactoryCredential } from '../domain/factory/factory-credential';
 
 export const RELAY_PATH = '/relay';
 
 const REQUEST_TIMEOUT_MS = 10_000;
-const ENROLL_ROUTE = '/api/v1/cells/enroll';
 const UNAUTHORIZED = 401;
 const BEARER = 'Bearer ';
+const CELL_HEADER = 'x-cell-id';
 const JSON_HEADERS = { 'content-type': 'application/json' };
 const ALLOWED_ROUTES = [
-  /^\/api\/v1\/cells\/(enroll|hello|claims|heartbeats|leave)$/,
+  /^\/api\/v1\/cells\/(claims|heartbeats|leave)$/,
   /^\/api\/v1\/jobs\/[^/]+\/transitions$/,
   /^\/api\/v1\/incidents\/[^/]+\/resolve$/,
 ];
-const EnrollBodySchema = enrollCellContract.in.body;
-const EnrollReplySchema = z.object({
-  cellId: z.string(),
-  sessionToken: z.string(),
-  expiresAt: z.number().int(),
-});
 const WaitSchema = z.object({ waitMs: z.number().min(0).optional() });
-
-type EnrollBody = z.infer<typeof EnrollBodySchema>;
-type EnrollReply = z.infer<typeof EnrollReplySchema>;
-
-interface HqSession {
-  cellId: string;
-  sessionToken: string;
-  enroll: EnrollBody;
-}
 
 interface Grant {
   cellId: string;
-  name: string;
-  hq: HqSession | null;
 }
 
 interface Live {
   token: string;
   grant: Grant;
 }
-
-type Enrolled =
-  { kind: 'ok'; reply: EnrollReply } | { kind: 'failed'; response: Response };
 
 export interface RelayDeps {
   credential: () => FactoryCredential | null;
@@ -54,7 +33,6 @@ export interface RelayDeps {
 
 export interface Relay {
   issue(cellId: string): string;
-  hqCellIdOf(cellId: string): string | null;
   handle(request: Request): Promise<Response>;
 }
 
@@ -86,27 +64,25 @@ const isAllowed = (request: Request, path: string): boolean =>
   request.method === 'POST' &&
   ALLOWED_ROUTES.some((pattern) => pattern.test(path));
 
-const randomName = (): string => `cell-${randomBytes(4).toString('hex')}`;
-
 const streamed = (reply: Response): Response =>
   new Response(reply.body, { status: reply.status, headers: JSON_HEADERS });
 
 const send = async (
-  url: string,
-  token: string,
+  credential: FactoryCredential,
   path: string,
   body: string,
-  timeoutMs: number,
+  cellId: string,
 ): Promise<Response | null> => {
   try {
-    return await fetch(`${url}${path}`, {
+    return await fetch(`${credential.url}${path}`, {
       method: 'POST',
       headers: {
-        authorization: `Bearer ${token}`,
+        authorization: `Bearer ${credential.sessionToken}`,
+        [CELL_HEADER]: cellId,
         'content-type': 'application/json',
       },
       body,
-      signal: AbortSignal.timeout(timeoutMs),
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS + waitMsOf(body)),
     });
   } catch {
     return null;
@@ -134,128 +110,6 @@ export const createRelay = (deps: RelayDeps): Relay => {
     grants.delete(live.token);
   };
 
-  const enrollHq = async (
-    live: Live,
-    credential: FactoryCredential,
-    enroll: EnrollBody,
-  ): Promise<Enrolled> => {
-    const reply = await send(
-      credential.url,
-      credential.sessionToken,
-      ENROLL_ROUTE,
-      JSON.stringify({ ...enroll, name: live.grant.name }),
-      REQUEST_TIMEOUT_MS,
-    );
-    if (reply === null) {
-      return { kind: 'failed', response: unavailable() };
-    }
-    if (reply.status === UNAUTHORIZED) {
-      await stop(live);
-      return {
-        kind: 'failed',
-        response: failure(
-          UNAUTHORIZED,
-          'unauthorized',
-          'factory credential rejected, cell stopped',
-        ),
-      };
-    }
-    const text = await reply.text();
-    if (!reply.ok) {
-      return {
-        kind: 'failed',
-        response: new Response(text, {
-          status: reply.status,
-          headers: JSON_HEADERS,
-        }),
-      };
-    }
-    const parsed = EnrollReplySchema.safeParse(parseJson(text));
-    if (!parsed.success) {
-      return { kind: 'failed', response: unavailable() };
-    }
-    live.grant.hq = {
-      cellId: parsed.data.cellId,
-      sessionToken: parsed.data.sessionToken,
-      enroll,
-    };
-    return { kind: 'ok', reply: parsed.data };
-  };
-
-  const enroll = async (
-    live: Live,
-    credential: FactoryCredential,
-    text: string,
-  ): Promise<Response> => {
-    const parsed = EnrollBodySchema.safeParse(parseJson(text));
-    if (!parsed.success) {
-      return failure(400, 'argument', parsed.error.message);
-    }
-    const enrolled = await enrollHq(live, credential, parsed.data);
-    if (enrolled.kind === 'failed') {
-      return enrolled.response;
-    }
-    return Response.json(
-      {
-        code: 201,
-        cellId: enrolled.reply.cellId,
-        sessionToken: live.token,
-        expiresAt: enrolled.reply.expiresAt,
-      },
-      { status: 201 },
-    );
-  };
-
-  const forward = async (
-    live: Live,
-    credential: FactoryCredential,
-    path: string,
-    text: string,
-  ): Promise<Response> => {
-    const hq = live.grant.hq;
-    if (hq === null) {
-      return failure(UNAUTHORIZED, 'unauthorized', 'cell is not enrolled');
-    }
-    const timeoutMs = REQUEST_TIMEOUT_MS + waitMsOf(text);
-    const first = await send(
-      credential.url,
-      hq.sessionToken,
-      path,
-      text,
-      timeoutMs,
-    );
-    if (first === null) {
-      return unavailable();
-    }
-    if (first.status !== UNAUTHORIZED) {
-      return streamed(first);
-    }
-    await first.body?.cancel();
-    const renewed = await enrollHq(live, credential, hq.enroll);
-    if (renewed.kind === 'failed') {
-      return renewed.response;
-    }
-    const second = await send(
-      credential.url,
-      renewed.reply.sessionToken,
-      path,
-      text,
-      timeoutMs,
-    );
-    if (second === null) {
-      return unavailable();
-    }
-    if (second.status !== UNAUTHORIZED) {
-      return streamed(second);
-    }
-    await stop(live);
-    return failure(
-      UNAUTHORIZED,
-      'unauthorized',
-      'cell session rejected twice, cell stopped',
-    );
-  };
-
   return {
     issue: (cellId) => {
       for (const [token, grant] of grants) {
@@ -264,12 +118,9 @@ export const createRelay = (deps: RelayDeps): Relay => {
         }
       }
       const token = randomBytes(32).toString('hex');
-      grants.set(token, { cellId, name: randomName(), hq: null });
+      grants.set(token, { cellId });
       return token;
     },
-    hqCellIdOf: (cellId) =>
-      [...grants.values()].find((grant) => grant.cellId === cellId)?.hq
-        ?.cellId ?? null,
     handle: async (request) => {
       const url = new URL(request.url);
       const path = url.pathname.slice(RELAY_PATH.length);
@@ -297,10 +148,20 @@ export const createRelay = (deps: RelayDeps): Relay => {
         );
       }
       const text = await request.text();
-      if (path === ENROLL_ROUTE) {
-        return enroll(live, credential, text);
+      const reply = await send(credential, path, text, live.grant.cellId);
+      if (reply === null) {
+        return unavailable();
       }
-      return forward(live, credential, path, text);
+      if (reply.status === UNAUTHORIZED) {
+        await reply.body?.cancel();
+        await stop(live);
+        return failure(
+          UNAUTHORIZED,
+          'unauthorized',
+          'factory credential rejected, cell stopped',
+        );
+      }
+      return streamed(reply);
     },
   };
 };

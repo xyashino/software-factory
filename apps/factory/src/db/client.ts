@@ -4,7 +4,6 @@ import {
   createDb as createKitDb,
 } from '@repo/bun-sqlite-kit/create-db';
 import { immediateTx as kitImmediateTx } from '@repo/bun-sqlite-kit/immediate-tx';
-import { cells } from './schema/cells';
 import { factories } from './schema/factories';
 import { incidents } from './schema/incidents';
 import { jobs } from './schema/jobs';
@@ -18,7 +17,6 @@ import { embeddedMigrationsOf } from './migrations';
 const schema = {
   projects,
   safeTokens,
-  cells,
   factories,
   orderPlans,
   workOrders,

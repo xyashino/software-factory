@@ -1,4 +1,4 @@
-import { type ChildProcess, spawn, spawnSync } from 'node:child_process';
+import { type ChildProcess, spawnSync } from 'node:child_process';
 import {
   existsSync,
   mkdirSync,
@@ -177,33 +177,48 @@ describe.skipIf(!built)('compiled sf in an external repository', () => {
     expect(response.status).toBe(200);
   });
 
-  it('enrolls a Cell with a cell_join token', async () => {
+  it('starts a Cell under the Factory daemon', async () => {
     // Arrange
     const joinToken = run([
       'token',
       'create',
       '--kind',
-      'cell_join',
+      'factory_join',
+      '--name',
+      'laptop',
+    ]);
+    const connected = run([
+      'factory',
+      'connect',
+      env.FACTORY_URL ?? '',
+      '--token',
+      joinToken.stdout.trim(),
+    ]);
+    const started = run(['factory', 'start']);
+
+    // Act
+    const created = run([
+      'cell',
+      'create',
+      '--repo',
+      repo,
       '--name',
       CELL_NAME,
     ]);
-    cell = spawn(sfBin, ['cell', 'start', '--name', CELL_NAME], {
-      cwd: repo,
-      env: { ...env, FACTORY_JOIN_TOKEN: joinToken.stdout.trim() },
-      stdio: 'ignore',
-    });
-
-    // Act
     let listed = '';
     const deadline = Date.now() + ENROLL_TIMEOUT_MS;
     while (!listed.includes(CELL_NAME) && Date.now() < deadline) {
       await sleep(POLL_MS);
       listed = run(['cell', 'list']).stdout;
     }
+    run(['factory', 'stop']);
 
     // Assert
     expect(joinToken.status).toBe(0);
-    expect(listed).toContain(`${PROJECT_ID}:${CELL_NAME}`);
+    expect(connected.status).toBe(0);
+    expect(started.status).toBe(0);
+    expect(created.status).toBe(0);
+    expect(listed).toContain(CELL_NAME);
   });
 
   it('imports todos and shows them in the queue', async () => {

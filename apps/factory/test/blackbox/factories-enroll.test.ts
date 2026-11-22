@@ -70,7 +70,7 @@ describe('factory enrollment', () => {
     const response = await postJson(
       app,
       '/api/v1/factories/heartbeat',
-      undefined,
+      { projects: [] },
       { authorization: `Bearer ${body.sessionToken}` },
     );
 

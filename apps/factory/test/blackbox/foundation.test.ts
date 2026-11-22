@@ -170,7 +170,7 @@ describe('HTTP foundation', () => {
   });
 
   it('answers 403 on a scoped route when the token lacks the scope', async () => {
-    const { app } = createTestApp({ auth: grantingAuth(['cell:worker']) });
+    const { app } = createTestApp({ auth: grantingAuth(['factory:worker']) });
     mountProbes(app);
 
     const response = await getJson(app, '/probe/read', {

@@ -28,8 +28,8 @@ export type WorkOrderSnapshot = {
   state: WorkOrderState;
   currentStepIndex: number;
   mechanicRuns: number;
-  pinnedCellId: string | null;
-  unavailableLineCells: string[];
+  pinnedFactoryId: string | null;
+  unavailableLineFactories: string[];
   staleBase: number;
   worktreeResets: number;
   steps: OrderStep[];
@@ -45,7 +45,7 @@ export type IncidentSnapshot = {
 export type TriageResult = {
   incident: IncidentSnapshot;
   workOrder: WorkOrderSnapshot;
-  mechanicJob: { pinnedCellId: string } | null;
+  mechanicJob: { pinnedFactoryId: string } | null;
 };
 
 export type ResolutionResult = {
@@ -104,12 +104,12 @@ export const triageIncident = (
   workOrder: WorkOrderSnapshot,
 ): TriageResult => {
   const failedStepIndex = workOrder.currentStepIndex;
-  const pinnedCellId = workOrder.pinnedCellId;
+  const pinnedFactoryId = workOrder.pinnedFactoryId;
 
   if (
     reason === 'line_unavailable' ||
     workOrder.mechanicRuns >= MAX_MECHANIC_RUNS ||
-    pinnedCellId === null
+    pinnedFactoryId === null
   ) {
     return {
       incident: {
@@ -131,7 +131,7 @@ export const triageIncident = (
       resolutionAction: null,
     },
     workOrder: { ...workOrder, mechanicRuns: workOrder.mechanicRuns + 1 },
-    mechanicJob: { pinnedCellId },
+    mechanicJob: { pinnedFactoryId },
   };
 };
 
@@ -157,7 +157,7 @@ export const resolveIncident = (
           ...workOrder,
           state: 'queued',
           currentStepIndex: resolution.stepIndex,
-          unavailableLineCells: [],
+          unavailableLineFactories: [],
           steps,
         },
         workspaceMode: 'keep',
@@ -191,7 +191,7 @@ export const resolveIncident = (
           currentStepIndex: 0,
           worktreeResets: 0,
           staleBase: 0,
-          unavailableLineCells: [],
+          unavailableLineFactories: [],
           steps: resetAttemptsFrom(workOrder.steps, 0),
         },
         workspaceMode: 'fresh',
@@ -214,7 +214,7 @@ export const resolveIncident = (
           status: 'cancelled',
           resolutionAction: resolution.action,
         },
-        workOrder: { ...workOrder, state: 'cancelled', pinnedCellId: null },
+        workOrder: { ...workOrder, state: 'cancelled', pinnedFactoryId: null },
         workspaceMode: 'keep',
       };
     default: {

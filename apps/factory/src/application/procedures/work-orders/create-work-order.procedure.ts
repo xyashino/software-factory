@@ -60,7 +60,7 @@ export const createWorkOrderProcedure = scopedProcedure(['supervisor:write'])(
       type: body.type,
       description: body.description,
       lineName: body.lineName,
-      unavailableLineCellsJson: [],
+      unavailableLineFactoriesJson: [],
       priority: body.priority,
       baseBranch: resolved.baseBranch,
       baseCommitSha: resolved.baseCommitSha,

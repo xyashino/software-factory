@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 import { join } from 'node:path';
 import { Refused } from '../application/core/errors';
 import type { Ports } from '../application/core/procedure';
@@ -7,12 +7,20 @@ import { cellNameOf } from '../domain/cell/cell-name';
 const STOP_WAIT_MS = 10_000;
 const KILL_WAIT_MS = 5_000;
 const POLL_MS = 100;
+const CELL_ID_BYTES = 4;
 
 export interface CellRecord {
   cellId: string;
   name: string;
+  projectId: string;
   repoRoot: string;
   pid: number;
+}
+
+export interface ProjectReport {
+  projectId: string;
+  desired: number;
+  running: number;
 }
 
 export interface CellStart {
@@ -22,6 +30,7 @@ export interface CellStart {
 
 export interface SpawnInput {
   repoRoot: string;
+  projectId: string;
   name: string | undefined;
   baseName: string;
   start: (name: string, cellId: string) => Promise<CellStart>;
@@ -30,6 +39,7 @@ export interface SpawnInput {
 export interface Supervisor {
   spawn(input: SpawnInput): Promise<CellRecord>;
   list(): CellRecord[];
+  projects(): ProjectReport[];
   has(cellId: string): boolean;
   kill(cellId: string): Promise<boolean>;
   killAll(): Promise<void>;
@@ -38,11 +48,21 @@ export interface Supervisor {
 interface Entry {
   cellId: string;
   name: string;
+  projectId: string;
   repoRoot: string;
   pid: number | null;
 }
 
 type RunningEntry = Entry & { pid: number };
+
+const newCellIdOf = (taken: ReadonlyMap<string, Entry>): string => {
+  for (;;) {
+    const cellId = `cell-${randomBytes(CELL_ID_BYTES).toString('hex')}`;
+    if (!taken.has(cellId)) {
+      return cellId;
+    }
+  }
+};
 
 const allocateName = (base: string, taken: readonly string[]): string => {
   for (let suffix = 1; ; suffix += 1) {
@@ -106,14 +126,24 @@ export const createSupervisor = (
   const recordOf = ({
     cellId,
     name,
+    projectId,
     repoRoot,
     pid,
   }: RunningEntry): CellRecord => ({
     cellId,
     name,
+    projectId,
     repoRoot,
     pid,
   });
+
+  const countByProject = (rows: readonly Entry[]): Map<string, number> => {
+    const counts = new Map<string, number>();
+    for (const row of rows) {
+      counts.set(row.projectId, (counts.get(row.projectId) ?? 0) + 1);
+    }
+    return counts;
+  };
 
   const spawn = async (input: SpawnInput): Promise<CellRecord> => {
     const taken = pruneDead().map((entry) => entry.name);
@@ -127,8 +157,9 @@ export const createSupervisor = (
       }
     }
     const entry: Entry = {
-      cellId: randomUUID(),
+      cellId: newCellIdOf(entries),
       name,
+      projectId: input.projectId,
       repoRoot: input.repoRoot,
       pid: null,
     };
@@ -162,6 +193,15 @@ export const createSupervisor = (
   return {
     spawn,
     list: () => runningOf().map(recordOf),
+    projects: () => {
+      const desired = countByProject(pruneDead());
+      const running = countByProject(runningOf());
+      return [...desired].map(([projectId, count]) => ({
+        projectId,
+        desired: count,
+        running: running.get(projectId) ?? 0,
+      }));
+    },
     has: (cellId) => pruneDead().some((entry) => entry.cellId === cellId),
     kill,
     killAll: async () => {

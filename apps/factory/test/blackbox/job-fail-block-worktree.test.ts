@@ -3,22 +3,15 @@ import { incidents } from '../../src/db/schema/incidents';
 import { jobs } from '../../src/db/schema/jobs';
 import { orderSteps, workOrders } from '../../src/db/schema/orders';
 import { safeTokens } from '../../src/db/schema/tokens';
-import {
-  hashToken,
-  TOKEN_PREFIXES,
-} from '../../src/application/tokens/token-hash';
+import { hashToken } from '../../src/application/tokens/token-hash';
 import { asTokenId } from '../../src/domain/common/brand';
 import type { Db } from '../../src/db/client';
-import {
-  createTestApp,
-  getJson,
-  postJson,
-  type TestApp,
-} from '../support/test-app';
+import { createTestApp, postJson, type TestApp } from '../support/test-app';
 import { seedBaseline } from '../support/test-db';
+import { claimBody, factoryHeaders } from '../support/factory-session';
 
 const PROJECT_ID = 'proj-1';
-const JOIN_TOKEN = 'sf_join_test-join-token';
+const CELL = 'cell-aaaaaaaa';
 const SUPERVISOR_TOKEN = 'supervisor-test-token';
 const ORDER_ID = 'order-1';
 
@@ -59,30 +52,9 @@ type TransitionBody = {
   nextJob?: null | NextJob;
 };
 
-type CellsBody = {
-  cells: {
-    name: string;
-    status: string;
-    activeJobId: string | null;
-  }[];
-};
-
-const bearer = (token: string) => ({ authorization: `Bearer ${token}` });
-
 const setup = () => {
   const { app, clock, db } = createTestApp({ safeTokenAuth: true });
   seedBaseline(db);
-  db.insert(safeTokens)
-    .values({
-      tokenId: asTokenId('join-1'),
-      tokenHash: hashToken(JOIN_TOKEN),
-      prefix: TOKEN_PREFIXES.join,
-      kind: 'cell_join',
-      name: 'join',
-      scopesJson: ['cell:enroll'],
-      createdAt: clock.now(),
-    })
-    .run();
   db.insert(safeTokens)
     .values({
       tokenId: asTokenId('supervisor-1'),
@@ -97,28 +69,12 @@ const setup = () => {
   return { app, db };
 };
 
-const enrollCell = async (app: TestApp, name: string): Promise<string> => {
-  const response = await postJson(
-    app,
-    '/api/v1/cells/enroll',
-    {
-      projectId: PROJECT_ID,
-      name,
-      allowedLines: ['feature'],
-      runners: ['claude'],
-    },
-    bearer(JOIN_TOKEN),
-  );
-  const body = (await response.json()) as { sessionToken: string };
-  return body.sessionToken;
-};
-
 const claimJob = async (app: TestApp, token: string): Promise<ClaimedJob> => {
   const response = await postJson(
     app,
     '/api/v1/cells/claims',
-    {},
-    bearer(token),
+    claimBody({}, PROJECT_ID),
+    factoryHeaders(token),
   );
   const body = (await response.json()) as { job: ClaimedJob | null };
   if (body.job === null) throw new Error('expected a claimed job');
@@ -135,7 +91,7 @@ const transition = async (
     app,
     `/api/v1/jobs/${jobId}/transitions`,
     body,
-    bearer(token),
+    factoryHeaders(token),
   );
   return {
     status: response.status,
@@ -222,20 +178,10 @@ const orderOf = (db: Db) =>
 
 const incidentsOf = (db: Db) => db.select().from(incidents).all();
 
-const cellNamed = async (app: TestApp, name: string) => {
-  const response = await getJson(
-    app,
-    '/api/v1/cells',
-    bearer(SUPERVISOR_TOKEN),
-  );
-  const body = (await response.json()) as CellsBody;
-  return body.cells.find((row) => row.name === name);
-};
-
 describe('job fail, block and worktree_missing transitions', () => {
   it('a failed step with retries left hands the same step to a new job inline', async () => {
     const { app, db } = setup();
-    const token = await enrollCell(app, 'cell-a');
+    const token = CELL;
     const job = await claimJob(app, token);
     await startJob(app, token, job);
 
@@ -253,7 +199,7 @@ describe('job fail, block and worktree_missing transitions', () => {
 
   it('a rewind target sends the line back to that step on the same cell', async () => {
     const { app, db } = setup();
-    const token = await enrollCell(app, 'cell-a');
+    const token = CELL;
     const job = await claimJob(app, token);
     await startJob(app, token, job);
     const build = await completeJob(app, token, job, ['report.md'], 'build');
@@ -267,13 +213,11 @@ describe('job fail, block and worktree_missing transitions', () => {
       epoch: review.epoch + 1,
     });
     expect(stepStateOf(db, 'review')).toBe('pending');
-    const cell = await cellNamed(app, 'cell-a');
-    expect(cell?.activeJobId).toBe(nextJobOf(body as TransitionBody).jobId);
   });
 
   it('the last failed attempt blocks the order and opens a step_retries_exhausted incident', async () => {
     const { app, db } = setup();
-    const token = await enrollCell(app, 'cell-a');
+    const token = CELL;
     const job = await claimJob(app, token);
     await startJob(app, token, job);
     const retry = nextJobOf(
@@ -290,9 +234,6 @@ describe('job fail, block and worktree_missing transitions', () => {
       activeJobId: null,
       activeCellId: null,
     });
-    expect(await cellNamed(app, 'cell-a')).toMatchObject({
-      activeJobId: null,
-    });
     expect(incidentsOf(db)).toEqual([
       expect.objectContaining({
         reason: 'step_retries_exhausted',
@@ -305,7 +246,7 @@ describe('job fail, block and worktree_missing transitions', () => {
 
   it('a failed delivery on its only attempt opens a delivery_failed incident', async () => {
     const { app, db } = setup();
-    const token = await enrollCell(app, 'cell-a');
+    const token = CELL;
     const job = await claimJob(app, token);
     await startJob(app, token, job);
     const build = await completeJob(app, token, job, ['report.md'], 'build');
@@ -331,7 +272,7 @@ describe('job fail, block and worktree_missing transitions', () => {
 
   it('block opens an operator_blocked incident that keeps the handover file', async () => {
     const { app, db } = setup();
-    const token = await enrollCell(app, 'cell-a');
+    const token = CELL;
     const job = await claimJob(app, token);
     await startJob(app, token, job);
 
@@ -356,7 +297,7 @@ describe('job fail, block and worktree_missing transitions', () => {
 
   it('a missing worktree resets the line to step 0 with a fresh workspace', async () => {
     const { app, db } = setup();
-    const token = await enrollCell(app, 'cell-a');
+    const token = CELL;
     const job = await claimJob(app, token);
     await startJob(app, token, job);
 
@@ -386,7 +327,7 @@ describe('job fail, block and worktree_missing transitions', () => {
 
   it('the third worktree reset blocks the order with a worktree_reset_limit incident', async () => {
     const { app, db } = setup();
-    const token = await enrollCell(app, 'cell-a');
+    const token = CELL;
     let job = await claimJob(app, token);
     await startJob(app, token, job);
     const missingStepId = stepIdOf(db, 'build');
@@ -422,7 +363,7 @@ describe('job fail, block and worktree_missing transitions', () => {
 
   it('a fail with a stale epoch gets 409 StaleLeaseEpoch', async () => {
     const { app } = setup();
-    const token = await enrollCell(app, 'cell-a');
+    const token = CELL;
     const job = await claimJob(app, token);
     await startJob(app, token, job);
 
@@ -439,7 +380,7 @@ describe('job fail, block and worktree_missing transitions', () => {
 
   it('a replayed block returns the first result and opens no second incident', async () => {
     const { app, db } = setup();
-    const token = await enrollCell(app, 'cell-a');
+    const token = CELL;
     const job = await claimJob(app, token);
     await startJob(app, token, job);
     const command = {
@@ -458,7 +399,7 @@ describe('job fail, block and worktree_missing transitions', () => {
 
   it('a quality-gate fail rewinds to build and the order delivers on one cell without re-claiming', async () => {
     const { app, db } = setup();
-    const token = await enrollCell(app, 'cell-a');
+    const token = CELL;
     const job = await claimJob(app, token);
     await startJob(app, token, job);
 
@@ -494,7 +435,6 @@ describe('job fail, block and worktree_missing transitions', () => {
     expect(delivered.body).toMatchObject({ completed: true, nextJob: null });
     expect(orderOf(db)).toMatchObject({ state: 'delivered' });
     expect(incidentsOf(db)).toEqual([]);
-    expect(await cellNamed(app, 'cell-a')).toMatchObject({ activeJobId: null });
     expect(db.select().from(jobs).all()).toHaveLength(5);
   });
 });

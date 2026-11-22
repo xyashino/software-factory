@@ -123,8 +123,8 @@ beforeAll(async () => {
         {
           code: 201,
           tokenId: 'tok-1',
-          kind: 'cell_join',
-          token: 'sf_cell_join_stub',
+          kind: 'factory_join',
+          token: 'sf_join_stub',
           scopes: [],
           expiresAt: null,
         },
@@ -247,7 +247,7 @@ describe('cell project target', () => {
     TEST_TIMEOUT_MS,
   );
 
-  it('exits 2 when cell start runs outside a repo without --project', async () => {
+  it('refuses cell start run by hand, outside the Factory daemon', async () => {
     // Arrange
     const outside = mkdtempSync(join(tmpdir(), 'sf-no-repo-'));
     dirs.push(outside);
@@ -267,7 +267,7 @@ describe('cell project target', () => {
     });
 
     // Assert
-    expect(result.status).toBe(EXIT.argument);
-    expect(result.stderr).toContain(PROJECT_ID);
+    expect(result.status).toBe(EXIT.refused);
+    expect(result.stderr).toContain('sf cell create');
   });
 });

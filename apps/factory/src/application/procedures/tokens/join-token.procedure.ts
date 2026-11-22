@@ -45,7 +45,6 @@ export const joinTokenProcedure = publicProcedure(joinTokenContract)((
       kind: 'web_session',
       name: 'web demo session',
       scopes: WEB_SESSION_SCOPES,
-      cellId: null,
       rotatedFromId: null,
       expiresAt,
       now,

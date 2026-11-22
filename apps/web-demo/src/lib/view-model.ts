@@ -39,11 +39,6 @@ export const countByState = (
   return counts;
 };
 
-export const findCell = <Cell extends { cellId: string }>(
-  cells: readonly Cell[],
-  cellId: string,
-): Cell | undefined => cells.find((cell) => cell.cellId === cellId);
-
 export const formatLease = (
   leaseExpiresAt: number | null,
   now: number,

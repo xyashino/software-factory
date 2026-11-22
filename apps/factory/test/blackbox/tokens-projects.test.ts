@@ -29,7 +29,7 @@ const setup = () => {
 const issueToken = async (
   app: TestApp,
   admin: string,
-  kind: 'supervisor' | 'cell_join',
+  kind: 'supervisor' | 'factory_join',
 ): Promise<TokenBody> => {
   const response = await postJson(
     app,
@@ -77,7 +77,7 @@ describe('token issuance', () => {
 
   it('answers 403 when the caller lacks admin:tokens', async () => {
     const { app, admin } = setup();
-    const joinToken = await issueToken(app, admin, 'cell_join');
+    const joinToken = await issueToken(app, admin, 'factory_join');
 
     const response = await postJson(
       app,

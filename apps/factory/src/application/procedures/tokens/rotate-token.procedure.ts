@@ -27,7 +27,7 @@ export const rotateTokenProcedure = authenticatedProcedure(rotateTokenContract)(
         kind: row.kind,
         name: row.name,
         scopes: row.scopesJson,
-        cellId: row.cellId,
+        factoryId: row.factoryId,
         rotatedFromId: current,
         expiresAt: row.expiresAt,
         now,

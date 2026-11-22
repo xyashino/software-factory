@@ -41,7 +41,7 @@ export const getWorkOrderProcedure = scopedProcedure(['supervisor:read'])(
       jobId: job.jobId,
       kind: job.kind,
       status: job.status,
-      cellId: job.cellId,
+      cellId: job.claimedByCellId,
       epoch: job.epoch,
     })),
     incidents: orderIncidents.map((incident) => ({

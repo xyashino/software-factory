@@ -53,9 +53,9 @@ export const PR_TEMPLATE_PATH = '.factory/templates/pr/body.md';
 export const CELLS_DIR = '.factory-local/cells';
 export const LOCAL_CELLS_DIR = join(DEFAULT_DATA_DIR, 'cells');
 export const WORKSPACES_DIR = join(DEFAULT_DATA_DIR, 'workspaces');
-export const LEGACY_CELL_STATE_PATH = '.factory-local/cell.json';
 export const SUPERVISOR_TOKEN_PATH = '.factory-local/supervisor.token';
 export const JOIN_TOKEN_ENV = 'FACTORY_JOIN_TOKEN';
+export const CELL_ID_ENV = 'FACTORY_CELL_ID';
 export const CELL_LINES_ENV = 'CELL_LINES';
 export const DEFAULT_TODO_DIR = 'todos';
 export const DEFAULT_WEB_HOST = '127.0.0.1';
@@ -79,8 +79,6 @@ const firstExisting = (candidates: readonly string[]): string | undefined =>
 const quoteIfSpaced = (path: string): string =>
   /\s/.test(path) ? `"${path}"` : path;
 
-export const cellStatePathOf = (name: string): string =>
-  join(CELLS_DIR, `${name}.json`);
 export const cellLogPathOf = (name: string): string =>
   join(CELLS_DIR, `${name}.log`);
 export const cellPidNameOf = (name: string): string => `${name}.pid`;

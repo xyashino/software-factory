@@ -36,6 +36,20 @@
       "when": 1795370468116,
       "tag": "0004_cell_gone",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1795381368791,
+      "tag": "0005_cell_identity_add",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1795381703090,
+      "tag": "0006_cell_identity_drop",
+      "breakpoints": true
     }
   ]
 }

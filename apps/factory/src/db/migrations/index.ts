@@ -5,6 +5,8 @@ import cellDrainLeave from './0001_cell_drain_leave.sql' with { type: 'text' };
 import factoriesLink from './0002_common_the_renegades.sql' with { type: 'text' };
 import cellFactoryOwner from './0003_cell_factory_owner.sql' with { type: 'text' };
 import cellGone from './0004_cell_gone.sql' with { type: 'text' };
+import cellIdentityAdd from './0005_cell_identity_add.sql' with { type: 'text' };
+import cellIdentityDrop from './0006_cell_identity_drop.sql' with { type: 'text' };
 
 const SQL_BY_TAG: Record<string, string> = {
   '0000_init': init,
@@ -12,6 +14,8 @@ const SQL_BY_TAG: Record<string, string> = {
   '0002_common_the_renegades': factoriesLink,
   '0003_cell_factory_owner': cellFactoryOwner,
   '0004_cell_gone': cellGone,
+  '0005_cell_identity_add': cellIdentityAdd,
+  '0006_cell_identity_drop': cellIdentityDrop,
 };
 
 export const embeddedMigrationsOf = () =>

@@ -9,13 +9,14 @@ import { sql } from 'drizzle-orm';
 import { WORK_ORDER_STATES } from '@repo/factory-contracts/enums/orders';
 import type {
   CellId,
+  FactoryId,
   OrderId,
   PlanId,
   ProjectId,
   StepId,
 } from '../../domain/common/brand';
 import { jsonColumn, timestamps } from '@repo/bun-sqlite-kit/columns';
-import { cells } from './cells';
+import { factories } from './factories';
 import { orderPlans } from './plans';
 import { projects } from './projects';
 
@@ -52,8 +53,8 @@ export const workOrders = sqliteTable(
     description: text('description').notNull(),
     lineName: text('line_name').notNull(),
     lineSnapshotJson: jsonColumn<unknown>('line_snapshot_json'),
-    unavailableLineCellsJson: jsonColumn<string[]>(
-      'unavailable_line_cells_json',
+    unavailableLineFactoriesJson: jsonColumn<string[]>(
+      'unavailable_line_factories_json',
     ).notNull(),
     priority: text('priority', { enum: ['high', 'medium', 'low'] }).notNull(),
     baseBranch: text('base_branch').notNull(),
@@ -63,9 +64,9 @@ export const workOrders = sqliteTable(
     staleBase: integer('stale_base').notNull().default(0),
     state: text('state', { enum: WORK_ORDER_STATES }).notNull(),
     currentStepIndex: integer('current_step_index').notNull().default(0),
-    pinnedCellId: text('pinned_cell_id')
-      .$type<CellId>()
-      .references(() => cells.cellId),
+    pinnedFactoryId: text('pinned_factory_id')
+      .$type<FactoryId>()
+      .references(() => factories.factoryId),
     worktreeResets: integer('worktree_resets').notNull().default(0),
     mechanicRuns: integer('mechanic_runs').notNull().default(0),
     activeJobId: text('active_job_id').unique(),

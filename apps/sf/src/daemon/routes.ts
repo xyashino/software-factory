@@ -1,12 +1,12 @@
 import { hostname } from 'node:os';
 import { z } from 'zod';
 import {
+  CELL_ID_ENV,
   CELL_LINES_ENV,
   CLI_ENTRY,
   FACTORY_DAEMON_URL,
   FACTORY_PID_ENV,
   IS_COMPILED,
-  JOIN_TOKEN_ENV,
   REPO_CONFIG_PATH,
   cellWorkerLauncherOf,
 } from '../config';
@@ -94,18 +94,18 @@ const readCreateBody = async (request: Request): Promise<unknown> => {
 
 const workerEnvOf = (
   localToken: string,
+  cellId: string,
   lines: readonly string[] | undefined,
 ): Record<string, string> => ({
   [FACTORY_PID_ENV]: String(process.pid),
   FACTORY_URL: RELAY_URL,
   FACTORY_TOKEN: localToken,
-  // Blank, so a join token inherited from the daemon's env never reaches the Cell.
-  [JOIN_TOKEN_ENV]: '',
+  [CELL_ID_ENV]: cellId,
   ...(lines === undefined ? {} : { [CELL_LINES_ENV]: lines.join(',') }),
 });
 
-// HQ failure is not reported: the HQ reaper deletes the Cell after its lease expires.
-const goneInHq = async (deps: RouteDeps, hqCellId: string): Promise<void> => {
+// HQ failure is not reported: the HQ reaper requeues the Cell's job after its lease expires.
+const goneInHq = async (deps: RouteDeps, cellId: string): Promise<void> => {
   const credential = deps.ports.factoryCredential.read();
   if (credential === null) {
     return;
@@ -113,7 +113,7 @@ const goneInHq = async (deps: RouteDeps, hqCellId: string): Promise<void> => {
   await deps.ports.hq.goneCell({
     url: credential.url,
     sessionToken: credential.sessionToken,
-    cellId: hqCellId,
+    cellId,
   });
 };
 
@@ -144,11 +144,12 @@ const createCell = async (
   }
   return deps.supervisor.spawn({
     repoRoot: target.repoRoot,
+    projectId: target.projectId,
     name: input.name,
     baseName: cellNameOf(hostname()),
     start: async (name, cellId) => ({
       args: [...cellLauncher, 'cell', 'start', '--name', name],
-      env: workerEnvOf(deps.relay.issue(cellId), input.lines),
+      env: workerEnvOf(deps.relay.issue(cellId), cellId, input.lines),
     }),
   });
 };
@@ -184,10 +185,7 @@ const handle = async (deps: RouteDeps, request: Request): Promise<Response> => {
     if (!(await deps.supervisor.kill(id))) {
       return failure(NOT_FOUND, 'not_found', `no cell ${id}`);
     }
-    const hqCellId = deps.relay.hqCellIdOf(id);
-    if (hqCellId !== null) {
-      await goneInHq(deps, hqCellId);
-    }
+    await goneInHq(deps, id);
     return reply(OK, { cellId: id });
   }
   return failure(

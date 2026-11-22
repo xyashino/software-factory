@@ -51,8 +51,8 @@ const workOrder = (
   state: 'blocked',
   currentStepIndex: 1,
   mechanicRuns: 0,
-  pinnedCellId: 'cell-a',
-  unavailableLineCells: ['cell-b'],
+  pinnedFactoryId: 'factory-a',
+  unavailableLineFactories: ['factory-b'],
   staleBase: 1,
   worktreeResets: 2,
   steps: buildSteps(),
@@ -90,7 +90,7 @@ describe('incident triage', () => {
   it('pins the mechanic job to the pinned cell and counts the run', () => {
     const result = triageIncident('operator_blocked', workOrder());
 
-    expect(result.mechanicJob).toEqual({ pinnedCellId: 'cell-a' });
+    expect(result.mechanicJob).toEqual({ pinnedFactoryId: 'factory-a' });
     expect(result.workOrder.mechanicRuns).toBe(1);
   });
 
@@ -116,7 +116,7 @@ describe('incident triage', () => {
   it('gives the supervisor the incident when no cell is pinned', () => {
     const result = triageIncident(
       'operator_blocked',
-      workOrder({ pinnedCellId: null }),
+      workOrder({ pinnedFactoryId: null }),
     );
 
     expect(result.incident.triageOwner).toBe('supervisor');
@@ -129,15 +129,15 @@ describe('incident resolutions', () => {
     const steps = withAttemptsUsed(buildSteps(), 1);
     const result = resolveIncident(
       incident(),
-      workOrder({ steps, unavailableLineCells: ['cell-b'] }),
+      workOrder({ steps, unavailableLineFactories: ['factory-b'] }),
       { action: 'retry_step', stepIndex: 1 },
     );
 
     expect(result.workOrder).toMatchObject({
       state: 'queued',
       currentStepIndex: 1,
-      unavailableLineCells: [],
-      pinnedCellId: 'cell-a',
+      unavailableLineFactories: [],
+      pinnedFactoryId: 'factory-a',
     });
     expect(result.incident).toMatchObject({
       status: 'resolved',
@@ -209,7 +209,7 @@ describe('incident resolutions', () => {
       currentStepIndex: 0,
       worktreeResets: 0,
       staleBase: 0,
-      unavailableLineCells: [],
+      unavailableLineFactories: [],
     });
     expect(
       result.workOrder.steps.every((step) => step.attemptsUsed === 0),
@@ -240,7 +240,7 @@ describe('incident resolutions', () => {
     });
     expect(result.workOrder).toMatchObject({
       state: 'cancelled',
-      pinnedCellId: null,
+      pinnedFactoryId: null,
     });
   });
 

@@ -1,9 +1,8 @@
-import { eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import type { DbTx } from '../../db/client';
-import type { cells } from '../../db/schema/cells';
 import { jobs } from '../../db/schema/jobs';
 import { workOrders } from '../../db/schema/orders';
-import type { CellId } from '../../domain/common/brand';
+import type { CellId, FactoryId } from '../../domain/common/brand';
 import { loseJob } from './job-loss';
 import {
   updateWorkOrder,
@@ -13,32 +12,58 @@ import {
 
 const ACTIVE_JOB_STATUSES = ['claimed', 'running'] as const;
 
-type CellRow = typeof cells.$inferSelect;
-
-export const unpinOrders = (tx: DbTx, cellId: CellId, now: number): void => {
+export const unpinOrders = (
+  tx: DbTx,
+  factoryId: FactoryId,
+  now: number,
+): void => {
   const pinned = tx
     .select()
     .from(workOrders)
-    .where(eq(workOrders.pinnedCellId, cellId))
+    .where(eq(workOrders.pinnedFactoryId, factoryId))
     .all();
   for (const row of pinned)
-    updateWorkOrder(tx, row, { pinnedCellId: null }, now);
+    updateWorkOrder(tx, row, { pinnedFactoryId: null }, now);
 };
 
-export const loseActiveJob = (
+export const loseFactoryJobs = (
   tx: DbTx,
-  cell: CellRow,
+  factoryId: FactoryId,
   now: number,
   actor: Actor,
   log: TransitionLog,
 ): void => {
-  if (cell.activeJobId === null) return;
+  const active = tx
+    .select()
+    .from(jobs)
+    .where(
+      and(
+        eq(jobs.claimedByFactoryId, factoryId),
+        inArray(jobs.status, ACTIVE_JOB_STATUSES),
+      ),
+    )
+    .all();
+  for (const job of active) loseJob(tx, job, now, actor, log);
+};
+
+export const loseCellJob = (
+  tx: DbTx,
+  cellId: CellId,
+  factoryId: FactoryId,
+  now: number,
+  actor: Actor,
+  log: TransitionLog,
+): void => {
   const job = tx
     .select()
     .from(jobs)
-    .where(eq(jobs.jobId, cell.activeJobId))
+    .where(
+      and(
+        eq(jobs.claimedByCellId, cellId),
+        eq(jobs.claimedByFactoryId, factoryId),
+        inArray(jobs.status, ACTIVE_JOB_STATUSES),
+      ),
+    )
     .get();
-  if (job === undefined || !ACTIVE_JOB_STATUSES.some((s) => s === job.status))
-    return;
-  loseJob(tx, job, now, actor, log);
+  if (job !== undefined) loseJob(tx, job, now, actor, log);
 };

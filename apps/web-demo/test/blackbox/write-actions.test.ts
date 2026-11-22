@@ -35,7 +35,7 @@ const order = {
   branch: 'factory/add-login',
   staleBase: false,
   currentStepIndex: 2,
-  pinnedCellId: null,
+  pinnedFactoryId: null,
   activeCellId: null,
   activeJobId: null,
   version: 3,

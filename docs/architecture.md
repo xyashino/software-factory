@@ -17,7 +17,7 @@ Terms: [glossary](./README.md#glossary).
 ## Who calls whom
 
 - Supervisor runs `sf` against the Factory (`/api/v1`, supervisor token).
-- `sf cell start` (Cell daemon) enrolls and talks to the Factory: claims, heartbeats, job transitions.
+- `sf cell start` (Cell daemon) runs under the Factory daemon and talks to HQ through its relay: claims, heartbeats, job transitions.
 - `sf operator` runs inside a Job's agent and talks only to its own Cell over loopback. The Cell forwards verbs to the Factory.
 - `sf cell` and `sf factory` call the local Factory daemon on `127.0.0.1:7072`, which spawns and kills Cell daemons.
 - `apps/web-demo` is a read-mostly client of the Factory API. No state of its own.

@@ -113,7 +113,7 @@ describe('procedure access rules', () => {
     expect(await response.json()).toMatchObject({
       code: 403,
       type: 'forbidden',
-      message: 'Token needs one of: supervisor:write, cell:worker',
+      message: 'Token needs one of: supervisor:write, factory:worker',
     });
   });
 

@@ -2,16 +2,17 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
+  asCellId,
   asOrderId,
   asProjectId,
-  asCellId,
+  asFactoryId,
   asJobId,
 } from '../../src/domain/common/brand';
 import { createDb, type Db } from '../../src/db/client';
-import { cells } from '../../src/db/schema/cells';
 import { jobs } from '../../src/db/schema/jobs';
 import { projects } from '../../src/db/schema/projects';
 import { workOrders } from '../../src/db/schema/orders';
+import { FACTORY_ID, FACTORY_TOKEN, seedFactory } from './factory-session';
 
 const SEED_AT = 1_700_000_000_000;
 
@@ -32,20 +33,7 @@ export const seedBaseline = (db: Db): void => {
       updatedAt: SEED_AT,
     })
     .run();
-  for (const id of ['cell-1', 'cell-2']) {
-    db.insert(cells)
-      .values({
-        cellId: asCellId(id),
-        name: id,
-        projectId,
-        allowedLinesJson: ['feature'],
-        status: 'online',
-        runnersJson: ['claude'],
-        localWorktreesJson: [],
-        createdAt: SEED_AT,
-      })
-      .run();
-  }
+  seedFactory(db, FACTORY_ID, FACTORY_TOKEN, SEED_AT);
   for (const id of ['order-1', 'order-2']) {
     db.insert(workOrders)
       .values({
@@ -56,7 +44,7 @@ export const seedBaseline = (db: Db): void => {
         type: 'feat',
         description: 'seeded order',
         lineName: 'feature',
-        unavailableLineCellsJson: [],
+        unavailableLineFactoriesJson: [],
         priority: 'medium',
         baseBranch: 'main',
         branch: `factory/${id}`,
@@ -81,7 +69,8 @@ export const insertJob = (
       jobId: asJobId(jobId),
       projectId: asProjectId('proj-1'),
       orderId: asOrderId(orderId),
-      cellId: asCellId(cellId),
+      claimedByCellId: asCellId(cellId),
+      claimedByFactoryId: asFactoryId(FACTORY_ID),
       kind: 'run_operator',
       workspaceMode: 'fresh',
       status,

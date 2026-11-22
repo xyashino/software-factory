@@ -2,7 +2,7 @@ import { eq } from 'drizzle-orm';
 import type { Db, DbTx } from '../../db/client';
 import type { TOKEN_KINDS } from '../../db/schema/tokens';
 import { safeTokens } from '../../db/schema/tokens';
-import type { CellId, FactoryId, TokenId } from '../../domain/common/brand';
+import type { FactoryId, TokenId } from '../../domain/common/brand';
 import { asTokenId } from '../../domain/common/brand';
 import type { TokenScope } from '../ports/auth.port';
 import {
@@ -13,18 +13,15 @@ import {
 } from './token-hash';
 
 export const DEFAULT_SCOPES: Record<
-  'supervisor' | 'cell_join' | 'factory_join',
+  'supervisor' | 'factory_join',
   TokenScope[]
 > = {
   supervisor: ['supervisor:read', 'supervisor:write', 'admin:tokens'],
-  cell_join: ['cell:enroll'],
   factory_join: ['factory:enroll'],
 };
 
 const PREFIX_BY_KIND: Record<TokenKind, TokenPrefix> = {
   supervisor: TOKEN_PREFIXES.supervisor,
-  cell_join: TOKEN_PREFIXES.join,
-  cell_session: TOKEN_PREFIXES.cell,
   web_join: TOKEN_PREFIXES.join,
   web_session: TOKEN_PREFIXES.supervisor,
   factory_join: TOKEN_PREFIXES.join,
@@ -40,7 +37,6 @@ export type NewSafeToken = {
   kind: TokenKind;
   name: string;
   scopes: readonly string[];
-  cellId: CellId | null;
   factoryId?: FactoryId | null;
   rotatedFromId: TokenId | null;
   expiresAt: number | null;
@@ -69,7 +65,6 @@ export const insertSafeToken = (
       kind: input.kind,
       name: input.name,
       scopesJson: [...input.scopes],
-      cellId: input.cellId,
       factoryId: input.factoryId ?? null,
       rotatedFromId: input.rotatedFromId,
       expiresAt: input.expiresAt,

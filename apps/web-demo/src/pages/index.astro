@@ -8,30 +8,30 @@ const session = await createSessionClient(process.env).catch(failureResponse);
 if (session instanceof Response) return session;
 const { client, projectId } = session;
 const overview = await Promise.all([
-  client.listCells(),
+  client.listFactories(),
   client.listWorkOrders({ projectId }),
   client.listIncidents({ projectId, status: 'open' }),
 ])
-  .then(([cells, orders, incidents]) => ({ cells, orders, incidents }))
+  .then(([factories, orders, incidents]) => ({ factories, orders, incidents }))
   .catch(failureResponse);
 if (overview instanceof Response) return overview;
 
-const connectedCells = overview.cells.cells.filter(
-  (cell) => cell.status !== 'offline' && cell.status !== 'revoked',
+const connectedFactories = overview.factories.factories.filter(
+  (factory) => factory.online,
 ).length;
 const ordersByState = Object.entries(countByState(overview.orders.items));
 ---
 
 <Base>
   <h1>Overview</h1>
-  <p>Connected cells: {connectedCells}</p>
+  <p>Connected factories: {connectedFactories}</p>
   <h2>Work orders by state</h2>
   <ul>
     {ordersByState.map(([state, count]) => <li>{state}: {count}</li>)}
   </ul>
   <p>Open incidents: {overview.incidents.items.length}</p>
   <ul>
-    <li><a href="/cells">Cells</a></li>
+    <li><a href="/factories">Factories</a></li>
     <li><a href="/work-orders">Work orders</a></li>
     <li><a href="/incidents">Incidents</a></li>
   </ul>

@@ -68,14 +68,11 @@ export const createHqClient = (
       await send(fetchImpl, `${url}${ENROLL_ROUTE}`, joinToken, { name }),
       EnrollReplySchema,
     ),
-  heartbeat: async ({ url, sessionToken }) =>
+  heartbeat: async ({ url, sessionToken, projects }) =>
     replyOf(
-      await send(
-        fetchImpl,
-        `${url}${HEARTBEAT_ROUTE}`,
-        sessionToken,
-        undefined,
-      ),
+      await send(fetchImpl, `${url}${HEARTBEAT_ROUTE}`, sessionToken, {
+        projects,
+      }),
       HeartbeatReplySchema,
     ),
   goneCell: async ({ url, sessionToken, cellId }) =>
