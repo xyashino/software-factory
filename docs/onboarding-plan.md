@@ -16,7 +16,7 @@ Fresh machine (VPS) to a running factory in few commands, with clear errors. Tod
 - `RunnerCatalogPort.isInstalled(name)` exists (`apps/sf/src/adapters/runners/catalog.ts`).
 - Lines use runners `claude` and `antigravity` (`.factory/lines/*.yml`). Nothing checks they are installed before a job.
 - Runner abort and duplicate-agent bug: see `docs/cell-runner-plan.md` (replaces the former `cell-kill-job-process-tree` todo).
-- No release workflow; only `pr-ci.yml`. Install needs Node, pnpm, Bun and a build from source.
+- No release workflow; only `pr-ci.yml`. Install needs Node, Bun and a build from source.
 - Corrections to earlier advice: start already waits for the server; dry-run already exists.
 
 ## Decisions
@@ -58,4 +58,4 @@ Suggested pick order: install-fix, server-start-verify, error-hint, smoke-test, 
 
 ## Verify
 
-`pnpm ci:verify` per todo.
+`bun run ci:verify` per todo.

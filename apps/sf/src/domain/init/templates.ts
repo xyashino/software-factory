@@ -2,7 +2,7 @@ const WORKSPACE = `workspace:
   setup:
     timeout: 10m
     exec:
-      - pnpm install --frozen-lockfile
+      - bun install --frozen-lockfile
 `;
 
 const BUILDER_OPERATOR = `  builder:
@@ -24,9 +24,9 @@ const QUALITY_GATE_STATION = `  - id: quality-gate
     kind: inspection
     timeout: 15m
     exec:
-      - pnpm run --if-present lint
-      - pnpm run --if-present check-types
-      - pnpm run --if-present test
+      - bun run --if-present lint
+      - bun run --if-present check-types
+      - bun run --if-present test
     onFail:
       retry: build
       max: 3

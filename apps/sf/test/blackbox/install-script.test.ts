@@ -64,7 +64,7 @@ describe('install script without a built binary', () => {
 
     // Assert
     expect(result.status).toBe(1);
-    expect(result.stderr).toContain('run pnpm build:sf first');
+    expect(result.stderr).toContain('run bun run build:sf first');
     rmSync(join(empty, '..'), { recursive: true, force: true });
   });
 });

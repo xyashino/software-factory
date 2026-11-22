@@ -25,20 +25,20 @@ The system is modeled as an automated software factory:
 
 ## Prerequisites
 
-- [mise](https://mise.jdx.dev/): `mise install` (Node 24, pnpm 12.15.0)
-- [Bun](https://bun.sh/) (the factory runs on Bun)
+- [mise](https://mise.jdx.dev/): `mise install` (Node 24, Bun 1.4.4)
+- [Bun](https://bun.sh/) 1.4.4: package manager and script runner (the factory runs on Bun)
 - `herdr`, `gh` and the agent CLIs used in `.factory/lines/*.yml`
 
 ## Development
 
 ```bash
-pnpm install
-pnpm ci:verify    # format, lint, typecheck, test, build
+bun install
+bun run ci:verify    # format, lint, typecheck, test, build
 ```
 
 ## Install `sf`
 
-`sf` is one standalone binary (server, init templates and migrations embedded) plus the web UI. Install a prebuilt release with no Node, pnpm or Bun (Linux x64/arm64, macOS arm64):
+`sf` is one standalone binary (server, init templates and migrations embedded) plus the web UI. Install a prebuilt release with no Node or Bun (Linux x64/arm64, macOS arm64):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/xyashino/software-factory/main/scripts/install-release.sh | sh   # ~/.local/bin/sf, ~/.local/share/sf/web
@@ -51,18 +51,18 @@ Or build and install from this checkout, as your user, with no admin rights need
 Linux:
 
 ```bash
-pnpm install && pnpm install:sf          # ~/.local/bin/sf, ~/.local/share/sf/web
+bun install && bun run install:sf       # ~/.local/bin/sf, ~/.local/share/sf/web
 ```
 
 Windows 10 (PowerShell):
 
 ```powershell
-pnpm install; pnpm install:sf            # %LOCALAPPDATA%\sf\bin\sf.exe, %LOCALAPPDATA%\sf\web
+bun install; bun run install:sf         # %LOCALAPPDATA%\sf\bin\sf.exe, %LOCALAPPDATA%\sf\web
 ```
 
-`pnpm install:sf` runs `pnpm build:sf`, then `node scripts/install.mjs`. If the install directory is not on `PATH`, the script prints the line to add. Options: `--prefix <dir>` (installs to `<dir>/bin` and `<dir>/share/sf/web`), `--source <dir>` (directory holding the built `sf`), `--web-dir <dir>`; env `PREFIX`, `DESTDIR` and `SF_WEB_DIR` work the same way.
+`bun run install:sf` runs `bun run build:sf`, then `node scripts/install.mjs`. If the install directory is not on `PATH`, the script prints the line to add. Options: `--prefix <dir>` (installs to `<dir>/bin` and `<dir>/share/sf/web`), `--source <dir>` (directory holding the built `sf`), `--web-dir <dir>`; env `PREFIX`, `DESTDIR` and `SF_WEB_DIR` work the same way.
 
-System-wide Linux install: `pnpm build:sf && sudo scripts/install.sh` (`/usr/local/bin/sf`, `/usr/local/share/sf/web`; `PREFIX` and `DESTDIR` override the targets).
+System-wide Linux install: `bun run build:sf && sudo scripts/install.sh` (`/usr/local/bin/sf`, `/usr/local/share/sf/web`; `PREFIX` and `DESTDIR` override the targets).
 
 State lives in `$XDG_DATA_HOME/sf` (default `~/.local/share/sf` on Linux, `%LOCALAPPDATA%\sf` on Windows).
 
@@ -72,7 +72,7 @@ Fresh Linux VPS, SSH only, no desktop. Run everything as your normal user, not r
 
 Prerequisites:
 
-- Git, `mise` (Node 24, pnpm 12.15.0), Bun.
+- Git, `mise` (Node 24, Bun 1.4.4).
 - `gh auth login` done: `sf setup` warns until PR delivery can use `gh`.
 - Runner CLIs named in `.factory/lines/*.yml` on `PATH` (starter lines use `claude`).
 - `herdr` only if a line has a non-headless station; `sf doctor` says when.
@@ -81,8 +81,8 @@ Install from a checkout:
 
 ```bash
 git clone <repo-url> software-factory && cd software-factory
-mise install && pnpm install
-pnpm build:sf                                     # apps/sf/dist/sf + web UI
+mise install && bun install
+bun run build:sf                                  # apps/sf/dist/sf + web UI
 node scripts/install.mjs --source apps/sf/dist    # ~/.local/bin/sf (see troubleshooting)
 export PATH="$HOME/.local/bin:$PATH"
 ```
@@ -122,7 +122,7 @@ Troubleshooting:
 
 | Symptom | Check | Fix |
 | --- | --- | --- |
-| Install fails: `missing .../apps/factory/dist/sf: run pnpm build:sf first` even after `pnpm build:sf` | `ls apps/sf/dist/sf` exists | Installer default source is stale. Pass it: `node scripts/install.mjs --source apps/sf/dist` |
+| Install fails: `missing .../apps/factory/dist/sf: run bun run build:sf first` even after `bun run build:sf` | `ls apps/sf/dist/sf` exists | Installer default source is stale. Pass it: `node scripts/install.mjs --source apps/sf/dist` |
 | Port 7070 in use: `sf server start` prints `server started`, or `sf doctor` shows `token rejected` on a server you did not start | `ss -ltnp 'sport = :7070'`: owner is not your factory server | Stop the owner: `kill <pid>`. `sf server stop` only stops the process in the pid file, not a leaked one. Then `sf server start` |
 | 401 after `sf server token create`: `401: Missing or invalid bearer token` | Read `token source:` in the error. `fix:` always prints `--global`, which is wrong for a repo token | `repo:.factory-local/supervisor.token`: `sf server token create --save` (the repo file wins over global). `env:FACTORY_TOKEN`: unset it or set the new token. `config:<name>`: `sf server token create --save --global` |
 | Missing runner: `missing: runner <name> not installed` in `sf doctor`; `sf setup` refuses | `command -v <name>` prints nothing | Install the CLI, put it on `PATH` for non-login shells too, sign in (see above), then `sf doctor` |
@@ -146,7 +146,7 @@ sf todos import && sf queue                # push todos/*.md, see the queue
 sf server stop
 ```
 
-Run `sf init`, `sf project add` and `sf cell start` in each repository to share one server across repositories. Command reference: [docs/sf.md](docs/sf.md). The flow is proved end to end by `apps/sf/test/blackbox/standalone-external-repo.test.ts` (runs after `pnpm build:sf`, skipped without build output).
+Run `sf init`, `sf project add` and `sf cell start` in each repository to share one server across repositories. Command reference: [docs/sf.md](docs/sf.md). The flow is proved end to end by `apps/sf/test/blackbox/standalone-external-repo.test.ts` (runs after `bun run build:sf`, skipped without build output).
 
 ## Credits
 

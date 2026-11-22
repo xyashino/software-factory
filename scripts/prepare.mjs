@@ -1,10 +1,10 @@
-// Runs after `pnpm install`: husky, then regenerate the AI docs.
+// Runs after `bun install`: husky, then regenerate the AI docs.
 // Every step is best effort so a missing tool never fails the install.
 import { spawnSync } from 'node:child_process';
 
 const steps = [
-  ['husky', 'pnpm exec husky'],
-  ['nitpick build', 'pnpm turbo run build --filter=@repo/nitpick --ui=stream'],
+  ['husky', 'bun run husky'],
+  ['nitpick build', 'bun run turbo run build --filter=@repo/nitpick --ui=stream'],
   ['nitpick sync', 'node packages/nitpick/dist/cli.js --sync'],
 ];
 

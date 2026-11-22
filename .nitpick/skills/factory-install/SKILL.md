@@ -22,7 +22,7 @@ Never activate automatically. Only when user asks to install `sf`, onboard a rep
 Check each, report missing, do not install silently:
 
 ```bash
-bun --version && pnpm --version && git --version
+bun --version && git --version
 gh auth status        # must be logged in; never print token
 herdr --version
 ```
@@ -34,8 +34,8 @@ Line runners, at least one: `claude`, `agy`, `cursor-agent`, `opencode` (`comman
 From the factory checkout:
 
 ```bash
-pnpm install
-pnpm build:sf                              # apps/sf/dist/sf + web UI
+bun install
+bun run build:sf                           # apps/sf/dist/sf + web UI
 ```
 
 Remove stale symlink first (a link to an old build shadows the install):

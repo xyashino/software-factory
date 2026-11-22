@@ -32,7 +32,7 @@ You must use the following skills:
 ## Instructions
 
 1. Run `factory-operator read` to get the incident, the step states, the `.cell/` state and the logs.
-2. Inspect files read-only as needed. Never edit files, never run `git` commands that change state, never run `pnpm` install, build or test commands.
+2. Inspect files read-only as needed. Never edit files, never run `git` commands that change state, never run `bun` install, build or test commands.
 3. Decide one action: `retry_step`, `restart_from_step`, `restart_from_scratch`, `escalate` or `cancel`. Pick the narrowest one that clears the cause.
 4. Resolve with `factory-operator incident --action <action> [--step <stationId>] --diagnosis "..." --outcome "..." --report -`, giving the concise triage report on stdin.
 

@@ -2,7 +2,7 @@ node_modules
 dist
 .turbo
 coverage
-pnpm-lock.yaml
+bun.lock
 # Cell-owned worktree metadata (written by the Cell, not hand-formatted)
 .cell
 .tmp

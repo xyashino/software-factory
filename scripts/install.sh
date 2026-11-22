@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Install the built sf binary and web runtime. Run `pnpm build:sf` first, as your user.
+# Install the built sf binary and web runtime. Run `bun run build:sf` first, as your user.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -14,7 +14,7 @@ WEB_DEPS="$WEB_DIST/sf-deps/node_modules"
 
 require() {
   if [ ! -e "$1" ]; then
-    echo "missing $1: run pnpm build:sf first" >&2
+    echo "missing $1: run bun run build:sf first" >&2
     exit 1
   fi
 }

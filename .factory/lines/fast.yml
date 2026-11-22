@@ -10,8 +10,8 @@ workspace:
   setup:
     timeout: 10m
     exec:
-      - pnpm install --frozen-lockfile
-      - pnpm run --if-present nitpick:sync
+      - bun install --frozen-lockfile
+      - bun run --if-present nitpick:sync
 
 operators:
   builder:
@@ -40,7 +40,7 @@ stations:
     kind: inspection
     timeout: 15m
     exec:
-      - pnpm ci:verify
+      - bun run ci:verify
     onFail:
       retry: build
       max: 3

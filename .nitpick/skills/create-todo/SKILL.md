@@ -49,7 +49,7 @@ Read `.factory/lines/*.yml` descriptions again if lines changed. Named model or 
 
 - Read what is needed to state facts. Targeted `grep`, `diff`, `ls`, `package.json`, the files being moved. No whole-repo scans, no unrelated packages.
 - Verified fact goes in as fact, with paths. Unverified claim goes under "Verify first". Never guess.
-- Versions: `pnpm-workspace.yaml` `catalog:`. Workspace deps `workspace:*` (`linkWorkspacePackages: false`, declare every consumer).
+- Versions: root `package.json` `workspaces.catalog`. Workspace deps `workspace:*` (declare every consumer).
 - Read ADRs in `decisions/` only if the change alters a recorded decision.
 
 ## Template
@@ -63,8 +63,8 @@ Every todo ends with:
 - [ ] Tests follow `testing` rules: black box, Arrange/Act/Assert, story-style names, public behavior only.
 - [ ] One new ADR in `decisions/` (`decision-log` rule).
 - [ ] Strict TypeScript, no `any`, no loose assertions.
-- [ ] `pnpm ci:verify` passes. Package-scoped `pnpm --filter <pkg> test|lint|check-types` allowed while working.
-- [ ] `pnpm nitpick:check` passes when `.nitpick/` changed.
+- [ ] `bun run ci:verify` passes. Package-scoped `bun --filter <pkg> test|lint|check-types` allowed while working.
+- [ ] `bun run nitpick:check` passes when `.nitpick/` changed.
 
 ## Style
 
@@ -72,13 +72,13 @@ Markdown follows `general-caveman-markdown` and `general-prefer-ascii`: short, p
 
 ## Validate before finishing
 
-Run `pnpm todo:lint`. It parses every `todos/*.md` with the factory importer parser and also checks the line file exists, `depends_on` names a todo in `todos/`, and the chain has no cycle. Fix every reported `file: message` line, then run it again.
+Run `bun run todo:lint`. It parses every `todos/*.md` with the factory importer parser and also checks the line file exists, `depends_on` names a todo in `todos/`, and the chain has no cycle. Fix every reported `file: message` line, then run it again.
 
-- [ ] `pnpm todo:lint` passes.
+- [ ] `bun run todo:lint` passes.
 - [ ] Every path and number in the body was verified, or sits under "Verify first". The script cannot check this.
 
 ## Guardrails
 
 - Do not implement. The todo defines the plan and contracts, not code dumps.
 - Do not run tests or builds while drafting.
-- Edit this skill only in `.nitpick/skills/create-todo/`, then `pnpm nitpick:sync`. `.claude/` and `.agents/` are generated.
+- Edit this skill only in `.nitpick/skills/create-todo/`, then `bun run nitpick:sync`. `.claude/` and `.agents/` are generated.

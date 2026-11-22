@@ -34,7 +34,7 @@ You must use the following skills:
 
 1. If the change is complex, write a short plan first.
 2. Follow the declared rules and skills; read each file before you edit.
-3. Run the basic repo checks (typecheck, lint, test) for every package you touched, then `pnpm nitpick:check`, and fix every finding. The doctor audits the same rules.
+3. Run the basic repo checks (typecheck, lint, test) for every package you touched, then `bun run nitpick:check`, and fix every finding. The doctor audits the same rules.
 4. Proof: this attempt's evidence directory is `{{evidenceDir}}`. For a change without UI, proof is the test/check output. Save the output of each check you ran as a file there (e.g. `check.txt`, `test.txt`, `ci.txt`, `diff-summary.txt`). Do not write proof to `/tmp`, to the worktree, or to another attempt's directory; the supervisor only sees files in `{{evidenceDir}}`.
 5. Record one new entry in `decisions/` per the declared `decision-log` rule and stage it with `git add decisions/<file>`. The task ships as one commit with exactly one new entry: if an earlier attempt already added one, update that file.
 6. Do not reuse or edit files from other attempts.

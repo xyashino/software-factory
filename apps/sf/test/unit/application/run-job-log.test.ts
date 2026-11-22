@@ -70,7 +70,7 @@ stations:
     timeout: 1m
   - id: quality-gate
     kind: inspection
-    exec: ["pnpm ci:verify", "pnpm lint"]
+    exec: ["bun run ci:verify", "bun run lint"]
     onFail:
       max: 3
 `;
@@ -334,9 +334,9 @@ describe('cell log detail', () => {
       gate.map((line) => line.replace(/^\S+ \S+ quality-gate /, '')),
     ).toEqual([
       'claim job=job-1 kind=step epoch=2',
-      'start (2/3) command="pnpm ci:verify"',
+      'start (2/3) command="bun run ci:verify"',
       'complete (2/3) exit=0 duration=15s',
-      'start (2/3) command="pnpm lint"',
+      'start (2/3) command="bun run lint"',
       'complete (2/3) exit=0 duration=15s',
     ]);
   });

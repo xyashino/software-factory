@@ -1,2 +1,2 @@
-pnpm format
-pnpm ci:verify
+bun run format
+bun run ci:verify

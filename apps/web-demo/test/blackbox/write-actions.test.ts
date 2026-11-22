@@ -87,7 +87,7 @@ const ok = () =>
   HttpResponse.json({ code: 200, order: { ...order, state: 'queued' } });
 
 beforeAll(async () => {
-  execFileSync('pnpm', ['exec', 'astro', 'build'], {
+  execFileSync('bun', ['run', 'astro', 'build'], {
     cwd: APP_DIR,
     stdio: 'ignore',
   });

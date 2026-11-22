@@ -43,4 +43,4 @@ depends_on: parent-slug
 - [ ] Tests: black box, Arrange/Act/Assert, story-style names.
 - [ ] One new ADR in `decisions/`.
 - [ ] Strict TypeScript, no `any`, no loose assertions.
-- [ ] `pnpm ci:verify` passes.
+- [ ] `bun run ci:verify` passes.

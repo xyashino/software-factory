@@ -19,7 +19,7 @@ const REPO_LINE = [
   'name: fast',
   'workspace:',
   '  setup:',
-  '    exec: [pnpm install]',
+  '    exec: [bun install]',
   'operators:',
   '  builder:',
   '    profile: builder',
@@ -37,7 +37,7 @@ const REPO_LINE = [
   '    operator: builder',
   '  - id: quality-gate',
   '    kind: inspection',
-  '    exec: [pnpm ci:verify]',
+  '    exec: [bun run ci:verify]',
   '    onFail:',
   '      retry: build',
   '      max: 3',
@@ -107,8 +107,8 @@ describe('line snapshot', () => {
       model: 'sonnet',
       profile: 'builder',
     });
-    expect(line.stations[1]?.exec).toEqual(['pnpm ci:verify']);
-    expect(line.setup).toEqual(['pnpm install']);
+    expect(line.stations[1]?.exec).toEqual(['bun run ci:verify']);
+    expect(line.setup).toEqual(['bun install']);
   });
 
   it('ends with a deliver station when the line declares delivery', () => {
