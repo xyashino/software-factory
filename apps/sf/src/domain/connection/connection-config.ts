@@ -2,7 +2,8 @@ import { z } from 'zod';
 
 export const LOCAL_TARGET = 'local';
 export const TARGET_NAME_PATTERN = /^[a-z0-9][a-z0-9_-]{0,39}$/;
-export const SUPERVISOR_TOKEN_LABEL = 'repo:.factory-local/supervisor.token';
+export const SUPERVISOR_TOKEN_PATH = '.factory-local/supervisor.token';
+export const SUPERVISOR_TOKEN_LABEL = `repo:${SUPERVISOR_TOKEN_PATH}` as const;
 export const LEGACY_TOKEN_LABEL = 'legacy:~/.config/factory/token';
 
 export const TargetNameSchema = z
@@ -156,3 +157,13 @@ export const recoveryCommandOf = (url: string): string =>
   isLoopbackUrl(url)
     ? 'sf server token create --save --global'
     : `sf connect ${url}`;
+
+export const tokenFixOf = (connection: Connection): string => {
+  if (connection.tokenSource === SUPERVISOR_TOKEN_LABEL) {
+    return `rm ${SUPERVISOR_TOKEN_PATH} && sf server token create --save`;
+  }
+  if (connection.tokenSource === 'env:FACTORY_TOKEN') {
+    return 'unset FACTORY_TOKEN, or set it to a token the server accepts';
+  }
+  return recoveryCommandOf(connection.url);
+};
