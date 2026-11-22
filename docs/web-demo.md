@@ -1,6 +1,6 @@
 # `@repo/web-demo` — plan
 
-A small Astro SSR web server that shows the factory and lets the Supervisor resume or cancel Work orders. It is a client of the factory server ([`factory.md`](./factory.md)) and holds no state of its own.
+A small Astro SSR web server that shows HQ and lets the Supervisor resume or cancel Work orders. It is a client of the HQ server ([`factory.md`](./factory.md)) and holds no state of its own.
 
 It is a demo UI: one process, read pages, two write actions, no client JavaScript, no database.
 
@@ -21,17 +21,17 @@ It is a demo UI: one process, read pages, two write actions, no client JavaScrip
 
 ## 2. Auto-registration on localhost
 
-Goal: when the demo runs on the same machine as the factory server (`apps/factory`), it registers itself without the Supervisor copying a token by hand, the way a Cell enrolls.
+Goal: when the demo runs on the same machine as HQ (`apps/factory`), it registers itself without the Supervisor copying a token by hand, the way a Cell enrolls.
 
 Rules:
 
 1. **Only on loopback.** Auto-registration runs only when `FACTORY_URL` host is `127.0.0.1`, `localhost` or `::1`. Any other host requires `FACTORY_TOKEN` set by hand. Never auto-register against a remote server.
-2. **Trust = same OS user.** A secret is never sent over the network to get a token. The server writes a join secret to `$FACTORY_DATA_DIR/web-demo.join` (`0600`), the same trust as `factory server token create`. The demo reads it at startup.
+2. **Trust = same OS user.** A secret is never sent over the network to get a token. The server writes a join secret to `$FACTORY_DATA_DIR/web-demo.join` (`0600`), the same trust as `sf hq token admin create`. The demo reads it at startup.
 3. **Join exchange.** The demo calls `POST /api/v1/tokens/join` with the join secret and gets a session token. The session is `supervisor` kind with only `supervisor:read` and `supervisor:write`. No `admin:tokens`. TTL 24 h.
 4. **Keep alive.** The demo rotates its session with `POST /api/v1/tokens/rotate` before expiry (existing route, 60 s grace). The token lives only in process memory.
 5. **Missing or refused join** fails startup with a message naming the file or the status. The demo never falls back to an unauthenticated mode.
 
-Open decision: whether the join secret is multi-use for 24 h (simple) or single-use and re-minted on each start (stricter, like `cell_join`). Recommended: single-use, re-minted by the server on each `factory server start`.
+Open decision: whether the join secret is multi-use for 24 h (simple) or single-use and re-minted on each start (stricter, like `cell_join`). Recommended: single-use, re-minted by the server on each `sf hq start`.
 
 Note: [`factory.md`](./factory.md) §11 lists `POST /api/v1/tokens/join` for `cell_join`. The join contract in `apps/factory/src/contracts/tokens.contract.ts` takes a `joinSecret` but has no web client kind yet.
 
@@ -46,7 +46,7 @@ Note: [`factory.md`](./factory.md) §11 lists `POST /api/v1/tokens/join` for `ce
 
 | Env | Default | Required |
 | :-- | :------ | :------- |
-| `FACTORY_URL` | `http://127.0.0.1:7070` | no |
+| `FACTORY_URL` | `http://127.0.0.1:7070` | no. The HQ address (web demo reads this name) |
 | `FACTORY_PROJECT_ID` | none | yes |
 | `FACTORY_DATA_DIR` | server default | only for auto-register |
 | `FACTORY_TOKEN` | none | only for a non-loopback `FACTORY_URL` |

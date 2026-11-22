@@ -2,23 +2,21 @@
 import { defineCommand, runCommand, showUsage } from 'citty';
 import { dispatchInternal } from './bootstrap/server-dispatch';
 import { cellCommand } from './adapters/cli/cell.command';
-import { connectCommand } from './adapters/cli/connection.command';
 import { doctorCommand } from './adapters/cli/doctor.command';
 import { factoryCommand } from './adapters/cli/factory.command';
 import { incidentCommand } from './adapters/cli/incident.command';
+import { hqCommand } from './adapters/cli/hq.command';
 import { initCommand } from './adapters/cli/init.command';
+import { legacyCommands } from './adapters/cli/legacy.command';
 import { operatorCommand } from './adapters/cli/operator.command';
 import { orderCommand } from './adapters/cli/order.command';
 import { printError } from './adapters/cli/output';
 import { projectCommand } from './adapters/cli/project.command';
 import { queueCommand } from './adapters/cli/queue.command';
 import { argsOf, resolveCommand } from './adapters/cli/resolve-command';
-import { serverCommand } from './adapters/cli/server.command';
 import { serviceCommand } from './adapters/cli/service.command';
 import { setupCommand } from './adapters/cli/setup.command';
-import { targetCommand } from './adapters/cli/target.command';
 import { todosCommand } from './adapters/cli/todos.command';
-import { tokenCommand } from './adapters/cli/token.command';
 import { assertValidArgs } from './adapters/cli/validate';
 import { watchCommand } from './adapters/cli/watch.command';
 import { webCommand } from './adapters/cli/web.command';
@@ -34,13 +32,11 @@ const main = defineCommand({
     description: 'Software factory CLI (v2 flow)',
   },
   subCommands: {
-    server: serverCommand,
+    hq: hqCommand,
     service: serviceCommand,
     setup: setupCommand,
-    connect: connectCommand,
     doctor: doctorCommand,
     factory: factoryCommand,
-    target: targetCommand,
     todos: todosCommand,
     queue: queueCommand,
     incident: incidentCommand,
@@ -51,7 +47,7 @@ const main = defineCommand({
     web: webCommand,
     init: initCommand,
     project: projectCommand,
-    token: tokenCommand,
+    ...legacyCommands,
   },
 });
 

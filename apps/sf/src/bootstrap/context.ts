@@ -26,6 +26,7 @@ import { createSystemClock } from '../adapters/process/system-clock';
 import type { Ports } from '../application/core/procedure';
 import { cellNameOf } from '../domain/cell/cell-name';
 import { resolveConnection } from '../domain/connection/connection-config';
+import { hqTokenEnv, hqUrlEnv } from './hq-env';
 import {
   CELL_ID_ENV,
   DEFAULT_FACTORY_URL,
@@ -56,8 +57,8 @@ export const buildContext = (cellName?: string): Ports => {
   const connections = createConnectionStore(GLOBAL_CONFIG_PATH);
   const repoTokenPath = resolve(process.cwd(), SUPERVISOR_TOKEN_PATH);
   const connection = resolveConnection({
-    envUrl: process.env.FACTORY_URL,
-    envToken: process.env.FACTORY_TOKEN,
+    envUrl: hqUrlEnv(),
+    envToken: hqTokenEnv(),
     repoToken: readOptional(repoTokenPath),
     legacyToken: readOptional(LEGACY_TOKEN_PATH),
     config: connections.read(),

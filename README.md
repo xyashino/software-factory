@@ -7,8 +7,9 @@ Monorepo hosting **SoftwareFactory** ([docs](docs/README.md): [architecture](doc
 
 The system is modeled as an automated software factory:
 
-- **The Factory** (central server) is the single control point holding blueprints (Lines, Stations, Operators), the schedule, **Traveler** records (append-only event logs), and the board.
-- **Cells** are replaceable compute machines that connect outbound to the Factory, claim a **Job** for a **Station**, execute it, push git checkpoints and artifacts, and can disconnect at any time without losing completed work.
+- **HQ** (external server) is the single control point holding blueprints (Lines, Stations, Operators), the schedule, **Traveler** records (append-only event logs), and the board.
+- **Factory** (local daemon, one per PC) is the only holder of the HQ credential. It will spawn, supervise and kill Cells. It is planned, not built yet.
+- **Cells** are disposable workers that connect outbound to HQ, claim a **Job** for a **Station**, execute it, push git checkpoints and artifacts, and can disconnect at any time without losing completed work.
 - **Lines** are declarative production workflows composed of **Stations**—either an **Operator** (an AI specialist such as `planner`, `builder`, `reviewer`, `auditor`) or an **Inspection** (a deterministic command gate).
 - **Work orders** (`todos/*.md`) travel down a Line from station to station. If an Operator or Inspection hits a blocker, it raises an **Andon** (releasing the Cell immediately) with a **Handover** so a human supervisor can resolve it and resume on any available Cell.
 
@@ -91,7 +92,7 @@ Set up the repo the factory will work on:
 ```bash
 cd path/to/your-repo
 sf doctor                 # read-only check: git, gh, runners, server, token, project
-sf setup                  # doctor, init, server start, project add (idempotent)
+sf setup                  # doctor, init, hq start, project add (idempotent)
 sf todos import --dry-run # preview todos/*.md before pushing
 ```
 
@@ -107,7 +108,7 @@ ssh -L 4321:127.0.0.1:4321 <user>@<vps>   # laptop
 # open http://127.0.0.1:4321 on the laptop
 ```
 
-The server listens on loopback by default. Set `FACTORY_HOST` (for example a Tailscale address) only behind Tailscale or TLS: it exposes the factory API to the network.
+HQ listens on loopback by default. Set `FACTORY_HOST` (for example a Tailscale address) only behind Tailscale or TLS: it exposes the HQ API to the network.
 
 Keep a Cell running after you log out. `sf service install` is not available yet, so use `tmux`:
 
@@ -122,11 +123,11 @@ Troubleshooting:
 | Symptom | Check | Fix |
 | --- | --- | --- |
 | Install fails: `missing .../apps/factory/dist/sf: run bun run build:sf first` even after `bun run build:sf` | `ls apps/sf/dist/sf` exists | Installer default source is stale. Pass it: `node scripts/install.mjs --source apps/sf/dist` |
-| Port 7070 in use: `sf server start` prints `server started`, or `sf doctor` shows `token rejected` on a server you did not start | `ss -ltnp 'sport = :7070'`: owner is not your factory server | Stop the owner: `kill <pid>`. `sf server stop` only stops the process in the pid file, not a leaked one. Then `sf server start` |
-| 401 after `sf server token create`: `401: Missing or invalid bearer token` | Read `token source:` in the error. `fix:` always prints `--global`, which is wrong for a repo token | `repo:.factory-local/supervisor.token`: `sf server token create --save` (the repo file wins over global). `env:FACTORY_TOKEN`: unset it or set the new token. `config:<name>`: `sf server token create --save --global` |
+| Port 7070 in use: `sf hq start` prints `server started`, or `sf doctor` shows `token rejected` on an HQ you did not start | `ss -ltnp 'sport = :7070'`: owner is not your HQ server | Stop the owner: `kill <pid>`. `sf hq stop` only stops the process in the pid file, not a leaked one. Then `sf hq start` |
+| 401 after `sf hq token admin create`: `401: Missing or invalid bearer token` | Read `token source:` in the error. The `fix:` line for a saved target still prints the older `sf server token create --global` spelling, which is the same command | `repo:.factory-local/supervisor.token`: `sf hq token admin create --save` (the repo file wins over global). `env:HQ_TOKEN` (or `env:FACTORY_TOKEN`): unset it or set the new token. `config:<name>`: `sf hq token admin create --save --global` |
 | Missing runner: `missing: runner <name> not installed` in `sf doctor`; `sf setup` refuses | `command -v <name>` prints nothing | Install the CLI, put it on `PATH` for non-login shells too, sign in (see above), then `sf doctor` |
 
-Test runs on the same VPS: set `FACTORY_PORT` and `FACTORY_URL` together, or the probe and the doctor check still hit port 7070.
+Test runs on the same VPS: set `FACTORY_PORT` and `HQ_URL` together, or the probe and the doctor check still hit port 7070.
 
 ## Use `sf` in any repository
 
@@ -135,14 +136,14 @@ Works in any git repository, not only this monorepo:
 ```bash
 cd path/to/repo
 sf init                                    # .factory/ and .gitignore entries
-sf server start                            # one server per machine
-sf server token create --save              # .factory-local/supervisor.token
+sf hq start                                # one HQ server per machine
+sf hq token admin create --save            # .factory-local/supervisor.token
 sf project add my-project --repo <url>
 sf web start                               # dashboard at http://127.0.0.1:4321; sf web stop to end
 sf factory connect <hq-url> --token <factory_join>         # once per PC
 sf cell create --repo ~/code/my-project                    # Cells start under the Factory daemon
 sf todos import && sf queue                # push todos/*.md, see the queue
-sf server stop
+sf hq stop
 ```
 
 Run `sf init`, `sf project add` and `sf cell start` in each repository to share one server across repositories. Command reference: [docs/sf.md](docs/sf.md). The flow is proved end to end by `apps/sf/test/blackbox/standalone-external-repo.test.ts` (runs after `bun run build:sf`, skipped without build output).

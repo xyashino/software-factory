@@ -87,13 +87,13 @@ const runConnect = async (input: {
 export const connectCommand = defineCommand({
   meta: {
     name: 'connect',
-    description: 'Save a factory server URL and its supervisor token',
+    description: 'Save an HQ URL and its supervisor token',
   },
   args: {
     url: {
       type: 'positional',
       required: true,
-      description: 'Factory server URL',
+      description: 'HQ URL',
     },
     name: { type: 'string', description: 'Target name' },
     token: { type: 'string', description: 'Supervisor token' },

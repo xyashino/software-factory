@@ -4,6 +4,7 @@ import {
   defaultTargetNameOf,
   recoveryCommandOf,
   resolveConnection,
+  tokenFixOf,
   withoutTarget,
   type ConnectionConfig,
   type ConnectionInputs,
@@ -62,10 +63,10 @@ describe('connection resolution', () => {
     });
   });
 
-  it('lets FACTORY_URL override the active target url', () => {
+  it('lets HQ_URL override the active target url', () => {
     // Arrange
     const inputs = inputsWith({
-      envUrl: 'http://10.0.0.5:7070',
+      envUrl: { name: 'HQ_URL', value: 'http://10.0.0.5:7070' },
       config: remoteConfig,
     });
 
@@ -74,13 +75,13 @@ describe('connection resolution', () => {
 
     // Assert
     expect(connection.url).toBe('http://10.0.0.5:7070');
-    expect(connection.urlSource).toBe('env:FACTORY_URL');
+    expect(connection.urlSource).toBe('env:HQ_URL');
   });
 
-  it('lets FACTORY_TOKEN beat the repo and target tokens', () => {
+  it('lets HQ_TOKEN beat the repo and target tokens', () => {
     // Arrange
     const inputs = inputsWith({
-      envToken: 'env-token',
+      envToken: { name: 'HQ_TOKEN', value: 'env-token' },
       repoToken: 'repo-token',
       config: remoteConfig,
     });
@@ -90,7 +91,23 @@ describe('connection resolution', () => {
 
     // Assert
     expect(connection.token).toBe('env-token');
+    expect(connection.tokenSource).toBe('env:HQ_TOKEN');
+  });
+
+  it('names the FACTORY_TOKEN fallback as the token source', () => {
+    // Arrange
+    const inputs = inputsWith({
+      envToken: { name: 'FACTORY_TOKEN', value: 'legacy-env-token' },
+    });
+
+    // Act
+    const connection = resolveConnection(inputs);
+
+    // Assert
     expect(connection.tokenSource).toBe('env:FACTORY_TOKEN');
+    expect(tokenFixOf(connection)).toBe(
+      'unset FACTORY_TOKEN, or set it to a token the server accepts',
+    );
   });
 
   it('prefers the repo token over the active target token', () => {
@@ -122,7 +139,10 @@ describe('connection resolution', () => {
 
   it('ignores blank env values', () => {
     // Arrange
-    const inputs = inputsWith({ envUrl: '   ', envToken: '' });
+    const inputs = inputsWith({
+      envUrl: { name: 'HQ_URL', value: '   ' },
+      envToken: { name: 'HQ_TOKEN', value: '' },
+    });
 
     // Act
     const connection = resolveConnection(inputs);

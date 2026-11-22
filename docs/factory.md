@@ -37,7 +37,7 @@ flowchart TD
 
 ---
 
-## 1. Core Principles & Factory Nomenclature
+## 1. Core Principles & Nomenclature
 
 This backend (`apps/factory`) is a standalone, stateful control plane built on **Bun + Hono + Drizzle ORM (`bun:sqlite` WAL) + Zod**.
 
@@ -47,7 +47,7 @@ This backend (`apps/factory`) is a standalone, stateful control plane built on *
    - Every repository defines its canonical project identifier in `.factory/config.json` via `"project": "<project-id>"` (e.g., `"project": "software-factory"`).
    - **Every `OrderPlan`, `WorkOrder`, and `Job` has a pinned `projectId`**.
    - **Cells** read `.factory/config.json` on startup and register with that `project` to the server, optionally declaring **`allowedLines`** (e.g., `["feature", "fast"]`) to restrict which Lines that Cell is allowed to execute.
-2. **3-Level Factory Hierarchy (`OrderPlan` → `WorkOrder` → `OrderStep` / `Job`)**:
+2. **3-Level HQ Hierarchy (`OrderPlan` → `WorkOrder` → `OrderStep` / `Job`)**:
    - **`OrderPlan`** _(optional)_: Groups related `WorkOrder`s under a shared incremental integration branch (`feat/<plan-slug>` branched from `baseBranch`, e.g., `main`), pinned to `projectId`.
    - **`WorkOrder`**: A deliverable unit of work pinned to `projectId`, owning a target feature branch (`factory/<order-slug>`) and referencing a `line` (`feature`, `standard`, `fast`). Can run **standalone** (`main → factory/<order-slug>`) or **inside an `OrderPlan`** (starting from the `OrderPlan` root branch `feat/<plan-slug>` or stacked on **at most 1 parent `WorkOrder`** via `parent_order_id`).
    - **`OrderStep` (Station) & `Job`**: A `WorkOrder`'s steps come from its **Line** definition in the repo's local `.factory/lines/<line>.yml` (e.g., `plan → plan-review → build → quality-gate → audit → deliver`). A **`Job`** is a concrete execution attempt of a step (or of `OrderPlan` branch initialization) claimed by a **`Cell`**. **Every `Job` always carries its pinned `projectId`, `lineName`, `baseBranch`, `targetBranch`, and `baseCommitSha`.**
@@ -210,7 +210,7 @@ When a Cell receives a `Job` (and the local line check in §3.2 passes), if it i
 sequenceDiagram
   autonumber
   participant C as Cell (Worker)
-  participant S as Factory Server (DB)
+  participant S as HQ Server (DB)
 
   C->>S: POST /api/v1/cells/claims
   S-->>C: Job (projectId, orderId, lineName, stepIndex: x, stepId, workspaceMode: "reuse",\nexpectedPriorSteps: [{ stepId: "step-0", requiredFiles: ["plan.md"] }, ...])
@@ -309,7 +309,7 @@ When the server receives `action: "worktree_missing"` from the Cell holding the 
 - A restarted Cell process gets a new id from its Factory daemon. There is no hello and no `resumedJob`.
 - Its old `active_job_id` stays locked until the Factory confirms the old process is dead (`gone`) or the lease expires. Then the Job is requeued and the new Cell claims it at the same step (`workspaceMode = 'reuse'`) when the worktree is intact (§3.3).
 
-### 3.7 Cell ↔ Factory Connection & Timing Constants (`≤ 5 Cells + 1 Server`)
+### 3.7 Cell ↔ HQ Connection & Timing Constants (`≤ 5 Cells + 1 Server`)
 
 For up to **5 Cells and 1 web server (`Bun.serve` + Hono + `bun:sqlite`)**, the transport layer uses **HTTP Keep-Alive REST + In-Memory Long-Polling (`waitMs`) + Piggybacked `nextJob`**:
 
@@ -438,8 +438,8 @@ Returns all matching `WorkOrder`s for a `projectId` rendered as clean Markdown s
 - **Shell one-liner to export server queue to `./todos/*.md`**:
   ```bash
   PROJECT_ID=$(jq -r '.project' .factory/config.json)
-  curl -sH "Authorization: Bearer $FACTORY_TOKEN" \
-    "$FACTORY_URL/api/v1/queue/export?projectId=$PROJECT_ID" | \
+  curl -sH "Authorization: Bearer $HQ_TOKEN" \
+    "$HQ_URL/api/v1/queue/export?projectId=$PROJECT_ID" | \
     jq -r '.files[] | @base64' | while read -r item; do
       file=$(echo "$item" | base64 -d | jq -r '.filename')
       echo "$item" | base64 -d | jq -r '.markdown' > "todos/$file"

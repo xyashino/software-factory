@@ -2,13 +2,13 @@
 
 ## Goal
 
-One shared package for opening and configuring SQLite via Bun + drizzle. Factory adopts first. Cell follows later.
+One shared package for opening and configuring SQLite via Bun + drizzle. HQ adopts first. Cell follows later.
 
 ## Why
 
 - `apps/cell/src/db/client.ts` and `apps/factory/src/db/client.ts` near-identical: pragmas, `createDb`, `immediateTx`, `Db`/`DbTx`, drizzle internals hack (`dialect`, `session`).
 - `columns.ts` byte-identical in both.
-- Factory skips `chmod 0600` on DB file. Cell does it. Factory holds `safeTokens`. Gap.
+- HQ skips `chmod 0600` on DB file. Cell does it. HQ holds `safeTokens`. Gap.
 - Drizzle upgrade can break internals hack. Today fix in two places.
 
 ## Decisions
@@ -36,7 +36,7 @@ Two todos, not one: package is reviewable alone, factory switch is the behavior 
 
 ## Risks
 
-- Factory DB files tighten to 0600 on open, incl. existing ones. Intended. Note in ADR.
+- HQ DB files tighten to 0600 on open, incl. existing ones. Intended. Note in ADR.
 - Kit Bun-only (`bun:sqlite`). Rename if runtime changes.
 - Generic `Db<S>` typing must keep procedure call sites compiling unchanged.
 

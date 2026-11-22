@@ -24,15 +24,15 @@ Terms: [glossary](./README.md#glossary).
 
 ```mermaid
 flowchart LR
-  S[Supervisor] -->|sf CLI| F[apps/factory]
+  S[Supervisor] -->|sf CLI| H[apps/factory: HQ]
   S -->|sf web| W[apps/web-demo]
-  W -->|/api/v1| F
-  C[sf cell daemon] -->|claims, transitions| F
+  W -->|/api/v1| H
+  C[sf cell daemon] -->|claims, transitions| H
   A[Operator agent] -->|sf operator, loopback| C
   S -->|sf factory| FD[Factory daemon]
   FD -->|spawns, kills| C
 ```
 
-Factory is the single control point. Cells are replaceable and can disconnect without losing finished work.
+HQ is the single control point. Cells are replaceable and can disconnect without losing finished work.
 
 Cell internals, which code runs a Cell, and the Factory daemon: [cell.md](./cell.md).

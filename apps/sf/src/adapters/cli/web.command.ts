@@ -1,6 +1,7 @@
 import { resolve } from 'node:path';
 import { defineCommand } from 'citty';
 import { buildContext } from '../../bootstrap/context';
+import { hqUrlEnv } from '../../bootstrap/hq-env';
 import { runWithoutToken, settle } from '../../bootstrap/run';
 import {
   DEFAULT_DATA_DIR,
@@ -48,7 +49,7 @@ const runStart = async (
       webEntry,
       webArgs: webArgsOf(IS_COMPILED, webEntry),
       dataDir: dataDirFromEnv(),
-      factoryUrl: process.env.FACTORY_URL ?? DEFAULT_FACTORY_URL,
+      factoryUrl: hqUrlEnv()?.value ?? DEFAULT_FACTORY_URL,
       projectId,
       host,
       port: portNumber,
@@ -112,11 +113,11 @@ const runStatus = async (
 export const webCommand = defineCommand({
   meta: {
     name: 'web',
-    description: 'Start, stop and check the factory web UI',
+    description: 'Start, stop and check the web UI',
   },
   subCommands: {
     start: defineCommand({
-      meta: { name: 'start', description: 'Start the factory web UI' },
+      meta: { name: 'start', description: 'Start the web UI' },
       args: {
         host: {
           type: 'string',
@@ -135,7 +136,7 @@ export const webCommand = defineCommand({
       },
     }),
     stop: defineCommand({
-      meta: { name: 'stop', description: 'Stop the factory web UI' },
+      meta: { name: 'stop', description: 'Stop the web UI' },
       args: { json: { type: 'boolean', default: false } },
       run: async ({ args }) => {
         process.exitCode = await runStop(args.json);
