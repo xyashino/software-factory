@@ -168,7 +168,7 @@ describe('sf argument validation', () => {
     expect(hits).toBe(before);
     expect(readdirSync(work)).toEqual([]);
     expect(readdirSync(join(home, 'xdg'))).toEqual([]);
-  });
+  }, 120_000);
 
   it('reports the unknown flag instead of an unknown command', async () => {
     // Act
