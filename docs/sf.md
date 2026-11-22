@@ -112,7 +112,7 @@ apps/sf/
 │   │   ├── fs/                     # .factory-local/cell.json (0600), pid file, .cell/ files
 │   │   ├── git/                    # worktree, checkpoint commit, push
 │   │   ├── process/                # spawn factory server, spawn runner
-│   │   ├── runners/                # claude, codex, cursor, antigravity, opencode (one file each)
+│   │   ├── runners/                # claude, codex, cursor, antigravity, opencode, copilot (one file each)
 │   │   ├── operator-endpoint/      # loopback listener per job (Hono, like `apps/factory`)
 │   │   └── memory/                 # clock, in-memory waiters for tests
 │   └── bootstrap/
@@ -153,7 +153,7 @@ The Cell is the only process that talks to the server. Agents never do.
 6. **Start the Job.** Send `transitions { action: start, epoch, lineSnapshot }`. The server
    materializes the steps.
 7. **Run the station.** Open the per-job loopback endpoint (see §5), set `FACTORY_OPERATOR_URL` and
-   `FACTORY_CYCLE_TOKEN`, start the runner (one of the five in §8), and write
+   `FACTORY_CYCLE_TOKEN`, start the runner (one of the six in §8), and write
    `.cell/<step-id>/state.json`.
 8. **Heartbeat.** Every 10 s, `POST /api/v1/cells/heartbeats`. Read `signals` in the reply, such as
    `abort`. If 4 heartbeats in a row fail (45 s), abort the runner. The lease is 60 s.
@@ -230,7 +230,7 @@ Decided:
    (45 s), a Cell aborts its runner, and its Job is lost once the lease ends (`apps/factory` PLAN §3.7).
    `sf server start` brings the server back, and Cells resume.
 5. **Cell token storage.** Not important for now. Keep the simplest option that works.
-6. **Runners in v2.0.** All five ship: `claude`, `codex`, `cursor`, `antigravity`, `opencode`. They match
+6. **Runners in v2.0.** All six ship: `claude`, `codex`, `cursor`, `antigravity`, `opencode`, `copilot`. They match
    the adapters in the legacy `registry.ts` runner registry.
 
 Open:

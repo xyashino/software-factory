@@ -33,6 +33,7 @@ describe('preference patch validation', () => {
       'cursor',
       'antigravity',
       'opencode',
+      'copilot',
     ])
       expect(validateSettingsPatch({ default_runner: runner })).toEqual({
         default_runner: runner,

@@ -1,6 +1,7 @@
 import { antigravityRunner } from './antigravity';
 import { claudeRunner } from './claude';
 import { codexRunner } from './codex';
+import { copilotRunner } from './copilot';
 import { cursorRunner } from './cursor';
 import { opencodeRunner } from './opencode';
 import type { RunnerAdapter } from './runner';
@@ -11,6 +12,7 @@ const ADAPTERS: readonly RunnerAdapter[] = [
   cursorRunner,
   antigravityRunner,
   opencodeRunner,
+  copilotRunner,
 ];
 
 const BY_NAME = new Map(ADAPTERS.map((adapter) => [adapter.name, adapter]));
