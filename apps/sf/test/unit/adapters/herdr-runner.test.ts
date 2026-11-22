@@ -224,8 +224,8 @@ describe('herdr pane runner', () => {
     const follow = calls.find(
       (call) => call[1] === 'pane' && call[2] === 'run',
     );
-    expect(follow?.[4]).toMatch(
-      /^mkdir -p '\/repo\/\.factory-local\/cells' && touch '\/repo\/\.factory-local\/cells\/omarchy\.log' && .*exec tail/,
+    expect(follow?.[4]).toContain(
+      `mkdir -p '${dirname(LOG_OPTIONS.logPath)}' && touch '${LOG_OPTIONS.logPath}' && `,
     );
   });
 
