@@ -6,6 +6,7 @@ Index of project docs, by topic. Each app keeps a short `README.md` pointing her
 - [factory.md](./factory.md): server design. State, Cell lifecycle, incidents, queue, tokens, agent reporting.
 - [sf.md](./sf.md): `sf` CLI. Command tree, Cell daemon, operator verbs, shared contracts.
 - [operator.md](./operator.md): `sf operator` client. Commands, exit codes, request shape.
+- [cell.md](./cell.md): Cell daemon vs cell-server, slots, operator endpoint, settings, local data.
 - [web-demo.md](./web-demo.md): Astro web UI served by `sf web start`.
 - [engineering.md](./engineering.md): backend layering, transactions, SQLite, testing.
 - [plans/](./plans/): open designs. Contracts, SQLite kit, docs.
