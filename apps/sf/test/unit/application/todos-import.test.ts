@@ -25,7 +25,32 @@ status: todo
 Body.
 `;
 
-const input = (dryRun: boolean) => ({ configPath: CONFIG, dir: DIR, dryRun });
+const CANCELLED = `---
+status: cancelled
+line: feature
+---
+# cli-07: old
+
+Body.
+`;
+
+const PAUSED_READY = `---
+status: paused
+priority: high
+line: feature
+plan: web-demo
+---
+# cli-05: queue
+
+Body.
+`;
+
+const input = (dryRun: boolean, paused = false) => ({
+  configPath: CONFIG,
+  dir: DIR,
+  dryRun,
+  paused,
+});
 
 describe('todos import', () => {
   it('lists the files it would send and sends nothing on dry run', async () => {
@@ -89,6 +114,42 @@ describe('todos import', () => {
     expect(result.errors).toEqual([
       { filename: 'cli-05.md', message: 'slug conflict' },
     ]);
+  });
+
+  it('sends work orders paused and keeps cancelled ones cancelled', async () => {
+    // Arrange
+    const fake = createFakePorts({
+      todos: { 'cli-05.md': READY, 'cli-07.md': CANCELLED },
+      reply: () => ({ created: 2, updated: 0, skipped: 0, errors: [] }),
+    });
+
+    // Act
+    const result = await runProcedure(importTodos, input(false, true), fake);
+
+    // Assert
+    expect(fake.calls[0]).toMatchObject({
+      body: {
+        files: [
+          { filename: 'cli-05.md', markdown: PAUSED_READY },
+          { filename: 'cli-07.md', markdown: CANCELLED },
+        ],
+      },
+    });
+    expect(result.paused).toBe(1);
+  });
+
+  it('counts the work orders it would pause on dry run without sending', async () => {
+    // Arrange
+    const fake = createFakePorts({
+      todos: { 'cli-05.md': READY, 'cli-07.md': CANCELLED },
+    });
+
+    // Act
+    const result = await runProcedure(importTodos, input(true, true), fake);
+
+    // Assert
+    expect(result.paused).toBe(1);
+    expect(fake.calls).toEqual([]);
   });
 
   it('refuses to run without a repo config', async () => {

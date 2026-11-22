@@ -22,14 +22,14 @@ const printImport = (result: ImportResult, json: boolean): void => {
   }
   if (result.mode === 'dry_run') {
     printLine(
-      `dry run: would send ${result.sent.length} file(s) to ${result.projectId}`,
+      `dry run: would send ${result.sent.length} file(s) to ${result.projectId}, paused ${result.paused}`,
     );
     for (const filename of result.sent) {
       printLine(`  send ${filename}`);
     }
   } else {
     printLine(
-      `imported to ${result.projectId}: created ${result.created}, updated ${result.updated}, unchanged ${result.unchanged}`,
+      `imported to ${result.projectId}: created ${result.created}, updated ${result.updated}, unchanged ${result.unchanged}, paused ${result.paused}`,
     );
   }
   for (const skip of result.skipped) {
@@ -54,13 +54,19 @@ const printExport = (result: ExportResult, json: boolean): void => {
   }
 };
 
-const runImport = async (dir: string, dryRun: boolean, json: boolean) => {
+const runImport = async (
+  dir: string,
+  dryRun: boolean,
+  paused: boolean,
+  json: boolean,
+) => {
   const result = await run(
     importTodos,
     {
       configPath: resolve(cwd(), REPO_CONFIG_PATH),
       dir: resolve(cwd(), dir),
       dryRun,
+      paused,
     },
     'supervisor',
   );
@@ -102,12 +108,19 @@ export const todosCommand = defineCommand({
       args: {
         dir: { type: 'string', default: DEFAULT_TODO_DIR },
         'dry-run': { type: 'boolean', default: false },
+        paused: {
+          type: 'boolean',
+          default: false,
+          description:
+            'Import every todo as paused, except cancelled. Files on disk are not changed',
+        },
         json: { type: 'boolean', default: false },
       },
       run: async ({ args }) => {
         process.exitCode = await runImport(
           args.dir,
           args['dry-run'],
+          args.paused,
           args.json,
         );
       },
