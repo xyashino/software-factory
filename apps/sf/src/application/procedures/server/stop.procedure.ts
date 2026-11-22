@@ -7,7 +7,8 @@ const POLL_INTERVAL_MS = 200;
 
 const StopSchema = z.object({ dataDir: z.string().min(1) }).strict();
 
-export type StopResult = { outcome: 'stopped' } | { outcome: 'not-running' };
+export type StopResult =
+  { outcome: 'stopped' } | { outcome: 'not-running'; warning?: string };
 
 const waitUntilExited = async (ctx: Ports, pid: number): Promise<boolean> => {
   const deadline = ctx.clock.now() + STOP_TIMEOUT_MS;
@@ -26,6 +27,12 @@ export const stopServer = define({ kind: 'supervisor' })(
   const pid = await ctx.pidFile.read(input.dataDir);
   if (pid === null || !ctx.process.isAlive(pid)) {
     await ctx.pidFile.remove(input.dataDir);
+    if (await ctx.server.probe()) {
+      return {
+        outcome: 'not-running',
+        warning: `something answers on ${ctx.connection.url}, not started by sf`,
+      };
+    }
     return { outcome: 'not-running' };
   }
   ctx.process.terminate(pid);

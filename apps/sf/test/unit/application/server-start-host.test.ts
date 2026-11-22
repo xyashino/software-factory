@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import type { DetachedSpec } from '../../../src/application/ports/process.port';
 import { startServer } from '../../../src/application/procedures/server/start.procedure';
 import { createFakePorts } from '../../support/fake-ports';
 
@@ -8,25 +7,12 @@ const SUPERVISOR = { kind: 'supervisor' } as const;
 const spawnedEnvFor = async (
   host: string | undefined,
 ): Promise<Record<string, string>> => {
-  const spawned: DetachedSpec[] = [];
-  const fake = createFakePorts().ports;
+  const fake = createFakePorts({ listening: 'after-spawn' });
   const ports = {
-    ...fake,
-    server: { ...fake.server, probe: async () => true },
-    pidFile: {
-      ...fake.pidFile,
-      read: async () => null,
-      write: async () => undefined,
-    },
-    clock: { now: () => 0, sleep: async () => undefined },
+    ...fake.ports,
     process: {
-      ...fake.process,
-      isAlive: () => false,
+      ...fake.ports.process,
       run: async () => ({ exitCode: 0, stdout: 'minted\n', stderr: '' }),
-      spawnDetached: async (spec: DetachedSpec) => {
-        spawned.push(spec);
-        return 1;
-      },
     },
   };
   await startServer.execute(
@@ -41,7 +27,7 @@ const spawnedEnvFor = async (
     },
     { ...ports, token: SUPERVISOR, principal: SUPERVISOR } as never,
   );
-  return { ...spawned[0]?.env };
+  return { ...fake.spawned[0]?.env };
 };
 
 describe('factory server start host', () => {
