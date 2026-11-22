@@ -6,6 +6,7 @@ import type {
 } from '../../../src/application/procedures/cell/cell-runtime';
 import { runJob } from '../../../src/application/procedures/cell/run-job.procedure';
 import type {
+  AbortOptions,
   RunOutcome,
   RunSpec,
 } from '../../../src/application/ports/runner.port';
@@ -74,24 +75,37 @@ interface Harness {
   runtime: CellRuntime;
   calls: ServerCall[];
   runs: RunSpec[];
+  aborts: (AbortOptions | undefined)[];
+  log: string[];
   control: {
     handler?: Handler;
     exit?: (outcome: RunOutcome) => void;
   };
 }
 
+const PANE = { workspaceId: 'w1', tabId: 'w1:t1', paneId: 'w1:t1:p1' };
+// eslint-disable-next-line no-control-regex
+const ANSI = /\u001b\[[0-9;]*m/g;
+
+const logTextOf = (h: Harness): string =>
+  h.log.join('\n').replace(ANSI, '').replace(/\s+/g, ' ');
+
 const transitionReply = (body: unknown) =>
   (body as { action: string }).action === 'fail'
     ? { code: 200, action: 'fail', failed: true, nextJob: JOB }
     : { code: 200, action: 'start', status: 'running' };
 
-const harness = (options: { timeoutFires?: boolean } = {}): Harness => {
+const harness = (
+  options: { timeoutFires?: boolean; interactive?: boolean } = {},
+): Harness => {
   const files = new Map<string, string>([
     [LINE_PATH, LINE_YAML],
     [PROFILE_PATH, PROFILE],
     [WORKTREE, ''],
   ]);
   const runs: RunSpec[] = [];
+  const aborts: (AbortOptions | undefined)[] = [];
+  const log: string[] = [];
   const control: Harness['control'] = {};
   const fake = createFakePorts({
     reply: (call) =>
@@ -111,21 +125,28 @@ const harness = (options: { timeoutFires?: boolean } = {}): Harness => {
       writeText: async (path, text) => {
         files.set(path, text);
       },
-      appendText: async () => undefined,
+      appendText: async (_path, text) => {
+        log.push(text);
+      },
       exists: async (path) => files.has(path),
     },
     runner: {
       prepare: async () => undefined,
       start: async (spec) => {
         runs.push(spec);
-        return { id: 'run-1' };
+        return options.interactive === true
+          ? { id: 'run-1', pane: PANE }
+          : { id: 'run-1' };
       },
-      abort: async () => true,
+      abort: async (_handle, abortOptions) => {
+        aborts.push(abortOptions);
+        return true;
+      },
       wait: (): Promise<RunOutcome> =>
         new Promise((done) => {
           control.exit = done;
         }),
-      interactiveAvailable: async () => false,
+      interactiveAvailable: async () => options.interactive === true,
     },
     runners: {
       names: () => ['antigravity'],
@@ -161,6 +182,8 @@ const harness = (options: { timeoutFires?: boolean } = {}): Harness => {
     },
     calls: fake.calls,
     runs,
+    aborts,
+    log,
     control,
   };
 };
@@ -303,6 +326,84 @@ describe('mechanic job', () => {
         action: 'fail',
         detail: 'mechanic timed out after 20m',
       }),
+    );
+  });
+});
+
+describe('mechanic pane', () => {
+  it('logs the pane ids of the tab it opens when herdr is up', async () => {
+    // Arrange
+    const h = harness({ interactive: true });
+    const job = runJob(h.runtime, JOB);
+    const run = await startedRun(h);
+    const handler = await operatorOf(h);
+
+    // Act
+    await handler({
+      verb: 'incident',
+      action: 'retry_step',
+      step: 'build',
+      diagnosis: 'gate flaked',
+      outcome: 'no edits',
+      report: 'Retry the build.',
+      token: tokenOf(run),
+    });
+    await job;
+
+    // Assert
+    expect(logTextOf(h)).toMatch(
+      /mechanic start runner=antigravity model=gemini-3.8-flash-medium headless=false/,
+    );
+    expect(logTextOf(h)).toMatch(/mechanic pane ws=w1 tab=w1:t1 pane=w1:t1:p1/);
+  });
+
+  it('keeps its pane open after it resolves its incident', async () => {
+    // Arrange
+    const h = harness({ interactive: true });
+    const job = runJob(h.runtime, JOB);
+    const run = await startedRun(h);
+    const handler = await operatorOf(h);
+
+    // Act
+    await handler({
+      verb: 'incident',
+      action: 'retry_step',
+      step: 'build',
+      diagnosis: 'gate flaked',
+      outcome: 'no edits',
+      report: 'Retry the build.',
+      token: tokenOf(run),
+    });
+    await job;
+
+    // Assert
+    expect(h.aborts).toEqual([{ keepPane: true }]);
+  });
+
+  it('closes its pane when it times out', async () => {
+    // Arrange
+    const h = harness({ interactive: true, timeoutFires: true });
+
+    // Act
+    await runJob(h.runtime, JOB);
+
+    // Assert
+    expect(h.aborts).toEqual([{ keepPane: false }]);
+  });
+
+  it('logs why it runs headless when herdr is down', async () => {
+    // Arrange
+    const h = harness({ interactive: false });
+    const job = runJob(h.runtime, JOB);
+    await startedRun(h);
+    await exitRunWith(h, { exitCode: 1 });
+
+    // Act
+    await job;
+
+    // Assert
+    expect(logTextOf(h)).toMatch(
+      /mechanic headless fallback=herdr server unavailable/,
     );
   });
 });

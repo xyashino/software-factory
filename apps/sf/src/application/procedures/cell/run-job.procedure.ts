@@ -100,9 +100,15 @@ interface Launch {
   interactive: boolean;
 }
 
+interface Plan {
+  launch: Launch;
+  fallback: Launch | null;
+  /** why a run that asked for a pane runs headless; empty when it did not ask or got one */
+  reason: string;
+}
+
 type LaunchPlan =
-  | { kind: 'ok'; launch: Launch; fallback: Launch | null }
-  | { kind: 'unavailable'; detail: string };
+  ({ kind: 'ok' } & Plan) | { kind: 'unavailable'; detail: string };
 
 type LineLoad =
   | { kind: 'ok'; snapshot: LineSnapshot; station: StepLine | undefined }
@@ -130,9 +136,11 @@ interface Serving {
 
 interface Run {
   dir: string;
-  plan: { launch: Launch; fallback: Launch | null };
+  plan: Plan;
   timeoutMs: number | null;
   serving: Serving | null;
+  /** a pane that ended on its own verb stays open for reading; abort and timeout still close it */
+  keepPane: boolean;
 }
 
 const cycleTokenOf = (): string =>
@@ -358,19 +366,33 @@ const launchOf = async (
     return { kind: 'unavailable', detail: `no runner adapter: ${runner}` };
   }
   const headlessLaunch: Launch = { ...headless, logPath, interactive: false };
-  const tui =
-    !agent.headless && (await runtime.ports.runner.interactiveAvailable())
-      ? runners.commandLine(runner, promptPath, {
-          ...options,
-          interactive: true,
-        })
-      : undefined;
+  if (agent.headless) {
+    return { kind: 'ok', launch: headlessLaunch, fallback: null, reason: '' };
+  }
+  if (!(await runtime.ports.runner.interactiveAvailable())) {
+    return {
+      kind: 'ok',
+      launch: headlessLaunch,
+      fallback: null,
+      reason: 'herdr server unavailable',
+    };
+  }
+  const tui = runners.commandLine(runner, promptPath, {
+    ...options,
+    interactive: true,
+  });
   return tui === undefined
-    ? { kind: 'ok', launch: headlessLaunch, fallback: null }
+    ? {
+        kind: 'ok',
+        launch: headlessLaunch,
+        fallback: null,
+        reason: `no interactive command for runner ${runner}`,
+      }
     : {
         kind: 'ok',
         launch: { ...tui, logPath, interactive: true },
         fallback: headlessLaunch,
+        reason: '',
       };
 };
 
@@ -1114,7 +1136,10 @@ const runOperator = async (
         FACTORY_CYCLE_TOKEN: cycleToken,
       },
     });
-  let mode = { interactive: run.plan.launch.interactive, reason: '' };
+  let mode = {
+    interactive: run.plan.launch.interactive,
+    reason: run.plan.reason,
+  };
   let handle: Awaited<ReturnType<typeof startRun>>;
   try {
     handle = await startRun(run.plan.launch);
@@ -1142,10 +1167,13 @@ const runOperator = async (
         ? undefined
         : `fallback=${mode.reason}`,
   );
-  const abortRun = async (detail: string): Promise<boolean> => {
+  const abortRun = async (
+    detail: string,
+    keepPane: boolean,
+  ): Promise<boolean> => {
     let confirmed = true;
     try {
-      confirmed = await ports.runner.abort(handle);
+      confirmed = await ports.runner.abort(handle, { keepPane });
     } catch {
       confirmed = false;
     }
@@ -1153,7 +1181,7 @@ const runOperator = async (
       runtime,
       job,
       'abort',
-      `${detail} confirmed=${confirmed ? 'yes' : 'no'}`,
+      `${detail} confirmed=${confirmed ? 'yes' : 'no'}${keepPane ? ' pane=kept' : ''}`,
     );
     return confirmed;
   };
@@ -1216,8 +1244,9 @@ const runOperator = async (
       outcome.kind === 'aborted'
         ? `heartbeat failures=${heartbeatFailures}`
         : outcome.kind;
+    const keepPane = run.keepPane && outcome.kind === 'operator';
     if (stopNeeded) {
-      if (!(await abortRun(`reason=${reason}`))) {
+      if (!(await abortRun(`reason=${reason}`, keepPane))) {
         // A second runner must never start in this worktree while the first lives: fail the job and stop claiming.
         await finishWithFail(
           runtime,
@@ -1246,7 +1275,7 @@ const execute = async (
   runtime: CellRuntime,
   job: ClaimedJob,
   station: StepLine,
-  plan: { launch: Launch; fallback: Launch | null },
+  plan: Plan,
 ): Promise<ClaimedJob | null> =>
   runOperator(
     runtime,
@@ -1256,6 +1285,7 @@ const execute = async (
       plan,
       timeoutMs: station.timeoutMs,
       serving: null,
+      keepPane: false,
     },
     (end, ran) => finish(runtime, job, station, end, ran),
   );
@@ -1451,6 +1481,7 @@ const runMechanic = async (
       plan,
       timeoutMs: mechanic.timeoutMs,
       serving: servingOf(runtime, job, snapshot),
+      keepPane: true,
     },
     (end, ran) => finishMechanic(runtime, job, mechanic.timeoutMs, end, ran),
   );
