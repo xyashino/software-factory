@@ -15,4 +15,8 @@ export interface GitPort {
   status(cwd: string): Promise<string>;
   clone(url: string, dest: string): Promise<void>;
   originUrl(cwd: string): Promise<string | null>;
+  resetHard(cwd: string, sha: string): Promise<void>;
+  clean(cwd: string): Promise<void>;
+  discardChanges(cwd: string): Promise<void>;
+  hasCommit(cwd: string, sha: string): Promise<boolean>;
 }

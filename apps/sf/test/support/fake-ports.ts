@@ -183,6 +183,10 @@ export const createFakePorts = (options: FakeOptions = {}): FakePorts => {
       status: unused,
       clone: unused,
       originUrl: unused,
+      resetHard: unused,
+      clean: unused,
+      discardChanges: unused,
+      hasCommit: unused,
     },
     pr: { publish: unused },
     process: {
