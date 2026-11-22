@@ -1038,13 +1038,27 @@ const runOperator = async (
         ? undefined
         : `fallback=${mode.reason}`,
   );
+  const abortRun = async (detail: string): Promise<void> => {
+    let confirmed = true;
+    try {
+      await ports.runner.abort(handle);
+    } catch {
+      confirmed = false;
+    }
+    await logLine(
+      runtime,
+      job,
+      'abort',
+      `${detail} confirmed=${confirmed ? 'yes' : 'no'}`,
+    );
+  };
   let ended = false;
   const exit: { code?: number } = {};
   if (run.timeoutMs) {
     void ports.clock.sleep(run.timeoutMs).then(() => {
       if (ended) return;
       end.resolve({ kind: 'timeout' });
-      void ports.runner.abort(handle);
+      void abortRun('reason=timeout');
     });
   }
   let forced = false;
@@ -1063,13 +1077,13 @@ const runOperator = async (
       ) {
         forced = true;
         end.resolve({ kind: 'drain-force' });
-        void ports.runner.abort(handle);
+        void abortRun('reason=drain-force');
       }
       return signals;
     },
-    onAbort: () => {
+    onAbort: (failures) => {
       end.resolve({ kind: 'aborted' });
-      void ports.runner.abort(handle);
+      void abortRun(`reason=heartbeat failures=${failures}`);
     },
   });
   void ports.runner.wait(handle).then(
@@ -1085,15 +1099,14 @@ const runOperator = async (
   try {
     const outcome = await end.promise;
     ended = true;
+    // A runner that reported a verb may still be shutting down: its exit is not known yet.
+    const ran = `exit=${exit.code ?? 'pending'} duration=${secondsOf(ports.clock.now() - startedAt)}`;
+    await logLine(runtime, job, 'end', `kind=${outcome.kind} ${ran}`);
     // A TUI stays open after its verb; close its tab once the step has reported.
     if (mode.interactive && outcome.kind === 'operator') {
-      await ports.runner.abort(handle);
+      await abortRun('reason=operator');
     }
-    // A runner that reported a verb may still be shutting down: its exit is not known yet.
-    return await finishRun(
-      outcome,
-      `exit=${exit.code ?? 'pending'} duration=${secondsOf(ports.clock.now() - startedAt)}`,
-    );
+    return await finishRun(outcome, ran);
   } finally {
     heartbeat.stop();
     await ports.operator.close();

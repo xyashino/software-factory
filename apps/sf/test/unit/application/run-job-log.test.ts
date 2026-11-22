@@ -10,18 +10,47 @@ import type {
   RunOutcome,
 } from '../../../src/application/ports/runner.port';
 import { drainStateOf } from '../../../src/cell/drain-signal';
-import { LINES_DIR, OPERATORS_DIR, WORKTREES_DIR } from '../../../src/config';
+import {
+  HEARTBEAT_INTERVAL_MS,
+  LINES_DIR,
+  OPERATORS_DIR,
+  WORKTREES_DIR,
+} from '../../../src/config';
 import { joinPath } from '../../../src/domain/common/path';
 import { slugOf } from '../../../src/domain/git/branch-names';
 import { createFakePorts } from '../../support/fake-ports';
 
 type Handler = (request: unknown) => Promise<unknown>;
 
+interface Sleeper {
+  ms: number;
+  wake: () => void;
+}
+
+interface Control {
+  handler?: Handler;
+  exit?: (outcome: RunOutcome) => void;
+  env?: Record<string, string>;
+  refuseAbort: boolean;
+  beat: { signals: string[]; down: boolean };
+}
+
+interface Harness {
+  runtime: CellRuntime;
+  lines: () => string[];
+  control: Control;
+  sleepers: Sleeper[];
+  advance: (ms: number) => void;
+}
+
 const REPO = '/repo';
 const GATE_MS = 15_000;
+const BUILD_TIMEOUT_MS = 60_000;
 const LINE_PATH = joinPath(REPO, LINES_DIR, 'feature.yml');
 const PROFILE_PATH = joinPath(REPO, OPERATORS_DIR, 'builder.md');
 const WORKTREE = joinPath(REPO, WORKTREES_DIR, slugOf('order-1'));
+const HEARTBEATS_ROUTE = '/api/v1/cells/heartbeats';
+const LEAVE_ROUTE = '/api/v1/cells/leave';
 // eslint-disable-next-line no-control-regex
 const ANSI = /\u001b\[[0-9;]*m/g;
 
@@ -36,6 +65,7 @@ stations:
   - id: build
     kind: operator
     operator: builder
+    timeout: 1m
   - id: quality-gate
     kind: inspection
     exec: ["pnpm ci:verify", "pnpm lint"]
@@ -76,22 +106,41 @@ const jobOf = (patch: Partial<ClaimedJob>): ClaimedJob => ({
   ...patch,
 });
 
-interface Harness {
-  runtime: CellRuntime;
-  lines: () => string[];
-  control: { handler?: Handler; exit?: (outcome: RunOutcome) => void };
-}
-
 const harness = (options: { interactive: boolean }): Harness => {
   const files = new Map<string, string>([
     [LINE_PATH, LINE_YAML],
     [PROFILE_PATH, PROFILE],
   ]);
   const log: string[] = [];
-  const control: Harness['control'] = {};
+  const sleepers: Sleeper[] = [];
+  const control: Control = {
+    refuseAbort: false,
+    beat: { signals: [], down: false },
+  };
   const clock = { at: 0 };
+  const advance = (ms: number): void => {
+    clock.at += ms;
+    const due = sleepers.filter((sleeper) => sleeper.ms === ms);
+    for (const sleeper of due) {
+      sleepers.splice(sleepers.indexOf(sleeper), 1);
+    }
+    for (const sleeper of due) {
+      sleeper.wake();
+    }
+  };
   const fake = createFakePorts({
     reply: (call) => {
+      if (call.route === HEARTBEATS_ROUTE) {
+        if (control.beat.down) throw new Error('server down');
+        return {
+          code: 200,
+          leaseExpiresAt: null,
+          signals: control.beat.signals,
+        };
+      }
+      if (call.route === LEAVE_ROUTE) {
+        return { code: 200, status: 'left' };
+      }
       const action = (call.body as { action?: string } | undefined)?.action;
       if (action === 'start') {
         return { code: 200, action, status: 'running' };
@@ -135,8 +184,13 @@ const harness = (options: { interactive: boolean }): Harness => {
     },
     runner: {
       prepare: async () => undefined,
-      start: async () => PANE,
-      abort: async () => undefined,
+      start: async (spec) => {
+        control.env = spec.env;
+        return PANE;
+      },
+      abort: async () => {
+        if (control.refuseAbort) throw new Error('runner refused abort');
+      },
       wait: (): Promise<RunOutcome> =>
         new Promise((done) => {
           control.exit = done;
@@ -160,7 +214,10 @@ const harness = (options: { interactive: boolean }): Harness => {
     },
     clock: {
       now: () => clock.at,
-      sleep: () => new Promise<void>(() => undefined),
+      sleep: (ms) =>
+        new Promise<void>((wake) => {
+          sleepers.push({ ms, wake });
+        }),
     },
   };
   return {
@@ -176,6 +233,8 @@ const harness = (options: { interactive: boolean }): Harness => {
     lines: () =>
       log.map((text) => text.replace(ANSI, '').trim().replace(/\s+/g, ' ')),
     control,
+    sleepers,
+    advance,
   };
 };
 
@@ -184,6 +243,13 @@ const paneLogged = async (h: Harness): Promise<void> => {
     expect(h.lines().some((line) => line.includes(' pane '))).toBe(true),
   );
   await vi.waitFor(() => expect(h.control.exit).toBeDefined());
+};
+
+const fireAfter = async (h: Harness, ms: number): Promise<void> => {
+  await vi.waitFor(() =>
+    expect(h.sleepers.some((sleeper) => sleeper.ms === ms)).toBe(true),
+  );
+  h.advance(ms);
 };
 
 describe('cell log detail', () => {
@@ -270,5 +336,139 @@ describe('cell log detail', () => {
         /worktree_missing missing \.cell\/worktree\.json, \.cell\/build\/state\.json$/,
       ),
     );
+  });
+});
+
+describe('cell run outcome log', () => {
+  it('logs the exit code when the runner exits before a verdict', async () => {
+    const h = harness({ interactive: true });
+    const job = runJob(h.runtime, jobOf({}));
+    await paneLogged(h);
+
+    h.control.exit?.({ exitCode: 3 });
+    await job;
+
+    expect(h.lines()).toContainEqual(
+      expect.stringMatching(/build end kind=exited exit=3 duration=0s$/),
+    );
+  });
+
+  it('logs the verb that ended the run and closes the pane', async () => {
+    const h = harness({ interactive: true });
+    const job = runJob(h.runtime, jobOf({}));
+    await paneLogged(h);
+
+    await h.control.handler?.({
+      verb: 'done',
+      token: h.control.env?.FACTORY_CYCLE_TOKEN,
+    });
+    await job;
+
+    const lines = h.lines();
+    expect(lines).toContainEqual(
+      expect.stringMatching(
+        /build end kind=operator exit=pending duration=0s$/,
+      ),
+    );
+    expect(lines).toContainEqual(
+      expect.stringMatching(/build abort reason=operator confirmed=yes$/),
+    );
+  });
+
+  it('logs the timeout end and the abort of the runner', async () => {
+    const h = harness({ interactive: true });
+    const job = runJob(h.runtime, jobOf({}));
+    await paneLogged(h);
+
+    await fireAfter(h, BUILD_TIMEOUT_MS);
+    await job;
+
+    const lines = h.lines();
+    expect(lines).toContainEqual(
+      expect.stringMatching(
+        /build end kind=timeout exit=pending duration=60s$/,
+      ),
+    );
+    expect(lines).toContainEqual(
+      expect.stringMatching(/build abort reason=timeout confirmed=yes$/),
+    );
+    expect(lines).toContainEqual(
+      expect.stringMatching(
+        /build fail exit=pending duration=60s station timed out after 1m$/,
+      ),
+    );
+  });
+
+  it('marks an abort the runner refused as not confirmed', async () => {
+    const h = harness({ interactive: true });
+    h.control.refuseAbort = true;
+    const job = runJob(h.runtime, jobOf({}));
+    await paneLogged(h);
+
+    await fireAfter(h, BUILD_TIMEOUT_MS);
+    await job;
+
+    expect(h.lines()).toContainEqual(
+      expect.stringMatching(/build abort reason=timeout confirmed=no$/),
+    );
+  });
+
+  it('logs the drain-force end and the abort of the runner', async () => {
+    const h = harness({ interactive: true });
+    const job = runJob(h.runtime, jobOf({}));
+    await paneLogged(h);
+
+    h.control.beat.signals = ['force'];
+    await fireAfter(h, HEARTBEAT_INTERVAL_MS);
+    await job;
+
+    const lines = h.lines();
+    expect(lines).toContainEqual(
+      expect.stringMatching(
+        /build end kind=drain-force exit=pending duration=10s$/,
+      ),
+    );
+    expect(lines).toContainEqual(
+      expect.stringMatching(/build abort reason=drain-force confirmed=yes$/),
+    );
+  });
+
+  it('logs the heartbeat failure count that aborted the run', async () => {
+    const h = harness({ interactive: true });
+    const job = runJob(h.runtime, jobOf({}));
+    await paneLogged(h);
+
+    h.control.beat.down = true;
+    for (let beat = 0; beat < 4; beat += 1) {
+      await fireAfter(h, HEARTBEAT_INTERVAL_MS);
+    }
+    await job;
+
+    const lines = h.lines();
+    expect(lines).toContainEqual(
+      expect.stringMatching(
+        /build end kind=aborted exit=pending duration=40s$/,
+      ),
+    );
+    expect(lines).toContainEqual(
+      expect.stringMatching(
+        /build abort reason=heartbeat failures=4 confirmed=yes$/,
+      ),
+    );
+  });
+
+  it('keeps tokens out of every log line', async () => {
+    const h = harness({ interactive: true });
+    const job = runJob(h.runtime, jobOf({}));
+    await paneLogged(h);
+    const cycleToken = h.control.env?.FACTORY_CYCLE_TOKEN ?? '';
+
+    await h.control.handler?.({ verb: 'done', token: cycleToken });
+    await job;
+
+    const text = h.lines().join('\n');
+    expect(cycleToken).not.toBe('');
+    expect(text).not.toContain(cycleToken);
+    expect(text).not.toContain('session-token');
   });
 });
