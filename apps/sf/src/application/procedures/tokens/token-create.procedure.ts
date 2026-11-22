@@ -1,5 +1,6 @@
+import { issueTokenContract } from '@repo/factory-contracts/tokens.contract';
+import { titleSchema } from '@repo/zod-contract-kit/fields';
 import { z } from 'zod';
-import { issueTokenContract } from '../../../contracts/tokens.contract';
 import { define } from '../../core/procedure';
 import { readSecret } from '../../core/repo-access';
 
@@ -8,7 +9,7 @@ const TOKENS_ROUTE = '/api/v1/tokens';
 const TokenCreateSchema = z
   .object({
     kind: z.enum(['cell_join', 'supervisor']),
-    name: z.string().trim().min(1),
+    name: titleSchema,
   })
   .strict();
 

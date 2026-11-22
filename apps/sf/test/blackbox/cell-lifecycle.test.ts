@@ -233,9 +233,9 @@ const serverReplies = (
     if (call.route === CLAIMS_ROUTE) {
       if (queue.length === 0) {
         stop();
-        return { code: 200, job: null };
+        return { code: 200, job: null, signals: [] };
       }
-      return { code: 200, job: queue.shift() };
+      return { code: 200, job: queue.shift(), signals: [] };
     }
     if (call.route === HEARTBEATS_ROUTE) {
       return { code: 200, leaseExpiresAt: 1, signals: [] };

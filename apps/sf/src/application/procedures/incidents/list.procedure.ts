@@ -1,5 +1,8 @@
 import { z } from 'zod';
-import { INCIDENT_REASONS, INCIDENT_STATUSES } from '../../../contracts/common';
+import {
+  INCIDENT_REASONS,
+  INCIDENT_STATUSES,
+} from '@repo/factory-contracts/enums/incidents';
 import { define } from '../../core/procedure';
 import { readProjectId, readSecret } from '../../core/repo-access';
 

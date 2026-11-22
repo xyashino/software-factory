@@ -394,6 +394,12 @@ importers:
 
   apps/sf:
     dependencies:
+      '@repo/factory-contracts':
+        specifier: workspace:*
+        version: link:../../packages/factory-contracts
+      '@repo/zod-contract-kit':
+        specifier: workspace:*
+        version: link:../../packages/zod-contract-kit
       citty:
         specifier: 'catalog:'
         version: 0.2.2

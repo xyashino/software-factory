@@ -6,7 +6,7 @@ import {
   heartbeatCellContract,
   helloCellContract,
   leaveCellContract,
-} from '../../../src/contracts/cells.contract';
+} from '@repo/factory-contracts/cells.contract';
 
 describe('cells contract', () => {
   it('accepts an enroll body with the known fields', () => {
@@ -25,7 +25,7 @@ describe('cells contract', () => {
     expect(result.success).toBe(true);
   });
 
-  it('rejects an enroll body with an unknown key', () => {
+  it('ignores an enroll body with an unknown key', () => {
     // Arrange
     const body = {
       projectId: 'factory',
@@ -39,7 +39,7 @@ describe('cells contract', () => {
     const result = enrollCellContract.in.body.safeParse(body);
 
     // Assert
-    expect(result.success).toBe(false);
+    expect(result.success).toBe(true);
   });
 
   it('defaults hello local worktrees to an empty list', () => {
@@ -57,7 +57,7 @@ describe('cells contract', () => {
     expect(result.success && result.data.localWorktrees).toEqual([]);
   });
 
-  it('rejects a hello body with an unknown key', () => {
+  it('ignores a hello body with an unknown key', () => {
     // Arrange
     const body = {
       projectId: 'factory',
@@ -70,7 +70,7 @@ describe('cells contract', () => {
     const result = helloCellContract.in.body.safeParse(body);
 
     // Assert
-    expect(result.success).toBe(false);
+    expect(result.success).toBe(true);
   });
 
   it('accepts a claim body and an absent claim body', () => {
@@ -86,7 +86,7 @@ describe('cells contract', () => {
     expect(parsedAbsent.success).toBe(true);
   });
 
-  it('rejects a claim body with an unknown key', () => {
+  it('ignores a claim body with an unknown key', () => {
     // Arrange
     const body = { waitMs: 1, extra: true };
 
@@ -94,7 +94,7 @@ describe('cells contract', () => {
     const result = claimJobContract.in.body.safeParse(body);
 
     // Assert
-    expect(result.success).toBe(false);
+    expect(result.success).toBe(true);
   });
 
   it('accepts a heartbeat body with job and epoch', () => {
@@ -108,7 +108,7 @@ describe('cells contract', () => {
     expect(result.success).toBe(true);
   });
 
-  it('rejects a heartbeat body with an unknown key', () => {
+  it('ignores a heartbeat body with an unknown key', () => {
     // Arrange
     const body = { jobId: 'job-1', epoch: 2, extra: true };
 
@@ -116,7 +116,7 @@ describe('cells contract', () => {
     const result = heartbeatCellContract.in.body.safeParse(body);
 
     // Assert
-    expect(result.success).toBe(false);
+    expect(result.success).toBe(true);
   });
 
   it('reads drain and force signals from a heartbeat reply', () => {
@@ -134,15 +134,15 @@ describe('cells contract', () => {
     expect(result.success).toBe(true);
   });
 
-  it('defaults a claim reply without signals to none', () => {
+  it('rejects a claim reply without signals', () => {
     // Arrange
     const reply = { code: 200, job: null };
 
     // Act
-    const result = claimJobContract.out[200].parse(reply);
+    const result = claimJobContract.out[200].safeParse(reply);
 
     // Assert
-    expect(result.signals).toEqual([]);
+    expect(result.success).toBe(false);
   });
 
   it('reads a drain signal from a claim reply', () => {

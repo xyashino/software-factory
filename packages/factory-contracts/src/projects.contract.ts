@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { projectIdSchema } from './common';
 
-const projectDto = z.object({
+export const projectDto = z.object({
   projectId: z.string(),
   repoUrl: z.string(),
   defaultBaseBranch: z.string(),

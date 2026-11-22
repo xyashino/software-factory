@@ -1,5 +1,5 @@
 import { observeDrain } from '../../../cell/drain-signal';
-import { claimJobContract } from '../../../contracts/cells.contract';
+import { claimJobContract } from '@repo/factory-contracts/cells.contract';
 import { nextStep, type NextStep } from '../../../domain/cell/cell-loop';
 import { type CellRuntime, type ClaimedJob } from './cell-runtime';
 import { leaveCell } from './leave.procedure';
