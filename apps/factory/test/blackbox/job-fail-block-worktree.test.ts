@@ -325,6 +325,34 @@ describe('job fail, block and worktree_missing transitions', () => {
     });
   });
 
+  it('a cell reports a missing worktree before it starts the job', async () => {
+    const { app, db } = setup();
+    const token = CELL;
+    const first = await claimJob(app, token);
+    await startJob(app, token, first);
+    const retry = nextJobOf(
+      (await failJob(app, token, first, 'fail-build')).body,
+    );
+
+    const { status, body } = await transition(app, token, retry.jobId, {
+      action: 'worktree_missing',
+      commandId: 'missing-claimed',
+      epoch: retry.epoch,
+      missingStepId: stepIdOf(db, 'build'),
+      missingFiles: ['.cell/worktree.json'],
+    });
+
+    expect(status).toBe(200);
+    expect(body).toMatchObject({
+      action: 'worktree_missing',
+      resetToScratch: true,
+    });
+    expect(orderOf(db)).toMatchObject({
+      worktreeResets: 1,
+      currentStepIndex: 0,
+    });
+  });
+
   it('the third worktree reset blocks the order with a worktree_reset_limit incident', async () => {
     const { app, db } = setup();
     const token = CELL;

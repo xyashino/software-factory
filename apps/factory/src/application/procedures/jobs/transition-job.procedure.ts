@@ -191,8 +191,8 @@ const fence = (job: JobRow, cellId: CellId, epoch: number): void => {
     throw new StaleLeaseEpoch(`Job ${job.jobId} epoch ${epoch} is stale`);
 };
 
-const requireStatus = (job: JobRow, status: JobRow['status']): void => {
-  if (job.status !== status)
+const requireStatus = (job: JobRow, ...statuses: JobRow['status'][]): void => {
+  if (!statuses.includes(job.status))
     throw new Conflict(`Job ${job.jobId} cannot transition from ${job.status}`);
 };
 
@@ -585,7 +585,11 @@ const issueJob = (
     },
     now,
   );
-  return toClaimedJob(nextJob, leaseExpiresAt);
+  return toClaimedJob(
+    nextJob,
+    leaseExpiresAt,
+    input.orderPatch.headCommitSha ?? order.headCommitSha ?? order.baseCommitSha,
+  );
 };
 
 const advanceOrder = (
@@ -909,7 +913,7 @@ const resetWorktree = (
   now: number,
   log: TransitionLog,
 ): TransitionResponse => {
-  requireStatus(job, 'running');
+  requireStatus(job, 'claimed', 'running');
   const order = requireOrder(tx, orderIdOf(job));
   const missing = stepWithId(stepsOf(tx, order.orderId), input.missingStepId);
   const reset = planWorktreeMissing(order.worktreeResets);

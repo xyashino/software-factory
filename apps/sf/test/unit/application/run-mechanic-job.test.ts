@@ -61,6 +61,7 @@ const JOB: ClaimedJob = {
   repoUrl: 'git@example.test:repo.git',
   baseBranch: 'main',
   baseCommitSha: null,
+  headCommitSha: null,
   targetBranch: 'factory/order-1',
   expectedPriorSteps: [],
   incidentId: 'inc-1',

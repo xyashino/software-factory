@@ -31,6 +31,7 @@ export const claimedJobDto = z.object({
   repoUrl: z.string(),
   baseBranch: z.string(),
   baseCommitSha: z.string().nullable(),
+  headCommitSha: z.string().nullable(),
   targetBranch: z.string(),
   expectedPriorSteps: z.array(
     z.object({

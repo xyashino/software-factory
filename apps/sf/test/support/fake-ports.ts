@@ -176,6 +176,7 @@ export const createFakePorts = (options: FakeOptions = {}): FakePorts => {
       isClean: unused,
       worktreeAdd: unused,
       worktreeRemove: unused,
+      deleteBranch: unused,
       excludeLocally: unused,
       commit: unused,
       push: unused,
