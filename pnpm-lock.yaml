@@ -427,6 +427,9 @@ importers:
       '@astrojs/node':
         specifier: 'catalog:'
         version: 11.1.9(astro@7.4.5(@types/node@26.6.4)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))(supports-color@7.2.0)
+      '@repo/factory-contracts':
+        specifier: workspace:*
+        version: link:../../packages/factory-contracts
       astro:
         specifier: 'catalog:'
         version: 7.4.5(@types/node@26.6.4)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)
