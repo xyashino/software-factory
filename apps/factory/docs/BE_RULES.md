@@ -131,19 +131,10 @@ apps/factory/
 
 ## 3. Code Style & TypeScript Rules (Repo-Wide Nitpick Compliance)
 
-1. **No barrel exports (`index.ts`)**: Never create re-export barrel files (`index.ts` that only `export * from ...`). Import concrete module paths directly (`../../application/core/procedure`). Exception: package root `src/index.ts` server entrypoint.
-2. **Declaration export order (`coding-export-order`)**: Every `.ts` file orders top-level declarations into at most 4 non-interleaved blocks from top to bottom:
-   1. Constants (`const` values, private and exported together; constants read at module load time go above their reader)
-   2. Types and interfaces (`type`, `interface`, `abstract class` / error classes)
-   3. Private helper functions (`const helper = (...) => ...`)
-   4. Exported functions / procedures / routers (`export const myProcedure = ...`)
-   Never alternate `const` -> `interface` -> `const`.
-3. **Arrow functions only**: Use `const fn = (...) => ...` everywhere (implementation and tests). `function` declarations are forbidden except where TypeScript requires overload signatures on a single adapter helper.
-4. **Strict TypeScript (`ts-strict`, `ts-exhaustive`, `ts-unknown-as`)**:
-   - Zero `any` (only permitted in a single variance type alias like `AnyZodProcedure` with an explicit reason comment).
-   - Avoid `as unknown as`; narrow with Zod, discriminated unions, or type guards.
-   - Exhaustive `switch` checks on all state/action unions (`default: { const _exhaustive: never = value; return _exhaustive; }`).
-5. **Minimal comments (`coding-minimal-comments`)**: Comment only non-obvious invariants or SQLite/protocol constraints. Never narrate what code does or reference task/step numbers.
+Shared style rules (`coding-no-barrel-export`, `coding-export-order`, `coding-minimal-comments`, `ts-strict`, `ts-exhaustive`, `ts-unknown-as`) live in [`.nitpick/rules/`](../../../.nitpick/rules/) and apply to this app. Not repeated here.
+
+1. **Arrow functions only**: Use `const fn = (...) => ...` everywhere (implementation and tests). `function` declarations are forbidden except where TypeScript requires overload signatures on a single adapter helper.
+2. **Barrel exception**: package root `src/index.ts` (server entrypoint) is exempt from `coding-no-barrel-export`.
 
 ---
 
