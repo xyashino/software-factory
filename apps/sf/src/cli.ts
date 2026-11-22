@@ -13,6 +13,7 @@ import { projectCommand } from './adapters/cli/project.command';
 import { queueCommand } from './adapters/cli/queue.command';
 import { argsOf, resolveCommand } from './adapters/cli/resolve-command';
 import { serverCommand } from './adapters/cli/server.command';
+import { setupCommand } from './adapters/cli/setup.command';
 import { targetCommand } from './adapters/cli/target.command';
 import { todosCommand } from './adapters/cli/todos.command';
 import { tokenCommand } from './adapters/cli/token.command';
@@ -33,6 +34,7 @@ const main = defineCommand({
   subCommands: {
     server: serverCommand,
     doctor: doctorCommand,
+    setup: setupCommand,
     connect: connectCommand,
     target: targetCommand,
     todos: todosCommand,
