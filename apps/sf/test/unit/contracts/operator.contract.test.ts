@@ -9,7 +9,8 @@ import {
   verdictVerb,
 } from '../../../src/contracts/operator.contract';
 
-const TOKEN = 'cycle-token';
+const TOKEN = 'cycle-token-0123456789';
+const TEXT_LIMIT = 65536;
 
 describe('operator contract', () => {
   it('accepts a done verb with the job token', () => {
@@ -110,6 +111,78 @@ describe('operator contract', () => {
       diagnosis: 'lint failed',
       outcome: 'retried once',
       report: '## What happened',
+      token: TOKEN,
+    };
+
+    // Act
+    const result = incidentVerb.safeParse(request);
+
+    // Assert
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects a token shorter than 16 characters', () => {
+    // Arrange
+    const request = { verb: 'done', token: 'short-token' };
+
+    // Act
+    const result = doneVerb.safeParse(request);
+
+    // Assert
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects a token longer than 256 characters', () => {
+    // Arrange
+    const request = { verb: 'done', token: 'a'.repeat(257) };
+
+    // Act
+    const result = doneVerb.safeParse(request);
+
+    // Assert
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects verdict feedback over the size limit', () => {
+    // Arrange
+    const request = {
+      verb: 'verdict',
+      outcome: 'fail',
+      feedback: 'x'.repeat(TEXT_LIMIT + 1),
+      token: TOKEN,
+    };
+
+    // Act
+    const result = verdictVerb.safeParse(request);
+
+    // Assert
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects a block handover over the size limit', () => {
+    // Arrange
+    const request = {
+      verb: 'block',
+      reason: 'needs a human',
+      handover: 'x'.repeat(TEXT_LIMIT + 1),
+      token: TOKEN,
+    };
+
+    // Act
+    const result = blockVerb.safeParse(request);
+
+    // Assert
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects an incident report over the size limit', () => {
+    // Arrange
+    const request = {
+      verb: 'incident',
+      action: 'escalate',
+      diagnosis: 'lint failed',
+      outcome: 'retried once',
+      report: 'x'.repeat(TEXT_LIMIT + 1),
       token: TOKEN,
     };
 

@@ -26,6 +26,7 @@ interface Hit {
 interface Reply {
   status: number;
   body: unknown;
+  raw?: boolean;
 }
 
 interface CliResult {
@@ -69,7 +70,11 @@ const startStubCell = (): Promise<Server> =>
       });
       response.statusCode = stub.reply.status;
       response.setHeader('content-type', 'application/json');
-      response.end(JSON.stringify(stub.reply.body));
+      response.end(
+        stub.reply.raw === true
+          ? String(stub.reply.body)
+          : JSON.stringify(stub.reply.body),
+      );
     });
     server.listen(0, '127.0.0.1', () => resolve(server));
   });
@@ -329,6 +334,59 @@ describe('factory operator verbs', () => {
     expect(result.code).toBe(EXIT_UNREACHABLE);
     expect(result.stderr).toContain('cannot reach the Cell');
     expect(result.stderr).not.toContain(CYCLE_TOKEN);
+  });
+
+  it('exits 3 when the cell replies with text that is not JSON', async () => {
+    // Arrange
+    stub.reply = { status: 200, body: 'not json', raw: true };
+
+    // Act
+    const result = await runCli(['operator', 'done'], cellEnv());
+
+    // Assert
+    expect(result.code).toBe(EXIT_UNREACHABLE);
+    expect(result.stderr).toContain('cannot read');
+    expect(result.stdout).toBe('');
+  });
+
+  it('exits 3 when the cell replies with a status the protocol does not define', async () => {
+    // Arrange
+    stub.reply = { status: 503, body: { message: 'busy' } };
+
+    // Act
+    const result = await runCli(['operator', 'done'], cellEnv());
+
+    // Assert
+    expect(result.code).toBe(EXIT_UNREACHABLE);
+    expect(result.stdout).toBe('');
+  });
+
+  it.each([400, 401, 500])(
+    'prints code and message and exits 1 for a %i reply',
+    async (status) => {
+      // Arrange
+      stub.reply = { status, body: { code: status, message: 'refused' } };
+
+      // Act
+      const result = await runCli(['operator', 'done'], cellEnv());
+
+      // Assert
+      expect(result.code).toBe(EXIT_REFUSED);
+      expect(result.stderr).toBe(`${status}: refused\n`);
+    },
+  );
+
+  it('exits 3 and sends nothing when the operator url is not a URL', async () => {
+    // Arrange
+    const env = cellEnv({ FACTORY_OPERATOR_URL: 'not a url' });
+
+    // Act
+    const result = await runCli(['operator', 'done'], env);
+
+    // Assert
+    expect(result.code).toBe(EXIT_UNREACHABLE);
+    expect(result.stderr).not.toContain(CYCLE_TOKEN);
+    expect(hitsNow()).toEqual([]);
   });
 
   it('exits 2 and sends nothing when the cycle token is not set', async () => {

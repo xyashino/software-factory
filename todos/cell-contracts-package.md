@@ -27,7 +27,7 @@ Cell API contracts live in `apps/cell/src/contracts/`. sf talks to cell-server w
 - **Dependencies**:
   - `zod: catalog:`
   - `@repo/zod-contract-kit: workspace:*`
-  - dev: same toolchain set as `packages/operator-protocol`
+  - dev: same toolchain set as `packages/prompt`
 - Out: sf, domain logic, supervisor/runtime code.
 
 ---

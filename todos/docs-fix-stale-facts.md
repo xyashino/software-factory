@@ -16,13 +16,13 @@ Docs match the repo: real app and package names, real cell status, resolved `fac
 
 ## 🌐 Context & Problem Statement
 
-Operator docs name `apps/operator-cli` / `@repo/factory-operator-cli`; real is `apps/operator` / `@repo/operator`. sf PLAN says Cell app removed; `apps/cell` exists. sf PLAN §7 cites a "no `factory-` prefix" operator boundary rule not found in operator docs; it blocks the name `@repo/factory-contracts`. Wrong docs mislead agents. See `docs/docs-plan.md`.
+sf PLAN says Cell app removed; `apps/cell` exists. sf PLAN §7 cites a "no `factory-` prefix" operator boundary rule not found in operator docs; it blocks the name `@repo/factory-contracts`. Wrong docs mislead agents. See `docs/docs-plan.md`.
 
 ---
 
 ## 📦 Specification / Scope
 
-- **Target**: `apps/operator/docs`, `apps/sf/docs`, `apps/factory/docs`, `apps/web-demo/docs`
+- **Target**: `apps/sf/docs`, `apps/factory/docs`, `apps/web-demo/docs`
 - **Classification**: `Universal Tooling`
 - **Dependencies**: none
 - Out: moving files, deleting sections, new docs.
