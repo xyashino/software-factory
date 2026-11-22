@@ -32,6 +32,32 @@
     "//#docs:test": {
       "inputs": ["scripts/check-doc-links*.ts"]
     },
+    "//#todo:lint": {
+      "inputs": [
+        "todos/**",
+        ".factory/lines/**",
+        "scripts/**",
+        "apps/factory/src/domain/queue/**",
+        "apps/factory/src/domain/orders/order-state.ts"
+      ]
+    },
+    "//#test:scripts": {
+      "inputs": [
+        "todos/**",
+        ".factory/lines/**",
+        "scripts/**",
+        "apps/factory/src/domain/queue/**",
+        "apps/factory/src/domain/orders/order-state.ts"
+      ]
+    },
+    "//#check-types:scripts": {
+      "inputs": [
+        "scripts/**",
+        "apps/factory/src/domain/queue/**",
+        "apps/factory/src/domain/orders/order-state.ts",
+        "packages/typescript-config/*.json"
+      ]
+    },
     "build": {
       "dependsOn": ["^build"],
       "outputs": ["dist/**", ".astro/**"]
