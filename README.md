@@ -40,7 +40,15 @@ pnpm ci:verify    # format, lint, typecheck, test, build
 
 ## Install `sf`
 
-`sf` is one standalone binary (server, init templates and migrations embedded) plus the web UI. Build and install it from this checkout, as your user, with no admin rights needed.
+`sf` is one standalone binary (server, init templates and migrations embedded) plus the web UI. Install a prebuilt release with no Node, pnpm or Bun (Linux x64/arm64, macOS arm64):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/xyashino/software-factory/main/scripts/install-release.sh | sh   # ~/.local/bin/sf, ~/.local/share/sf/web
+```
+
+The script checks each asset against `SHA256SUMS` before it writes anything. `SF_VERSION=v1.2.3` pins a tag, `PREFIX` changes the install root. `SHA256SUMS` covers the release assets, not the script.
+
+Or build and install from this checkout, as your user, with no admin rights needed.
 
 Linux:
 
