@@ -1,10 +1,6 @@
 import { parse } from 'yaml';
-import {
-  ORDER_TYPES,
-  PRIORITIES,
-  type OrderType,
-  type Priority,
-} from '../orders/order-state';
+import { ORDER_TYPES, PRIORITIES } from '@repo/factory-contracts/enums/orders';
+import type { OrderType, Priority } from '../orders/order-state';
 
 export const TODO_STATUSES = ['queued', 'paused', 'cancelled'] as const;
 

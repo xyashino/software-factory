@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm';
 import { immediateTx, type DbTx } from '../../../db/client';
 import { cells } from '../../../db/schema/cells';
-import { drainCellContract } from '../../../contracts/cells.contract';
+import { drainCellContract } from '@repo/factory-contracts/cells.contract';
 import {
   asCellId,
   asCommandId,

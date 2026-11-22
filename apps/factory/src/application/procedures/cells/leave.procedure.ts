@@ -3,7 +3,7 @@ import { immediateTx, type DbTx } from '../../../db/client';
 import { cells } from '../../../db/schema/cells';
 import { jobs } from '../../../db/schema/jobs';
 import { workOrders } from '../../../db/schema/orders';
-import { leaveCellContract } from '../../../contracts/cells.contract';
+import { leaveCellContract } from '@repo/factory-contracts/cells.contract';
 import { asCommandId, type CellId } from '../../../domain/common/brand';
 import {
   Conflict,

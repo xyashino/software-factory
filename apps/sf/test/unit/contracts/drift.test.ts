@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 const CLI_CONTRACTS = new URL('../../../src/contracts/', import.meta.url);
 const SERVER_CONTRACTS = new URL(
-  '../../../../factory/src/contracts/',
+  '../../../../../packages/factory-contracts/src/',
   import.meta.url,
 );
 const KIT_CONTRACTS = new URL(

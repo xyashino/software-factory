@@ -4,7 +4,7 @@ import { cells } from '../../../db/schema/cells';
 import { jobs } from '../../../db/schema/jobs';
 import { workOrders } from '../../../db/schema/orders';
 import { LEASE_TTL_MS } from '../../../config';
-import { heartbeatCellContract } from '../../../contracts/cells.contract';
+import { heartbeatCellContract } from '@repo/factory-contracts/cells.contract';
 import { asJobId, type CellId } from '../../../domain/common/brand';
 import { addMs } from '../../../domain/common/time';
 import {

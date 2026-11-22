@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm';
 import { immediateTx } from '../../../db/client';
 import { safeTokens } from '../../../db/schema/tokens';
-import { rotateTokenContract } from '../../../contracts/tokens.contract';
+import { rotateTokenContract } from '@repo/factory-contracts/tokens.contract';
 import { TOKEN_ROTATE_GRACE_MS } from '../../../config';
 import { Conflict, Unauthorized } from '../../core/error-handling';
 import { authenticatedProcedure } from '../../core/procedure';

@@ -6,6 +6,7 @@ import {
   type AnySQLiteColumn,
 } from 'drizzle-orm/sqlite-core';
 import { sql } from 'drizzle-orm';
+import { WORK_ORDER_STATES } from '@repo/factory-contracts/enums/orders';
 import type {
   CellId,
   OrderId,
@@ -17,19 +18,6 @@ import { jsonColumn, timestamps } from '@repo/bun-sqlite-kit/columns';
 import { cells } from './cells';
 import { orderPlans } from './plans';
 import { projects } from './projects';
-
-export const WORK_ORDER_STATES = [
-  'waiting_parent',
-  'queued',
-  'paused',
-  'running',
-  'delivering',
-  'delivered',
-  'completed',
-  'line_unavailable',
-  'blocked',
-  'cancelled',
-] as const;
 
 export const ORDER_STEP_STATES = [
   'pending',
