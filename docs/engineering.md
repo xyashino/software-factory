@@ -11,7 +11,7 @@ Source of truth for code shape, layering, transactions, and testing in `apps/fac
    - Scope is strictly limited to `apps/factory/`. Do **NOT** modify, wire, or connect other apps or packages from here.
    - `apps/factory` owns all of its domain, SQLite schema, contracts, procedures, and Hono adapters inside `apps/factory/src/`.
    - All Cell interactions (`enroll`, `hello`, `claims`, `heartbeats`, `jobs/:id/transitions`, `incidents/:id/resolve`) are implemented purely as backend HTTP endpoints and verified via black-box `app.request()` HTTP tests inside `apps/factory/test/`.
-3. **Catalog dependencies only**: Pin third-party packages via `catalog:` in `pnpm-workspace.yaml` (`hono`, `drizzle-orm`, `drizzle-kit`, `zod`, `yaml`, `vitest`, `@types/bun`, `@types/node`, `typescript`, `eslint`).
+3. **Catalog dependencies only**: Pin third-party packages via `catalog:` in root `package.json` (`workspaces.catalog`) (`hono`, `drizzle-orm`, `drizzle-kit`, `zod`, `yaml`, `vitest`, `@types/bun`, `@types/node`, `typescript`, `eslint`).
 4. **Zero GitHub coupling**: Server never calls `gh` CLI, GitHub REST/GraphQL APIs, or GitHub webhooks. Cells push branches, publish PRs on `deliver`, and report git refs/commits back via REST.
 
 ---
@@ -203,4 +203,4 @@ Shared style rules (`coding-no-barrel-export`, `coding-export-order`, `coding-mi
    - **DB & Concurrency Tests (`test/db/*.test.ts`)**: Real `bun:sqlite` DB (`:memory:` or temp file with WAL). Test partial unique indexes (`idx_jobs_one_active_per_order`, `idx_jobs_one_active_per_cell`, `idx_work_orders_one_active_per_cell`), `immediateTx` contention, and schema constraints.
    - **Black-Box HTTP Tests (`test/blackbox/*.test.ts`)**: Through `app.request()` using `createTestApp()` (fresh SQLite DB + controllable fake clock + in-memory waiters/bus per test). Arrange-Act-Assert, story-like test names, zero internal mocks.
 2. **Single Verification Gate**:
-   - Every vertical slice must pass `pnpm ci:verify` (typecheck, lint, format, tests) with zero warnings and zero errors.
+   - Every vertical slice must pass `bun run ci:verify` (typecheck, lint, format, tests) with zero warnings and zero errors.

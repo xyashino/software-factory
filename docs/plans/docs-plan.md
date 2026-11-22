@@ -58,4 +58,4 @@ One ADR per todo when done. Importer allows one `depends_on` parent only, so the
 
 ## Verify
 
-`pnpm ci:verify` per todo; `pnpm nitpick:check` when `.nitpick/` changes.
+`bun run ci:verify` per todo; `bun run nitpick:check` when `.nitpick/` changes.

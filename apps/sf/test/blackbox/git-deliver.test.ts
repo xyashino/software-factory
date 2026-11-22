@@ -166,7 +166,7 @@ describe('git work for a job', () => {
       priorStepIds: ['build'],
       taskDescription: '## Objective\n\nAdd git work.\n',
       adrPaths: ['decisions/entry.md'],
-      checks: ['pnpm ci:verify'],
+      checks: ['bun run ci:verify'],
     });
 
     // Assert
@@ -177,7 +177,7 @@ describe('git work for a job', () => {
     expect(published[0]?.title).toBe('feat(factory): add git work for a job');
     expect(published[0]?.body).toContain('# Add git work.');
     expect(published[0]?.body).toContain('> **Why:** Needed');
-    expect(published[0]?.body).toContain('- [x] `pnpm ci:verify`');
+    expect(published[0]?.body).toContain('- [x] `bun run ci:verify`');
     expect(published[0]?.body).not.toContain('Event log:');
     expect(existsSync(sandbox.worktree)).toBe(false);
   });

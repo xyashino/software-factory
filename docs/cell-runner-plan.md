@@ -57,4 +57,4 @@ Replaces `cell-kill-job-process-tree`.
 
 ## Verify
 
-`pnpm ci:verify` per todo. Each todo reproduces the failure with a fake runner before fixing.
+`bun run ci:verify` per todo. Each todo reproduces the failure with a fake runner before fixing.

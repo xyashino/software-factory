@@ -76,7 +76,7 @@ describe('deliver', () => {
       ...SPEC,
       taskDescription: '## 🎯 Objective\n\nShip login.\n\n## Scope\n\nx',
       adrPaths: ['decisions/a.md'],
-      checks: ['pnpm ci:verify'],
+      checks: ['bun run ci:verify'],
     });
 
     // Assert
@@ -84,7 +84,7 @@ describe('deliver', () => {
     expect(body).toContain('Ship login.');
     expect(body).toContain('**[`decisions/a.md`](decisions/a.md)**');
     expect(body).toContain('> **Why:** Needed');
-    expect(body).toContain('- [x] `pnpm ci:verify`');
+    expect(body).toContain('- [x] `bun run ci:verify`');
     expect(body).not.toContain('Event log:');
   });
 

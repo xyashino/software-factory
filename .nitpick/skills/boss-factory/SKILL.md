@@ -45,6 +45,6 @@ Run only on a disposable factory host (no prod secrets, no sudo). Personal/sensi
 - Boss has NO business knowledge. Do not evaluate application code or domain correctness yourself.
 - One order at a time unless the queue says otherwise.
 - Never read/print secret files (`.env*`, `~/config/secrets.env`, keys, `.factory-local/*.token`). Needed secret missing -> escalate, don't hunt.
-- Never edit `.agents/` by hand — edit `.nitpick/`, run `pnpm nitpick:sync`.
+- Never edit `.agents/` by hand — edit `.nitpick/`, run `bun run nitpick:sync`.
 - Never commit evidences, worktrees, logs.
 - Hit an `sf` limitation -> work around it in-session only if safe, and say so in the report.

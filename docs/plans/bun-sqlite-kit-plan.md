@@ -42,7 +42,7 @@ Two todos, not one: package is reviewable alone, factory switch is the behavior 
 
 ## Verify
 
-`pnpm ci:verify`.
+`bun run ci:verify`.
 
 ## Related
 

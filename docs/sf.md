@@ -5,11 +5,11 @@ the Cell daemon (each machine that runs work), and the Operator and Mechanic ver
 
 ## 0. Install and quickstart
 
-`pnpm build:sf` compiles `apps/sf/dist/sf` (server, init templates and SQL migrations embedded) and
+`bun run build:sf` compiles `apps/sf/dist/sf` (server, init templates and SQL migrations embedded) and
 builds the web UI. `scripts/install.sh` copies them under `$PREFIX` (default `/usr/local`):
 
 ```bash
-pnpm install && pnpm build:sf
+bun install && bun run build:sf
 sudo scripts/install.sh               # bin/sf + share/sf/web
 PREFIX=$HOME/.local scripts/install.sh   # no sudo; then SF_WEB_DIR=$HOME/.local/share/sf/web
 ```

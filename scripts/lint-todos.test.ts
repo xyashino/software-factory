@@ -58,6 +58,15 @@ describe('todo lint', () => {
     expect(output).toContain('todo:lint ok');
   });
 
+  it('passes when the repo has no todos folder', async () => {
+    const root = makeRepo(LINE_FILES);
+
+    const { exitCode, output } = await runLint(root);
+
+    expect(exitCode).toBe(0);
+    expect(output).toContain('todo:lint ok');
+  });
+
   it('fails when a todo names two parents', async () => {
     const root = makeRepo({
       ...LINE_FILES,

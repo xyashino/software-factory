@@ -42,7 +42,7 @@ You must use the following skills:
 
 - The quality gate already ran. Its result is in the context as "Gate result". Cite it; do not re-run it.
 - Never run `check-types`, `lint`, `test`, `ci:verify` or any other gate command.
-- Run no shell commands at all: no `pnpm`, no `git`, no `cat`, no `find`. The only command you may run is `factory-operator verdict`. The files, the diff and the `build.commit` message are already in your context; read them there.
+- Run no shell commands at all: no `bun`, no `git`, no `cat`, no `find`. The only command you may run is `factory-operator verdict`. The files, the diff and the `build.commit` message are already in your context; read them there.
 - If something you need is not in the context, fail the verdict and name what is missing. Do not go looking for it with a command.
 - A passing gate does not excuse missing proof or a wrong scope; fail those. A missing gate result in the context is a failure.
 

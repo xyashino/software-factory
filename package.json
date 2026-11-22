@@ -2,13 +2,54 @@
   "name": "software-factory",
   "private": true,
   "type": "module",
+  "workspaces": {
+    "packages": [
+      "apps/*",
+      "packages/*"
+    ],
+    "catalog": {
+      "@astrojs/check": "0.9.12",
+      "@astrojs/node": "11.1.9",
+      "@eslint/js": "9.39.5",
+      "@types/bun": "1.4.4",
+      "@types/node": "26.6.4",
+      "@vitest/coverage-v8": "5.1.0",
+      "astro": "7.4.5",
+      "handlebars": "4.7.10",
+      "citty": "0.2.2",
+      "drizzle-kit": "0.31.11",
+      "drizzle-orm": "0.45.4",
+      "eslint": "9.39.5",
+      "eslint-config-prettier": "10.1.8",
+      "eslint-plugin-only-warn": "1.2.1",
+      "eslint-plugin-react": "7.37.5",
+      "eslint-plugin-react-hooks": "7.1.1",
+      "eslint-plugin-turbo": "2.11.10",
+      "globals": "17.14.0",
+      "hono": "4.13.14",
+      "husky": "9.1.7",
+      "lint-staged": "17.6.0",
+      "msw": "3.0.3",
+      "picocolors": "1.1.1",
+      "prettier": "3.9.10",
+      "turbo": "2.11.10",
+      "typescript": "6.0.3",
+      "typescript-eslint": "8.72.2",
+      "vitest": "5.1.0",
+      "yaml": "2.9.1",
+      "zod": "4.6.7"
+    }
+  },
+  "trustedDependencies": [
+    "esbuild"
+  ],
   "scripts": {
     "build": "turbo run build",
     "check-types:scripts": "tsc --noEmit -p scripts/tsconfig.json",
     "test:scripts": "bun test scripts",
     "todo:lint": "bun scripts/lint-todos.ts",
-    "build:sf": "pnpm --filter @repo/sf build:sf && pnpm --filter @repo/web-demo build && pnpm --filter @repo/web-demo deploy --prod --force apps/web-demo/dist/sf-deps",
-    "install:sf": "pnpm build:sf && node scripts/install.mjs",
+    "build:sf": "bun --filter @repo/sf build:sf && bun --filter @repo/web-demo build && node scripts/deploy-web-deps.mjs",
+    "install:sf": "bun run build:sf && node scripts/install.mjs",
     "lint": "turbo run lint",
     "check-types": "turbo run check-types",
     "test": "turbo run test",
@@ -19,8 +60,8 @@
     "ci:verify": "turbo run //#format:check //#docs:check //#docs:test //#todo:lint //#check-types:scripts //#test:scripts lint check-types db:check test build --ui=stream",
     "docs:check": "node scripts/check-doc-links.ts",
     "docs:test": "node --test scripts/check-doc-links.test.ts",
-    "nitpick:check": "pnpm nitpick --check",
-    "nitpick:sync": "pnpm nitpick --sync",
+    "nitpick:check": "bun run nitpick --check",
+    "nitpick:sync": "bun run nitpick --sync",
     "prepare": "node scripts/prepare.mjs"
   },
   "devDependencies": {
@@ -33,7 +74,7 @@
     "turbo": "catalog:",
     "typescript": "catalog:"
   },
-  "packageManager": "pnpm@12.15.0",
+  "packageManager": "bun@1.4.4",
   "engines": {
     "node": ">=24.0.0"
   }

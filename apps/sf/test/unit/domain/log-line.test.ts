@@ -32,12 +32,12 @@ describe('cell log line', () => {
       order: 'pane-smoke',
       station: 'quality-gate',
       action: 'fail',
-      detail: 'pnpm ci:verify\nexited 1',
+      detail: 'bun run ci:verify\nexited 1',
     });
 
     // Assert
     expect(line).toContain(`${ESC}31mfail`);
-    expect(line.endsWith('pnpm ci:verify exited 1')).toBe(true);
+    expect(line.endsWith('bun run ci:verify exited 1')).toBe(true);
   });
 
   it('paints every delivery action green', () => {

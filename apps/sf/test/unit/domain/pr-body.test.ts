@@ -76,10 +76,10 @@ describe('pull request text', () => {
 
   it('lists each check command as done', () => {
     // Arrange & Act
-    const checks = formatChecks(['pnpm lint', 'pnpm test']);
+    const checks = formatChecks(['bun run lint', 'bun run test']);
 
     // Assert
-    expect(checks).toBe('- [x] `pnpm lint`\n- [x] `pnpm test`');
+    expect(checks).toBe('- [x] `bun run lint`\n- [x] `bun run test`');
     expect(formatChecks([])).toBe('_No automated checks configured._');
   });
 

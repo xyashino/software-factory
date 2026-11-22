@@ -30,7 +30,7 @@ const exists = (path) =>
     () => false,
   );
 
-const missing = (path) => new Error(`missing ${path}: run pnpm build:sf first`);
+const missing = (path) => new Error(`missing ${path}: run bun run build:sf first`);
 
 const localAppData = () =>
   process.env.LOCALAPPDATA || join(homedir(), 'AppData', 'Local');

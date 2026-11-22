@@ -14,10 +14,13 @@ type LintError = { file: string; message: string };
 
 type ParsedTodo = { file: string; todo: TodoFile };
 
-const listTodoFiles = (root: string): string[] =>
-  readdirSync(join(root, TODOS_DIR))
+const listTodoFiles = (root: string): string[] => {
+  const dir = join(root, TODOS_DIR);
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir)
     .filter((name) => name.endsWith(TODO_EXTENSION))
     .sort();
+};
 
 const lineErrors = (root: string, { file, todo }: ParsedTodo): LintError[] =>
   existsSync(join(root, LINES_DIR, `${todo.line}.yml`))

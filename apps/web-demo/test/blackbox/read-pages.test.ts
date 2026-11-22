@@ -104,7 +104,7 @@ const readBody = async (
 };
 
 beforeAll(async () => {
-  execFileSync('pnpm', ['exec', 'astro', 'build'], {
+  execFileSync('bun', ['run', 'astro', 'build'], {
     cwd: APP_DIR,
     stdio: 'ignore',
   });

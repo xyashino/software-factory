@@ -56,7 +56,7 @@ Note: [`factory.md`](./factory.md) §11 lists `POST /api/v1/tokens/join` for `ce
 ## 5. Stack and layout
 
 - Astro (`output: 'server'`, `@astrojs/node` standalone), Zod for replies, Vitest, msw for tests.
-- Versions from npm at planning time: `astro` `7.4.13`, `@astrojs/node` `11.1.14`. Pin both in `pnpm-workspace.yaml` `catalog:` before use.
+- Versions from npm at planning time: `astro` `7.4.13`, `@astrojs/node` `11.1.14`. Pin both in root `package.json` `workspaces.catalog` before use.
 
 ```text
 apps/web-demo/

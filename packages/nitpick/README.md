@@ -52,7 +52,7 @@ import { richCommit } from '@repo/nitpick/rules/rich-commit';
 export default config({
   output: [{ path: '.claude', root: 'CLAUDE.md' }], // default: [{ path: '.ai', root: 'AGENTS.md' }]
   entry: { doc: ({ header, ref }) => `${header}\n\n${ref('react-hooks')}` },
-  settings: { permissions: { allow: ['Bash(pnpm test:*)'] } },
+  settings: { permissions: { allow: ['Bash(bun test:*)'] } },
   rules: {
     git: { 'rich-commit': richCommit },
     react: {
@@ -149,8 +149,8 @@ Root scripts:
 ```json
 {
   "nitpick": "nitpick",
-  "nitpick:sync": "pnpm nitpick --sync",
-  "nitpick:check": "pnpm nitpick --check"
+  "nitpick:sync": "bun run nitpick --sync",
+  "nitpick:check": "bun run nitpick --check"
 }
 ```
 

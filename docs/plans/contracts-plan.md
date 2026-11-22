@@ -49,7 +49,7 @@ Whole order with sqlite kit (see [`bun-sqlite-kit-plan.md`](./bun-sqlite-kit-pla
 - `HttpStatus` union in kit = superset of factory (401 403 422) and cell (502). Cell `ProcedureResponse` becomes wider. Accept, or add generic param.
 - Moving enums out of `order-state.ts`: file may mix constants with transition logic (not read). Move constants only.
 - Real drift found in sf diff = existing client/server bug. Report it, do not silently pick.
-- Large import churn: 30+4 factory files, 14+1 cell, 18+10 sf. Mechanical; verify with `pnpm ci:verify`.
+- Large import churn: 30+4 factory files, 14+1 cell, 18+10 sf. Mechanical; verify with `bun run ci:verify`.
 
 ## Follow-ups (no todo yet)
 
@@ -59,4 +59,4 @@ Whole order with sqlite kit (see [`bun-sqlite-kit-plan.md`](./bun-sqlite-kit-pla
 
 ## Verify
 
-`pnpm ci:verify` per todo.
+`bun run ci:verify` per todo.
