@@ -26,6 +26,8 @@ import { Refused, Unreachable } from './application/core/errors';
 import { EXIT } from './domain/exit-codes';
 
 const HELP_FLAGS = ['--help', '-h'];
+const REMOVED_CELL_COMMANDS = ['create', 'stop', 'rm'];
+const REMOVED_CELL_HINT = 'use "sf cell scale N"';
 
 const main = defineCommand({
   meta: {
@@ -63,6 +65,9 @@ const helpRequested = (args: readonly string[]): boolean => {
   return head.some((arg) => HELP_FLAGS.includes(arg));
 };
 
+const removedCellCommand = (args: readonly string[]): boolean =>
+  args[0] === 'cell' && REMOVED_CELL_COMMANDS.includes(args[1] ?? '');
+
 const fail = async (error: unknown): Promise<number> => {
   if (error instanceof Error && error.name === 'CLIError') {
     const { cmd, parent } = resolveCommand(main, rawArgs);
@@ -81,6 +86,10 @@ const fail = async (error: unknown): Promise<number> => {
 };
 
 try {
+  if (removedCellCommand(rawArgs)) {
+    printError(REMOVED_CELL_HINT);
+    process.exit(EXIT.argument);
+  }
   if (!(await dispatchInternal(rawArgs))) {
     if (rawArgs.length === 0) {
       await showUsage(main);

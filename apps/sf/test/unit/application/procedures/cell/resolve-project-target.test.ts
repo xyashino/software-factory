@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
   ArgumentError,
   Refused,
@@ -24,20 +24,27 @@ const PROJECTS = [ALPHA, BETA];
 
 describe('project target selection', () => {
   it('uses the project of the repo config without asking', async () => {
-    // Arrange
-    const choose = vi.fn(async () => BETA);
-
     // Act
     const picked = await pickProject({
       repoProject: 'alpha',
       projects: PROJECTS,
       requested: undefined,
-      choose,
     });
 
     // Assert
     expect(picked).toEqual(ALPHA);
-    expect(choose).not.toHaveBeenCalled();
+  });
+
+  it('accepts a --project that matches the repo config', async () => {
+    // Act
+    const picked = await pickProject({
+      repoProject: 'beta',
+      projects: PROJECTS,
+      requested: 'beta',
+    });
+
+    // Assert
+    expect(picked).toEqual(BETA);
   });
 
   it('refuses a repo config whose project is not registered on the Factory', async () => {
@@ -46,7 +53,6 @@ describe('project target selection', () => {
       repoProject: 'ghost',
       projects: PROJECTS,
       requested: undefined,
-      choose: undefined,
     });
 
     // Act & Assert
@@ -60,87 +66,9 @@ describe('project target selection', () => {
       repoProject: 'alpha',
       projects: PROJECTS,
       requested: 'beta',
-      choose: undefined,
     });
 
     // Act & Assert
     await expect(pick).rejects.toBeInstanceOf(ArgumentError);
-  });
-
-  it('refuses outside a repo when no project is registered', async () => {
-    // Arrange
-    const pick = pickProject({
-      repoProject: null,
-      projects: [],
-      requested: undefined,
-      choose: undefined,
-    });
-
-    // Act & Assert
-    await expect(pick).rejects.toBeInstanceOf(Refused);
-    await expect(pick).rejects.toThrow('sf project add');
-  });
-
-  it('picks the requested registered project without asking', async () => {
-    // Arrange
-    const choose = vi.fn(async () => ALPHA);
-
-    // Act
-    const picked = await pickProject({
-      repoProject: null,
-      projects: PROJECTS,
-      requested: 'beta',
-      choose,
-    });
-
-    // Assert
-    expect(picked).toEqual(BETA);
-    expect(choose).not.toHaveBeenCalled();
-  });
-
-  it('refuses a requested project that is not registered', async () => {
-    // Arrange
-    const pick = pickProject({
-      repoProject: null,
-      projects: PROJECTS,
-      requested: 'ghost',
-      choose: undefined,
-    });
-
-    // Act & Assert
-    await expect(pick).rejects.toBeInstanceOf(Refused);
-    await expect(pick).rejects.toThrow('sf project add ghost');
-  });
-
-  it('asks for the arguments when outside a repo without a terminal', async () => {
-    // Arrange
-    const pick = pickProject({
-      repoProject: null,
-      projects: PROJECTS,
-      requested: undefined,
-      choose: undefined,
-    });
-
-    // Act & Assert
-    await expect(pick).rejects.toBeInstanceOf(ArgumentError);
-    await expect(pick).rejects.toThrow('alpha, beta');
-  });
-
-  it('asks the terminal chooser once and returns its pick', async () => {
-    // Arrange
-    const choose = vi.fn(async () => BETA);
-
-    // Act
-    const picked = await pickProject({
-      repoProject: null,
-      projects: PROJECTS,
-      requested: undefined,
-      choose,
-    });
-
-    // Assert
-    expect(picked).toEqual(BETA);
-    expect(choose).toHaveBeenCalledTimes(1);
-    expect(choose).toHaveBeenCalledWith(PROJECTS);
   });
 });

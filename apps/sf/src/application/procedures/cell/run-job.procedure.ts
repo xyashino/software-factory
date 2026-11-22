@@ -40,6 +40,7 @@ import {
 import {
   type CellRuntime,
   type ClaimedJob,
+  reportActivity,
   sendWithRetry,
 } from './cell-runtime';
 import { checkpointStation } from './checkpoint.procedure';
@@ -1467,6 +1468,13 @@ export const runJob = async (
     return lineUnavailable(runtime, job, line.lineName, line.detail);
   }
   const { snapshot, station } = line;
+  await reportActivity(runtime, {
+    state: 'running',
+    orderId: job.orderId ?? undefined,
+    stationId: station?.stationId,
+    writes: station?.kind === 'operator' && station.permission === 'write',
+    since: runtime.ports.clock.now(),
+  });
   if (job.kind === 'mechanic') {
     stationNames.set(job, MECHANIC_DIR);
     await logLine(runtime, job, 'claim', claimDetail);

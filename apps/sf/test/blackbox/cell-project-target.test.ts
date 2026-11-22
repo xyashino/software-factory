@@ -55,10 +55,13 @@ const repoWithConfig = (root: string, project: string): string => {
   return repo;
 };
 
-const runSf = (args: readonly string[]): Promise<CliResult> =>
+const runSf = (
+  args: readonly string[],
+  cwd: string = env.HOME,
+): Promise<CliResult> =>
   new Promise((resolve) => {
     const child = spawn(process.execPath, [CLI_PATH, ...args], {
-      cwd: env.HOME,
+      cwd,
       env,
     });
     let stdout = '';
@@ -170,40 +173,40 @@ afterAll(async () => {
 
 describe('cell project target', () => {
   it(
-    'takes the project of the repo config without asking',
+    'scales the repo to the count given, the project comes from its config',
     async () => {
       // Arrange
       const repo = repoWithConfig(home, PROJECT_ID);
 
       // Act
-      const result = await runSf(['cell', 'create', '--repo', repo, '--json']);
-      const [cell] = JSON.parse(result.stdout || '[]') as {
-        cellId: string;
-        repoRoot: string;
-      }[];
-      await runSf(['cell', 'rm', cell?.cellId ?? '']);
+      const result = await runSf(['cell', 'scale', '1', '--json'], repo);
+      await runSf(['cell', 'scale', '0'], repo);
 
       // Assert
       expect(result.status).toBe(EXIT.ok);
-      expect(cell?.repoRoot).toBe(repo);
+      expect(JSON.parse(result.stdout)).toEqual({
+        projectId: PROJECT_ID,
+        repoRoot: repo,
+        count: 1,
+      });
     },
     TEST_TIMEOUT_MS,
   );
 
   it(
-    'refuses to start a cell outside a project repo',
+    'refuses to scale outside a project repo',
     async () => {
       // Arrange
       const outside = mkdtempSync(join(tmpdir(), 'sf-no-repo-'));
       dirs.push(outside);
 
       // Act
-      const result = await runSf(['cell', 'create', '--repo', outside]);
+      const result = await runSf(['cell', 'scale', '1'], outside);
 
       // Assert
       expect(result.status).toBe(EXIT.refused);
       expect(result.stderr).toContain(
-        'a Cell starts only inside a project repo',
+        'not inside a repo with .factory/config.json',
       );
     },
     TEST_TIMEOUT_MS,
@@ -216,17 +219,17 @@ describe('cell project target', () => {
       const repo = repoWithConfig(home, 'ghost');
 
       // Act
-      const result = await runSf(['cell', 'create', '--repo', repo]);
+      const result = await runSf(['cell', 'scale', '1'], repo);
 
       // Assert
       expect(result.status).toBe(EXIT.refused);
-      expect(result.stderr).toContain('sf project add ghost');
+      expect(result.stderr).toContain('sf project add ghost --repo <url>');
     },
     TEST_TIMEOUT_MS,
   );
 
   it(
-    'refuses to create a cell when no project is registered',
+    'refuses to scale when no project is registered',
     async () => {
       // Arrange
       const repo = repoWithConfig(home, PROJECT_ID);
@@ -235,7 +238,7 @@ describe('cell project target', () => {
 
       try {
         // Act
-        const result = await runSf(['cell', 'create', '--repo', repo]);
+        const result = await runSf(['cell', 'scale', '1'], repo);
 
         // Assert
         expect(result.status).toBe(EXIT.refused);
@@ -247,7 +250,7 @@ describe('cell project target', () => {
     TEST_TIMEOUT_MS,
   );
 
-  it('exits 2 when cell start runs outside a repo without --project', async () => {
+  it('refuses cell start outside a repo', async () => {
     // Arrange
     const outside = mkdtempSync(join(tmpdir(), 'sf-no-repo-'));
     dirs.push(outside);
@@ -267,7 +270,9 @@ describe('cell project target', () => {
     });
 
     // Assert
-    expect(result.status).toBe(EXIT.argument);
-    expect(result.stderr).toContain(PROJECT_ID);
+    expect(result.status).toBe(EXIT.refused);
+    expect(result.stderr).toContain(
+      'not inside a repo with .factory/config.json',
+    );
   });
 });

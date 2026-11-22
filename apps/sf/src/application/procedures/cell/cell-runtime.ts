@@ -17,7 +17,34 @@ export interface CellRuntime {
   logPath: string;
   signal: AbortSignal;
   drain: DrainState;
+  daemonCellId?: string;
 }
+
+export interface ActivityReport {
+  state: 'idle' | 'running';
+  orderId?: string;
+  stationId?: string;
+  writes?: boolean;
+  since: number;
+}
+
+// Best-effort: a missing daemon must not fail a job; the daemon's parent-gone watch stops this Cell.
+export const reportActivity = async (
+  runtime: CellRuntime,
+  report: ActivityReport,
+): Promise<void> => {
+  if (runtime.daemonCellId === undefined) {
+    return;
+  }
+  try {
+    await runtime.ports.factoryDaemon.post(
+      `/cells/${encodeURIComponent(runtime.daemonCellId)}/activity`,
+      report,
+    );
+  } catch {
+    // Reporting is optional: the Cell keeps working without the daemon.
+  }
+};
 
 export const sendWithRetry = async <T>(
   runtime: CellRuntime,

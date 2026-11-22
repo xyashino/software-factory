@@ -15,7 +15,7 @@ Terms: [glossary](./README.md#glossary). Protocol and timing: [factory.md §3](.
 | :--- | :--- | :--- | :--- |
 | Cell daemon | `apps/sf/src/application/procedures/cell/*`, helpers `apps/sf/src/cell/*`, CLI `apps/sf/src/adapters/cli/cell.command.ts` | `sf cell start`, one per Cell, cwd = repo root | Factory `/api/v1/cells/*`, `/api/v1/jobs/*`; loopback operator endpoint |
 | Factory daemon | `apps/sf/src/daemon/*`, CLI `apps/sf/src/adapters/cli/factory.command.ts` | detached `sf factory start`, `127.0.0.1:7072` | Factory `/api/v1/tokens`, `/api/v1/projects` (supervisor token); spawns and kills Cell daemons |
-| Factory daemon client | `apps/sf/src/application/procedures/cell/factory-cells.ts`, `apps/sf/src/adapters/http/factory-daemon.adapter.ts` | inside `sf cell create|list|stop|rm` | Factory daemon loopback API |
+| Factory daemon client | `apps/sf/src/application/procedures/cell/factory-cells.ts`, `apps/sf/src/adapters/http/factory-daemon.adapter.ts` | inside `sf cell scale|list` | Factory daemon loopback API |
 
 ## Factory daemon
 
@@ -47,12 +47,15 @@ Cell supervision (`apps/sf/src/daemon/supervisor.ts`):
 - The daemon keeps no state on disk except the pid file. Logs: Cell output in `$XDG_DATA_HOME/sf/cells/<cellId>.log`.
 - Only the daemon holds the HQ credential. The CLI mints nothing for Cells.
 
-`sf cell create|list|stop|rm` call the daemon. Daemon down → `factory not running: run "sf factory start"`.
+`sf cell scale|list` call the daemon. Daemon down → `factory not running: run "sf factory start"`.
 
-- `cell create [--repo path] [--count N] [--name slug] [--lines a,b] [--json]`: `--name` only with count 1. No `--project`: the project comes from the repo config.
-- `cell list`: HQ rows with a `pid` column from the daemon. `--here` lists daemon Cells only.
-- `cell stop <id>`: a daemon Cell is removed (killed). Any other id drains the HQ Cell as before (`--force` aborts the station).
-- `cell rm <id>`: removes a daemon Cell (kills it). Unknown id is refused.
+- `cell scale N [--lines a,b] [--json]`: N Cells for the repo project. Project = `.factory/config.json` of the nearest ancestor; none → refused. No `--project`. Project not on HQ → refused with `sf project add <id> --repo <url>`. One repo path per project per Factory.
+- `cell list [--json]`: per project: repo, desired, running, Cell id + state (`idle`|`running`), `crash loop` flag.
+- Count lives in memory. Daemon restart or HQ loss → 0. Scale up refused while HQ is not connected.
+- Scale down: idle first, then read-only stations, then newest writing station.
+- Exit not requested → respawn after 1, 2, 4 ... 30 s. 5 exits in 60 s → `crash loop`, no respawn until `scale` again.
+- Cell reports `idle` (claim wait) and `running` (station) to `POST /cells/:id/activity`. Best-effort.
+- `cell create|stop|rm` are removed: exit 2 with `use "sf cell scale N"`.
 - `slots.json` and the old per-slot files are ignored. No migration.
 
 ## Cell daemon: start to Job
@@ -95,7 +98,7 @@ Timing constants live in `apps/sf/src/config.ts` (`HEARTBEAT_INTERVAL_MS`, `LEAS
 | `$XDG_DATA_HOME/sf/factory.pid` | `sf factory start` | Factory daemon pid. Removed on stop |
 | `$XDG_DATA_HOME/sf/factory.log` | Factory daemon | Daemon stdout/stderr |
 | `$XDG_DATA_HOME/sf/cells/<cellId>.log` | Factory daemon child | Cell daemon output |
-| `$XDG_DATA_HOME/sf/cells/slots.json`, `<slotId>.pid`, `<slotId>.log` | old `sf cell create` | Ignored since the Factory daemon. Removable |
+| `$XDG_DATA_HOME/sf/cells/slots.json`, `<slotId>.pid`, `<slotId>.log` | old `sf cell create` (removed) | Ignored since the Factory daemon. Removable |
 | `$XDG_CONFIG_HOME/sf/config.json` | user / `sf` | Shared factory targets |
 | `<repo>/.factory-local/cells/<name>.json` | Cell daemon | Session `{cellId, sessionToken}`. Mode 0600 |
 | `<repo>/.factory-local/cells/<name>.pid` | Cell daemon | Claims name; second start with same name refused |
@@ -107,5 +110,5 @@ Legacy `.factory-local/cell.json` moves to `cells/<hostname>.json` on first star
 ## Open
 
 - Cell daemon started by hand (tmux, systemd) has no parent watch. Only daemon-started Cells exit with the daemon.
-- `sf setup --cell` and `sf cell create` need a running Factory daemon.
+- `sf setup --cell` and `sf cell scale` need a running Factory daemon.
 - The Factory daemon does not start on boot. `sf service` does not manage it yet.

@@ -5,19 +5,15 @@ import { ArgumentError, Refused } from '../../core/errors';
 import type { Ports } from '../../core/procedure';
 import { readProjectId } from '../../core/repo-access';
 import { listProjects } from '../projects/list-projects.procedure';
-import { ensureWorkspace } from './workspace';
 
 const SUPERVISOR: Access = { kind: 'supervisor' };
+const NOT_A_REPO = 'not inside a repo with .factory/config.json';
 
 export interface ProjectSummary {
   projectId: string;
   repoUrl: string;
   defaultBaseBranch: string;
 }
-
-export type ProjectChooser = (
-  projects: readonly ProjectSummary[],
-) => Promise<ProjectSummary>;
 
 export interface CellTarget {
   projectId: string;
@@ -27,15 +23,13 @@ export interface CellTarget {
 export interface CellTargetInput {
   repoRoot: string;
   requested: string | undefined;
-  choose: ProjectChooser | undefined;
   relayed: boolean;
 }
 
 interface PickInput {
-  repoProject: string | null;
+  repoProject: string;
   projects: readonly ProjectSummary[];
   requested: string | undefined;
-  choose: ProjectChooser | undefined;
 }
 
 const findOrRefuse = (
@@ -51,16 +45,6 @@ const findOrRefuse = (
   return project;
 };
 
-const repoProjectOf = async (
-  ctx: Ports,
-  repoRoot: string,
-): Promise<string | null> => {
-  const configPath = joinPath(repoRoot, REPO_CONFIG_PATH);
-  return (await ctx.fs.exists(configPath))
-    ? readProjectId(ctx, configPath)
-    : null;
-};
-
 const listedProjects = async (ctx: Ports): Promise<ProjectSummary[]> =>
   (
     await listProjects.execute(
@@ -72,55 +56,32 @@ const listedProjects = async (ctx: Ports): Promise<ProjectSummary[]> =>
 export const pickProject = async (
   input: PickInput,
 ): Promise<ProjectSummary> => {
-  if (input.repoProject !== null) {
-    if (
-      input.requested !== undefined &&
-      input.requested !== input.repoProject
-    ) {
-      throw new ArgumentError(
-        `repo config selects project ${input.repoProject}, not --project ${input.requested}`,
-      );
-    }
-    return findOrRefuse(input.projects, input.repoProject);
-  }
-  if (input.projects.length === 0) {
-    throw new Refused(
-      'no project registered on this Factory\nfix: sf project add <id> --repo <url>',
-    );
-  }
-  if (input.requested !== undefined) {
-    return findOrRefuse(input.projects, input.requested);
-  }
-  if (input.choose === undefined) {
-    const ids = input.projects.map((project) => project.projectId).join(', ');
+  if (input.requested !== undefined && input.requested !== input.repoProject) {
     throw new ArgumentError(
-      `no repo config here, pass --project <id> (one of: ${ids})`,
+      `repo config selects project ${input.repoProject}, not --project ${input.requested}`,
     );
   }
-  return input.choose(input.projects);
+  return findOrRefuse(input.projects, input.repoProject);
 };
 
 export const resolveCellTarget = async (
   ctx: Ports,
   input: CellTargetInput,
 ): Promise<CellTarget> => {
-  const repoProject = await repoProjectOf(ctx, input.repoRoot);
+  const configPath = joinPath(input.repoRoot, REPO_CONFIG_PATH);
+  if (!(await ctx.fs.exists(configPath))) {
+    throw new Refused(NOT_A_REPO);
+  }
+  const repoProject = await readProjectId(ctx, configPath);
   // Join-token-only and relayed workers cannot list projects; the repo config is trusted there.
   const trustsRepo = input.relayed || (await ctx.tokens.secret()) === null;
-  if (repoProject !== null && trustsRepo) {
+  if (trustsRepo) {
     return { projectId: repoProject, repoRoot: input.repoRoot };
   }
   const project = await pickProject({
     repoProject,
     projects: await listedProjects(ctx),
     requested: input.requested,
-    choose: input.choose,
   });
-  if (repoProject !== null) {
-    return { projectId: project.projectId, repoRoot: input.repoRoot };
-  }
-  return {
-    projectId: project.projectId,
-    repoRoot: await ensureWorkspace(ctx, project),
-  };
+  return { projectId: project.projectId, repoRoot: input.repoRoot };
 };

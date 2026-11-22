@@ -50,7 +50,7 @@ especially §3 (Cell lifecycle) and §11 (agent reporting). Operator CLI spec:
 | web | `sf web start \| stop \| status` | Supervisor | none (runs the installed web UI, pid in `web.pid`) |
 | cell | `sf cell start [--name <slug>]` | Supervisor, on a Cell machine | `enroll` once, then `hello`, `claims`, `heartbeats`, `jobs/{id}/transitions` |
 | cell | `sf cell list` | Supervisor | `GET /api/v1/cells` |
-| cell | `sf cell stop --id <id>` | Supervisor | drain (§3) |
+| cell | `sf cell scale N` | Supervisor, inside a repo | daemon `PUT /scale` |
 | cell | `sf cell revoke --id <id>` | Supervisor | `DELETE /api/v1/cells/{id}` |
 | todos | `sf todos import` | Supervisor | `POST /api/v1/queue/import` |
 | todos | `sf todos export` | Supervisor | `GET /api/v1/queue/export` |
@@ -220,8 +220,8 @@ Decided:
 2. **One binary, named `sf`.**
    The Cell daemon (`sf cell start`) lives in `apps/sf/src/application/procedures/cell/`, with helpers
    in `apps/sf/src/cell/`. The Factory daemon (`sf factory start|stop|status`) is one per PC, listens on
-   `127.0.0.1:7072` (`SF_FACTORY_PORT`) and spawns, lists and kills Cell daemons. `sf cell create|list|stop|rm`
-   call it. `apps/cell` and `sf cell server` are removed.
+   `127.0.0.1:7072` (`SF_FACTORY_PORT`) and runs the Cell count per project. `sf cell scale|list` call it.
+   `apps/cell` and `sf cell server` are removed.
 3. **Coexistence.** The new approach is built alongside the current implementation, which stays until
    cut-over. The new one is cleaner, so nothing is migrated from the old code.
 4. **`server stop` does not stop Cells.** It stops only the server process. Cells keep running and

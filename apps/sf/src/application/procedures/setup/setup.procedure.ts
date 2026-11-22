@@ -1,10 +1,10 @@
 import { z } from 'zod';
 import type { Access } from '../../../domain/access';
-import { cellNameOf } from '../../../domain/cell/cell-name';
 import { ArgumentError, Refused } from '../../core/errors';
 import { define, type Context, type Ports } from '../../core/procedure';
 import { readProjectId } from '../../core/repo-access';
-import { createFactoryCell, listFactoryCells } from '../cell/factory-cells';
+import { listFactoryProjects } from '../cell/factory-cells';
+import { scaleCells } from '../cell/scale.procedure';
 import { runDoctor, type DoctorCheck } from '../doctor/doctor.procedure';
 import { initProject } from '../init/init.procedure';
 import { addProject } from '../projects/add-project.procedure';
@@ -30,7 +30,7 @@ const SetupSchema = z
     bin: z.string().min(1),
     serverArgs: z.array(z.string().min(1)).min(1),
     project: z.string().min(1).optional(),
-    cell: z.string().min(1).optional(),
+    cell: z.boolean().optional(),
     reconnect: z.custom<() => Ports>((value) => typeof value === 'function'),
   })
   .strict();
@@ -153,18 +153,14 @@ export const runSetup = define({ kind: 'supervisor' })(
     steps.push({ step: 'project', outcome: 'done' });
   }
 
-  if (input.cell !== undefined) {
-    const name = cellNameOf(input.cell);
-    const live = (await listFactoryCells.execute({}, fresh)).some(
-      (cell) => cell.name === name,
+  if (input.cell === true) {
+    const live = (await listFactoryProjects.execute({}, fresh)).some(
+      (project) => project.repoRoot === input.repoRoot && project.running > 0,
     );
     if (live) {
       steps.push({ step: 'cell', outcome: 'skipped' });
     } else {
-      await createFactoryCell.execute(
-        { repoRoot: input.repoRoot, name },
-        fresh,
-      );
+      await scaleCells.execute({ cwd: input.repoRoot, count: 1 }, fresh);
       steps.push({ step: 'cell', outcome: 'done' });
     }
   }

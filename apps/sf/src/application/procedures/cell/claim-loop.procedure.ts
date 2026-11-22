@@ -1,7 +1,11 @@
 import { observeDrain } from '../../../cell/drain-signal';
 import { claimJobContract } from '@repo/factory-contracts/cells.contract';
 import { nextStep, type NextStep } from '../../../domain/cell/cell-loop';
-import { type CellRuntime, type ClaimedJob } from './cell-runtime';
+import {
+  type CellRuntime,
+  type ClaimedJob,
+  reportActivity,
+} from './cell-runtime';
 import { leaveCell } from './leave.procedure';
 import { runJob } from './run-job.procedure';
 
@@ -32,9 +36,14 @@ export const claimLoop = async (
       await leaveCell(runtime, next.kind === 'run' ? next.job : null);
       return;
     }
-    next =
-      next.kind === 'run'
-        ? nextStep(await runJob(runtime, next.job))
-        : nextStep(await claimOnce(runtime, next.waitMs));
+    if (next.kind === 'run') {
+      next = nextStep(await runJob(runtime, next.job));
+    } else {
+      await reportActivity(runtime, {
+        state: 'idle',
+        since: runtime.ports.clock.now(),
+      });
+      next = nextStep(await claimOnce(runtime, next.waitMs));
+    }
   }
 };

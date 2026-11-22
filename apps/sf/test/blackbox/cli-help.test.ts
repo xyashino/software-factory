@@ -33,7 +33,7 @@ describe('sf entrypoint', () => {
   });
 
   it.each([
-    [['cell', '--help'], 'start|list|stop|revoke'],
+    [['cell', '--help'], 'start|list|scale|revoke'],
     [['cell', 'start', '--help'], 'Enroll this Cell'],
     [['server', 'token', '--help'], 'create'],
     [['operator', 'block', '--help'], 'block'],

@@ -96,3 +96,16 @@ export const createHqLink = ({
     stopped: () => halted,
   };
 };
+
+export const hqGateOf = (state: HqState): string | null => {
+  switch (state.kind) {
+    case 'ok':
+      return null;
+    case 'not_connected':
+      return 'factory not connected: run "sf factory connect"';
+    case 'unreachable':
+      return 'HQ unreachable: no Cell starts until HQ answers';
+    case 'rejected':
+      return 'HQ rejected the credential: run "sf factory connect"';
+  }
+};

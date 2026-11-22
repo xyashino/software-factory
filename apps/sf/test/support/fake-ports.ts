@@ -46,7 +46,7 @@ export interface FakeOptions {
 }
 
 export interface DaemonCall {
-  method: 'GET' | 'POST' | 'DELETE';
+  method: 'GET' | 'PUT' | 'POST' | 'DELETE';
   route: string;
   body?: unknown;
 }
@@ -229,6 +229,7 @@ export const createFakePorts = (options: FakeOptions = {}): FakePorts => {
     cellState: { read: async () => null, write: unused },
     factoryDaemon: {
       get: async (route) => recordDaemon({ method: 'GET', route }),
+      put: async (route, body) => recordDaemon({ method: 'PUT', route, body }),
       post: async (route, body) =>
         recordDaemon({ method: 'POST', route, body }),
       delete: async (route) => recordDaemon({ method: 'DELETE', route }),

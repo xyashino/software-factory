@@ -37,6 +37,12 @@ export const createFactoryDaemonAdapter = ({
 
   return {
     get: (route) => send(route, { method: 'GET' }),
+    put: (route, body) =>
+      send(route, {
+        method: 'PUT',
+        headers: JSON_HEADERS,
+        body: JSON.stringify(body),
+      }),
     post: (route, body) =>
       send(route, {
         method: 'POST',

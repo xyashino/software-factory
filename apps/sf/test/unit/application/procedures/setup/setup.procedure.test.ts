@@ -140,18 +140,36 @@ const arrange = (overrides: Partial<Machine> = {}): Arrangement => {
       secret: async () => machine.secret,
     },
     factoryDaemon: {
-      get: async () => ({ cells: machine.cells }),
-      post: async (_route, body) => {
-        const { name } = body as { name: string };
-        const cell = {
-          cellId: `id-${name}`,
-          name,
+      get: async () => ({
+        projects:
+          machine.cells.length === 0
+            ? []
+            : [
+                {
+                  projectId: PROJECT,
+                  repoRoot: REPO,
+                  desired: machine.cells.length,
+                  running: machine.cells.length,
+                  crashLoop: false,
+                  cells: machine.cells.map((cell) => ({
+                    ...cell,
+                    state: 'idle',
+                  })),
+                },
+              ],
+      }),
+      put: async () => {
+        machine.cells.push({
+          cellId: 'id-1',
+          name: 'dev-box',
           repoRoot: REPO,
           pid: machine.cells.length + 1,
-        };
-        machine.cells.push(cell);
+        });
         machine.actions.push('spawn:cell');
-        return cell;
+        return { projectId: PROJECT };
+      },
+      post: async () => {
+        throw new Refused('not used by setup');
       },
       delete: async () => {
         throw new Refused('not used by setup');
@@ -163,7 +181,7 @@ const arrange = (overrides: Partial<Machine> = {}): Arrangement => {
 
 const runSetupOn = (
   ports: Ports,
-  overrides: { cell?: string; project?: string } = {},
+  overrides: { cell?: boolean; project?: string } = {},
 ): Promise<{ steps: SetupStep[] }> =>
   runSetup.execute(
     {
@@ -267,13 +285,13 @@ describe('sf setup', () => {
   it('--cell starts one local cell and skips when already live', async () => {
     // Arrange
     const { machine, ports } = arrange();
-    await runSetupOn(ports, { cell: 'dev-box' });
+    await runSetupOn(ports, { cell: true });
     const spawnedFirst = machine.actions.filter((action) =>
       action.startsWith('spawn:cell'),
     );
 
     // Act
-    const result = await runSetupOn(ports, { cell: 'dev-box' });
+    const result = await runSetupOn(ports, { cell: true });
 
     // Assert
     expect(spawnedFirst).toEqual(['spawn:cell']);

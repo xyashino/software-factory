@@ -4,8 +4,10 @@ import {
   FACTORY_DAEMON_PORT,
   LOCAL_CELLS_DIR,
 } from '../config';
-import { HQ_TICK_MS, createHqLink } from './hq-link';
+import { createCellControl } from './cell-control';
+import { HQ_TICK_MS, createHqLink, hqGateOf } from './hq-link';
 import { createRelay } from './relay';
+import { createScale } from './scale';
 import { createFactoryRoutes } from './routes';
 import { createSupervisor } from './supervisor';
 
@@ -14,25 +16,37 @@ const HOST = '127.0.0.1';
 const ports = buildContext();
 const supervisor = createSupervisor(ports, LOCAL_CELLS_DIR);
 const credential = ports.factoryCredential.read();
-const hq = createHqLink({
-  credential,
-  hq: ports.hq,
-  clock: ports.clock,
-  killAll: () => supervisor.killAll(),
-});
-await hq.tick();
-const timer = setInterval(() => void hq.tick(), HQ_TICK_MS);
 const relay = createRelay({
   credential: () => ports.factoryCredential.read(),
   alive: (cellId) => supervisor.has(cellId),
   kill: (cellId) => supervisor.kill(cellId),
 });
+const cells = createCellControl({ ports, supervisor, relay });
+const scale = createScale({
+  alive: (cellId) => supervisor.has(cellId),
+  clock: ports.clock,
+  gate: () => hqGateOf(hq.state()),
+  spawn: cells.spawn,
+  stop: cells.stop,
+});
+const hq = createHqLink({
+  credential,
+  hq: ports.hq,
+  clock: ports.clock,
+  killAll: () => scale.stopAll(),
+});
+await hq.tick();
+const timer = setInterval(() => {
+  void hq.tick();
+  void scale.tick();
+}, HQ_TICK_MS);
 const server = Bun.serve({
   hostname: HOST,
   port: FACTORY_DAEMON_PORT,
   fetch: createFactoryRoutes({
     ports,
     supervisor,
+    scale,
     hq,
     relay,
     identity:

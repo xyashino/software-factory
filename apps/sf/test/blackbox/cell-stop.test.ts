@@ -1,15 +1,12 @@
-import { spawn } from 'node:child_process';
 import { mkdtempSync } from 'node:fs';
 import { createServer, type Server } from 'node:http';
 import { type AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { Refused } from '../../src/application/core/errors';
 import type { Ports } from '../../src/application/core/procedure';
 import type { ClaimedJob } from '../../src/application/procedures/cell/cell-runtime';
-import { stopCell } from '../../src/application/procedures/cell/stop.procedure';
 import { startCell } from '../../src/application/procedures/cell/start.procedure';
 import type {
   CellSession,
@@ -29,12 +26,8 @@ import {
   createFakePorts,
   PROJECTS_REPLY,
   PROJECTS_ROUTE,
-  runProcedure,
   type ServerCall,
 } from '../support/fake-ports';
-
-const CLI_PATH = fileURLToPath(new URL('../../src/cli.ts', import.meta.url));
-const COMMAND_TIMEOUT_MS = 30_000;
 
 const REPO = '/repo';
 const PROJECT = 'software-factory';
@@ -44,7 +37,6 @@ const CLAIMS_ROUTE = '/api/v1/cells/claims';
 const HEARTBEATS_ROUTE = '/api/v1/cells/heartbeats';
 const LEAVE_ROUTE = '/api/v1/cells/leave';
 const HELLO_ROUTE = '/api/v1/cells/hello';
-const DRAIN_ROUTE = `/api/v1/cells/${CELL_ID}/drain`;
 const FEATURE_LINE = [
   'name: feature',
   'stations:',
@@ -61,12 +53,6 @@ interface Scenario {
   nextJob?: ClaimedJob;
   staleLeave?: boolean;
   signalOnStart?: boolean;
-}
-
-interface CliResult {
-  code: number;
-  stdout: string;
-  stderr: string;
 }
 
 const job = (overrides: Partial<ClaimedJob> = {}): ClaimedJob => ({
@@ -294,25 +280,6 @@ const stubServer = (): Promise<{
     });
   });
 
-const runCli = (
-  args: readonly string[],
-  env: Record<string, string>,
-  cwd: string,
-): Promise<CliResult> =>
-  new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, [CLI_PATH, ...args], { env, cwd });
-    let stdout = '';
-    let stderr = '';
-    const timer = setTimeout(() => child.kill(), COMMAND_TIMEOUT_MS);
-    child.stdout.on('data', (chunk: Buffer) => (stdout += chunk.toString()));
-    child.stderr.on('data', (chunk: Buffer) => (stderr += chunk.toString()));
-    child.on('error', reject);
-    child.on('close', (code) => {
-      clearTimeout(timer);
-      resolve({ code: code ?? -1, stdout, stderr });
-    });
-  });
-
 const fixture: {
   stub?: { url: string; calls: string[]; server: Server };
   daemonPort?: number;
@@ -348,55 +315,6 @@ beforeAll(async () => {
 afterAll(async () => {
   await runFactoryCommand(stopEnv(), 'stop');
   fixture.stub?.server.close();
-});
-
-describe('cell stop request', () => {
-  it('sends one drain request and no other request', async () => {
-    // Arrange
-    const fake = createFakePorts({
-      reply: () => ({
-        code: 200,
-        status: 'draining',
-        force: false,
-        offline: false,
-      }),
-    });
-
-    // Act
-    await runProcedure(stopCell, { id: CELL_ID, force: false }, fake);
-
-    // Assert
-    expect(routesOf(fake.calls)).toEqual([`POST ${DRAIN_ROUTE}`]);
-    expect(bodyOf(fake.calls[0] as ServerCall)).toEqual({ force: false });
-  });
-
-  it('asks for a forced drain when force is set', async () => {
-    // Arrange
-    const fake = createFakePorts({
-      reply: () => ({
-        code: 200,
-        status: 'draining',
-        force: true,
-        offline: false,
-      }),
-    });
-
-    // Act
-    const result = await runProcedure(
-      stopCell,
-      { id: CELL_ID, force: true },
-      fake,
-    );
-
-    // Assert
-    expect(bodyOf(fake.calls[0] as ServerCall)).toEqual({ force: true });
-    expect(result).toEqual({
-      cellId: CELL_ID,
-      status: 'draining',
-      force: true,
-      offline: false,
-    });
-  });
 });
 
 describe('cell drain on the Cell side', () => {
@@ -539,83 +457,5 @@ describe('cell drain on the Cell side', () => {
 
     // Assert
     expect(outcome).toBe('superseded');
-  });
-});
-
-describe('cell stop command', () => {
-  it('prints the graceful drain line with one drain request', async () => {
-    // Arrange
-    const stub = fixture.stub as NonNullable<typeof fixture.stub>;
-    const before = stub.calls.length;
-    fixture.drainReply = {
-      code: 200,
-      status: 'draining',
-      force: false,
-      offline: false,
-    };
-
-    // Act
-    const result = await runCli(
-      ['cell', 'stop', '--id', CELL_ID],
-      stopEnv(),
-      fixture.cwd,
-    );
-
-    // Assert
-    expect(result.stderr).toBe('');
-    expect(result.code).toBe(EXIT.ok);
-    expect(stub.calls.slice(before)).toEqual([
-      `POST /api/v1/cells/${CELL_ID}/drain`,
-    ]);
-    expect(result.stdout).toBe(
-      `cell ${CELL_ID} draining: leaves after the current station; use --force to abort it now\n`,
-    );
-  });
-
-  it('prints the forced drain line when the drain is forced', async () => {
-    // Arrange
-    fixture.drainReply = {
-      code: 200,
-      status: 'draining',
-      force: true,
-      offline: false,
-    };
-
-    // Act
-    const result = await runCli(
-      ['cell', 'stop', '--id', CELL_ID, '--force'],
-      stopEnv(),
-      fixture.cwd,
-    );
-
-    // Assert
-    expect(result.code).toBe(EXIT.ok);
-    expect(result.stdout).toBe(
-      `cell ${CELL_ID} draining (force): current station is aborted at the next heartbeat\n`,
-    );
-  });
-
-  it('warns that an offline Cell will not receive the drain', async () => {
-    // Arrange
-    fixture.drainReply = {
-      code: 200,
-      status: 'draining',
-      force: false,
-      offline: true,
-    };
-
-    // Act
-    const result = await runCli(
-      ['cell', 'stop', '--id', CELL_ID],
-      stopEnv(),
-      fixture.cwd,
-    );
-
-    // Assert
-    expect(result.code).toBe(EXIT.ok);
-    expect(result.stdout).toContain(`cell ${CELL_ID} draining`);
-    expect(result.stderr).toBe(
-      'Cell is offline, no heartbeat will deliver this; check the process or `sf cell revoke`\n',
-    );
   });
 });

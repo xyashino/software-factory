@@ -10,10 +10,7 @@ import { claimLoop } from './claim-loop.procedure';
 import type { CellRuntime } from './cell-runtime';
 import { enrollCell } from './enroll.procedure';
 import { helloCell } from './hello.procedure';
-import {
-  resolveCellTarget,
-  type ProjectChooser,
-} from './resolve-project-target';
+import { resolveCellTarget } from './resolve-project-target';
 
 const LINE_SUFFIX = '.yml';
 const SUPERVISOR: Access = { kind: 'supervisor' };
@@ -26,8 +23,8 @@ export interface StartInput {
   lines: readonly string[] | undefined;
   relayed: boolean;
   project?: string;
-  choose?: ProjectChooser;
   signal: AbortSignal;
+  daemonCellId?: string;
 }
 
 export type StartOutcome = 'superseded' | 'stopped';
@@ -84,7 +81,6 @@ export const startCell = async (
   const target = await resolveCellTarget(ports, {
     repoRoot: input.repoRoot,
     requested: input.project,
-    choose: input.choose,
     relayed: input.relayed,
   });
   const { projectId, repoRoot } = target;
@@ -128,6 +124,7 @@ export const startCell = async (
     logPath: input.logPath,
     signal: input.signal,
     drain: drainStateOf(),
+    daemonCellId: input.daemonCellId,
   };
   await claimLoop(runtime, null);
   return runtime.drain.superseded ? 'superseded' : 'stopped';

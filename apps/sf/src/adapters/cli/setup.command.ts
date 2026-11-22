@@ -29,7 +29,7 @@ const printSteps = (result: SetupResult): void => {
 };
 
 const runSetupCommand = async (options: {
-  cell: string | undefined;
+  cell: boolean;
   project: string | undefined;
   json: boolean;
 }): Promise<number> => {
@@ -76,8 +76,9 @@ export const setupCommand = defineCommand({
   },
   args: {
     cell: {
-      type: 'string',
-      description: 'Also start one local Cell with this name',
+      type: 'boolean',
+      default: false,
+      description: 'Also scale this repo to one local Cell',
     },
     project: {
       type: 'string',
