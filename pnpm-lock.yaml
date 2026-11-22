@@ -375,6 +375,12 @@ importers:
 
   apps/sf:
     dependencies:
+      '@repo/cell-contracts':
+        specifier: workspace:*
+        version: link:../../packages/cell-contracts
+      '@repo/zod-contract-kit':
+        specifier: workspace:*
+        version: link:../../packages/zod-contract-kit
       citty:
         specifier: 'catalog:'
         version: 0.2.2

@@ -10,8 +10,14 @@ import type { DetachedSpec } from '../../../../src/application/ports/process.por
 import { startCellServer } from '../../../../src/application/procedures/cell-server/start.procedure';
 import { statusCellServer } from '../../../../src/application/procedures/cell-server/status.procedure';
 import { stopCellServer } from '../../../../src/application/procedures/cell-server/stop.procedure';
-import { addFactory } from '../../../../src/application/procedures/cell-server/factories.procedure';
-import { setSettings } from '../../../../src/application/procedures/cell-server/settings.procedure';
+import {
+  addFactory,
+  listFactories,
+} from '../../../../src/application/procedures/cell-server/factories.procedure';
+import {
+  getSettings,
+  setSettings,
+} from '../../../../src/application/procedures/cell-server/settings.procedure';
 import { createFakePorts } from '../../../support/fake-ports';
 
 const DATA_DIR = '/data/sf';
@@ -289,6 +295,8 @@ describe('factory add', () => {
               isDefault: false,
               hasJoinToken: true,
               hasSupervisorToken: false,
+              createdAt: 1,
+              updatedAt: 1,
             },
           };
         },
@@ -314,5 +322,74 @@ describe('factory add', () => {
         body: { name: 'home', url: 'http://10.0.0.5:7070', joinToken: 'jt-1' },
       },
     ]);
+  });
+});
+
+describe('cell server reply drift', () => {
+  it('reports a readable error naming the drifted settings field', async () => {
+    // Arrange
+    const ports = withPorts({
+      cellServer: {
+        ...unusedCellServer,
+        get: async () => ({
+          code: 200,
+          settings: { ...SETTINGS, default_runner: 'gemini' },
+        }),
+      },
+    });
+
+    // Act
+    const attempt = runAs(getSettings, {}, ports);
+
+    // Assert
+    await expect(attempt).rejects.toThrow(Unreachable);
+    await expect(attempt).rejects.toThrow(
+      /\/api\/v1\/settings does not match its contract: settings\.default_runner/,
+    );
+  });
+
+  it('reports a readable error when a factory row lacks a field the contract requires', async () => {
+    // Arrange
+    const ports = withPorts({
+      cellServer: {
+        ...unusedCellServer,
+        get: async () => ({
+          code: 200,
+          factories: [
+            {
+              factoryId: 'f-1',
+              name: 'home',
+              url: 'http://10.0.0.5:7070',
+              isDefault: false,
+              hasJoinToken: true,
+              hasSupervisorToken: false,
+            },
+          ],
+        }),
+      },
+    });
+
+    // Act
+    const attempt = runAs(listFactories, {}, ports);
+
+    // Assert
+    await expect(attempt).rejects.toThrow(Unreachable);
+    await expect(attempt).rejects.toThrow(/createdAt/);
+  });
+
+  it('keeps a valid settings reply unchanged', async () => {
+    // Arrange
+    const ports = withPorts({
+      cellServer: {
+        ...unusedCellServer,
+        get: async () => ({ code: 200, settings: SETTINGS }),
+      },
+    });
+
+    // Act
+    const result = await runAs(getSettings, {}, ports);
+
+    // Assert
+    expect(result).toEqual(SETTINGS);
   });
 });

@@ -1,6 +1,13 @@
 import { z } from 'zod';
+import {
+  listFactoriesContract,
+  removeFactoryContract,
+  setDefaultFactoryContract,
+  upsertFactoryContract,
+} from '@repo/cell-contracts/factories.contract';
 import { Refused } from '../../core/errors';
 import { define, type Ports } from '../../core/procedure';
+import { checkedReply } from './checked-reply';
 import {
   type Factory,
   FactoriesReplySchema,
@@ -22,10 +29,18 @@ const AddSchema = z
 const NameOnlySchema = z.object({ name: NameSchema }).strict();
 const EmptySchema = z.object({}).strict();
 
+const FACTORIES_ROUTE = '/api/v1/factories';
+
+const listFactoriesReply = async (ctx: Ports): Promise<Factory[]> =>
+  checkedReply(
+    FACTORIES_ROUTE,
+    listFactoriesContract,
+    FactoriesReplySchema,
+    await ctx.cellServer.get(FACTORIES_ROUTE),
+  ).factories;
+
 const factoryNamed = async (ctx: Ports, name: string): Promise<Factory> => {
-  const { factories } = FactoriesReplySchema.parse(
-    await ctx.cellServer.get('/api/v1/factories'),
-  );
+  const factories = await listFactoriesReply(ctx);
   const found = factories.find((factory) => factory.name === name);
   if (found === undefined) {
     throw new Refused(`factory not found: ${name}`);
@@ -35,7 +50,7 @@ const factoryNamed = async (ctx: Ports, name: string): Promise<Factory> => {
 
 export const addFactory = define({ kind: 'supervisor' })(AddSchema)<Factory>(
   async (input, ctx) => {
-    const reply = await ctx.cellServer.post('/api/v1/factories', {
+    const body: z.input<typeof upsertFactoryContract.in.body> = {
       name: input.name,
       url: input.url,
       ...(input.joinToken === undefined ? {} : { joinToken: input.joinToken }),
@@ -43,34 +58,46 @@ export const addFactory = define({ kind: 'supervisor' })(AddSchema)<Factory>(
         ? {}
         : { supervisorToken: input.supervisorToken }),
       ...(input.isDefault ? { isDefault: true } : {}),
-    });
-    return FactoryReplySchema.parse(reply).factory;
+    };
+    const reply = await ctx.cellServer.post(FACTORIES_ROUTE, body);
+    return checkedReply(
+      FACTORIES_ROUTE,
+      upsertFactoryContract,
+      FactoryReplySchema,
+      reply,
+    ).factory;
   },
 );
 
 export const listFactories = define({ kind: 'supervisor' })(EmptySchema)<
   Factory[]
->(async (_input, ctx) => {
-  const reply = await ctx.cellServer.get('/api/v1/factories');
-  return FactoriesReplySchema.parse(reply).factories;
-});
+>((_input, ctx) => listFactoriesReply(ctx));
 
 export const useFactory = define({ kind: 'supervisor' })(
   NameOnlySchema,
 )<Factory>(async (input, ctx) => {
   const factory = await factoryNamed(ctx, input.name);
-  const reply = await ctx.cellServer.post(
-    `/api/v1/factories/${encodeURIComponent(factory.factoryId)}/default`,
-  );
-  return FactoryReplySchema.parse(reply).factory;
+  const route = `${FACTORIES_ROUTE}/${encodeURIComponent(factory.factoryId)}/default`;
+  const reply = await ctx.cellServer.post(route);
+  return checkedReply(
+    route,
+    setDefaultFactoryContract,
+    FactoryReplySchema,
+    reply,
+  ).factory;
 });
 
 export const removeFactory = define({ kind: 'supervisor' })(
   NameOnlySchema,
 )<string>(async (input, ctx) => {
   const factory = await factoryNamed(ctx, input.name);
-  await ctx.cellServer.delete(
-    `/api/v1/factories/${encodeURIComponent(factory.factoryId)}`,
+  const route = `${FACTORIES_ROUTE}/${encodeURIComponent(factory.factoryId)}`;
+  const reply = await ctx.cellServer.delete(route);
+  checkedReply(
+    route,
+    removeFactoryContract,
+    removeFactoryContract.out[200],
+    reply,
   );
   return factory.factoryId;
 });
