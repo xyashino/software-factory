@@ -11,6 +11,7 @@ export const XDG_DATA_HOME =
 export const XDG_CONFIG_HOME =
   process.env.XDG_CONFIG_HOME || join(homedir(), '.config');
 export const DEFAULT_CONFIG_DIR = join(XDG_CONFIG_HOME, 'sf');
+export const SYSTEMD_USER_DIR = join(XDG_CONFIG_HOME, 'systemd', 'user');
 export const GLOBAL_CONFIG_PATH = join(DEFAULT_CONFIG_DIR, 'config.json');
 export const LEGACY_TOKEN_PATH = join(homedir(), '.config', 'factory', 'token');
 export const DEFAULT_FACTORY_URL = 'http://127.0.0.1:7070';
