@@ -32,6 +32,7 @@ interface Control {
   exit?: (outcome: RunOutcome) => void;
   env?: Record<string, string>;
   refuseAbort: boolean;
+  aborts: number;
   beat: { signals: string[]; down: boolean };
 }
 
@@ -109,6 +110,7 @@ const jobOf = (patch: Partial<ClaimedJob>): ClaimedJob => ({
 
 const harness = (options: {
   interactive: boolean;
+  stopConfirmed?: boolean;
   alivePids?: number[];
   psStart?: string;
   runnerPid?: number;
@@ -121,6 +123,7 @@ const harness = (options: {
   const sleepers: Sleeper[] = [];
   const control: Control = {
     refuseAbort: false,
+    aborts: 0,
     beat: { signals: [], down: false },
   };
   const clock = { at: 0 };
@@ -204,7 +207,10 @@ const harness = (options: {
           ? PANE
           : { ...PANE, pid: options.runnerPid };
       },
-      abort: async () => !control.refuseAbort,
+      abort: async () => {
+        control.aborts += 1;
+        return (options.stopConfirmed ?? true) && !control.refuseAbort;
+      },
       wait: (): Promise<RunOutcome> =>
         new Promise((done) => {
           control.exit = done;
@@ -443,6 +449,46 @@ describe('cell run outcome log', () => {
       ),
     );
     expect(h.routes()).toContain(LEAVE_ROUTE);
+  });
+
+  it('aborts the runner and hands the job back when the signal fires mid-job', async () => {
+    // Arrange
+    const h = harness({ interactive: true });
+    const stop = new AbortController();
+    h.runtime.signal = stop.signal;
+    const job = runJob(h.runtime, jobOf({}));
+    await paneLogged(h);
+
+    // Act
+    stop.abort();
+    const next = await job;
+
+    // Assert
+    expect(next).toBeNull();
+    expect(h.control.aborts).toBe(1);
+    expect(h.routes()).toContain(LEAVE_ROUTE);
+    expect(h.runtime.drain.left).toBe(true);
+  });
+
+  it('fails the job and stops claiming when the runner survives the signal', async () => {
+    // Arrange
+    const h = harness({ interactive: true, stopConfirmed: false });
+    const stop = new AbortController();
+    h.runtime.signal = stop.signal;
+    const job = runJob(h.runtime, jobOf({}));
+    await paneLogged(h);
+
+    // Act
+    stop.abort();
+    const next = await job;
+
+    // Assert
+    expect(next).toBeNull();
+    expect(h.lines()).toContainEqual(
+      expect.stringMatching(/build fail .*runner still alive after abort/),
+    );
+    expect(h.routes()).toContain(LEAVE_ROUTE);
+    expect(h.runtime.drain.left).toBe(true);
   });
 
   it('logs the drain-force end and the abort of the runner', async () => {
