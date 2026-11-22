@@ -2,7 +2,6 @@ import { eq } from 'drizzle-orm';
 import { immediateTx, type DbTx } from '../../../db/client';
 import { cells } from '../../../db/schema/cells';
 import { jobs } from '../../../db/schema/jobs';
-import { workOrders } from '../../../db/schema/orders';
 import { leaveCellContract } from '@repo/factory-contracts/cells.contract';
 import { asCommandId, type CellId } from '../../../domain/common/brand';
 import {
@@ -12,6 +11,7 @@ import {
   StaleLeaseEpoch,
 } from '../../core/error-handling';
 import { scopedProcedure } from '../../core/procedure';
+import { unpinOrders } from '../../orders/cell-release';
 import {
   findOrder,
   flushTransitions,
@@ -42,16 +42,6 @@ const liveJobOf = (tx: DbTx, cell: CellRow): JobRow | undefined => {
     ACTIVE_JOB_STATUSES.some((status) => status === job.status)
     ? job
     : undefined;
-};
-
-const unpinOrders = (tx: DbTx, cellId: CellId, now: number): void => {
-  const pinned = tx
-    .select()
-    .from(workOrders)
-    .where(eq(workOrders.pinnedCellId, cellId))
-    .all();
-  for (const row of pinned)
-    updateWorkOrder(tx, row, { pinnedCellId: null }, now);
 };
 
 const markCellLeft = (

@@ -29,6 +29,13 @@
       "when": 1795368641117,
       "tag": "0003_cell_factory_owner",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1795370468116,
+      "tag": "0004_cell_gone",
+      "breakpoints": true
     }
   ]
 }

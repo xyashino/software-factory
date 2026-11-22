@@ -16,10 +16,14 @@ const EnrollReplySchema = z.object({
 });
 
 const HeartbeatReplySchema = z.object({ factoryId: z.string().min(1) });
+const GoneReplySchema = z.object({ cellId: z.string().min(1) });
 
 interface Parser<T> {
   parse(raw: unknown): T;
 }
+
+const goneRouteOf = (cellId: string): string =>
+  `/api/v1/factories/cells/${encodeURIComponent(cellId)}/gone`;
 
 const send = async (
   fetchImpl: typeof fetch,
@@ -73,5 +77,15 @@ export const createHqClient = (
         undefined,
       ),
       HeartbeatReplySchema,
+    ),
+  goneCell: async ({ url, sessionToken, cellId }) =>
+    replyOf(
+      await send(
+        fetchImpl,
+        `${url}${goneRouteOf(cellId)}`,
+        sessionToken,
+        undefined,
+      ),
+      GoneReplySchema,
     ),
 });

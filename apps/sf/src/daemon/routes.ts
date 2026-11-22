@@ -104,6 +104,19 @@ const workerEnvOf = (
   ...(lines === undefined ? {} : { [CELL_LINES_ENV]: lines.join(',') }),
 });
 
+// HQ failure is not reported: the HQ reaper deletes the Cell after its lease expires.
+const goneInHq = async (deps: RouteDeps, hqCellId: string): Promise<void> => {
+  const credential = deps.ports.factoryCredential.read();
+  if (credential === null) {
+    return;
+  }
+  await deps.ports.hq.goneCell({
+    url: credential.url,
+    sessionToken: credential.sessionToken,
+    cellId: hqCellId,
+  });
+};
+
 const createCell = async (
   deps: RouteDeps,
   raw: unknown,
@@ -170,6 +183,10 @@ const handle = async (deps: RouteDeps, request: Request): Promise<Response> => {
     const id = decodeURIComponent(cellId);
     if (!(await deps.supervisor.kill(id))) {
       return failure(NOT_FOUND, 'not_found', `no cell ${id}`);
+    }
+    const hqCellId = deps.relay.hqCellIdOf(id);
+    if (hqCellId !== null) {
+      await goneInHq(deps, hqCellId);
     }
     return reply(OK, { cellId: id });
   }

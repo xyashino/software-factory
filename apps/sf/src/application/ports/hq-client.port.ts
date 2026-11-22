@@ -17,4 +17,9 @@ export interface HqClientPort {
     url: string;
     sessionToken: string;
   }): Promise<HqReply<{ factoryId: string }>>;
+  goneCell(input: {
+    url: string;
+    sessionToken: string;
+    cellId: string;
+  }): Promise<HqReply<{ cellId: string }>>;
 }
