@@ -780,9 +780,9 @@ CREATE UNIQUE INDEX idx_work_orders_one_active_per_cell
 
 ## 10. Implementation Roadmap & Vertical Slice Todos (`todo/`)
 
-Code shape and layering (`domain -> db -> contracts -> application (ports + procedures) -> adapters/hono -> bootstrap -> tests`) are governed by [**`BE_RULES.md`**](BE_RULES.md) (modeled on `.tmp/omino-api`).
+Code shape and layering (`domain -> db -> contracts -> application (ports + procedures) -> adapters/hono -> bootstrap -> tests`) are governed by [**`BE_RULES.md`**](BE_RULES.md).
 
-**Scope Boundary (Backend Only)**: Implementation is strictly confined to `apps/factory`. We do **not** connect or modify `apps/cell`, `apps/sf`, or any `packages/factory-*` workspace packages—all Cell and Supervisor interactions are tested purely against the backend HTTP API via black-box `app.request()` tests in `apps/factory/test/`.
+**Scope Boundary (Backend Only)**: Implementation is strictly confined to `apps/factory`. We do **not** connect or modify `apps/cell`, `apps/sf`, or any other workspace package—all Cell and Supervisor interactions are tested purely against the backend HTTP API via black-box `app.request()` tests in `apps/factory/test/`.
 
 Each vertical slice in [`todo/`](todo/README.md) ships, migrates, typechecks, and passes unit, DB, and black-box HTTP tests independently:
 
