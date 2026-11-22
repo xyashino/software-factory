@@ -14,7 +14,7 @@ import type {
   ProjectId,
   StepId,
 } from '../../domain/common/brand';
-import { jsonColumn } from '../columns';
+import { jsonColumn } from '@repo/bun-sqlite-kit/columns';
 import { cells } from './cells';
 import { incidents } from './incidents';
 import { orderPlans } from './plans';

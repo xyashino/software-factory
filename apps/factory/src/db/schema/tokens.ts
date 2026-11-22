@@ -5,7 +5,7 @@ import {
   type AnySQLiteColumn,
 } from 'drizzle-orm/sqlite-core';
 import type { CellId, TokenId } from '../../domain/common/brand';
-import { jsonColumn } from '../columns';
+import { jsonColumn } from '@repo/bun-sqlite-kit/columns';
 import { cells } from './cells';
 
 export const TOKEN_KINDS = [

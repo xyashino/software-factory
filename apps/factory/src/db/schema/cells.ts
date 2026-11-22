@@ -1,6 +1,6 @@
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 import type { CellId, JobId, ProjectId } from '../../domain/common/brand';
-import { jsonColumn } from '../columns';
+import { jsonColumn } from '@repo/bun-sqlite-kit/columns';
 import { projects } from './projects';
 
 export const CELL_STATUSES = [

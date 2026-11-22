@@ -326,6 +326,9 @@ importers:
 
   apps/factory:
     dependencies:
+      '@repo/bun-sqlite-kit':
+        specifier: workspace:*
+        version: link:../../packages/bun-sqlite-kit
       '@repo/zod-contract-kit':
         specifier: workspace:*
         version: link:../../packages/zod-contract-kit

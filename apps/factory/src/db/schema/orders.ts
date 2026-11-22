@@ -13,7 +13,7 @@ import type {
   ProjectId,
   StepId,
 } from '../../domain/common/brand';
-import { jsonColumn, timestamps } from '../columns';
+import { jsonColumn, timestamps } from '@repo/bun-sqlite-kit/columns';
 import { cells } from './cells';
 import { orderPlans } from './plans';
 import { projects } from './projects';

@@ -1,7 +1,7 @@
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 import type { ProjectId } from '../../domain/common/brand';
 import { ACTOR_KINDS, ENTITY_TYPES } from '../../domain/common/events';
-import { jsonColumn } from '../columns';
+import { jsonColumn } from '@repo/bun-sqlite-kit/columns';
 import { projects } from './projects';
 
 export const stateTransitions = sqliteTable('state_transitions', {
