@@ -31,15 +31,32 @@ const logOptionsIn = (dir: string) => ({
 });
 const LOG_OPTIONS = logOptionsIn(mkdtempSync(join(tmpdir(), 'herdr-logs-')));
 
+const LAUNCHER_PID = 100;
+
 const fakeHerdr = (
   statusCode = 0,
   workspaceList = NO_WORKSPACES,
   tabList = TABS('1'),
+  recordsPid = true,
 ): FakeHerdr => {
   const calls: string[][] = [];
+  let launches = 0;
   const port: ProcessPort = {
-    run: async (command, args) => {
+    run: async (command, args, cwd) => {
       calls.push([command, ...args]);
+      if (
+        args[0] === 'pane' &&
+        args[1] === 'run' &&
+        args[3]?.startsWith('bash ')
+      ) {
+        launches += 1;
+        if (recordsPid) {
+          writeFileSync(
+            join(cwd, `herdr-${launches}.pid`),
+            `${LAUNCHER_PID}\n`,
+          );
+        }
+      }
       if (args[0] === 'status') return { ...OK, exitCode: statusCode };
       if (args[0] === 'workspace' && args[1] === 'list')
         return { ...OK, stdout: workspaceList };
@@ -157,6 +174,19 @@ describe('herdr pane runner', () => {
     expect(
       calls.find((call) => call[2] === 'create' && call[1] === 'tab'),
     ).toContain('w5');
+  });
+
+  it('hands back the launcher pid once the pane runs it', async () => {
+    // Arrange
+    const dir = stepDir();
+    const { port } = fakeHerdr();
+    const runner = createHerdrRunner(port, CELL);
+
+    // Act
+    const handle = await runner.start(specIn(dir));
+
+    // Assert
+    expect(handle.pid).toBe(LAUNCHER_PID);
   });
 
   it('closes the previous tab when the next run starts', async () => {
@@ -334,8 +364,14 @@ const AGENT_TREE = ['  100     1', '  200   100', '  300   200'].join('\n');
 const processTree = (
   ignoresTerm: readonly number[] = [],
   ignoresKill: readonly number[] = [],
+  recordsPid = true,
 ) => {
-  const { port: herdr, calls } = fakeHerdr();
+  const { port: herdr, calls } = fakeHerdr(
+    0,
+    NO_WORKSPACES,
+    TABS('1'),
+    recordsPid,
+  );
   const alive = new Set([100, 200, 300]);
   const kills: string[][] = [];
   const port: ProcessPort = {
@@ -429,13 +465,17 @@ describe('herdr pane runner abort', () => {
 
   it('confirms a run as gone when its pid was never recorded', async () => {
     // Arrange
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     const dir = stepDir();
-    const { port } = processTree();
+    const { port } = processTree([], [], false);
     const runner = createHerdrRunner(port, CELL);
-    const handle = await runner.start(specIn(dir));
+    const starting = runner.start(specIn(dir));
+    await vi.advanceTimersByTimeAsync(10_000);
+    const handle = await starting;
 
     // Act
     const gone = await runner.abort(handle);
+    vi.useRealTimers();
 
     // Assert
     expect(gone).toBe(true);

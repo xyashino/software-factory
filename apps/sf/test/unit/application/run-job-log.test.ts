@@ -107,7 +107,12 @@ const jobOf = (patch: Partial<ClaimedJob>): ClaimedJob => ({
   ...patch,
 });
 
-const harness = (options: { interactive: boolean }): Harness => {
+const harness = (options: {
+  interactive: boolean;
+  alivePids?: number[];
+  psStart?: string;
+  runnerPid?: number;
+}): Harness => {
   const files = new Map<string, string>([
     [LINE_PATH, LINE_YAML],
     [PROFILE_PATH, PROFILE],
@@ -130,6 +135,7 @@ const harness = (options: { interactive: boolean }): Harness => {
     }
   };
   const fake = createFakePorts({
+    alivePids: options.alivePids,
     reply: (call) => {
       if (call.route === HEARTBEATS_ROUTE) {
         if (control.beat.down) throw new Error('server down');
@@ -178,7 +184,14 @@ const harness = (options: { interactive: boolean }): Harness => {
     },
     process: {
       ...fake.ports.process,
-      run: async () => {
+      run: async (command) => {
+        if (command === 'ps') {
+          return {
+            exitCode: 0,
+            stdout: `${options.psStart ?? ''}\n`,
+            stderr: '',
+          };
+        }
         clock.at += GATE_MS;
         return { exitCode: 0, stdout: '', stderr: '' };
       },
@@ -187,7 +200,9 @@ const harness = (options: { interactive: boolean }): Harness => {
       prepare: async () => undefined,
       start: async (spec) => {
         control.env = spec.env;
-        return PANE;
+        return options.runnerPid === undefined
+          ? PANE
+          : { ...PANE, pid: options.runnerPid };
       },
       abort: async () => !control.refuseAbort,
       wait: (): Promise<RunOutcome> =>
@@ -487,5 +502,166 @@ describe('cell run outcome log', () => {
     expect(cycleToken).not.toBe('');
     expect(text).not.toContain(cycleToken);
     expect(text).not.toContain('session-token');
+  });
+});
+
+const RUNNER_PATH = joinPath(WORKTREE, '.cell', 'build', 'runner.json');
+const STARTED_AT = 'Sat Nov 21 15:29:22 2026';
+
+const heldLockJson = (pid: number, pidStartedAt: string): string =>
+  JSON.stringify({
+    interactive: true,
+    reason: '',
+    runId: 'run-9',
+    pid,
+    pidStartedAt,
+    pane: 'w5J:p2',
+    startedAt: 1,
+  });
+
+describe('step runner lock', () => {
+  it('refuses a second start while the lock names a live runner', async () => {
+    // Arrange
+    const h = harness({
+      interactive: true,
+      alivePids: [4242],
+      psStart: STARTED_AT,
+    });
+    await h.runtime.ports.fs.writeText(
+      RUNNER_PATH,
+      heldLockJson(4242, STARTED_AT),
+    );
+
+    // Act
+    await runJob(h.runtime, jobOf({}));
+
+    // Assert
+    expect(h.lines()).toContainEqual(
+      expect.stringMatching(
+        /build fail .*runner still holds this step: runner=run-9 pid=4242 pane=w5J:p2$/,
+      ),
+    );
+    expect(h.control.env?.FACTORY_CYCLE_TOKEN).toBeUndefined();
+  });
+
+  it('takes over a lock whose runner pid is gone and logs it', async () => {
+    // Arrange
+    const h = harness({ interactive: true });
+    await h.runtime.ports.fs.writeText(
+      RUNNER_PATH,
+      heldLockJson(4242, STARTED_AT),
+    );
+
+    // Act
+    const job = runJob(h.runtime, jobOf({}));
+    await paneLogged(h);
+    h.control.exit?.({ exitCode: 0 });
+    await job;
+
+    // Assert
+    expect(h.lines()).toContainEqual(
+      expect.stringMatching(/build lock takeover stale runner=run-9 pid=4242$/),
+    );
+    expect(h.control.env?.FACTORY_CYCLE_TOKEN).toBeDefined();
+  });
+
+  it('takes over a lock whose pid now belongs to another process', async () => {
+    // Arrange
+    const h = harness({
+      interactive: true,
+      alivePids: [4242],
+      psStart: 'Sun Nov 22 09:00:00 2026',
+    });
+    await h.runtime.ports.fs.writeText(
+      RUNNER_PATH,
+      heldLockJson(4242, STARTED_AT),
+    );
+
+    // Act
+    const job = runJob(h.runtime, jobOf({}));
+    await paneLogged(h);
+    h.control.exit?.({ exitCode: 0 });
+    await job;
+
+    // Assert
+    expect(h.lines()).toContainEqual(
+      expect.stringMatching(/build lock takeover stale runner=run-9 pid=4242$/),
+    );
+  });
+
+  it('records the runner pid and pane while the runner is alive', async () => {
+    // Arrange
+    const h = harness({
+      interactive: true,
+      runnerPid: 4242,
+      alivePids: [4242],
+      psStart: STARTED_AT,
+    });
+
+    // Act
+    const job = runJob(h.runtime, jobOf({}));
+    await paneLogged(h);
+    const during = JSON.parse(await h.runtime.ports.fs.readText(RUNNER_PATH));
+    h.control.exit?.({ exitCode: 0 });
+    await job;
+
+    // Assert
+    expect(during).toMatchObject({
+      runId: 'run-1',
+      pid: 4242,
+      pidStartedAt: STARTED_AT,
+      pane: 'w6F:p1',
+    });
+  });
+
+  it('releases the step lock after a normal exit', async () => {
+    // Arrange
+    const h = harness({ interactive: true });
+
+    // Act
+    const job = runJob(h.runtime, jobOf({}));
+    await paneLogged(h);
+    h.control.exit?.({ exitCode: 0 });
+    await job;
+
+    // Assert
+    expect(await h.runtime.ports.fs.readText(RUNNER_PATH)).not.toContain(
+      'runId',
+    );
+  });
+
+  it('releases the step lock after a failed exit', async () => {
+    // Arrange
+    const h = harness({ interactive: true });
+
+    // Act
+    const job = runJob(h.runtime, jobOf({}));
+    await paneLogged(h);
+    h.control.exit?.({ exitCode: 1 });
+    await job;
+
+    // Assert
+    expect(await h.runtime.ports.fs.readText(RUNNER_PATH)).not.toContain(
+      'runId',
+    );
+  });
+
+  it('releases the step lock after the runner is stopped by its own verb', async () => {
+    // Arrange
+    const h = harness({ interactive: true });
+    const job = runJob(h.runtime, jobOf({}));
+    await paneLogged(h);
+
+    // Act
+    await h.control.handler?.({
+      verb: 'done',
+      token: h.control.env?.FACTORY_CYCLE_TOKEN,
+    });
+    await job;
+
+    // Assert
+    expect(await h.runtime.ports.fs.readText(RUNNER_PATH)).not.toContain(
+      'runId',
+    );
   });
 });

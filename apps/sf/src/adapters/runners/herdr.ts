@@ -32,6 +32,8 @@ const LOG_TAIL_LINES = 200;
 const CLEAR_SCREEN = "printf '\\033[2J\\033[3J\\033[H'";
 const TERM_WAIT_MS = 10_000;
 const KILL_WAIT_MS = 5_000;
+const PID_WAIT_MS = 10_000;
+const PID_POLL_MS = 100;
 const TAB_ID = /"tab_id"\s*:\s*"([^"]+)"/;
 const PANE_ID = /"pane_id"\s*:\s*"([^"]+)"/;
 const WORKSPACE_ID = /"workspace_id"\s*:\s*"([^"]+)"/;
@@ -100,6 +102,18 @@ const pidOf = (pidFile: string): number | undefined => {
   if (!existsSync(pidFile)) return undefined;
   const pid = Number.parseInt(readFileSync(pidFile, 'utf8'), 10);
   return Number.isNaN(pid) ? undefined : pid;
+};
+
+// The launcher writes its pid right after the pane runs it; the pid is what the step lock records.
+const pidWithin = async (
+  pidFile: string,
+  limitMs: number,
+): Promise<number | undefined> => {
+  for (let waited = 0; ; waited += PID_POLL_MS) {
+    const pid = pidOf(pidFile);
+    if (pid !== undefined || waited >= limitMs) return pid;
+    await sleep(PID_POLL_MS);
+  }
 };
 
 const childrenOf = (
@@ -367,7 +381,8 @@ export const createHerdrRunner = (
         aborted: false,
       });
       previous = { runId: id, tabId };
-      return { id, pane: { workspaceId, tabId, paneId } };
+      const pid = await pidWithin(pidFile, PID_WAIT_MS);
+      return { id, pane: { workspaceId, tabId, paneId }, pid };
     },
     abort: async (handle) => {
       const run = runs.get(handle.id);

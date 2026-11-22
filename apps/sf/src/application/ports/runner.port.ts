@@ -17,6 +17,8 @@ export interface RunHandle {
   id: string;
   /** the terminal pane a run opened, when it has one */
   pane?: RunPane;
+  /** the pid that stays alive while the run's agent does */
+  pid?: number;
 }
 
 export interface RunOutcome {

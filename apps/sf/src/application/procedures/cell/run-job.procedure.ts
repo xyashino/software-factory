@@ -15,10 +15,16 @@ import {
 import { slugSchema } from '../../../contracts/common';
 import { transitionJobContract } from '../../../contracts/jobs.contract';
 import { operatorRequest } from '../../../contracts/operator.contract';
+import type { RunHandle } from '../../ports/runner.port';
 import { commandIdOf } from '../../../domain/cell/command-id';
 import { renderLogLine } from '../../../domain/cell/log-line';
 import type { OperatorOutcome } from '../../../domain/cell/cell-loop';
 import { drainPolicy } from '../../../domain/cell/drain-policy';
+import {
+  lockVerdictOf,
+  parseStepLock,
+  type StepLock,
+} from '../../../domain/cell/step-lock';
 import { toJobId } from '../../../domain/common/brand';
 import { joinPath } from '../../../domain/common/path';
 import { factoryBranchOf, slugOf } from '../../../domain/git/branch-names';
@@ -989,6 +995,94 @@ const deliverStation = async (
   }
 };
 
+const runnerFileOf = (
+  runtime: CellRuntime,
+  job: ClaimedJob,
+  dir: string,
+): string => joinPath(dirOf(runtime, job, dir), RUNNER_FILE);
+
+const heldLockOf = async (
+  runtime: CellRuntime,
+  job: ClaimedJob,
+  dir: string,
+): Promise<StepLock | null> => {
+  const path = runnerFileOf(runtime, job, dir);
+  if (!(await runtime.ports.fs.exists(path))) return null;
+  try {
+    return parseStepLock(JSON.parse(await runtime.ports.fs.readText(path)));
+  } catch {
+    return null;
+  }
+};
+
+const startedAtOf = async (
+  runtime: CellRuntime,
+  job: ClaimedJob,
+  pid: number,
+): Promise<string | null> => {
+  const { process: processPort } = runtime.ports;
+  if (!processPort.isAlive(pid)) return null;
+  const result = await processPort.run(
+    'ps',
+    ['-o', 'lstart=', '-p', String(pid)],
+    worktreeOf(runtime, job),
+  );
+  const started = result.stdout.trim();
+  return result.exitCode === 0 && started !== '' ? started : null;
+};
+
+// Refuses while a live runner holds the step dir; a lock whose runner is gone is taken over and logged.
+const claimStepLock = async (
+  runtime: CellRuntime,
+  job: ClaimedJob,
+  dir: string,
+): Promise<string | null> => {
+  const lock = await heldLockOf(runtime, job, dir);
+  if (lock === null) return null;
+  const observed =
+    lock.pid === null ? null : await startedAtOf(runtime, job, lock.pid);
+  if (lockVerdictOf(lock, observed) === 'live') {
+    return `runner still holds this step: runner=${lock.runId} pid=${lock.pid ?? 'unknown'} pane=${lock.pane ?? '-'}`;
+  }
+  await logLine(
+    runtime,
+    job,
+    'lock',
+    `takeover stale runner=${lock.runId} pid=${lock.pid ?? '-'}`,
+  );
+  return null;
+};
+
+const lockOf = async (
+  runtime: CellRuntime,
+  job: ClaimedJob,
+  handle: RunHandle,
+): Promise<StepLock> => {
+  const pid = handle.pid ?? null;
+  // Without a confirmed start time the pid cannot be told from a reused one, so the lock records no pid.
+  const pidStartedAt =
+    pid === null ? null : await startedAtOf(runtime, job, pid);
+  return {
+    runId: handle.id,
+    pid: pidStartedAt === null ? null : pid,
+    pidStartedAt,
+    pane: handle.pane?.paneId ?? null,
+    startedAt: runtime.ports.clock.now(),
+  };
+};
+
+const writeRunnerFile = async (
+  runtime: CellRuntime,
+  job: ClaimedJob,
+  dir: string,
+  mode: { interactive: boolean; reason: string },
+  lock: StepLock | null,
+): Promise<void> =>
+  runtime.ports.fs.writeText(
+    runnerFileOf(runtime, job, dir),
+    `${JSON.stringify({ ...mode, ...lock })}\n`,
+  );
+
 // Runs the operator process for one job and hands its end to `finishRun`, all while the lease is kept alive.
 const runOperator = async (
   runtime: CellRuntime,
@@ -997,6 +1091,8 @@ const runOperator = async (
   finishRun: (end: RunEnd, ran: string) => Promise<ClaimedJob | null>,
 ): Promise<ClaimedJob | null> => {
   const { ports } = runtime;
+  const refusal = await claimStepLock(runtime, job, run.dir);
+  if (refusal !== null) return finishWithFail(runtime, job, refusal);
   const startedAt = ports.clock.now();
   const cycleToken = cycleTokenOf();
   const end = deferred<RunEnd>();
@@ -1023,9 +1119,12 @@ const runOperator = async (
     mode = { interactive: false, reason: errorText(error) };
     handle = await startRun(run.plan.fallback);
   }
-  await ports.fs.writeText(
-    joinPath(dirOf(runtime, job, run.dir), RUNNER_FILE),
-    `${JSON.stringify(mode)}\n`,
+  await writeRunnerFile(
+    runtime,
+    job,
+    run.dir,
+    mode,
+    await lockOf(runtime, job, handle),
   );
   const { pane } = handle;
   await logLine(
@@ -1063,6 +1162,7 @@ const runOperator = async (
   }
   let forced = false;
   let heartbeatFailures = 0;
+  let stopped = false;
   const heartbeat = startHeartbeat({
     clock: ports.clock,
     intervalMs: HEARTBEAT_INTERVAL_MS,
@@ -1111,20 +1211,27 @@ const runOperator = async (
       outcome.kind === 'aborted'
         ? `heartbeat failures=${heartbeatFailures}`
         : outcome.kind;
-    if (stopNeeded && !(await abortRun(`reason=${reason}`))) {
-      // A second runner must never start in this worktree while the first lives: fail the job and stop claiming.
-      await finishWithFail(
-        runtime,
-        job,
-        'runner still alive after abort, Cell left without claiming',
-        ranOf(),
-      );
-      await leaveCell(runtime, null);
-      return null;
+    if (stopNeeded) {
+      if (!(await abortRun(`reason=${reason}`))) {
+        // A second runner must never start in this worktree while the first lives: fail the job and stop claiming.
+        await finishWithFail(
+          runtime,
+          job,
+          'runner still alive after abort, Cell left without claiming',
+          ranOf(),
+        );
+        await leaveCell(runtime, null);
+        return null;
+      }
+      stopped = true;
     }
     return await finishRun(outcome, ranOf());
   } finally {
     heartbeat.stop();
+    // A headless runner that reported a verb may still be alive: its lock stays until its exit is seen.
+    if (exit.code !== undefined || stopped) {
+      await writeRunnerFile(runtime, job, run.dir, mode, null);
+    }
     await ports.operator.close();
   }
 };
