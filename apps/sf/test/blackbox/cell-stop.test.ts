@@ -257,6 +257,7 @@ const runScenario = async (scenario: Scenario) => {
       },
       abort: async (handle) => {
         aborts.push(handle);
+        return true;
       },
       wait: () => new Promise<RunOutcome>(() => undefined),
     },

@@ -120,7 +120,7 @@ const harness = (options: { timeoutFires?: boolean } = {}): Harness => {
         runs.push(spec);
         return { id: 'run-1' };
       },
-      abort: async () => undefined,
+      abort: async () => true,
       wait: (): Promise<RunOutcome> =>
         new Promise((done) => {
           control.exit = done;

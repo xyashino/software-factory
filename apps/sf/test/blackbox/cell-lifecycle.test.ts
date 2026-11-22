@@ -317,7 +317,7 @@ const runScenario = async (scenario: Scenario) => {
         });
         return { id: `run-${runs.length}` };
       },
-      abort: async () => undefined,
+      abort: async () => true,
       wait: () => new Promise<RunOutcome>(() => undefined),
     },
   };

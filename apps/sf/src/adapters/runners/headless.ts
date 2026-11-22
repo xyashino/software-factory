@@ -10,35 +10,58 @@ import type {
 
 const KILL_AFTER_MS = 5_000;
 const SPAWN_FAILED_EXIT = 127;
+const IS_WINDOWS = process.platform === 'win32';
 
 interface HeadlessRun {
   exit: Promise<number>;
-  abort: () => void;
+  stop: () => Promise<boolean>;
 }
 
 const spawnHeadless = (spec: RunSpec): HeadlessRun => {
   mkdirSync(dirname(spec.logPath), { recursive: true });
   const log = openSync(spec.logPath, 'a');
+  // Own process group, so the signal reaches the agent's children too.
   const child = spawn(spec.command, spec.args, {
     cwd: spec.cwd,
     env: { ...process.env, ...spec.env },
     stdio: ['ignore', log, log],
+    detached: !IS_WINDOWS,
   });
   closeSync(log);
-  let killTimer: ReturnType<typeof setTimeout> | undefined;
+  let exited = false;
   const exit = new Promise<number>((resolve) => {
     const settle = (code: number): void => {
-      clearTimeout(killTimer);
+      exited = true;
       resolve(code);
     };
     child.once('error', () => settle(SPAWN_FAILED_EXIT));
     child.once('close', (code) => settle(code ?? -1));
   });
+  const { pid } = child;
+  const signalTree = (signal: NodeJS.Signals): void => {
+    if (pid === undefined) return;
+    try {
+      process.kill(IS_WINDOWS ? pid : -pid, signal);
+    } catch {
+      child.kill(signal);
+    }
+  };
+  const exitWithin = (ms: number): Promise<boolean> =>
+    new Promise((resolve) => {
+      const timer = setTimeout(() => resolve(false), ms);
+      void exit.then(() => {
+        clearTimeout(timer);
+        resolve(true);
+      });
+    });
   return {
     exit,
-    abort: () => {
-      child.kill('SIGTERM');
-      killTimer ??= setTimeout(() => child.kill('SIGKILL'), KILL_AFTER_MS);
+    stop: async () => {
+      if (exited) return true;
+      signalTree('SIGTERM');
+      if (await exitWithin(KILL_AFTER_MS)) return true;
+      signalTree('SIGKILL');
+      return exitWithin(KILL_AFTER_MS);
     },
   };
 };
@@ -54,9 +77,7 @@ export const createHeadlessRunner = (): RunnerPort => {
       runs.set(id, spawnHeadless(spec));
       return { id };
     },
-    abort: async (handle) => {
-      runs.get(handle.id)?.abort();
-    },
+    abort: async (handle) => runs.get(handle.id)?.stop() ?? true,
     wait: async (handle): Promise<RunOutcome> => {
       const run = runs.get(handle.id);
       if (run === undefined) throw new Error(`unknown run ${handle.id}`);

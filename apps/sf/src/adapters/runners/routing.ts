@@ -18,9 +18,8 @@ export const createRoutingRunner = (
       return handle;
     },
     interactiveAvailable: () => interactive.interactiveAvailable(),
-    abort: async (handle) => {
-      await owners.get(handle.id)?.abort(handle);
-    },
+    abort: async (handle) =>
+      (await owners.get(handle.id)?.abort(handle)) ?? true,
     wait: async (handle) => {
       const port = owners.get(handle.id);
       if (port === undefined) throw new Error(`unknown run ${handle.id}`);

@@ -1038,10 +1038,10 @@ const runOperator = async (
         ? undefined
         : `fallback=${mode.reason}`,
   );
-  const abortRun = async (detail: string): Promise<void> => {
+  const abortRun = async (detail: string): Promise<boolean> => {
     let confirmed = true;
     try {
-      await ports.runner.abort(handle);
+      confirmed = await ports.runner.abort(handle);
     } catch {
       confirmed = false;
     }
@@ -1051,6 +1051,7 @@ const runOperator = async (
       'abort',
       `${detail} confirmed=${confirmed ? 'yes' : 'no'}`,
     );
+    return confirmed;
   };
   let ended = false;
   const exit: { code?: number } = {};
@@ -1058,10 +1059,10 @@ const runOperator = async (
     void ports.clock.sleep(run.timeoutMs).then(() => {
       if (ended) return;
       end.resolve({ kind: 'timeout' });
-      void abortRun('reason=timeout');
     });
   }
   let forced = false;
+  let heartbeatFailures = 0;
   const heartbeat = startHeartbeat({
     clock: ports.clock,
     intervalMs: HEARTBEAT_INTERVAL_MS,
@@ -1077,13 +1078,12 @@ const runOperator = async (
       ) {
         forced = true;
         end.resolve({ kind: 'drain-force' });
-        void abortRun('reason=drain-force');
       }
       return signals;
     },
     onAbort: (failures) => {
+      heartbeatFailures = failures;
       end.resolve({ kind: 'aborted' });
-      void abortRun(`reason=heartbeat failures=${failures}`);
     },
   });
   void ports.runner.wait(handle).then(
@@ -1099,14 +1099,30 @@ const runOperator = async (
   try {
     const outcome = await end.promise;
     ended = true;
-    // A runner that reported a verb may still be shutting down: its exit is not known yet.
-    const ran = `exit=${exit.code ?? 'pending'} duration=${secondsOf(ports.clock.now() - startedAt)}`;
-    await logLine(runtime, job, 'end', `kind=${outcome.kind} ${ran}`);
-    // A TUI stays open after its verb; close its tab once the step has reported.
-    if (mode.interactive && outcome.kind === 'operator') {
-      await abortRun('reason=operator');
+    // A TUI stays open after its verb, and a stopped run is still alive: both are stopped and confirmed gone here.
+    // A headless runner that reported a verb may still be shutting down: its exit is not known yet.
+    const stopNeeded =
+      exit.code === undefined &&
+      (outcome.kind !== 'operator' || mode.interactive);
+    const ranOf = (): string =>
+      `exit=${exit.code ?? 'pending'} duration=${secondsOf(ports.clock.now() - startedAt)}`;
+    await logLine(runtime, job, 'end', `kind=${outcome.kind} ${ranOf()}`);
+    const reason =
+      outcome.kind === 'aborted'
+        ? `heartbeat failures=${heartbeatFailures}`
+        : outcome.kind;
+    if (stopNeeded && !(await abortRun(`reason=${reason}`))) {
+      // A second runner must never start in this worktree while the first lives: fail the job and stop claiming.
+      await finishWithFail(
+        runtime,
+        job,
+        'runner still alive after abort, Cell left without claiming',
+        ranOf(),
+      );
+      await leaveCell(runtime, null);
+      return null;
     }
-    return await finishRun(outcome, ran);
+    return await finishRun(outcome, ranOf());
   } finally {
     heartbeat.stop();
     await ports.operator.close();
