@@ -32,6 +32,7 @@ const CONFLICT = 409;
 const UNREACHABLE = 503;
 const INTERNAL = 500;
 const CELL_ROUTE = /^\/cells\/([^/]+)$/;
+const RELAY_URL = `${FACTORY_DAEMON_URL}${RELAY_PATH}`;
 const cellLauncher = cellWorkerLauncherOf(IS_COMPILED, CLI_ENTRY);
 
 const CreateSchema = z
@@ -90,8 +91,6 @@ const readCreateBody = async (request: Request): Promise<unknown> => {
     throw new ArgumentError('body is not JSON');
   }
 };
-
-const RELAY_URL = `${FACTORY_DAEMON_URL}${RELAY_PATH}`;
 
 const workerEnvOf = (
   localToken: string,
