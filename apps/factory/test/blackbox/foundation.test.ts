@@ -6,7 +6,7 @@ import {
   publicProcedure,
   scopedProcedure,
 } from '../../src/application/core/procedure';
-import { errorResponse } from '../../src/contracts/common';
+import { errorResponse } from '@repo/zod-contract-kit/reply';
 import {
   VALID_TOKEN,
   createTestApp,

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { idParams, titleSchema } from './common';
+import { idParams, titleSchema } from '@repo/zod-contract-kit/fields';
 
 const issuedTokenFields = {
   tokenId: z.string(),

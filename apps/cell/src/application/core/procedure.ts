@@ -5,13 +5,13 @@ import type { FactoryClientPort } from '../ports/factory-client.port';
 import type { RepoInspectorPort } from '../ports/repo-inspector.port';
 import type { SupervisorPort } from '../ports/supervisor.port';
 import type { WorkspacePort } from '../ports/workspace.port';
-import { withZodSchema } from './schema/zod';
 import type {
   ContractInput,
   ProcedureResponse,
   RawInput,
   ZodContract,
-} from './schema/types';
+} from '@repo/zod-contract-kit/types';
+import { withZodSchema } from './schema/zod';
 
 export type TransportContext = {
   db: Db;

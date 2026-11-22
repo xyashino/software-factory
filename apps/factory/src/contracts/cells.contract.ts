@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import { idParams, projectIdSchema, slugSchema } from './common';
+import { idParams, slugSchema } from '@repo/zod-contract-kit/fields';
+import { projectIdSchema } from './common';
 
 const allowedLinesSchema = z
   .array(z.union([z.literal('*'), slugSchema]))

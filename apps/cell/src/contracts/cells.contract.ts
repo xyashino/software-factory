@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { errorResponse } from './common';
+import { errorResponse } from '@repo/zod-contract-kit/reply';
 
 const slotIdParams = z.object({ id: z.string().min(1) });
 

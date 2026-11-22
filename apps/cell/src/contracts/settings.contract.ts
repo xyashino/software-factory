@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { errorResponse } from './common';
+import { errorResponse } from '@repo/zod-contract-kit/reply';
 import { RUNNERS } from '../domain/settings/preferences';
 
 const settingsDto = z.object({

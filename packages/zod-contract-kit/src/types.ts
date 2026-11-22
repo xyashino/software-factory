@@ -1,5 +1,5 @@
 import type { z } from 'zod';
-import type { HttpStatus } from '../error-handling';
+import type { HttpStatus } from './http-status';
 
 export type ContractIn = {
   params?: z.ZodType;

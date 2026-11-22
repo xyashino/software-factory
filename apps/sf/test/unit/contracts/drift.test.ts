@@ -6,13 +6,24 @@ const SERVER_CONTRACTS = new URL(
   '../../../../factory/src/contracts/',
   import.meta.url,
 );
+const KIT_CONTRACTS = new URL(
+  '../../../../../packages/zod-contract-kit/src/',
+  import.meta.url,
+);
 const OPERATOR_DOCS = new URL(
   '../../../../operator/docs/PLAN.md',
   import.meta.url,
 );
 
-const PAIRS: ReadonlyArray<readonly [string, URL]> = [
-  ['common.ts', new URL('common.ts', SERVER_CONTRACTS)],
+const PAIRS: ReadonlyArray<readonly [string, URL | ReadonlyArray<URL>]> = [
+  [
+    'common.ts',
+    [
+      new URL('common.ts', SERVER_CONTRACTS),
+      new URL('reply.ts', KIT_CONTRACTS),
+      new URL('fields.ts', KIT_CONTRACTS),
+    ],
+  ],
   ['cells.contract.ts', new URL('cells.contract.ts', SERVER_CONTRACTS)],
   ['jobs.contract.ts', new URL('jobs.contract.ts', SERVER_CONTRACTS)],
   ['queue.contract.ts', new URL('queue.contract.ts', SERVER_CONTRACTS)],
@@ -45,7 +56,10 @@ describe('CLI contract drift', () => {
     (cliFile, serverFile) => {
       // Arrange
       const cliSource = readFileSync(new URL(cliFile, CLI_CONTRACTS), 'utf8');
-      const serverSource = readFileSync(serverFile, 'utf8');
+      const serverSource = [serverFile]
+        .flat()
+        .map((file) => readFileSync(file, 'utf8'))
+        .join('\n');
 
       // Act
       const missing = [...fieldNames(cliSource)].filter(

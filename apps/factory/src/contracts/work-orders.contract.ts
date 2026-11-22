@@ -5,7 +5,12 @@ import {
   WORK_ORDER_ACTIONS,
   WORK_ORDER_STATES,
 } from '../domain/orders/order-state';
-import { idParams, projectIdSchema, slugSchema, titleSchema } from './common';
+import {
+  idParams,
+  slugSchema,
+  titleSchema,
+} from '@repo/zod-contract-kit/fields';
+import { projectIdSchema } from './common';
 
 export const workOrderDto = z.object({
   orderId: z.string(),

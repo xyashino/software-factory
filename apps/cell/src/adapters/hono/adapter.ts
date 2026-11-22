@@ -1,7 +1,7 @@
 import type { Context } from 'hono';
 import type { Procedure } from '../../application/core/procedure';
 import { BadRequest } from '../../application/core/error-handling';
-import type { ContractIn } from '../../application/core/schema/types';
+import type { ContractIn } from '@repo/zod-contract-kit/types';
 import type { AppEnv } from './types';
 
 const parseJson = (text: string): unknown => {
