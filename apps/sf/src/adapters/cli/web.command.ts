@@ -1,7 +1,7 @@
 import { resolve } from 'node:path';
 import { defineCommand } from 'citty';
 import { buildContext } from '../../bootstrap/context';
-import { hqUrlEnv } from '../../bootstrap/hq-env';
+import { hqSettingOf, hqUrlEnv } from '../../bootstrap/hq-env';
 import { runWithoutToken, settle } from '../../bootstrap/run';
 import {
   DEFAULT_DATA_DIR,
@@ -21,7 +21,7 @@ import { printJson, printLine, reportFailure } from './output';
 import { parsePort } from './validate';
 
 const dataDirFromEnv = (): string =>
-  process.env.FACTORY_DATA_DIR ?? DEFAULT_DATA_DIR;
+  hqSettingOf('DATA_DIR') ?? DEFAULT_DATA_DIR;
 
 const runStart = async (
   host: string,

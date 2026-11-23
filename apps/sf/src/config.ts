@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { defaultDbPathOf } from '../../hq/src/config';
 
 export const XDG_DATA_HOME =
   process.env.XDG_DATA_HOME ||
@@ -27,7 +28,7 @@ export const FACTORY_DAEMON_PORT = Number(
 );
 export const FACTORY_DAEMON_URL = `http://127.0.0.1:${FACTORY_DAEMON_PORT}`;
 export const DEFAULT_DATA_DIR = join(XDG_DATA_HOME, 'sf');
-export const DEFAULT_DB_PATH = join(DEFAULT_DATA_DIR, 'factory.db');
+export const DEFAULT_DB_PATH = defaultDbPathOf(DEFAULT_DATA_DIR);
 export const SERVER_ENTRY = fileURLToPath(
   new URL('../../hq/src/index.ts', import.meta.url),
 );

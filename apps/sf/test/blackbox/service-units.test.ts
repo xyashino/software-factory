@@ -86,6 +86,21 @@ describe.skipIf(process.platform !== 'linux')('sf service units', () => {
     expect(cell).toContain(`WorkingDirectory=${sandbox.repo}`);
   });
 
+  it('writes HQ_* names into the server unit even when given FACTORY_* ones', () => {
+    // Arrange
+    const sandbox = createSandbox();
+
+    // Act
+    const result = runService(sandbox, ['install', '--cell', 'edge']);
+
+    // Assert
+    expect(result.status).toBe(EXIT.ok);
+    const server = unitOf(sandbox, 'sf-server.service');
+    expect(server).toContain(`Environment=HQ_DATA_DIR=${sandbox.dataDir}`);
+    expect(server).toContain('Environment=HQ_PORT=7070');
+    expect(server).not.toContain('FACTORY_');
+  });
+
   it('prints the systemctl and linger commands without running them', () => {
     // Arrange
     const sandbox = createSandbox();

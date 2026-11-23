@@ -15,6 +15,7 @@ import {
   runSetup,
   type SetupResult,
 } from '../../application/procedures/setup/setup.procedure';
+import { hqSettingOf } from '../../bootstrap/hq-env';
 import { EXIT } from '../../domain/exit-codes';
 import { printJson, printLine, reportFailure } from './output';
 import { parsePort } from './validate';
@@ -34,10 +35,7 @@ const runSetupCommand = async (options: {
   json: boolean;
 }): Promise<number> => {
   const cwd = process.cwd();
-  const port = parsePort(
-    process.env.FACTORY_PORT ?? DEFAULT_PORT,
-    'FACTORY_PORT',
-  );
+  const port = parsePort(hqSettingOf('PORT') ?? DEFAULT_PORT, 'HQ_PORT');
   const result = await runWithoutToken(
     runSetup,
     {
@@ -45,10 +43,10 @@ const runSetupCommand = async (options: {
       dirName: basename(cwd),
       repoConfigPath: resolve(cwd, REPO_CONFIG_PATH),
       linesDir: resolve(cwd, LINES_DIR),
-      dataDir: process.env.FACTORY_DATA_DIR ?? DEFAULT_DATA_DIR,
-      dbPath: process.env.FACTORY_DB_PATH ?? DEFAULT_DB_PATH,
+      dataDir: hqSettingOf('DATA_DIR') ?? DEFAULT_DATA_DIR,
+      dbPath: hqSettingOf('DB_PATH') ?? DEFAULT_DB_PATH,
       port,
-      host: process.env.FACTORY_HOST || undefined,
+      host: hqSettingOf('HOST'),
       bin: process.execPath,
       serverArgs: serverArgsOf(IS_COMPILED),
       project: options.project,

@@ -11,6 +11,7 @@ import {
   cellWorkerLauncherOf,
   serverArgsOf,
 } from '../../config';
+import { hqSettingOf } from '../../bootstrap/hq-env';
 import { Refused } from '../../application/core/errors';
 import { cellNameOf } from '../../domain/cell/cell-name';
 import {
@@ -41,8 +42,7 @@ interface Plan {
   secret?: { path: string; text: string };
 }
 
-const dataDirOf = (): string =>
-  process.env.FACTORY_DATA_DIR ?? DEFAULT_DATA_DIR;
+const dataDirOf = (): string => hqSettingOf('DATA_DIR') ?? DEFAULT_DATA_DIR;
 
 const unitPathOf = (unitName: string): string =>
   join(SYSTEMD_USER_DIR, unitName);
@@ -56,14 +56,13 @@ const envFileOf = (unitName: string): string =>
 
 const serverEnvOf = (): Record<string, string> => {
   const env: Record<string, string> = {
-    FACTORY_DATA_DIR: dataDirOf(),
-    FACTORY_DB_PATH: process.env.FACTORY_DB_PATH ?? DEFAULT_DB_PATH,
-    FACTORY_PORT: String(
-      parsePort(process.env.FACTORY_PORT ?? DEFAULT_PORT, 'FACTORY_PORT'),
-    ),
+    HQ_DATA_DIR: dataDirOf(),
+    HQ_DB_PATH: hqSettingOf('DB_PATH') ?? DEFAULT_DB_PATH,
+    HQ_PORT: String(parsePort(hqSettingOf('PORT') ?? DEFAULT_PORT, 'HQ_PORT')),
   };
-  if (process.env.FACTORY_HOST) {
-    env.FACTORY_HOST = process.env.FACTORY_HOST;
+  const host = hqSettingOf('HOST');
+  if (host !== undefined) {
+    env.HQ_HOST = host;
   }
   return env;
 };

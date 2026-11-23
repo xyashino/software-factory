@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
@@ -17,4 +18,14 @@ export const DEFAULT_HOST = '127.0.0.1';
 const XDG_DATA_HOME =
   process.env.XDG_DATA_HOME || join(homedir(), '.local', 'share');
 export const DEFAULT_DATA_DIR = join(XDG_DATA_HOME, 'sf');
-export const DEFAULT_DB_PATH = join(DEFAULT_DATA_DIR, 'factory.db');
+const DB_FILE_NAME = 'hq.db';
+const LEGACY_DB_FILE_NAME = 'factory.db';
+
+export const defaultDbPathOf = (dataDir: string): string => {
+  const current = join(dataDir, DB_FILE_NAME);
+  if (existsSync(current)) {
+    return current;
+  }
+  const legacy = join(dataDir, LEGACY_DB_FILE_NAME);
+  return existsSync(legacy) ? legacy : current;
+};

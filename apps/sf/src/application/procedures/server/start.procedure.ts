@@ -67,10 +67,10 @@ export const startServer = define({ kind: 'supervisor' })(
     command: input.bin,
     args: input.serverArgs,
     env: {
-      FACTORY_DATA_DIR: input.dataDir,
-      FACTORY_DB_PATH: input.dbPath,
-      FACTORY_PORT: String(input.port),
-      ...(input.host === undefined ? {} : { FACTORY_HOST: input.host }),
+      HQ_DATA_DIR: input.dataDir,
+      HQ_DB_PATH: input.dbPath,
+      HQ_PORT: String(input.port),
+      ...(input.host === undefined ? {} : { HQ_HOST: input.host }),
     },
     logPath: `${input.dataDir}/server.log`,
   });

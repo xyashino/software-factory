@@ -12,7 +12,7 @@ import {
 import { startServer } from '../../application/procedures/server/start.procedure';
 import { stopServer } from '../../application/procedures/server/stop.procedure';
 import { createServerToken } from '../../application/procedures/server/token-create.procedure';
-import { hqUrlEnv } from '../../bootstrap/hq-env';
+import { hqSettingOf, hqUrlEnv } from '../../bootstrap/hq-env';
 import { printError, printJson, printLine, reportFailure } from './output';
 import { parsePort } from './validate';
 
@@ -22,16 +22,13 @@ interface Paths {
 }
 
 const pathsFromEnv = (): Paths => ({
-  dataDir: process.env.FACTORY_DATA_DIR ?? DEFAULT_DATA_DIR,
-  dbPath: process.env.FACTORY_DB_PATH ?? DEFAULT_DB_PATH,
+  dataDir: hqSettingOf('DATA_DIR') ?? DEFAULT_DATA_DIR,
+  dbPath: hqSettingOf('DB_PATH') ?? DEFAULT_DB_PATH,
 });
 
 const runStart = async (json: boolean): Promise<number> => {
   const paths = pathsFromEnv();
-  const port = parsePort(
-    process.env.FACTORY_PORT ?? DEFAULT_PORT,
-    'FACTORY_PORT',
-  );
+  const port = parsePort(hqSettingOf('PORT') ?? DEFAULT_PORT, 'HQ_PORT');
   const result = await runWithoutToken(
     startServer,
     {
@@ -41,7 +38,7 @@ const runStart = async (json: boolean): Promise<number> => {
       dataDir: paths.dataDir,
       dbPath: paths.dbPath,
       port,
-      host: process.env.FACTORY_HOST || undefined,
+      host: hqSettingOf('HOST'),
     },
     () => buildContext(),
   );

@@ -20,7 +20,7 @@ export const mintSupervisorToken = async (
     input.bin,
     [...input.serverArgs, 'admin', 'token', 'create'],
     input.cwd,
-    { FACTORY_DB_PATH: input.dbPath },
+    { HQ_DB_PATH: input.dbPath },
   );
   const token = result.stdout.trim();
   if (result.exitCode !== 0 || token.length === 0) {

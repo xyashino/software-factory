@@ -179,14 +179,14 @@ describe('sf argument validation', () => {
     expect(result.stderr).toBe('unknown option --unknown\n');
   });
 
-  it('rejects a bad FACTORY_PORT without starting the server', async () => {
+  it('rejects a bad HQ_PORT without starting the server', async () => {
     // Act
-    const result = await runSf(['hq', 'start'], { FACTORY_PORT: 'abc' });
+    const result = await runSf(['hq', 'start'], { HQ_PORT: 'abc' });
 
     // Assert
     expectRejected(
       result,
-      'FACTORY_PORT takes a whole number between 1 and 65535, not "abc"',
+      'HQ_PORT takes a whole number between 1 and 65535, not "abc"',
     );
   });
 

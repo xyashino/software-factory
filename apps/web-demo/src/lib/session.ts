@@ -43,12 +43,12 @@ const acquireSession = async (deps: SessionDeps): Promise<Session> => {
 };
 
 const sessionDeps = (config: Config): SessionDeps => {
-  const { FACTORY_DATA_DIR: dataDir } = config;
+  const { HQ_DATA_DIR: dataDir } = config;
   if (dataDir === undefined) {
-    throw new Error('FACTORY_DATA_DIR is required to read the join secret');
+    throw new Error('HQ_DATA_DIR is required to read the join secret');
   }
   return {
-    baseUrl: config.FACTORY_URL,
+    baseUrl: config.HQ_URL,
     dataDir,
     read: (path) => readFile(path, 'utf8'),
     clock: Date.now,
@@ -67,7 +67,7 @@ export const startSession = async (
   env: Record<string, string | undefined>,
 ): Promise<void> => {
   const config = loadConfig(env);
-  if (config.FACTORY_TOKEN !== undefined) return;
+  if (config.HQ_TOKEN !== undefined) return;
   const session = await acquireSession(sessionDeps(config));
   console.log(
     `web-demo: registered session, expires ${new Date(session.expiresAt).toISOString()}`,
@@ -78,13 +78,12 @@ export const createSessionClient = async (
   env: Record<string, string | undefined>,
 ) => {
   const config = loadConfig(env);
-  const token =
-    config.FACTORY_TOKEN ?? (await currentToken(sessionDeps(config)));
+  const token = config.HQ_TOKEN ?? (await currentToken(sessionDeps(config)));
   return {
     client: createFactoryClient({
-      baseUrl: config.FACTORY_URL,
+      baseUrl: config.HQ_URL,
       getToken: () => token,
     }),
-    projectId: config.FACTORY_PROJECT_ID,
+    projectId: config.HQ_PROJECT_ID,
   };
 };
