@@ -3,6 +3,7 @@ import { hostname } from 'node:os';
 import { resolve } from 'node:path';
 import { createCellStateFile } from '../adapters/fs/cell-state';
 import { createConnectionStore } from '../adapters/fs/connection-store';
+import { createFactoryCredentialStore } from '../adapters/fs/factory-credential';
 import { createPidFile } from '../adapters/fs/pid-file';
 import { createTodoFiles } from '../adapters/fs/todo-files';
 import { createTokenFile } from '../adapters/fs/token-file';
@@ -10,6 +11,7 @@ import { appendTextFile, writeTextFile } from '../adapters/fs/write-text';
 import { createGitAdapter } from '../adapters/git/git';
 import { createPrAdapter } from '../adapters/git/gh';
 import { createFactoryDaemonAdapter } from '../adapters/http/factory-daemon.adapter';
+import { createHqClient } from '../adapters/http/hq-client';
 import { createServerClient } from '../adapters/http/server-client';
 import { createLoopbackEndpoint } from '../adapters/operator-endpoint/loopback';
 import { createRunnerCatalog } from '../adapters/runners/catalog';
@@ -24,6 +26,7 @@ import { cellNameOf } from '../domain/cell/cell-name';
 import { resolveConnection } from '../domain/connection/connection-config';
 import {
   DEFAULT_FACTORY_URL,
+  FACTORY_CREDENTIAL_PATH,
   FACTORY_DAEMON_URL,
   FACTORY_PID_FILE,
   GLOBAL_CONFIG_PATH,
@@ -34,10 +37,6 @@ import {
 } from '../config';
 
 export type Mode = 'supervisor' | 'cell' | 'operator';
-
-const notWired = (): never => {
-  throw new Error('port not wired');
-};
 
 const processPort = createProcessAdapter();
 
@@ -81,7 +80,7 @@ export const buildContext = (cellName?: string): Ports => {
       appendText: appendTextFile,
       exists: async (path) => existsSync(path),
       list: async (dir) => (existsSync(dir) ? readdirSync(dir) : []),
-      readStdin: notWired,
+      readStdin: async () => readFileSync(0, 'utf8'),
     },
     todoFiles: createTodoFiles(),
     tokens: createTokenFile(connection, repoTokenPath),
@@ -103,5 +102,7 @@ export const buildContext = (cellName?: string): Ports => {
     cellState,
     factoryDaemon: createFactoryDaemonAdapter({ baseUrl: FACTORY_DAEMON_URL }),
     factoryPidFile: createPidFile(FACTORY_PID_FILE),
+    factoryCredential: createFactoryCredentialStore(FACTORY_CREDENTIAL_PATH),
+    hq: createHqClient(),
   };
 };

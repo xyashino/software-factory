@@ -9,6 +9,7 @@ export type CellId = Brand<'CellId', string>;
 export type IncidentId = Brand<'IncidentId', string>;
 export type TokenId = Brand<'TokenId', string>;
 export type CommandId = Brand<'CommandId', string>;
+export type FactoryId = Brand<'FactoryId', string>;
 
 const requireNonEmpty = <K extends string>(
   kind: K,
@@ -37,3 +38,5 @@ export const asTokenId = (value: string): TokenId =>
   requireNonEmpty('TokenId', value);
 export const asCommandId = (value: string): CommandId =>
   requireNonEmpty('CommandId', value);
+export const asFactoryId = (value: string): FactoryId =>
+  requireNonEmpty('FactoryId', value);

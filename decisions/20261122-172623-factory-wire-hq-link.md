@@ -1,0 +1,21 @@
+---
+scope: factory
+summary: Factory enrolls with HQ; daemon kills Cells when HQ is silent
+why: Factory must hold the only HQ credential and stop Cells before HQ reaps its lease (60 s); join must be single use
+date: 2026-11-22
+tags: [factory, hq, enroll, heartbeat, fence, credential]
+---
+
+- HQ: new table `factories` (`factoryId` random UUID, `name` hostname, `lastSeenAt`, `createdAt`); migration `0002` is additive (new table + nullable `safe_tokens.factory_id`), no table rebuild for the enum change.
+- Token kinds `factory_join` (scope `factory:enroll`, prefix `sf_join_`) and `factory_session` (scope `factory:worker`, prefix `sf_factory_`, 30 d `FACTORY_SESSION_TTL_MS`).
+- Join consumed inside the enroll transaction: token row revoked and factory row inserted in one `immediateTx`. Second use gets 401. Unlike `cell_join`, which is not consumed today.
+- `factory_session` carries `factoryId`; heartbeat maps the principal's token to its Factory. `Principal` type unchanged.
+- Routes: `POST /api/v1/factories/enroll`, `POST /api/v1/factories/heartbeat`, `GET /api/v1/factories` (supervisor, `online` = seen within `LEASE_TTL_MS`).
+- `sf factory connect <url> --token <join>` (`--token -` reads stdin, never printed). Writes `$XDG_CONFIG_HOME/sf/factory.json` `{url, factoryId, sessionToken}`: atomic write, mode `0600`. Only HQ credential the daemon keeps.
+- Daemon HQ link: 1 s tick, heartbeat every `HEARTBEAT_INTERVAL_MS`. First heartbeat runs before the daemon serves, so the first Cell spawn is not refused on boot.
+- Fence: no successful heartbeat for `SELF_FENCE_MS` (45 s) while unreachable -> kill all Cells. Kill comes before HQ's 60 s lease reap.
+- 401 -> state `rejected`, kill all Cells, stop heartbeating. Reconnect needed (join is single use). Cell session re-enroll belongs to `factory-relay`.
+- Cell spawn gate: `POST /cells` refused (409) unless HQ state is `ok`. Covers not connected, unreachable, rejected. Spec silent on unreachable; chosen: refuse. Gate runs after input and project validation, just before spawn.
+- `sf factory status` shows daemon pid, HQ url, factoryId, `hq: ok | unreachable since <iso> | credential rejected | not connected`, cell count. No token in output or state.
+- Killing Cells that survive SIGKILL is retried on the next tick; the fence stays on until HQ answers again.
+- Out of scope: Cell relay, Cell token removal, HQ reaping of silent Factories, `hq` rename.

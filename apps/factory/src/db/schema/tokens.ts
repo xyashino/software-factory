@@ -4,9 +4,10 @@ import {
   text,
   type AnySQLiteColumn,
 } from 'drizzle-orm/sqlite-core';
-import type { CellId, TokenId } from '../../domain/common/brand';
+import type { CellId, FactoryId, TokenId } from '../../domain/common/brand';
 import { jsonColumn } from '@repo/bun-sqlite-kit/columns';
 import { cells } from './cells';
+import { factories } from './factories';
 
 export const TOKEN_KINDS = [
   'supervisor',
@@ -14,6 +15,8 @@ export const TOKEN_KINDS = [
   'cell_session',
   'web_join',
   'web_session',
+  'factory_join',
+  'factory_session',
 ] as const;
 
 export const safeTokens = sqliteTable('safe_tokens', {
@@ -26,6 +29,9 @@ export const safeTokens = sqliteTable('safe_tokens', {
   cellId: text('cell_id')
     .$type<CellId>()
     .references(() => cells.cellId),
+  factoryId: text('factory_id')
+    .$type<FactoryId>()
+    .references(() => factories.factoryId),
   rotatedFromId: text('rotated_from_id')
     .$type<TokenId>()
     .references((): AnySQLiteColumn => safeTokens.tokenId),

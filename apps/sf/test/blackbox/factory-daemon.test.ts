@@ -27,6 +27,9 @@ const ENROLL_ROUTE = '/api/v1/cells/enroll';
 const HELLO_ROUTE = '/api/v1/cells/hello';
 const CLAIMS_ROUTE = '/api/v1/cells/claims';
 const TOKENS_ROUTE = '/api/v1/tokens';
+const HEARTBEAT_ROUTE = '/api/v1/factories/heartbeat';
+const FACTORY_ID = 'factory-stub';
+const FACTORY_SESSION = 'sf_factory_session_stub';
 
 const sandboxes: Sandbox[] = [];
 let factory: Server;
@@ -76,11 +79,30 @@ const replyJson = (
   response.end(JSON.stringify(body));
 };
 
-const sandbox = async (): Promise<Sandbox> => {
+const writeCredential = (configHome: string): void => {
+  mkdirSync(join(configHome, 'sf'), { recursive: true });
+  writeFileSync(
+    join(configHome, 'sf', 'factory.json'),
+    JSON.stringify({
+      url: factoryUrl,
+      factoryId: FACTORY_ID,
+      sessionToken: FACTORY_SESSION,
+    }),
+    { mode: 0o600 },
+  );
+};
+
+const sandbox = async (
+  options: { connected?: boolean } = {},
+): Promise<Sandbox> => {
   const home = mkdtempSync(join(tmpdir(), 'sf-factory-daemon-'));
   const bin = join(home, 'bin');
   const repo = join(home, 'repo');
+  const configHome = join(home, 'config');
   mkdirSync(bin);
+  if (options.connected !== false) {
+    writeCredential(configHome);
+  }
   writeFileSync(join(bin, 'claude'), '#!/bin/sh\nexit 0\n');
   chmodSync(join(bin, 'claude'), 0o755);
   mkdirSync(join(repo, '.factory', 'lines'), { recursive: true });
@@ -97,6 +119,7 @@ const sandbox = async (): Promise<Sandbox> => {
     env: {
       PATH: `${bin}:${process.env.PATH ?? ''}`,
       HOME: home,
+      XDG_CONFIG_HOME: configHome,
       XDG_DATA_HOME: join(home, 'data'),
       SF_FACTORY_PORT: String(port),
       FACTORY_URL: factoryUrl,
@@ -194,6 +217,10 @@ beforeAll(async () => {
       replyJson(200, { code: 200, cellId: 'cell-stub' }, response);
       return;
     }
+    if (request.method === 'POST' && request.url === HEARTBEAT_ROUTE) {
+      replyJson(200, { code: 200, factoryId: FACTORY_ID }, response);
+      return;
+    }
     if (request.method === 'POST' && request.url === CLAIMS_ROUTE) {
       setTimeout(() => {
         replyJson(200, { code: 200, job: null, signals: [] }, response);
@@ -264,6 +291,7 @@ describe('factory daemon lifecycle', () => {
           running: false,
           healthy: false,
           pid: null,
+          daemon: null,
         });
         expect(start.status).toBe(EXIT.refused);
         expect(start.stderr).toContain(`port ${port} is in use`);
@@ -375,6 +403,42 @@ describe('factory daemon lifecycle', () => {
       expect(result.stderr).toContain(
         'factory not running: run "sf factory start"',
       );
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    'cell create is refused while the factory is not connected',
+    async () => {
+      // Arrange
+      const { env, repo } = await sandbox({ connected: false });
+      await startDaemon(env);
+
+      // Act
+      const result = await runSf(env, ['cell', 'create', '--repo', repo]);
+
+      // Assert
+      expect(result.status).toBe(EXIT.refused);
+      expect(result.stderr).toContain('factory not connected');
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    'status shows the HQ link and never the credential token',
+    async () => {
+      // Arrange
+      const { env } = await sandbox();
+      await startDaemon(env);
+
+      // Act
+      const status = await runSf(env, ['factory', 'status']);
+
+      // Assert
+      expect(status.status).toBe(EXIT.ok);
+      expect(status.stdout).toContain(`factoryId ${FACTORY_ID}`);
+      expect(status.stdout).toContain('hq: ok');
+      expect(status.stdout).not.toContain(FACTORY_SESSION);
     },
     TEST_TIMEOUT_MS,
   );
