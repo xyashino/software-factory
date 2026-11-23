@@ -48,8 +48,8 @@
     "check-types:scripts": "tsc --noEmit -p scripts/tsconfig.json",
     "test:scripts": "bun test scripts",
     "todo:lint": "bun scripts/lint-todos.ts",
-    "build:sf": "bun --filter @repo/sf build:sf && bun --filter @repo/web-demo build && node scripts/deploy-web-deps.mjs",
-    "install:sf": "bun run build:sf && node scripts/install.mjs",
+    "build:sf": "bun --filter @repo/sf build:sf && bun --filter @repo/web-demo build && bun scripts/deploy-web-deps.mjs",
+    "install:sf": "bun run build:sf && bun scripts/install.mjs",
     "lint": "turbo run lint",
     "check-types": "turbo run check-types",
     "test": "turbo run test",
@@ -58,11 +58,12 @@
     "format:check": "prettier --check \"**/*.{ts,tsx,json,yaml,css,js,jsx}\"",
     "ci:format": "lint-staged",
     "ci:verify": "turbo run //#format:check //#docs:check //#docs:test //#todo:lint //#check-types:scripts //#test:scripts lint check-types db:check test build --ui=stream",
-    "docs:check": "node scripts/check-doc-links.ts",
-    "docs:test": "node --test scripts/check-doc-links.test.ts",
-    "nitpick:check": "bun run nitpick --check",
-    "nitpick:sync": "bun run nitpick --sync",
-    "prepare": "node scripts/prepare.mjs"
+    "docs:check": "bun scripts/check-doc-links.ts",
+    "docs:test": "bun test scripts/check-doc-links.test.ts",
+    "nitpick": "bun packages/nitpick/dist/cli.js",
+    "nitpick:check": "bun packages/nitpick/dist/cli.js --check",
+    "nitpick:sync": "bun packages/nitpick/dist/cli.js --sync",
+    "prepare": "bun scripts/prepare.mjs"
   },
   "devDependencies": {
     "@repo/nitpick": "workspace:*",

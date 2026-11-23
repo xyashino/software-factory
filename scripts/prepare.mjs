@@ -4,8 +4,11 @@ import { spawnSync } from 'node:child_process';
 
 const steps = [
   ['husky', 'bun run husky'],
-  ['nitpick build', 'bun run turbo run build --filter=@repo/nitpick --ui=stream'],
-  ['nitpick sync', 'node packages/nitpick/dist/cli.js --sync'],
+  [
+    'nitpick build',
+    'bun run turbo run build --filter=@repo/nitpick --ui=stream',
+  ],
+  ['nitpick sync', 'bun packages/nitpick/dist/cli.js --sync'],
 ];
 
 for (const [name, command] of steps) {
