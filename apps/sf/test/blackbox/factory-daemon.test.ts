@@ -35,6 +35,7 @@ const GONE_ROUTE = /^\/api\/v1\/factories\/cells\/([^/]+)\/gone$/;
 const FACTORY_ID = 'factory-stub';
 const FACTORY_SESSION = 'sf_factory_session_stub';
 const START_WAIT_MS = 20_000;
+const RESPAWN_WAIT_MS = 3_000;
 
 const sandboxes: Sandbox[] = [];
 let factory: Server;
@@ -85,6 +86,15 @@ interface CreatedCell {
   name: string;
   projectId: string;
   pid: number;
+}
+
+interface ProjectRow {
+  projectId: string;
+  repoRoot: string;
+  desired: number;
+  running: number;
+  crashLoop: boolean;
+  cells: { cellId: string; name: string; pid: number; state: string }[];
 }
 
 const freePort = (): Promise<number> =>
@@ -308,19 +318,45 @@ const waitFor = async (check: () => boolean): Promise<boolean> => {
   return check();
 };
 
+const cellsOf = async (
+  env: Record<string, string>,
+  repo: string,
+): Promise<CreatedCell[]> => {
+  const listed = await runSf(env, ['cell', 'list', '--json']);
+  const projects = JSON.parse(listed.stdout) as ProjectRow[];
+  return projects
+    .filter((row) => row.repoRoot === repo)
+    .flatMap((row) =>
+      row.cells.map((cell) => ({
+        cellId: cell.cellId,
+        name: cell.name,
+        projectId: row.projectId,
+        pid: cell.pid,
+      })),
+    );
+};
+
+const scaleTo = async (
+  env: Record<string, string>,
+  repo: string,
+  count: number,
+): Promise<CreatedCell[]> => {
+  const scaled = await runSf(env, [
+    'cell',
+    'scale',
+    String(count),
+    '--repo',
+    repo,
+  ]);
+  expect(scaled.status).toBe(EXIT.ok);
+  return cellsOf(env, repo);
+};
+
 const createCell = async (
   env: Record<string, string>,
   repo: string,
 ): Promise<CreatedCell> => {
-  const created = await runSf(env, [
-    'cell',
-    'create',
-    '--repo',
-    repo,
-    '--json',
-  ]);
-  expect(created.status).toBe(EXIT.ok);
-  const [cell] = JSON.parse(created.stdout) as CreatedCell[];
+  const [cell] = await scaleTo(env, repo, 1);
   if (cell === undefined) throw new Error('no cell created');
   return cell;
 };
@@ -468,16 +504,7 @@ describe('factory daemon lifecycle', () => {
       // Arrange
       const { env, repo, dataDir } = await sandbox();
       await startDaemon(env);
-      const created = await runSf(env, [
-        'cell',
-        'create',
-        '--repo',
-        repo,
-        '--count',
-        '2',
-        '--json',
-      ]);
-      const cells = JSON.parse(created.stdout) as CreatedCell[];
+      const cells = await scaleTo(env, repo, 2);
       const pids = cells.map((cell) => cell.pid);
       const daemonPid = Number(
         readFileSync(join(dataDir, 'factory.pid'), 'utf8'),
@@ -489,7 +516,7 @@ describe('factory daemon lifecycle', () => {
       const status = await runSf(env, ['factory', 'status']);
 
       // Assert
-      expect(created.status).toBe(EXIT.ok);
+      expect(cells).toHaveLength(2);
       expect(aliveBefore).toEqual(pids.map(() => true));
       expect(stopped.stdout.trim()).toBe('factory stopped');
       expect(status.status).toBe(EXIT.refused);
@@ -505,18 +532,7 @@ describe('factory daemon lifecycle', () => {
       // Arrange
       const { env, repo, dataDir } = await sandbox();
       await startDaemon(env);
-      const created = await runSf(env, [
-        'cell',
-        'create',
-        '--repo',
-        repo,
-        '--count',
-        '2',
-        '--json',
-      ]);
-      const pids = (JSON.parse(created.stdout) as CreatedCell[]).map(
-        (cell) => cell.pid,
-      );
+      const pids = (await scaleTo(env, repo, 2)).map((cell) => cell.pid);
       const daemonPid = Number(
         readFileSync(join(dataDir, 'factory.pid'), 'utf8'),
       );
@@ -531,13 +547,13 @@ describe('factory daemon lifecycle', () => {
   );
 
   it(
-    'cell create without a daemon fails with the start hint',
+    'cell scale without a daemon fails with the start hint',
     async () => {
       // Arrange
       const { env, repo } = await sandbox();
 
       // Act
-      const result = await runSf(env, ['cell', 'create', '--repo', repo]);
+      const result = await runSf(env, ['cell', 'scale', '1', '--repo', repo]);
 
       // Assert
       expect(result.status).toBe(EXIT.unreachable);
@@ -549,14 +565,14 @@ describe('factory daemon lifecycle', () => {
   );
 
   it(
-    'cell create is refused while the factory is not connected',
+    'cell scale up is refused while the factory is not connected',
     async () => {
       // Arrange
       const { env, repo } = await sandbox({ connected: false });
       await startDaemon(env);
 
       // Act
-      const result = await runSf(env, ['cell', 'create', '--repo', repo]);
+      const result = await runSf(env, ['cell', 'scale', '1', '--repo', repo]);
 
       // Assert
       expect(result.status).toBe(EXIT.refused);
@@ -585,83 +601,67 @@ describe('factory daemon lifecycle', () => {
   );
 
   it(
-    'cell list, stop and rm act on the daemon cells',
+    'cell list shows the project desired count and its cells, scale down empties it',
     async () => {
       // Arrange
-      const { env, repo } = await sandbox();
+      const { env, repo, project } = await sandbox();
       await startDaemon(env);
       const cell = await createCell(env, repo);
 
       // Act
       const listed = await runSf(env, ['cell', 'list', '--json']);
-      const stopped = await runSf(env, ['cell', 'stop', cell.cellId]);
-      const afterStop = await runSf(env, ['cell', 'list', '--json']);
-      const removed = await runSf(env, ['cell', 'rm', cell.cellId]);
+      const scaled = await runSf(env, ['cell', 'scale', '0', '--repo', repo]);
+      const afterScale = await runSf(env, ['cell', 'list', '--json']);
 
       // Assert
       expect(JSON.parse(listed.stdout)).toEqual([
-        expect.objectContaining({ cellId: cell.cellId, pid: cell.pid }),
+        expect.objectContaining({
+          projectId: project,
+          desired: 1,
+          running: 1,
+          cells: [expect.objectContaining({ cellId: cell.cellId })],
+        }),
       ]);
-      expect(stopped.stdout.trim()).toBe(`cell ${cell.cellId} stopped`);
-      expect(JSON.parse(afterStop.stdout)).toEqual([]);
-      expect(removed.status).toBe(EXIT.refused);
-      expect(removed.stderr).toContain(`no cell ${cell.cellId}`);
+      expect(scaled.stdout.trim()).toBe(`project ${project} scaled to 0`);
+      expect(JSON.parse(afterScale.stdout)).toEqual([
+        expect.objectContaining({ desired: 0, running: 0, cells: [] }),
+      ]);
       await stopDaemon(env);
     },
     TEST_TIMEOUT_MS,
   );
 
-  it('refuses a stop of a cell the daemon does not run', async () => {
+  it('cell stop and rm are removed and point to cell scale', async () => {
     // Arrange
     const { env } = await sandbox();
-    await startDaemon(env);
 
     // Act
-    const result = await runSf(env, ['cell', 'stop', 'cell-00000000']);
+    const stop = await runSf(env, ['cell', 'stop', 'cell-00000000']);
+    const remove = await runSf(env, ['cell', 'rm', 'cell-00000000']);
 
     // Assert
-    expect(result.status).toBe(EXIT.refused);
-    expect(result.stderr).toContain('no local cell cell-00000000');
-    await stopDaemon(env);
-  });
-
-  it('refuses a fixed name for more than one cell', async () => {
-    // Arrange
-    const { env, repo } = await sandbox();
-
-    // Act
-    const result = await runSf(env, [
-      'cell',
-      'create',
-      '--repo',
-      repo,
-      '--count',
-      '2',
-      '--name',
-      'shared',
-    ]);
-
-    // Assert
-    expect(result.status).toBe(EXIT.argument);
-    expect(result.stderr).toContain('name is only allowed with count 1');
+    expect(stop.status).toBe(EXIT.argument);
+    expect(stop.stderr).toContain('use "sf cell scale N"');
+    expect(remove.status).toBe(EXIT.argument);
+    expect(remove.stderr).toContain('use "sf cell scale N"');
   });
 });
 
 describe('factory gone calls', () => {
   it(
-    'stop calls HQ gone for the cell after its process is dead',
+    'scale down calls HQ gone for the cell after its process is dead',
     async () => {
       // Arrange
-      const { env, repo } = await sandbox();
+      const { env, repo, project } = await sandbox();
       await startDaemon(env);
       const cell = await createCell(env, repo);
       await waitFor(() => claimsOf(cell.cellId).length >= 1);
 
       // Act
-      const stopped = await runSf(env, ['cell', 'stop', cell.cellId]);
+      const stopped = await runSf(env, ['cell', 'scale', '0', '--repo', repo]);
 
       // Assert
-      expect(stopped.stdout.trim()).toBe(`cell ${cell.cellId} stopped`);
+      expect(stopped.stdout.trim()).toBe(`project ${project} scaled to 0`);
       expect(await waitFor(() => !isAlive(cell.pid))).toBe(true);
       expect(goneCalls.filter((call) => call.cellId === cell.cellId)).toEqual([
         { cellId: cell.cellId, bearer: FACTORY_SESSION },
@@ -672,10 +672,10 @@ describe('factory gone calls', () => {
   );
 
   it(
-    'stop still ends the cell when HQ refuses the gone call',
+    'scale down still ends the cell when HQ refuses the gone call',
     async () => {
       // Arrange
-      const { env, repo } = await sandbox();
+      const { env, repo, project } = await sandbox();
       await startDaemon(env);
       const cell = await createCell(env, repo);
       await waitFor(() => claimsOf(cell.cellId).length >= 1);
@@ -684,14 +684,14 @@ describe('factory gone calls', () => {
       goneFailing = true;
       let stopped: CliResult;
       try {
-        stopped = await runSf(env, ['cell', 'stop', cell.cellId]);
+        stopped = await runSf(env, ['cell', 'scale', '0', '--repo', repo]);
       } finally {
         goneFailing = false;
       }
 
       // Assert
       expect(stopped.status).toBe(EXIT.ok);
-      expect(stopped.stdout.trim()).toBe(`cell ${cell.cellId} stopped`);
+      expect(stopped.stdout.trim()).toBe(`project ${project} scaled to 0`);
       expect(await waitFor(() => !isAlive(cell.pid))).toBe(true);
       await stopDaemon(env);
     },
@@ -774,7 +774,7 @@ describe('factory relay', () => {
   );
 
   it(
-    'a factory credential rejected by HQ stops the cell',
+    'a factory credential rejected by HQ ends the cell and the daemon respawns it',
     async () => {
       // Arrange
       const { env, repo } = await sandbox();
@@ -784,11 +784,13 @@ describe('factory relay', () => {
 
       // Act
       const gone = await waitFor(() => !isAlive(cell.pid));
-      const listed = await runSf(env, ['cell', 'list', '--json']);
+      await new Promise((resolve) => setTimeout(resolve, RESPAWN_WAIT_MS));
+      const respawned = await cellsOf(env, repo);
 
       // Assert
       expect(gone).toBe(true);
-      expect(JSON.parse(listed.stdout)).toEqual([]);
+      expect(respawned).toHaveLength(1);
+      expect(respawned[0]?.cellId).not.toBe(cell.cellId);
       await stopDaemon(env);
     },
     TEST_TIMEOUT_MS,
@@ -805,7 +807,7 @@ describe('factory relay', () => {
       await waitFor(() => claimsOf(cell.cellId).length >= 1);
 
       // Act
-      await runSf(env, ['cell', 'stop', cell.cellId]);
+      await runSf(env, ['cell', 'scale', '0', '--repo', repo]);
       const gone = await waitFor(() => !isAlive(cell.pid));
       const after = await fetch(`${relayUrlOf(port)}/api/v1/cells/claims`, {
         method: 'POST',

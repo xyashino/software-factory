@@ -23,6 +23,27 @@ export interface CellRuntime {
   signal: AbortSignal;
 }
 
+export interface ActivityReport {
+  state: 'idle' | 'running';
+  writes: boolean;
+  since: number;
+}
+
+// Best-effort: a missing daemon must not fail a job; the daemon keeps the Cell either way.
+export const reportActivity = async (
+  runtime: CellRuntime,
+  report: ActivityReport,
+): Promise<void> => {
+  try {
+    await runtime.ports.factoryDaemon.post(
+      `/cells/${encodeURIComponent(runtime.session.cellId)}/activity`,
+      report,
+    );
+  } catch {
+    // The Cell keeps working without activity reports.
+  }
+};
+
 export const sendWithRetry = async <T>(
   runtime: CellRuntime,
   call: () => Promise<T>,

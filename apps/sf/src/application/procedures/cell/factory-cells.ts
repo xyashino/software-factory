@@ -1,60 +1,51 @@
 import { z } from 'zod';
-import { define, type Ports } from '../../core/procedure';
+import { define } from '../../core/procedure';
 
 const EmptySchema = z.object({}).strict();
 
-const FactoryCellSchema = z.object({
+const CellStatusSchema = z.object({
   cellId: z.string().min(1),
   name: z.string().min(1),
-  projectId: z.string().min(1),
-  repoRoot: z.string().min(1),
   pid: z.number().int().positive(),
+  state: z.enum(['idle', 'running']),
+  writes: z.boolean(),
 });
 
-const CellsReplySchema = z.object({ cells: z.array(FactoryCellSchema) });
+const ProjectSchema = z.object({
+  projectId: z.string().min(1),
+  repoRoot: z.string().min(1),
+  desired: z.number().int().min(0),
+  running: z.number().int().min(0),
+  crashLoop: z.boolean(),
+  cells: z.array(CellStatusSchema),
+});
 
-const CreateSchema = z
+const ProjectsReplySchema = z.object({ projects: z.array(ProjectSchema) });
+
+const ScaleSchema = z
   .object({
     repoRoot: z.string().min(1),
-    name: z.string().min(1).optional(),
+    count: z.number().int().min(0),
     lines: z.array(z.string().min(1)).min(1).optional(),
   })
   .strict();
 
-const RemoveSchema = z.object({ id: z.string().trim().min(1) }).strict();
+const SCALE_ROUTE = '/scale';
 
-const CELLS_ROUTE = '/cells';
+export type FactoryProject = z.infer<typeof ProjectSchema>;
 
-export interface FactoryCell {
-  cellId: string;
-  name: string;
-  projectId: string;
-  repoRoot: string;
-  pid: number;
-}
-
-const runningCellsOf = async (ctx: Ports): Promise<FactoryCell[]> =>
-  CellsReplySchema.parse(await ctx.factoryDaemon.get(CELLS_ROUTE)).cells;
-
-export const listFactoryCells = define({ kind: 'supervisor' })(EmptySchema)<
-  FactoryCell[]
->((_input, ctx) => runningCellsOf(ctx));
-
-export const createFactoryCell = define({ kind: 'supervisor' })(
-  CreateSchema,
-)<FactoryCell>(async (input, ctx) =>
-  FactoryCellSchema.parse(await ctx.factoryDaemon.post(CELLS_ROUTE, input)),
+export const listFactoryProjects = define({ kind: 'supervisor' })(EmptySchema)<
+  FactoryProject[]
+>(
+  async (_input, ctx) =>
+    ProjectsReplySchema.parse(await ctx.factoryDaemon.get(SCALE_ROUTE))
+      .projects,
 );
 
-export const removeFactoryCell = define({ kind: 'supervisor' })(
-  RemoveSchema,
-)<string>(async (input, ctx) => {
-  const reply = z
-    .object({ cellId: z.string().min(1) })
-    .parse(
-      await ctx.factoryDaemon.delete(
-        `${CELLS_ROUTE}/${encodeURIComponent(input.id)}`,
-      ),
-    );
-  return reply.cellId;
-});
+export const scaleFactoryCells = define({ kind: 'supervisor' })(ScaleSchema)<{
+  projectId: string;
+}>(async (input, ctx) =>
+  z
+    .object({ projectId: z.string().min(1) })
+    .parse(await ctx.factoryDaemon.put(SCALE_ROUTE, input)),
+);

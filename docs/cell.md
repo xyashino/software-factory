@@ -16,7 +16,7 @@ Terms: [glossary](./README.md#glossary). Protocol and timing: [factory.md §3](.
 | :--- | :--- | :--- | :--- |
 | Cell daemon | `apps/sf/src/application/procedures/cell/*`, helpers `apps/sf/src/cell/*`, CLI `apps/sf/src/adapters/cli/cell.command.ts` | `sf cell start`, one per Cell, cwd = repo root, started by the Factory daemon | Factory daemon `/relay/api/v1/*`; loopback operator endpoint |
 | Factory daemon | `apps/sf/src/daemon/*`, CLI `apps/sf/src/adapters/cli/factory.command.ts` | detached `sf factory start`, `127.0.0.1:7072` | HQ `/api/v1/factories/*`, `/api/v1/cells/*` (Factory credential); spawns and kills Cell daemons |
-| Factory daemon client | `apps/sf/src/application/procedures/cell/factory-cells.ts`, `apps/sf/src/adapters/http/factory-daemon.adapter.ts` | inside `sf cell create|list|stop|rm` | Factory daemon loopback API |
+| Factory daemon client | `apps/sf/src/application/procedures/cell/factory-cells.ts`, `apps/sf/src/adapters/http/factory-daemon.adapter.ts` | inside `sf cell scale|list` | Factory daemon loopback API |
 
 ## Factory daemon
 
@@ -41,7 +41,7 @@ Errors: `{ code, type, message }`. `400` argument, `409` refused (name taken, pr
 Cell supervision (`apps/sf/src/daemon/supervisor.ts`):
 
 - Cell id = `cell-` + 8 random hex, memory only, one per run, never reused. Names: `hostname`, `hostname-2`, … against live Cells.
-- Create: daemon checks `.factory/config.json` in the repo, takes the project from it, spawns `sf cell start --name <name>` with cwd = repo root and env `FACTORY_URL` (relay), `FACTORY_TOKEN` (local bearer for this Cell), `FACTORY_CELL_ID`, `CELL_LINES` (if set), `SF_FACTORY_PID` = daemon pid.
+- Scale up: daemon checks `.factory/config.json` in the repo, takes the project from it, spawns `sf cell start --name <name>` with cwd = repo root and env `FACTORY_URL` (relay), `FACTORY_TOKEN` (local bearer for this Cell), `FACTORY_CELL_ID`, `CELL_LINES` (if set), `SF_FACTORY_PID` = daemon pid.
 - Kill: SIGTERM, wait 10 s, SIGKILL, wait until the pid is gone. Resolves only after exit. Then `DELETE` stops, and the daemon calls HQ `POST /api/v1/factories/cells/:id/gone` (failure ignored: HQ requeues the Job when its lease expires).
 - Relay (`apps/sf/src/daemon/relay.ts`): accepts only `claims`, `heartbeats`, `jobs/:id/transitions`, `incidents/:id/resolve`. Forwards with the Factory credential and `x-cell-id`. A local bearer unknown or dead → `401`. HQ answers `401` → the daemon stops that Cell and returns `401`.
 - Heartbeat to HQ every 10 s carries `projects: [{ projectId, desired, running }]` (display only).
@@ -51,12 +51,12 @@ Cell supervision (`apps/sf/src/daemon/supervisor.ts`):
 - The daemon keeps no state on disk except the pid file. Logs: Cell output in `$XDG_DATA_HOME/sf/cells/<cellId>.log`.
 - Only the daemon holds the HQ credential. The Cell holds only its local bearer.
 
-`sf cell create|list|stop|rm` call the daemon. Daemon down → `factory not running: run "sf factory start"`.
+`sf cell scale|list` call the daemon. Daemon down → `factory not running: run "sf factory start"`.
 
-- `cell create [--repo path] [--count N] [--name slug] [--lines a,b] [--json]`: `--name` only with count 1. No `--project`: the project comes from the repo config.
+- `cell scale N [--repo path] [--lines a,b] [--json]`: desired Cells for the repo project, converged by the daemon (`PUT /scale`). No `--project`: the project comes from the repo config. Count lives in memory; restart or HQ loss resets to 0.
 - `cell list [--json]`: the daemon's Cells, local only.
-- `cell stop <id> | --all`: kills local Cells. Unknown id → `no local cell <id>`.
-- `cell rm <id>`: same as stop for one Cell. Unknown id is refused.
+- Scale down order: idle Cells, then read-only stations, then the newest writing station. Kill is confirmed before HQ gets the gone call.
+- `cell list`: per project repo, desired, running, Cell id and state, `crash loop` flag. `cell create|stop|rm` are removed: exit 2 with `use "sf cell scale N"`.
 
 ## Cell daemon: start to Job
 
@@ -102,5 +102,5 @@ Timing constants live in `apps/sf/src/config.ts` (`HEARTBEAT_INTERVAL_MS`, `LEAS
 ## Open
 
 - Cell daemon started by hand has no Factory daemon to relay through. It refuses to start.
-- `sf setup --cell` and `sf cell create` need a running Factory daemon.
+- `sf setup --cell` and `sf cell scale` need a running Factory daemon.
 - The Factory daemon does not start on boot. `sf service` does not manage it yet.

@@ -9,12 +9,19 @@ const KILL_WAIT_MS = 5_000;
 const POLL_MS = 100;
 const CELL_ID_BYTES = 4;
 
-export interface CellRecord {
+export interface Activity {
+  state: 'idle' | 'running';
+  writes: boolean;
+  since: number;
+}
+
+export interface CellRecord extends Activity {
   cellId: string;
   name: string;
   projectId: string;
   repoRoot: string;
   pid: number;
+  startedAt: number;
 }
 
 export interface ProjectReport {
@@ -41,6 +48,7 @@ export interface Supervisor {
   list(): CellRecord[];
   projects(): ProjectReport[];
   has(cellId: string): boolean;
+  setActivity(cellId: string, activity: Activity): boolean;
   kill(cellId: string): Promise<boolean>;
   killAll(): Promise<void>;
 }
@@ -51,6 +59,8 @@ interface Entry {
   projectId: string;
   repoRoot: string;
   pid: number | null;
+  startedAt: number;
+  activity: Activity;
 }
 
 type RunningEntry = Entry & { pid: number };
@@ -129,12 +139,16 @@ export const createSupervisor = (
     projectId,
     repoRoot,
     pid,
+    startedAt,
+    activity,
   }: RunningEntry): CellRecord => ({
     cellId,
     name,
     projectId,
     repoRoot,
     pid,
+    startedAt,
+    ...activity,
   });
 
   const countByProject = (rows: readonly Entry[]): Map<string, number> => {
@@ -156,12 +170,15 @@ export const createSupervisor = (
         throw new Refused(`cell ${name} already running`);
       }
     }
+    const startedAt = ports.clock.now();
     const entry: Entry = {
       cellId: newCellIdOf(entries),
       name,
       projectId: input.projectId,
       repoRoot: input.repoRoot,
       pid: null,
+      startedAt,
+      activity: { state: 'idle', writes: false, since: startedAt },
     };
     entries.set(entry.cellId, entry);
     try {
@@ -203,6 +220,14 @@ export const createSupervisor = (
       }));
     },
     has: (cellId) => pruneDead().some((entry) => entry.cellId === cellId),
+    setActivity: (cellId, activity) => {
+      const entry = pruneDead().find((item) => item.cellId === cellId);
+      if (entry === undefined) {
+        return false;
+      }
+      entry.activity = activity;
+      return true;
+    },
     kill,
     killAll: async () => {
       await Promise.all([...entries.keys()].map((cellId) => kill(cellId)));

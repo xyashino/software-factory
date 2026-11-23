@@ -4,10 +4,7 @@ import type { Ports } from '../../core/procedure';
 import { joinPath } from '../../../domain/common/path';
 import { claimLoop } from './claim-loop.procedure';
 import type { CellRuntime } from './cell-runtime';
-import {
-  resolveCellTarget,
-  type ProjectChooser,
-} from './resolve-project-target';
+import { resolveCellTarget } from './resolve-project-target';
 
 const LINE_SUFFIX = '.yml';
 
@@ -17,8 +14,6 @@ export interface StartInput {
   logPath: string;
   lines: readonly string[] | undefined;
   relayed: boolean;
-  project?: string;
-  choose?: ProjectChooser;
   signal: AbortSignal;
 }
 
@@ -46,16 +41,13 @@ export const startCell = async (
   const bearer = ports.connection.token;
   if (!input.relayed || cellId === undefined || bearer === null) {
     throw new Refused(
-      'a Cell starts through its Factory daemon: run "sf cell create" in a project repo',
+      'a Cell starts through its Factory daemon: run "sf cell scale N" in a project repo',
     );
   }
-  const target = await resolveCellTarget(ports, {
-    repoRoot: input.repoRoot,
-    requested: input.project,
-    choose: input.choose,
-    relayed: input.relayed,
-  });
-  const { projectId, repoRoot } = target;
+  const { projectId, repoRoot } = await resolveCellTarget(
+    ports,
+    input.repoRoot,
+  );
   const runners = await installedRunnersOf(ports);
   if (runners.length === 0) {
     throw new Refused('no runner installed on this machine');

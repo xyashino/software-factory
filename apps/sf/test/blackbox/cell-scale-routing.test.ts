@@ -29,7 +29,7 @@ const closedPort = (): Promise<number> =>
   });
 
 const sandboxEnv = async (): Promise<Record<string, string>> => {
-  const home = mkdtempSync(join(tmpdir(), 'sf-stop-routing-'));
+  const home = mkdtempSync(join(tmpdir(), 'sf-scale-routing-'));
   dirs.push(home);
   return {
     PATH: process.env.PATH ?? '',
@@ -54,20 +54,33 @@ afterAll(() => {
   }
 });
 
-describe('cell stop routing', () => {
-  it('refuses a stop without an id or --all', async () => {
+describe('cell scale routing', () => {
+  it('refuses a scale without a count', async () => {
     // Arrange
     const env = await sandboxEnv();
 
     // Act
-    const result = runSf(env, ['cell', 'stop']);
+    const result = runSf(env, ['cell', 'scale']);
 
     // Assert
     expect(result.status).toBe(EXIT.argument);
-    expect(result.stderr).toContain('cell id required, or --all');
   });
 
-  it('refuses a stop by id when no Factory daemon runs', async () => {
+  it('refuses a scale when no Factory daemon runs', async () => {
+    // Arrange
+    const env = await sandboxEnv();
+
+    // Act
+    const result = runSf(env, ['cell', 'scale', '2']);
+
+    // Assert
+    expect(result.status).toBe(EXIT.unreachable);
+    expect(result.stderr).toContain(
+      'factory not running: run "sf factory start"',
+    );
+  });
+
+  it('refuses a stop because it was replaced by scale', async () => {
     // Arrange
     const env = await sandboxEnv();
 
@@ -75,23 +88,7 @@ describe('cell stop routing', () => {
     const result = runSf(env, ['cell', 'stop', 'dev-box-2']);
 
     // Assert
-    expect(result.status).toBe(EXIT.unreachable);
-    expect(result.stderr).toContain(
-      'factory not running: run "sf factory start"',
-    );
-  });
-
-  it('refuses a stop of all cells when no Factory daemon runs', async () => {
-    // Arrange
-    const env = await sandboxEnv();
-
-    // Act
-    const result = runSf(env, ['cell', 'stop', '--all']);
-
-    // Assert
-    expect(result.status).toBe(EXIT.unreachable);
-    expect(result.stderr).toContain(
-      'factory not running: run "sf factory start"',
-    );
+    expect(result.status).toBe(EXIT.argument);
+    expect(result.stderr).toContain('use "sf cell scale N"');
   });
 });

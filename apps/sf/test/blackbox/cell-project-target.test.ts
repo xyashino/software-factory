@@ -176,73 +176,38 @@ describe('cell project target', () => {
       const repo = repoWithConfig(home, PROJECT_ID);
 
       // Act
-      const result = await runSf(['cell', 'create', '--repo', repo, '--json']);
-      const [cell] = JSON.parse(result.stdout || '[]') as {
-        cellId: string;
-        repoRoot: string;
-      }[];
-      await runSf(['cell', 'rm', cell?.cellId ?? '']);
+      const result = await runSf([
+        'cell',
+        'scale',
+        '1',
+        '--repo',
+        repo,
+        '--json',
+      ]);
+      await runSf(['cell', 'scale', '0', '--repo', repo]);
 
       // Assert
       expect(result.status).toBe(EXIT.ok);
-      expect(cell?.repoRoot).toBe(repo);
+      expect(JSON.parse(result.stdout)).toEqual({ projectId: PROJECT_ID });
     },
     TEST_TIMEOUT_MS,
   );
 
   it(
-    'refuses to start a cell outside a project repo',
+    'refuses to scale a cell outside a project repo',
     async () => {
       // Arrange
       const outside = mkdtempSync(join(tmpdir(), 'sf-no-repo-'));
       dirs.push(outside);
 
       // Act
-      const result = await runSf(['cell', 'create', '--repo', outside]);
+      const result = await runSf(['cell', 'scale', '1', '--repo', outside]);
 
       // Assert
       expect(result.status).toBe(EXIT.refused);
       expect(result.stderr).toContain(
         'a Cell starts only inside a project repo',
       );
-    },
-    TEST_TIMEOUT_MS,
-  );
-
-  it(
-    'refuses a repo config that names an unregistered project',
-    async () => {
-      // Arrange
-      const repo = repoWithConfig(home, 'ghost');
-
-      // Act
-      const result = await runSf(['cell', 'create', '--repo', repo]);
-
-      // Assert
-      expect(result.status).toBe(EXIT.refused);
-      expect(result.stderr).toContain('sf project add ghost');
-    },
-    TEST_TIMEOUT_MS,
-  );
-
-  it(
-    'refuses to create a cell when no project is registered',
-    async () => {
-      // Arrange
-      const repo = repoWithConfig(home, PROJECT_ID);
-      const before = registered;
-      registered = [];
-
-      try {
-        // Act
-        const result = await runSf(['cell', 'create', '--repo', repo]);
-
-        // Assert
-        expect(result.status).toBe(EXIT.refused);
-        expect(result.stderr).toContain('sf project add');
-      } finally {
-        registered = before;
-      }
     },
     TEST_TIMEOUT_MS,
   );
@@ -268,6 +233,6 @@ describe('cell project target', () => {
 
     // Assert
     expect(result.status).toBe(EXIT.refused);
-    expect(result.stderr).toContain('sf cell create');
+    expect(result.stderr).toContain('sf cell scale N');
   });
 });
