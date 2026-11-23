@@ -1,4 +1,4 @@
-import { mkdir } from 'node:fs/promises';
+import { mkdir, rm } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import type { GitPort } from '../../application/ports/git.port';
 import type { ProcessPort } from '../../application/ports/process.port';
@@ -33,8 +33,22 @@ export const createGitAdapter = (process: ProcessPort): GitPort => {
       }
       await git(['worktree', 'add', path, '-b', branch, baseBranch], repoRoot);
     },
+    // Falls back to deleting the directory: a half-built or missing worktree still has to go.
     worktreeRemove: async (repoRoot, path) => {
-      await git(['worktree', 'remove', '--force', path], repoRoot);
+      const result = await process.run(
+        GIT,
+        ['worktree', 'remove', '--force', path],
+        repoRoot,
+      );
+      if (result.exitCode === 0) return;
+      await rm(path, { recursive: true, force: true });
+      await git(['worktree', 'prune'], repoRoot);
+    },
+    deleteBranch: async (repoRoot, branch) => {
+      if ((await git(['branch', '--list', branch], repoRoot)).trim() === '') {
+        return;
+      }
+      await git(['branch', '-D', branch], repoRoot);
     },
     excludeLocally: async (worktree, pattern) => {
       await addInfoExclude(process, worktree, pattern);

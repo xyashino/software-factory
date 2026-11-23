@@ -639,12 +639,28 @@ const finishOperator = async (
   }
 };
 
+const discardWorktree = async (
+  runtime: CellRuntime,
+  job: ClaimedJob,
+  reason: string,
+): Promise<void> => {
+  const { git } = runtime.ports;
+  await git.worktreeRemove(runtime.repoRoot, worktreeOf(runtime, job));
+  await git.deleteBranch(
+    runtime.repoRoot,
+    factoryBranchOf(slugOf(job.orderId)),
+  );
+  await logLine(runtime, job, 'worktree', `discarded: ${reason}`);
+};
+
 const worktreeMissingOf = async (
   runtime: CellRuntime,
   job: ClaimedJob,
   missing: { stepId: string; files: string[] },
-): Promise<ClaimedJob | null> =>
-  nextJobOf(
+  reason: string,
+): Promise<ClaimedJob | null> => {
+  await discardWorktree(runtime, job, reason);
+  return nextJobOf(
     await transition(
       runtime,
       job,
@@ -653,9 +669,65 @@ const worktreeMissingOf = async (
         missingStepId: missing.stepId,
         missingFiles: missing.files,
       },
-      `missing ${missing.files.join(', ')}`,
+      reason,
     ),
   );
+};
+
+// Returns the failure reason, or null when the worktree is reset to the order's head.
+const resumeWorktree = async (
+  runtime: CellRuntime,
+  job: ClaimedJob,
+): Promise<string | null> => {
+  const { git } = runtime.ports;
+  const worktree = worktreeOf(runtime, job);
+  const sha = job.headCommitSha;
+  try {
+    if (sha === null || !(await git.hasCommit(runtime.repoRoot, sha))) {
+      return `head commit ${sha ?? 'unknown'} not in clone`;
+    }
+    await git.resetHard(worktree, sha);
+    await git.clean(worktree);
+  } catch (error) {
+    return `reset failed: ${errorText(error)}`;
+  }
+  await logLine(runtime, job, 'worktree', `reset to ${sha}`);
+  return null;
+};
+
+// Undefined: the worktree is resumed and the station may run.
+const resumeOrReport = async (
+  runtime: CellRuntime,
+  job: ClaimedJob,
+): Promise<{ next: ClaimedJob | null } | undefined> => {
+  const [firstPrior] = job.expectedPriorSteps;
+  if (firstPrior === undefined) {
+    return undefined;
+  }
+  const missing = await missingPriorFiles(runtime, job);
+  if (missing !== null) {
+    return {
+      next: await worktreeMissingOf(
+        runtime,
+        job,
+        missing,
+        `missing ${missing.files.join(', ')}`,
+      ),
+    };
+  }
+  const failure = await resumeWorktree(runtime, job);
+  if (failure === null) {
+    return undefined;
+  }
+  return {
+    next: await worktreeMissingOf(
+      runtime,
+      job,
+      { stepId: firstPrior.stepId, files: [] },
+      failure,
+    ),
+  };
+};
 
 const beatOnce = async (
   runtime: CellRuntime,
@@ -771,9 +843,18 @@ const prepareWorktree = async (
   const slug = slugOf(job.orderId);
   try {
     if (await fs.exists(worktree)) {
-      await logLine(runtime, job, 'worktree', `reuse path=${worktree}`);
-      await removeStagedFiles(runtime, worktree, snapshot);
-    } else {
+      const failure =
+        job.workspaceMode === 'reuse'
+          ? await resumeWorktree(runtime, job)
+          : 'fresh start';
+      if (failure === null) {
+        await logLine(runtime, job, 'worktree', `reuse path=${worktree}`);
+        await removeStagedFiles(runtime, worktree, snapshot);
+      } else {
+        await discardWorktree(runtime, job, failure);
+      }
+    }
+    if (!(await fs.exists(worktree))) {
       await logLine(
         runtime,
         job,
@@ -998,9 +1079,9 @@ const deliverStation = async (
   job: ClaimedJob,
   snapshot: LineSnapshot,
 ): Promise<ClaimedJob | null> => {
-  const missing = await missingPriorFiles(runtime, job);
-  if (missing !== null) {
-    return worktreeMissingOf(runtime, job, missing);
+  const stalled = await resumeOrReport(runtime, job);
+  if (stalled !== undefined) {
+    return stalled.next;
   }
   await transition(runtime, job, {
     action: 'start',
@@ -1528,9 +1609,9 @@ export const runJob = async (
     return deliverStation(runtime, job, snapshot);
   }
   if (station?.kind === 'inspection') {
-    const missing = await missingPriorFiles(runtime, job);
-    if (missing !== null) {
-      return worktreeMissingOf(runtime, job, missing);
+    const stalled = await resumeOrReport(runtime, job);
+    if (stalled !== undefined) {
+      return stalled.next;
     }
     await transition(
       runtime,
@@ -1552,9 +1633,9 @@ export const runJob = async (
   if (plan.kind === 'unavailable') {
     return lineUnavailable(runtime, job, snapshot.name, plan.detail);
   }
-  const missing = await missingPriorFiles(runtime, job);
-  if (missing !== null) {
-    return worktreeMissingOf(runtime, job, missing);
+  const stalled = await resumeOrReport(runtime, job);
+  if (stalled !== undefined) {
+    return stalled.next;
   }
   await transition(
     runtime,

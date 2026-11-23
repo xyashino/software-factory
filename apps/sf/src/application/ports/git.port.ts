@@ -8,6 +8,7 @@ export interface GitPort {
     baseBranch: string,
   ): Promise<void>;
   worktreeRemove(repoRoot: string, path: string): Promise<void>;
+  deleteBranch(repoRoot: string, branch: string): Promise<void>;
   excludeLocally(worktree: string, pattern: string): Promise<void>;
   commit(cwd: string, paths: readonly string[], message: string): Promise<void>;
   push(cwd: string, branch: string): Promise<void>;

@@ -39,6 +39,7 @@ interface Harness {
   runtime: CellRuntime;
   lines: () => string[];
   routes: () => string[];
+  gitCalls: string[];
   control: Control;
   sleepers: Sleeper[];
   advance: (ms: number) => void;
@@ -88,6 +89,7 @@ skills: []
 Build task {{taskId}}.
 `;
 
+const HEAD_SHA = 'head-sha';
 const PANE: RunHandle = {
   id: 'run-1',
   pane: { workspaceId: 'w6E', tabId: 'w6F', paneId: 'w6F:p1' },
@@ -105,6 +107,7 @@ const jobOf = (patch: Partial<ClaimedJob>): ClaimedJob => ({
   repoUrl: 'git@example.test:repo.git',
   baseBranch: 'main',
   baseCommitSha: null,
+  headCommitSha: HEAD_SHA,
   targetBranch: 'factory/order-1',
   expectedPriorSteps: [],
   payload: { lineName: 'feature' },
@@ -114,6 +117,7 @@ const jobOf = (patch: Partial<ClaimedJob>): ClaimedJob => ({
 const harness = (options: {
   interactive: boolean;
   dirty?: boolean;
+  unknownCommit?: boolean;
   stopConfirmed?: boolean;
   alivePids?: number[];
   psStart?: string;
@@ -131,6 +135,7 @@ const harness = (options: {
     beat: { signals: [], down: false },
   };
   const clock = { at: 0 };
+  const gitCalls: string[] = [];
   let stray = options.dirty === true;
   const advance = (ms: number): void => {
     clock.at += ms;
@@ -191,6 +196,25 @@ const harness = (options: {
     git: {
       ...fake.ports.git,
       worktreeAdd: async () => undefined,
+      worktreeRemove: async (_repoRoot, path) => {
+        gitCalls.push('worktreeRemove');
+        for (const key of [...files.keys()]) {
+          if (key === path || key.startsWith(`${path}/`)) files.delete(key);
+        }
+      },
+      deleteBranch: async (_repoRoot, branch) => {
+        gitCalls.push(`deleteBranch ${branch}`);
+      },
+      hasCommit: async (_cwd, sha) => {
+        gitCalls.push(`hasCommit ${sha}`);
+        return options.unknownCommit !== true;
+      },
+      resetHard: async (_cwd, sha) => {
+        gitCalls.push(`resetHard ${sha}`);
+      },
+      clean: async () => {
+        gitCalls.push('clean');
+      },
       excludeLocally: async () => undefined,
       status: async () => (stray ? ' M src/app.ts' : ''),
       discardChanges: async () => {
@@ -265,6 +289,7 @@ const harness = (options: {
     lines: () =>
       log.map((text) => text.replace(ANSI, '').trim().replace(/\s+/g, ' ')),
     routes: () => fake.calls.map((call) => call.route),
+    gitCalls,
     control,
     sleepers,
     advance,
@@ -346,6 +371,7 @@ describe('cell log detail', () => {
       gate.map((line) => line.replace(/^\S+ \S+ quality-gate /, '')),
     ).toEqual([
       'claim job=job-1 kind=step epoch=2',
+      `worktree reset to ${HEAD_SHA}`,
       'start (2/3) command="bun run ci:verify"',
       'complete (2/3) exit=0 duration=15s',
       'start (2/3) command="bun run lint"',
@@ -814,7 +840,7 @@ describe('cell step files', () => {
     await h.runtime.ports.fs.writeText(WORKTREE, '');
     await h.runtime.ports.fs.writeText(staged, '{"outcome"');
     await h.runtime.ports.fs.writeText(stagedTask, '# ta');
-    const job = runJob(h.runtime, jobOf({}));
+    const job = runJob(h.runtime, jobOf({ workspaceMode: 'reuse' }));
     await paneLogged(h);
 
     // Act
@@ -824,5 +850,148 @@ describe('cell step files', () => {
     // Assert
     expect(await h.runtime.ports.fs.exists(staged)).toBe(false);
     expect(await h.runtime.ports.fs.exists(stagedTask)).toBe(false);
+  });
+});
+
+const PRIOR_BUILD = {
+  stepId: 's1',
+  stationId: 'build',
+  stepIndex: 0,
+  requiredFiles: [],
+};
+const WORKTREE_JSON = joinPath(WORKTREE, '.cell', 'worktree.json');
+const PRIOR_STATE = joinPath(WORKTREE, '.cell', 'build', 'state.json');
+
+const seedWorktree = async (h: Harness): Promise<void> => {
+  await h.runtime.ports.fs.writeText(WORKTREE, '');
+  await h.runtime.ports.fs.writeText(WORKTREE_JSON, '');
+  await h.runtime.ports.fs.writeText(PRIOR_STATE, '{"outcome":"complete"}\n');
+};
+
+describe('cell worktree resume', () => {
+  it('resumes a killed station at the head commit it was left at', async () => {
+    // Arrange
+    const h = harness({ interactive: false });
+    await seedWorktree(h);
+
+    // Act
+    await runJob(h.runtime, jobOf({ expectedPriorSteps: [PRIOR_BUILD] }));
+
+    // Assert
+    expect(h.gitCalls).toEqual(
+      expect.arrayContaining([`resetHard ${HEAD_SHA}`, 'clean']),
+    );
+    expect(h.gitCalls).not.toContain('worktreeRemove');
+    expect(h.lines()).toContainEqual(
+      expect.stringMatching(/quality-gate worktree reset to head-sha$/),
+    );
+  });
+
+  it('reruns a read-only station and keeps the files of earlier stations', async () => {
+    // Arrange
+    const h = harness({ interactive: false });
+    await seedWorktree(h);
+    const report = joinPath(WORKTREE, '.cell', 'build', 'report.md');
+    await h.runtime.ports.fs.writeText(report, '# build');
+
+    // Act
+    await runJob(h.runtime, jobOf({ expectedPriorSteps: [PRIOR_BUILD] }));
+
+    // Assert
+    expect(await h.runtime.ports.fs.exists(report)).toBe(true);
+  });
+
+  it('an unknown head commit deletes the worktree and reports worktree_missing', async () => {
+    // Arrange
+    const h = harness({ interactive: false, unknownCommit: true });
+    await seedWorktree(h);
+
+    // Act
+    await runJob(h.runtime, jobOf({ expectedPriorSteps: [PRIOR_BUILD] }));
+
+    // Assert
+    expect(h.gitCalls).toContain('worktreeRemove');
+    expect(h.gitCalls).toContain('deleteBranch factory/order-1');
+    expect(h.gitCalls).not.toContain(`resetHard ${HEAD_SHA}`);
+    expect(await h.runtime.ports.fs.exists(WORKTREE)).toBe(false);
+    expect(h.lines()).toContainEqual(
+      expect.stringMatching(
+        /quality-gate worktree discarded: head commit head-sha not in clone$/,
+      ),
+    );
+    expect(h.lines()).toContainEqual(
+      expect.stringMatching(
+        /worktree_missing head commit head-sha not in clone$/,
+      ),
+    );
+  });
+
+  it('a fresh start discards the old worktree before it creates one', async () => {
+    // Arrange
+    const h = harness({ interactive: true });
+    await seedWorktree(h);
+
+    // Act
+    const job = runJob(h.runtime, jobOf({}));
+    await paneLogged(h);
+    h.control.exit?.({ exitCode: 0 });
+    await job;
+
+    // Assert
+    expect(h.gitCalls).toEqual(
+      expect.arrayContaining([
+        'worktreeRemove',
+        'deleteBranch factory/order-1',
+      ]),
+    );
+    expect(h.gitCalls).not.toContain(`resetHard ${HEAD_SHA}`);
+    expect(h.lines()).toContainEqual(
+      expect.stringMatching(/build worktree discarded: fresh start$/),
+    );
+    expect(h.lines()).toContainEqual(
+      expect.stringMatching(/build worktree create path=/),
+    );
+  });
+
+  it('a reused first step resets the worktree to its head and keeps it', async () => {
+    // Arrange
+    const h = harness({ interactive: true });
+    await seedWorktree(h);
+
+    // Act
+    const job = runJob(h.runtime, jobOf({ workspaceMode: 'reuse' }));
+    await paneLogged(h);
+    h.control.exit?.({ exitCode: 0 });
+    await job;
+
+    // Assert
+    expect(h.gitCalls).toContain(`resetHard ${HEAD_SHA}`);
+    expect(h.gitCalls).not.toContain('worktreeRemove');
+    expect(h.lines()).toContainEqual(
+      expect.stringMatching(/build worktree reuse path=/),
+    );
+  });
+
+  it('a reused first step with an unknown head commit starts from scratch', async () => {
+    // Arrange
+    const h = harness({ interactive: true, unknownCommit: true });
+    await seedWorktree(h);
+
+    // Act
+    const job = runJob(h.runtime, jobOf({ workspaceMode: 'reuse' }));
+    await paneLogged(h);
+    h.control.exit?.({ exitCode: 0 });
+    await job;
+
+    // Assert
+    expect(h.gitCalls).toContain('worktreeRemove');
+    expect(h.lines()).toContainEqual(
+      expect.stringMatching(
+        /build worktree discarded: head commit head-sha not in clone$/,
+      ),
+    );
+    expect(h.lines()).toContainEqual(
+      expect.stringMatching(/build worktree create path=/),
+    );
   });
 });

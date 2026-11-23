@@ -62,6 +62,7 @@ type ClaimBody = {
     workspaceMode: string;
     epoch: number;
     leaseExpiresAt: number;
+    headCommitSha: string | null;
     targetBranch: string;
     payload: Record<string, unknown>;
   };
@@ -153,6 +154,28 @@ describe('cell claims', () => {
       claimedByCellId: CELL_A,
       claimedByFactoryId: 'factory-1',
     });
+  });
+
+  it('offers the base commit as the head to resume from before any build', async () => {
+    const { app, db } = setup();
+    db.update(workOrders)
+      .set({ baseCommitSha: 'base-sha' })
+      .where(eq(workOrders.orderId, asOrderId('order-1')))
+      .run();
+    const { body } = await claim(app, CELL_A);
+
+    expect(body.job?.headCommitSha).toBe('base-sha');
+  });
+
+  it('offers the last build commit as the head once a build committed', async () => {
+    const { app, db } = setup();
+    db.update(workOrders)
+      .set({ baseCommitSha: 'base-sha', headCommitSha: 'build-sha' })
+      .where(eq(workOrders.orderId, asOrderId('order-1')))
+      .run();
+    const { body } = await claim(app, CELL_A);
+
+    expect(body.job?.headCommitSha).toBe('build-sha');
   });
 
   it('tells the cell which line and task the claimed job runs', async () => {

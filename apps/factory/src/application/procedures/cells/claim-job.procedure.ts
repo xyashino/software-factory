@@ -327,7 +327,21 @@ const claimNext = (
   return claimWorkOrder(tx, cell, project, leaseExpiresAt, now, log);
 };
 
-export const toClaimedJob = (row: JobRow, leaseExpiresAt: number) => ({
+export const headCommitOfJob = (tx: DbTx, job: JobRow): string | null => {
+  if (job.orderId === null) return null;
+  const order = tx
+    .select()
+    .from(workOrders)
+    .where(eq(workOrders.orderId, job.orderId))
+    .get();
+  return order?.headCommitSha ?? order?.baseCommitSha ?? null;
+};
+
+export const toClaimedJob = (
+  row: JobRow,
+  leaseExpiresAt: number,
+  headCommitSha: string | null,
+) => ({
   jobId: row.jobId,
   kind: row.kind,
   orderId: row.orderId,
@@ -339,6 +353,7 @@ export const toClaimedJob = (row: JobRow, leaseExpiresAt: number) => ({
   repoUrl: row.repoUrl,
   baseBranch: row.baseBranch,
   baseCommitSha: row.baseCommitSha,
+  headCommitSha,
   targetBranch: row.targetBranch,
   expectedPriorSteps: row.expectedPriorStepsJson,
   incidentId: row.incidentId,
@@ -356,7 +371,10 @@ const attemptClaim = (ctx: AuthenticatedContext, cell: ClaimCell) => {
       ? undefined
       : claimNext(tx, cell, leaseExpiresAt, now, log);
     return {
-      job: claimed === undefined ? null : toClaimedJob(claimed, leaseExpiresAt),
+      job:
+        claimed === undefined
+          ? null
+          : toClaimedJob(claimed, leaseExpiresAt, headCommitOfJob(tx, claimed)),
       records: flushTransitions(tx, log),
     };
   });
