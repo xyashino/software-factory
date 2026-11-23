@@ -125,11 +125,12 @@ describe('git work for a job', () => {
     const producedFiles = ['src/feature.ts', '.cell/build/report.md'];
 
     // Act
-    const commitSha = await checkpointStation(ports, {
+    const { commitSha } = await checkpointStation(ports, {
       worktree: sandbox.worktree,
       slug: SLUG,
       stepId: 'build',
       producedFiles,
+      commits: true,
     });
 
     // Assert
@@ -144,6 +145,101 @@ describe('git work for a job', () => {
     expect(await ports.git.status(sandbox.worktree)).toContain('notes.ts');
   });
 
+  it('committing station pushes its commit to the branch', async () => {
+    // Arrange
+    const producedFiles = ['src/feature.ts'];
+
+    // Act
+    await checkpointStation(ports, {
+      worktree: sandbox.worktree,
+      slug: SLUG,
+      stepId: 'build',
+      producedFiles,
+      commits: true,
+    });
+
+    // Assert
+    expect(git(sandbox.repo, ['ls-remote', sandbox.remote, BRANCH])).toContain(
+      BRANCH,
+    );
+  });
+
+  it('retry commits on top of the previous build commit', async () => {
+    // Arrange
+    const first = await checkpointStation(ports, {
+      worktree: sandbox.worktree,
+      slug: SLUG,
+      stepId: 'build',
+      producedFiles: ['src/feature.ts'],
+      commits: true,
+    });
+    writeFile(
+      join(sandbox.worktree, 'src', 'feature.ts'),
+      'export const x = 2;\n',
+    );
+
+    // Act
+    const second = await checkpointStation(ports, {
+      worktree: sandbox.worktree,
+      slug: SLUG,
+      stepId: 'build',
+      producedFiles: ['src/feature.ts'],
+      commits: true,
+    });
+
+    // Assert
+    expect(second.commitSha).not.toBe(first.commitSha);
+    expect(git(sandbox.worktree, ['rev-parse', 'HEAD^']).trim()).toBe(
+      first.commitSha,
+    );
+  });
+
+  it('non-committing station leaves no commit and no push', async () => {
+    // Arrange
+    const base = git(sandbox.worktree, ['rev-parse', 'HEAD']).trim();
+
+    // Act
+    const result = await checkpointStation(ports, {
+      worktree: sandbox.worktree,
+      slug: SLUG,
+      stepId: 'plan',
+      producedFiles: [],
+      commits: false,
+    });
+
+    // Assert
+    expect(result.commitSha).toBe(base);
+    expect(git(sandbox.worktree, ['rev-parse', 'HEAD']).trim()).toBe(base);
+    expect(
+      git(sandbox.repo, ['ls-remote', sandbox.remote, BRANCH]),
+    ).not.toContain(BRANCH);
+  });
+
+  it('non-committing dirty station is discarded and reports head', async () => {
+    // Arrange
+    const base = git(sandbox.worktree, ['rev-parse', 'HEAD']).trim();
+    writeFile(join(sandbox.worktree, 'README.md'), 'edited\n');
+
+    // Act
+    const result = await checkpointStation(ports, {
+      worktree: sandbox.worktree,
+      slug: SLUG,
+      stepId: 'quality-gate',
+      producedFiles: [],
+      commits: false,
+    });
+
+    // Assert
+    expect(result.commitSha).toBe(base);
+    expect(result.discarded).toEqual(
+      expect.arrayContaining(['README.md', 'src/', 'notes.ts']),
+    );
+    expect(await ports.git.status(sandbox.worktree)).toBe('');
+    expect(
+      existsSync(join(sandbox.worktree, '.cell', 'build', 'commit.txt')),
+    ).toBe(true);
+  });
+
   it('delivers the branch, publishes the PR and removes the worktree', async () => {
     // Arrange
     await checkpointStation(ports, {
@@ -151,6 +247,7 @@ describe('git work for a job', () => {
       slug: SLUG,
       stepId: 'build',
       producedFiles: ['src/feature.ts'],
+      commits: true,
     });
     writeFile(
       join(sandbox.worktree, 'decisions', 'entry.md'),

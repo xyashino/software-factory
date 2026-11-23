@@ -57,5 +57,19 @@ export const createGitAdapter = (process: ProcessPort): GitPort => {
       const result = await process.run(GIT, ['remote', 'get-url', REMOTE], cwd);
       return result.exitCode === 0 ? result.stdout.trim() : null;
     },
+    // Never `-x`: ignored `.cell/` files must survive a discard.
+    resetHard: async (cwd, sha) => {
+      await git(['reset', '--hard', sha], cwd);
+    },
+    clean: async (cwd) => {
+      await git(['clean', '-fd'], cwd);
+    },
+    discardChanges: async (cwd) => {
+      await git(['reset', '--hard', 'HEAD'], cwd);
+      await git(['clean', '-fd'], cwd);
+    },
+    hasCommit: async (cwd, sha) =>
+      (await process.run(GIT, ['cat-file', '-e', `${sha}^{commit}`], cwd))
+        .exitCode === 0,
   };
 };

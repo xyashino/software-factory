@@ -537,18 +537,20 @@ const finishComplete = async (
     );
   }
   const produced = station?.requiredFiles ?? [];
-  let commitSha: string | undefined;
+  let commitSha: string;
   try {
     await writeFeedback(runtime, job, station, '');
-    const worktree = worktreeOf(runtime, job);
-    // The server needs a sha on every complete; a station that changed nothing reports the current HEAD.
-    commitSha =
-      (await checkpointStation(runtime.ports, {
-        worktree,
-        slug: slugOf(job.orderId),
-        stepId: station?.stationId ?? '',
-        producedFiles: produced,
-      })) ?? (await runtime.ports.git.headSha(worktree));
+    const checkpoint = await checkpointStation(runtime.ports, {
+      worktree: worktreeOf(runtime, job),
+      slug: slugOf(job.orderId),
+      stepId: station?.stationId ?? '',
+      producedFiles: produced,
+      commits: station?.commits ?? false,
+    });
+    commitSha = checkpoint.commitSha;
+    if (checkpoint.discarded.length > 0) {
+      await logLine(runtime, job, 'discard', checkpoint.discarded.join(', '));
+    }
     if (station !== undefined) {
       await runtime.ports.fs.writeText(
         joinPath(stepDirOf(runtime, job, station), STATE_FILE),

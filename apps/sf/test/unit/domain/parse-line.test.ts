@@ -74,6 +74,7 @@ describe('line snapshot', () => {
       headless: true,
       permission: 'write',
       timeoutMs: null,
+      commits: false,
     });
   });
 
@@ -122,6 +123,47 @@ describe('line snapshot', () => {
       'operator',
       'deliver',
     ]);
+  });
+
+  it('deliver commit marks the builder station', () => {
+    // Arrange
+    const text = REPO_LINE.replace(
+      'deliver:\n',
+      'deliver:\n  commit: build.commit\n',
+    );
+
+    // Act
+    const line = parseLine(text);
+
+    // Assert
+    expect(line.stations.map((station) => station.commits)).toEqual([
+      true,
+      false,
+      false,
+      false,
+    ]);
+  });
+
+  it('unknown commit station is rejected', () => {
+    // Arrange
+    const text = REPO_LINE.replace(
+      'deliver:\n',
+      'deliver:\n  commit: ship.commit\n',
+    );
+
+    // Act
+    const attempt = () => parseLine(text);
+
+    // Assert
+    expect(attempt).toThrow('invalid deliver.commit');
+  });
+
+  it('line without deliver commits nothing', () => {
+    // Arrange & Act
+    const line = parseLine(REPO_LINE);
+
+    // Assert
+    expect(line.stations.some((station) => station.commits)).toBe(false);
   });
 
   it('sends the server only the station fields it stores', () => {

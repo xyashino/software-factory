@@ -74,6 +74,8 @@ stations:
     exec: ["bun run ci:verify", "bun run lint"]
     onFail:
       max: 3
+deliver:
+  commit: build.commit
 `;
 
 const PROFILE = `---
@@ -129,6 +131,7 @@ const harness = (options: {
     beat: { signals: [], down: false },
   };
   const clock = { at: 0 };
+  let stray = options.dirty === true;
   const advance = (ms: number): void => {
     clock.at += ms;
     const due = sleepers.filter((sleeper) => sleeper.ms === ms);
@@ -189,7 +192,10 @@ const harness = (options: {
       ...fake.ports.git,
       worktreeAdd: async () => undefined,
       excludeLocally: async () => undefined,
-      status: async () => (options.dirty ? ' M src/app.ts' : ''),
+      status: async () => (stray ? ' M src/app.ts' : ''),
+      discardChanges: async () => {
+        stray = false;
+      },
       headSha: async () => 'sha',
     },
     process: {
@@ -345,6 +351,34 @@ describe('cell log detail', () => {
       'start (2/3) command="bun run lint"',
       'complete (2/3) exit=0 duration=15s',
     ]);
+  });
+
+  it('quality gate discards stray file and logs it', async () => {
+    // Arrange
+    const h = harness({ interactive: false, dirty: true });
+    const prior = {
+      stepId: 's1',
+      stationId: 'build',
+      stepIndex: 0,
+      requiredFiles: [],
+    };
+    for (const path of [
+      joinPath(WORKTREE, '.cell', 'worktree.json'),
+      joinPath(WORKTREE, '.cell', 'build', 'state.json'),
+    ]) {
+      await h.runtime.ports.fs.writeText(path, '');
+    }
+
+    // Act
+    await runJob(h.runtime, jobOf({ expectedPriorSteps: [prior] }));
+
+    // Assert
+    expect(h.lines()).toContainEqual(
+      expect.stringMatching(/ quality-gate discard src\/app\.ts$/),
+    );
+    expect(h.lines()).not.toContainEqual(
+      expect.stringMatching(/checkpoint failed/),
+    );
   });
 
   it('lists the missing files when the worktree is gone', async () => {

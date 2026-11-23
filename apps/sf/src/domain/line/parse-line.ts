@@ -57,7 +57,12 @@ const lineSchema = z.looseObject({
         .optional(),
     })
     .optional(),
-  deliver: z.looseObject({ requireAdr: z.boolean().default(false) }).optional(),
+  deliver: z
+    .looseObject({
+      requireAdr: z.boolean().default(false),
+      commit: z.string().trim().min(1).optional(),
+    })
+    .optional(),
   mechanic: mechanicSchema.optional(),
 });
 
@@ -76,6 +81,8 @@ export interface LineStation {
   headless: boolean;
   permission: 'read' | 'write';
   timeoutMs: number | null;
+  /** Only the station named by `deliver.commit` commits and pushes its work. */
+  commits: boolean;
 }
 
 /** The read-only operator that triages an incident: which profile runs, on which runner and model. */
@@ -144,6 +151,7 @@ const toStation = (
   station: z.infer<typeof stationSchema>,
   stepIndex: number,
   operators: Record<string, z.infer<typeof operatorSchema>>,
+  committingId: string | undefined,
 ): LineStation => {
   const operator =
     station.operator === undefined ? undefined : operators[station.operator];
@@ -162,13 +170,27 @@ const toStation = (
     headless: operator?.headless ?? true,
     permission: operator?.permission ?? 'write',
     timeoutMs: durationMs(station.timeout ?? operator?.timeout),
+    commits: station.id === committingId,
   };
+};
+
+const committingStationOf = (
+  line: z.infer<typeof lineSchema>,
+): string | undefined => {
+  const commit = line.deliver?.commit;
+  if (commit === undefined) return undefined;
+  const stationId = commit.split('.')[0] ?? '';
+  if (!line.stations.some((station) => station.id === stationId)) {
+    throw new Error(`invalid deliver.commit "${commit}": no such station`);
+  }
+  return stationId;
 };
 
 export const parseLine = (text: string): LineSnapshot => {
   const line = lineSchema.parse(parse(text));
+  const committingId = committingStationOf(line);
   const stations = line.stations.map((station, index) =>
-    toStation(station, index, line.operators),
+    toStation(station, index, line.operators, committingId),
   );
   // Line files declare delivery as a top-level `deliver` block; the server wants it as the last station.
   if (
@@ -190,6 +212,7 @@ export const parseLine = (text: string): LineSnapshot => {
       headless: true,
       permission: 'write',
       timeoutMs: null,
+      commits: false,
     });
   }
   return {
