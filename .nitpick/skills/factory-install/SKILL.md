@@ -1,13 +1,13 @@
 ---
 name: factory-install
-description: "Builds and installs the `sf` binary and web UI from a checkout, onboards a git repository, and starts server, web and Cell. ONLY activate when explicitly requested by the user (e.g., 'use factory-install', 'install sf', 'set up the factory on this machine'). Never activate automatically."
+description: "Builds and installs the `sf` binary and web UI from a checkout, onboards a git repository, and starts HQ, web and Cell. ONLY activate when explicitly requested by the user (e.g., 'use factory-install', 'install sf', 'set up the factory on this machine'). Never activate automatically."
 ---
 
 # Factory Install
 
 ## Activation (Explicit Only)
 
-Never activate automatically. Only when user asks to install `sf`, onboard a repo, or start server/web/Cell.
+Never activate automatically. Only when user asks to install `sf`, onboard a repo, or start HQ/web/Cell.
 
 ## Rules
 

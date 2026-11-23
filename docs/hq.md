@@ -129,7 +129,7 @@ Inside the target repository, the Cell creates an isolated git worktree per `Wor
 │   │   ├── feature.yml                       # Defines workspace setup, operators, stations, and deliver rules
 │   │   ├── standard.yml
 │   │   └── fast.yml
-│   ├── operators/                            # Operator profiles (planner.md, builder.md, doctor.md, ...)
+│   ├── operators/                            # Operator profiles (planner.md, plan-reviewer.md, builder.md, doctor.md, mechanic.md)
 │   └── templates/                            # Prompt & PR templates
 ├── .cell/
 │   ├── worktree.json                         # { projectId, orderId, planId, lineName, baseBranch, baseCommitSha, cellId }
