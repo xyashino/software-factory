@@ -59,9 +59,9 @@ export const startWeb = define({ kind: 'supervisor' })(
     command: input.bin,
     args: input.webArgs,
     env: {
-      FACTORY_URL: input.factoryUrl,
-      FACTORY_DATA_DIR: input.dataDir,
-      FACTORY_PROJECT_ID: input.projectId,
+      HQ_URL: input.factoryUrl,
+      HQ_DATA_DIR: input.dataDir,
+      HQ_PROJECT_ID: input.projectId,
       HOST: input.host,
       PORT: String(input.port),
     },

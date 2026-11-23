@@ -6,7 +6,7 @@ This section is the high-level summary. Sections 1–9 and 11 give the detailed 
 
 ```mermaid
 flowchart TD
-  A["todos/*.md in repo"] -->|"POST /queue/import"| B[("Server: factory.db")]
+  A["todos/*.md in repo"] -->|"POST /queue/import"| B[("Server: hq.db")]
   B -->|"WorkOrder queued"| C["Cell claims via /cells/claims"]
   C --> D{"Line .factory/lines/&lt;line&gt;.yml available locally?"}
   D -->|"no"| E["line_unavailable: Cell gets another Job; WorkOrder re-queued or Incident"]
@@ -72,7 +72,7 @@ This backend (`apps/hq`) is a standalone, stateful control plane built on **Bun 
    - The server **never** connects to GitHub (`gh` CLI, REST/GraphQL APIs, or webhooks are absent on the server).
    - It stores only job, step, order, plan, incident, and git ref/commit states reported directly by connected **Cells** (the Cell itself performs `git push` / PR publish during `deliver` and then cleans up its worktree).
 7. **Dual-Layer State Storage (Server SQLite DB + Cell Worktree `./.cell/<step-id>/`)**:
-   - **Server DB (`factory.db`)**: Single source of truth for workflow orchestration, step states, Cell pinning (`pinned_factory_id`), leases, incidents, and audit transitions.
+   - **Server DB (`hq.db`)**: Single source of truth for workflow orchestration, step states, Cell pinning (`pinned_factory_id`), leases, incidents, and audit transitions.
    - **Cell Worktree (`<repo>/.worktrees/<order-slug>/.cell/<step-id>/`)**: Holds the physical uncommitted code in the git worktree plus per-step local state and artifacts under `.cell/<step-id>/<files-x>` until `deliver` finishes and deletes the worktree.
 8. **Worktree Verification & Automatic Reset-to-Scratch**:
    - When a Cell picks up an abandoned task (after the prior Cell disconnected) at Step `x` (`stepIndex > 0`), it verifies that the worktree and all required prior step files (`.cell/<prev-step-id>/<files-x>`) exist on disk.
@@ -109,7 +109,7 @@ Each repository roots its factory configuration in `.factory/config.json`, which
 }
 ```
 
-### 2.2 Server Database State (`factory.db`)
+### 2.2 Server Database State (`hq.db`)
 
 The server stores structured relational state in SQLite (WAL mode, `BEGIN IMMEDIATE` transactions, no event-replay folding required). Columns and enums live in `apps/hq/src/db/schema`, not here:
 

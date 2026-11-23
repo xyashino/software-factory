@@ -116,9 +116,9 @@ describe('web start', () => {
     // Assert
     expect(result).toEqual({ pid: SPAWNED_PID, url: 'http://127.0.0.1:4321' });
     expect(spawns[0]?.env).toEqual({
-      FACTORY_URL: 'http://127.0.0.1:7070',
-      FACTORY_DATA_DIR: '/data',
-      FACTORY_PROJECT_ID: 'project-1',
+      HQ_URL: 'http://127.0.0.1:7070',
+      HQ_DATA_DIR: '/data',
+      HQ_PROJECT_ID: 'project-1',
       HOST: '127.0.0.1',
       PORT: '4321',
     });

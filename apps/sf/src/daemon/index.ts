@@ -44,8 +44,11 @@ const workerEnvOf = (
   lines: readonly string[] | undefined,
 ): Record<string, string> => ({
   [FACTORY_PID_ENV]: String(process.pid),
-  FACTORY_URL: RELAY_URL,
-  FACTORY_TOKEN: localToken,
+  // The daemon inherits the legacy names; blank them so a Cell never sees the HQ URL or credential.
+  FACTORY_URL: '',
+  FACTORY_TOKEN: '',
+  HQ_URL: RELAY_URL,
+  HQ_TOKEN: localToken,
   [CELL_ID_ENV]: cellId,
   ...(lines === undefined ? {} : { [CELL_LINES_ENV]: lines.join(',') }),
 });

@@ -54,8 +54,8 @@ export const startFactory = define({ kind: 'supervisor' })(
     cwd: input.dataDir,
     env: {
       [FACTORY_PORT_ENV]: String(input.port),
-      FACTORY_URL: input.factoryUrl,
-      ...(input.token === null ? {} : { FACTORY_TOKEN: input.token }),
+      HQ_URL: input.factoryUrl,
+      ...(input.token === null ? {} : { HQ_TOKEN: input.token }),
     },
     logPath: input.logPath,
   });

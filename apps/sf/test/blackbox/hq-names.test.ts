@@ -16,8 +16,6 @@ const COMMAND_TIMEOUT_MS = 30_000;
 const TOKEN = 'sup_hq_names_blackbox';
 const OTHER_TOKEN = 'sup_hq_names_other';
 const CLOSED_URL = 'http://127.0.0.1:1';
-const DEPRECATED_HQ_URL = 'deprecated: FACTORY_URL, use HQ_URL';
-const DEPRECATED_HQ_TOKEN = 'deprecated: FACTORY_TOKEN, use HQ_TOKEN';
 
 interface Sandbox {
   home: string;
@@ -92,9 +90,6 @@ const runCli = (
     );
     child.stdin.end();
   });
-
-const countOf = (text: string, line: string): number =>
-  text.split('\n').filter((row) => row === line).length;
 
 const saveLabTarget = (sandbox: Sandbox): Promise<CliResult> =>
   runCli(sandbox, [
@@ -217,7 +212,7 @@ describe('HQ environment names', () => {
     expect(result.stderr).not.toContain('deprecated');
   });
 
-  it('falls back to FACTORY_* with one warning per variable and no token value', async () => {
+  it('falls back to FACTORY_* silently and never prints the token', async () => {
     // Arrange
     const sandbox = createSandbox();
 
@@ -229,8 +224,7 @@ describe('HQ environment names', () => {
 
     // Assert
     expect(result.status).toBe(0);
-    expect(countOf(result.stderr, DEPRECATED_HQ_URL)).toBe(1);
-    expect(countOf(result.stderr, DEPRECATED_HQ_TOKEN)).toBe(1);
+    expect(result.stderr).toBe('');
     expect(result.stdout + result.stderr).not.toContain(TOKEN);
   });
 

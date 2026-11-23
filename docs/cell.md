@@ -41,7 +41,7 @@ Errors: `{ code, type, message }`. `400` argument, `409` refused (name taken, pr
 Cell supervision (`apps/sf/src/daemon/supervisor.ts`):
 
 - Cell id = `cell-` + 8 random hex, memory only, one per run, never reused. Names: `hostname`, `hostname-2`, … against live Cells.
-- Scale up: daemon checks `.factory/config.json` in the repo, takes the project from it, spawns `sf cell start --name <name>` with cwd = repo root and env `FACTORY_URL` (relay), `FACTORY_TOKEN` (local bearer for this Cell), `FACTORY_CELL_ID`, `CELL_LINES` (if set), `SF_FACTORY_PID` = daemon pid.
+- Scale up: daemon checks `.factory/config.json` in the repo, takes the project from it, spawns `sf cell start --name <name>` with cwd = repo root and env `HQ_URL` (relay), `HQ_TOKEN` (local bearer for this Cell), `FACTORY_CELL_ID`, `CELL_LINES` (if set), `SF_FACTORY_PID` = daemon pid.
 - Kill: SIGTERM, wait 10 s, SIGKILL, wait until the pid is gone. Resolves only after exit. Then `DELETE` stops, and the daemon calls HQ `POST /api/v1/factories/cells/:id/gone` (failure ignored: HQ requeues the Job when its lease expires).
 - Relay (`apps/sf/src/daemon/relay.ts`): accepts only `claims`, `heartbeats`, `jobs/:id/transitions`, `incidents/:id/resolve`. Forwards with the Factory credential and `x-cell-id`. A local bearer unknown or dead → `401`. HQ answers `401` → the daemon stops that Cell and returns `401`.
 - Heartbeat to HQ every 10 s carries `projects: [{ projectId, desired, running }]` (display only).
@@ -64,7 +64,7 @@ Cell supervision (`apps/sf/src/daemon/supervisor.ts`):
 
 1. Resolve project from `.factory/config.json`. Refuse if no runner installed (`claude`, `codex`, `cursor`, `antigravity`, `opencode`, `copilot`).
 2. Lines = `.factory/lines/*.yml`, filtered by `CELL_LINES`. None → error.
-3. Cell id from `FACTORY_CELL_ID`, bearer from `FACTORY_TOKEN`. No enroll, no session file.
+3. Cell id from `FACTORY_CELL_ID`, bearer from `HQ_TOKEN`. No enroll, no session file.
 4. Claim loop: `POST /relay/api/v1/cells/claims` with `{ waitMs, projectId, allowedLines, runners }`, `waitMs` 25 s. Empty reply → claim again.
 5. Run Job station by station. Reply `nextJob` continues without re-claim. Details: [hq.md §3](./hq.md).
 6. Heartbeat every 10 s (`POST /relay/api/v1/cells/heartbeats`). Reply `signals` drive the loop:
@@ -84,7 +84,7 @@ Timing constants live in `apps/sf/src/config.ts` (`HEARTBEAT_INTERVAL_MS`, `LEAS
 ## Settings and env
 
 - Factory daemon port: `SF_FACTORY_PORT` (default `7072`).
-- Daemon child env: `FACTORY_URL` (relay), `FACTORY_TOKEN` (local bearer), `FACTORY_CELL_ID`, `CELL_LINES`, `SF_FACTORY_PID`. Tokens are never logged.
+- Daemon child env: `HQ_URL` (relay), `HQ_TOKEN` (local bearer), `FACTORY_CELL_ID`, `CELL_LINES`, `SF_FACTORY_PID`. Tokens are never logged.
 - Shared config `$XDG_CONFIG_HOME/sf/config.json`: connection targets, read by `sf`.
 
 ## Local data

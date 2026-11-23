@@ -31,7 +31,7 @@ const spawnedEnvFor = async (
 };
 
 describe('factory server start host', () => {
-  it('passes FACTORY_HOST to the server when given', async () => {
+  it('passes HQ_HOST to the server when given', async () => {
     // Arrange
     const host = '0.0.0.0';
 
@@ -39,10 +39,10 @@ describe('factory server start host', () => {
     const env = await spawnedEnvFor(host);
 
     // Assert
-    expect(env.FACTORY_HOST).toBe('0.0.0.0');
+    expect(env.HQ_HOST).toBe('0.0.0.0');
   });
 
-  it('leaves FACTORY_HOST unset when no host is given', async () => {
+  it('leaves HQ_HOST unset when no host is given', async () => {
     // Arrange
     const host = undefined;
 
@@ -50,6 +50,6 @@ describe('factory server start host', () => {
     const env = await spawnedEnvFor(host);
 
     // Assert
-    expect(env).not.toHaveProperty('FACTORY_HOST');
+    expect(env).not.toHaveProperty('HQ_HOST');
   });
 });

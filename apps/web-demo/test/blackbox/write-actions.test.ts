@@ -95,9 +95,9 @@ beforeAll(async () => {
 
   Object.assign(process.env, {
     ASTRO_NODE_AUTOSTART: 'disabled',
-    FACTORY_URL,
-    FACTORY_PROJECT_ID: 'project-1',
-    FACTORY_TOKEN: TOKEN,
+    HQ_URL: FACTORY_URL,
+    HQ_PROJECT_ID: 'project-1',
+    HQ_TOKEN: TOKEN,
     HOST: '127.0.0.1',
     PORT: String(
       PORT_RANGE_START + Math.floor(Math.random() * PORT_RANGE_SIZE),

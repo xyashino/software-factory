@@ -245,7 +245,7 @@ const storageChecks = async (
           'data-dir',
           'missing',
           `data dir ${input.dataDir} not writable`,
-          'fix its owner or permissions, or set FACTORY_DATA_DIR',
+          'fix its owner or permissions, or set HQ_DATA_DIR',
         ),
     dbOk
       ? check('db-path', 'ok', `db path ${input.dbPath} writable`)
@@ -253,7 +253,7 @@ const storageChecks = async (
           'db-path',
           'missing',
           `db path ${input.dbPath} not writable`,
-          'fix its owner or permissions, or set FACTORY_DB_PATH',
+          'fix its owner or permissions, or set HQ_DB_PATH',
         ),
   ];
 };

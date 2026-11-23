@@ -46,9 +46,9 @@ const depsWithClock = (clock: () => number) => ({
 });
 
 const envFor = (dir: string) => ({
-  FACTORY_URL: BASE_URL,
-  FACTORY_PROJECT_ID: 'project-1',
-  FACTORY_DATA_DIR: dir,
+  HQ_URL: BASE_URL,
+  HQ_PROJECT_ID: 'project-1',
+  HQ_DATA_DIR: dir,
 });
 
 beforeAll(() => {
