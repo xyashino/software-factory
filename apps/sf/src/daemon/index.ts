@@ -18,6 +18,7 @@ const hq = createHqLink({
   credential,
   hq: ports.hq,
   clock: ports.clock,
+  projects: () => supervisor.projects(),
   killAll: () => supervisor.killAll(),
 });
 await hq.tick();

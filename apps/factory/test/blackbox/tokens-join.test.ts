@@ -57,7 +57,11 @@ describe('web demo join', () => {
     await postJson(app, '/api/v1/projects', PROJECT, bearer(admin));
     const session = await joinSession(app, joinSecret);
 
-    const cells = await getJson(app, '/api/v1/cells', bearer(session.token));
+    const factories = await getJson(
+      app,
+      '/api/v1/factories',
+      bearer(session.token),
+    );
     const created = await postJson(
       app,
       '/api/v1/work-orders',
@@ -78,7 +82,7 @@ describe('web demo join', () => {
     );
 
     expect(session.code).toBe(201);
-    expect(cells.status).toBe(200);
+    expect(factories.status).toBe(200);
     expect(created.status).toBe(201);
     expect(minted.status).toBe(403);
   });

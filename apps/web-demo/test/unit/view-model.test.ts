@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import {
   WORK_ORDER_STATE_LIST,
   countByState,
-  findCell,
   formatLease,
   isWorkOrderState,
 } from '../../src/lib/view-model';
@@ -24,30 +23,6 @@ describe('countByState', () => {
 
     // Assert
     expect(counts).toEqual({ queued: 2, running: 1, waiting_parent: 1 });
-  });
-});
-
-describe('findCell', () => {
-  it('returns the cell with the given id', () => {
-    // Arrange
-    const cells = [{ cellId: 'cell-1' }, { cellId: 'cell-2' }];
-
-    // Act
-    const cell = findCell(cells, 'cell-2');
-
-    // Assert
-    expect(cell).toEqual({ cellId: 'cell-2' });
-  });
-
-  it('returns undefined for an unknown id', () => {
-    // Arrange
-    const cells = [{ cellId: 'cell-1' }];
-
-    // Act
-    const cell = findCell(cells, 'unknown');
-
-    // Assert
-    expect(cell).toBeUndefined();
   });
 });
 

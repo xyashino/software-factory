@@ -3,27 +3,21 @@ import {
   COMPILED_URL_PATTERN,
   cellLogPathOf,
   cellPidNameOf,
-  cellStatePathOf,
   operatorCommandOf,
   serverArgsOf,
   webArgsOf,
 } from '../../src/config';
 
 describe('cell files', () => {
-  it('keeps state, log and lock of one cell name together', () => {
+  it('keeps log and lock of one cell name together', () => {
     // Arrange
     const name = 'dev-box-2';
 
     // Act
-    const files = [
-      cellStatePathOf(name),
-      cellLogPathOf(name),
-      cellPidNameOf(name),
-    ];
+    const files = [cellLogPathOf(name), cellPidNameOf(name)];
 
     // Assert
     expect(files).toEqual([
-      '.factory-local/cells/dev-box-2.json',
       '.factory-local/cells/dev-box-2.log',
       'dev-box-2.pid',
     ]);

@@ -1,6 +1,5 @@
 import { eq } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
-import { cells } from '../../src/db/schema/cells';
 import { incidents } from '../../src/db/schema/incidents';
 import { workOrders } from '../../src/db/schema/orders';
 import { safeTokens } from '../../src/db/schema/tokens';
@@ -10,19 +9,22 @@ import {
 } from '../../src/application/tokens/token-hash';
 import { asOrderId, asTokenId } from '../../src/domain/common/brand';
 import type { Db } from '../../src/db/client';
-import {
-  createTestApp,
-  getJson,
-  postJson,
-  type TestApp,
-} from '../support/test-app';
+import { createTestApp, postJson, type TestApp } from '../support/test-app';
 import { seedBaseline } from '../support/test-db';
+import {
+  claimBody,
+  factoryHeaders,
+  FACTORY_TOKEN,
+  seedFactory,
+} from '../support/factory-session';
 
 const PROJECT_ID = 'proj-1';
-const JOIN_TOKEN = 'sf_join_test-join-token';
+const SECOND_FACTORY_TOKEN = 'sf_factory_second-token';
 const SUPERVISOR_TOKEN = 'supervisor-test-token';
 const FIRST_ORDER_ID = 'order-1';
 const SECOND_ORDER_ID = 'order-2';
+const CELL_A = 'cell-aaaaaaaa';
+const CELL_B = 'cell-bbbbbbbb';
 
 type ErrorBody = { code: number; type: string };
 
@@ -35,63 +37,33 @@ type TransitionBody = {
   nextJob?: null | ClaimedJob;
 };
 
-type CellsBody = {
-  cells: { name: string; activeJobId: string | null }[];
-};
-
-const bearer = (token: string) => ({ authorization: `Bearer ${token}` });
-
 const setup = () => {
   const { app, clock, db } = createTestApp({ safeTokenAuth: true });
   seedBaseline(db);
-  db.update(cells).set({ status: 'offline' }).run();
-  db.insert(safeTokens)
-    .values({
-      tokenId: asTokenId('join-1'),
-      tokenHash: hashToken(JOIN_TOKEN),
-      prefix: TOKEN_PREFIXES.join,
-      kind: 'cell_join',
-      name: 'join',
-      scopesJson: ['cell:enroll'],
-      createdAt: clock.now(),
-    })
-    .run();
   db.insert(safeTokens)
     .values({
       tokenId: asTokenId('supervisor-1'),
       tokenHash: hashToken(SUPERVISOR_TOKEN),
-      prefix: 'sf_sup_',
+      prefix: TOKEN_PREFIXES.supervisor,
       kind: 'supervisor',
       name: 'supervisor',
       scopesJson: ['supervisor:read', 'supervisor:write'],
       createdAt: clock.now(),
     })
     .run();
-  return { app, db };
+  return { app, clock, db };
 };
 
-const enrollCell = async (app: TestApp, name: string): Promise<string> => {
-  const response = await postJson(
-    app,
-    '/api/v1/cells/enroll',
-    {
-      projectId: PROJECT_ID,
-      name,
-      allowedLines: ['feature'],
-      runners: ['claude'],
-    },
-    bearer(JOIN_TOKEN),
-  );
-  const body = (await response.json()) as { sessionToken: string };
-  return body.sessionToken;
-};
-
-const claimJob = async (app: TestApp, token: string): Promise<ClaimedJob> => {
+const claimJob = async (
+  app: TestApp,
+  cellId: string,
+  token: string = FACTORY_TOKEN,
+): Promise<ClaimedJob> => {
   const response = await postJson(
     app,
     '/api/v1/cells/claims',
-    {},
-    bearer(token),
+    claimBody({}, PROJECT_ID),
+    factoryHeaders(cellId, token),
   );
   const body = (await response.json()) as { job: ClaimedJob | null };
   if (body.job === null) throw new Error('expected a claimed job');
@@ -100,7 +72,7 @@ const claimJob = async (app: TestApp, token: string): Promise<ClaimedJob> => {
 
 const reportLineUnavailable = async (
   app: TestApp,
-  token: string,
+  cellId: string,
   job: ClaimedJob,
   commandId: string,
 ): Promise<{ status: number; body: TransitionBody | ErrorBody }> => {
@@ -114,22 +86,12 @@ const reportLineUnavailable = async (
       lineName: 'feature',
       detail: 'no runner for feature line',
     },
-    bearer(token),
+    factoryHeaders(cellId),
   );
   return {
     status: response.status,
     body: (await response.json()) as TransitionBody | ErrorBody,
   };
-};
-
-const nextJobOf = (body: TransitionBody | ErrorBody): ClaimedJob => {
-  if (
-    !('nextJob' in body) ||
-    body.nextJob === null ||
-    body.nextJob === undefined
-  )
-    throw new Error('expected a nextJob');
-  return body.nextJob;
 };
 
 const orderOf = (db: Db, orderId: string) =>
@@ -141,28 +103,27 @@ const orderOf = (db: Db, orderId: string) =>
 
 const incidentsOf = (db: Db) => db.select().from(incidents).all();
 
-const cellNamed = async (app: TestApp, name: string) => {
-  const response = await getJson(
+const reportFactoryProject = (app: TestApp, token: string) =>
+  postJson(
     app,
-    '/api/v1/cells',
-    bearer(SUPERVISOR_TOKEN),
+    '/api/v1/factories/heartbeat',
+    {
+      projects: [{ projectId: PROJECT_ID, desired: 1, running: 0 }],
+    },
+    { authorization: `Bearer ${token}` },
   );
-  const body = (await response.json()) as CellsBody;
-  return body.cells.find((row) => row.name === name);
-};
 
 describe('job line_unavailable transition', () => {
-  it('a line no other cell can run ends the order as line_unavailable and opens an incident', async () => {
+  it('a line no other factory can run ends the order as line_unavailable and opens an incident', async () => {
     const { app, db } = setup();
     db.delete(workOrders)
       .where(eq(workOrders.orderId, asOrderId(SECOND_ORDER_ID)))
       .run();
-    const token = await enrollCell(app, 'cell-a');
-    const job = await claimJob(app, token);
+    const job = await claimJob(app, CELL_A);
 
     const { status, body } = await reportLineUnavailable(
       app,
-      token,
+      CELL_A,
       job,
       'line-1',
     );
@@ -177,6 +138,7 @@ describe('job line_unavailable transition', () => {
       state: 'line_unavailable',
       activeJobId: null,
       activeCellId: null,
+      pinnedFactoryId: null,
     });
     expect(incidentsOf(db)).toEqual([
       expect.objectContaining({
@@ -186,66 +148,53 @@ describe('job line_unavailable transition', () => {
         failedJobId: job.jobId,
       }),
     ]);
-    expect(await cellNamed(app, 'cell-a')).toMatchObject({
-      activeJobId: null,
-    });
   });
 
-  it('a line another cell can run requeues the order for that cell', async () => {
-    const { app, db } = setup();
-    const tokenA = await enrollCell(app, 'cell-a');
-    const tokenB = await enrollCell(app, 'cell-b');
-    const job = await claimJob(app, tokenA);
+  it('a line another live factory can run requeues the order for that factory', async () => {
+    const { app, clock, db } = setup();
+    seedFactory(db, 'factory-2', SECOND_FACTORY_TOKEN, clock.now());
+    await reportFactoryProject(app, SECOND_FACTORY_TOKEN);
+    const job = await claimJob(app, CELL_A);
 
-    const { body } = await reportLineUnavailable(app, tokenA, job, 'line-1');
+    const { body } = await reportLineUnavailable(app, CELL_A, job, 'line-1');
 
     expect(body).toMatchObject({ markedLineUnavailable: true });
     expect(orderOf(db, FIRST_ORDER_ID)).toMatchObject({ state: 'queued' });
     expect(incidentsOf(db)).toEqual([]);
-    expect(await claimJob(app, tokenB)).toMatchObject({
+    expect(await claimJob(app, CELL_B, SECOND_FACTORY_TOKEN)).toMatchObject({
       orderId: FIRST_ORDER_ID,
     });
   });
 
-  it('the second queued order is handed to the same cell inline', async () => {
-    const { app, db } = setup();
-    const token = await enrollCell(app, 'cell-a');
-    const job = await claimJob(app, token);
+  it('the reporting cell claims the second queued order next', async () => {
+    const { app } = setup();
+    const job = await claimJob(app, CELL_A);
 
     const { status, body } = await reportLineUnavailable(
       app,
-      token,
+      CELL_A,
       job,
       'line-1',
     );
 
     expect(status).toBe(200);
-    expect(nextJobOf(body)).toMatchObject({
+    expect(body).toMatchObject({ nextJob: null });
+    expect(await claimJob(app, CELL_A)).toMatchObject({
       orderId: SECOND_ORDER_ID,
       epoch: 1,
     });
-    expect(await cellNamed(app, 'cell-a')).toMatchObject({
-      activeJobId: nextJobOf(body).jobId,
-    });
+  });
+
+  it('a factory is never handed back an order whose line it reported unavailable', async () => {
+    const { app, db } = setup();
+    const first = await claimJob(app, CELL_A);
+    await reportLineUnavailable(app, CELL_A, first, 'line-1');
+
+    const sibling = await claimJob(app, CELL_B);
+
+    expect(sibling).toMatchObject({ orderId: SECOND_ORDER_ID });
     expect(orderOf(db, FIRST_ORDER_ID)).toMatchObject({
       state: 'line_unavailable',
     });
-  });
-
-  it('a cell is never handed back an order whose line it reported unavailable', async () => {
-    const { app, db } = setup();
-    const token = await enrollCell(app, 'cell-a');
-    await enrollCell(app, 'cell-b');
-    const first = await claimJob(app, token);
-    const handed = nextJobOf(
-      (await reportLineUnavailable(app, token, first, 'line-1'))
-        .body as TransitionBody,
-    );
-
-    const { body } = await reportLineUnavailable(app, token, handed, 'line-2');
-
-    expect(body).toMatchObject({ markedLineUnavailable: true, nextJob: null });
-    expect(orderOf(db, FIRST_ORDER_ID)).toMatchObject({ state: 'queued' });
-    expect(orderOf(db, SECOND_ORDER_ID)).toMatchObject({ state: 'queued' });
   });
 });

@@ -41,7 +41,6 @@ export const enrollFactoryProcedure = scopedProcedure(['factory:enroll'])(
       kind: 'factory_session',
       name: `${input.body.name} session`,
       scopes: ['factory:worker'],
-      cellId: null,
       factoryId,
       rotatedFromId: null,
       expiresAt,

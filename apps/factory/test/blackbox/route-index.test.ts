@@ -22,24 +22,19 @@ const ENDPOINTS: Endpoint[] = [
   { method: 'POST', path: '/api/v1/work-orders/order-1/transitions' },
   { method: 'GET', path: '/api/v1/incidents' },
   { method: 'POST', path: '/api/v1/incidents/incident-1/resolve' },
-  { method: 'POST', path: '/api/v1/cells/enroll' },
-  { method: 'POST', path: '/api/v1/cells/hello' },
-  { method: 'GET', path: '/api/v1/cells' },
-  { method: 'DELETE', path: '/api/v1/cells/cell-1' },
   { method: 'POST', path: '/api/v1/cells/claims' },
   { method: 'POST', path: '/api/v1/cells/heartbeats' },
-  { method: 'POST', path: '/api/v1/cells/cell-1/drain' },
-  { method: 'POST', path: '/api/v1/cells/leave' },
   { method: 'POST', path: '/api/v1/jobs/job-1/transitions' },
   { method: 'GET', path: '/api/v1/stream' },
   { method: 'POST', path: '/api/v1/factories/enroll' },
   { method: 'POST', path: '/api/v1/factories/heartbeat' },
+  { method: 'POST', path: '/api/v1/factories/cells/cell-1/gone' },
   { method: 'GET', path: '/api/v1/factories' },
 ];
 
 describe('route index', () => {
-  it('lists all 31 endpoints of the plan', () => {
-    expect(ENDPOINTS).toHaveLength(31);
+  it('lists all 26 endpoints of the plan', () => {
+    expect(ENDPOINTS).toHaveLength(26);
   });
 
   it.each(ENDPOINTS)(

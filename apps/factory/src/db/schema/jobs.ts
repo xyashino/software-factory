@@ -7,6 +7,7 @@ import {
 import { sql } from 'drizzle-orm';
 import type {
   CellId,
+  FactoryId,
   IncidentId,
   JobId,
   OrderId,
@@ -19,6 +20,7 @@ import { incidents } from './incidents';
 import { orderPlans } from './plans';
 import { orderSteps, workOrders } from './orders';
 import { projects } from './projects';
+import { factories } from './factories';
 
 export const JOB_KINDS = [
   'plan_branch',
@@ -79,7 +81,10 @@ export const jobs = sqliteTable(
       }[]
     >('expected_prior_steps_json').notNull(),
     payloadJson: jsonColumn<Record<string, unknown>>('payload_json').notNull(),
-    cellId: text('cell_id').$type<CellId>(),
+    claimedByCellId: text('claimed_by_cell_id').$type<CellId>(),
+    claimedByFactoryId: text('claimed_by_factory_id')
+      .$type<FactoryId>()
+      .references(() => factories.factoryId),
     epoch: integer('epoch').notNull().default(0),
     leaseExpiresAt: integer('lease_expires_at'),
     resultCommitSha: text('result_commit_sha'),
@@ -96,9 +101,9 @@ export const jobs = sqliteTable(
         sql`${table.orderId} IS NOT NULL AND ${table.status} IN ('claimed', 'running')`,
       ),
     uniqueIndex('idx_jobs_one_active_per_cell')
-      .on(table.cellId)
+      .on(table.claimedByCellId)
       .where(
-        sql`${table.cellId} IS NOT NULL AND ${table.status} IN ('claimed', 'running')`,
+        sql`${table.claimedByCellId} IS NOT NULL AND ${table.status} IN ('claimed', 'running')`,
       ),
   ],
 );

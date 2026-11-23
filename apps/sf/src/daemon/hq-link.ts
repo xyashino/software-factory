@@ -3,6 +3,7 @@ import type { HqClientPort } from '../application/ports/hq-client.port';
 import type { FactoryCredential } from '../domain/factory/factory-credential';
 import type { HqState } from '../domain/factory/hq-state';
 import { HEARTBEAT_INTERVAL_MS, SELF_FENCE_MS } from '../config';
+import type { ProjectReport } from './supervisor';
 
 export const HQ_TICK_MS = 1_000;
 
@@ -12,6 +13,7 @@ export interface HqLinkDeps {
   credential: FactoryCredential | null;
   hq: HqClientPort;
   clock: ClockPort;
+  projects: () => ProjectReport[];
   killAll: () => Promise<void>;
 }
 
@@ -25,6 +27,7 @@ export const createHqLink = ({
   credential,
   hq,
   clock,
+  projects,
   killAll,
 }: HqLinkDeps): HqLink => {
   let state: HqState =
@@ -50,6 +53,7 @@ export const createHqLink = ({
     const reply = await hq.heartbeat({
       url: current.url,
       sessionToken: current.sessionToken,
+      projects: projects(),
     });
     if (reply.kind === 'ok') {
       lastOkAt = clock.now();

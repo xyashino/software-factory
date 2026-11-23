@@ -1,7 +1,11 @@
 import { and, eq } from 'drizzle-orm';
 import { listWorkOrdersContract } from '@repo/factory-contracts/work-orders.contract';
 import { workOrders } from '../../../db/schema/orders';
-import { asCellId, asPlanId, asProjectId } from '../../../domain/common/brand';
+import {
+  asFactoryId,
+  asPlanId,
+  asProjectId,
+} from '../../../domain/common/brand';
 import { scopedProcedure } from '../../core/procedure';
 import { toWorkOrderDto } from '../../orders/order-views';
 
@@ -24,9 +28,9 @@ export const listWorkOrdersProcedure = scopedProcedure(['supervisor:read'])(
         query.state === undefined
           ? undefined
           : eq(workOrders.state, query.state),
-        query.pinnedCellId === undefined
+        query.pinnedFactoryId === undefined
           ? undefined
-          : eq(workOrders.pinnedCellId, asCellId(query.pinnedCellId)),
+          : eq(workOrders.pinnedFactoryId, asFactoryId(query.pinnedFactoryId)),
       ),
     )
     .all();

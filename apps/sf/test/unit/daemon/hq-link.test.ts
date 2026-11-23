@@ -36,6 +36,7 @@ const setup = (initial: Outcome = 'ok', connected = true) => {
       goneCell: () => Promise.reject(new Error('not used by the link')),
     },
     clock: { now: () => now, sleep: () => Promise.resolve() },
+    projects: () => [],
     killAll: () => {
       kills.push(now);
       return Promise.resolve();

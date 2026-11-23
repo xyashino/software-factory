@@ -55,8 +55,8 @@ This backend (`apps/factory`) is a standalone, stateful control plane built on *
    - **A `WorkOrder` can be executed by at most ONE `Cell` at the same time, and the Cell that starts a `WorkOrder` must finish all of its steps (`0..deliver`).**
    - A `WorkOrder` can **only** be reassigned to a different Cell if the executing Cell **disconnects** (its heartbeat lease expires and the task becomes abandoned).
    - Enforced simultaneously by:
-     - **SQLite Partial Unique Indexes** (`UNIQUE(order_id) WHERE status IN ('claimed', 'running')` and `UNIQUE(cell_id) WHERE status IN ('claimed', 'running')`),
-     - **Serialized `BEGIN IMMEDIATE` Claim Transactions** (`work_orders.active_cell_id`, `work_orders.active_job_id`, and `work_orders.pinned_cell_id`),
+     - **SQLite Partial Unique Indexes** (`UNIQUE(order_id) WHERE status IN ('claimed', 'running')` and `UNIQUE(claimed_by_cell_id) WHERE status IN ('claimed', 'running')`),
+     - **Serialized `BEGIN IMMEDIATE` Claim Transactions** (`work_orders.active_cell_id`, `work_orders.active_job_id`, and `work_orders.pinned_factory_id`),
      - **Inline Step-to-Step Handoff (`nextJob`)** so the same Cell runs Steps `0..deliver` back-to-back without ever releasing `active_cell_id`, and
      - **Monotonic `epoch` Lease Fencing** (any late message from a disconnected Cell with a stale `epoch` is rejected with `409 StaleLeaseEpoch`).
 4. **Worktree Lifecycle & Cleanup Only After `deliver` (Push + PR Publish)**:
@@ -72,7 +72,7 @@ This backend (`apps/factory`) is a standalone, stateful control plane built on *
    - The server **never** connects to GitHub (`gh` CLI, REST/GraphQL APIs, or webhooks are absent on the server).
    - It stores only job, step, order, plan, incident, and git ref/commit states reported directly by connected **Cells** (the Cell itself performs `git push` / PR publish during `deliver` and then cleans up its worktree).
 7. **Dual-Layer State Storage (Server SQLite DB + Cell Worktree `./.cell/<step-id>/`)**:
-   - **Server DB (`factory.db`)**: Single source of truth for workflow orchestration, step states, Cell pinning (`pinned_cell_id`), leases, incidents, and audit transitions.
+   - **Server DB (`factory.db`)**: Single source of truth for workflow orchestration, step states, Cell pinning (`pinned_factory_id`), leases, incidents, and audit transitions.
    - **Cell Worktree (`<repo>/.worktrees/<order-slug>/.cell/<step-id>/`)**: Holds the physical uncommitted code in the git worktree plus per-step local state and artifacts under `.cell/<step-id>/<files-x>` until `deliver` finishes and deletes the worktree.
 8. **Worktree Verification & Automatic Reset-to-Scratch**:
    - When a Cell picks up an abandoned task (after the prior Cell disconnected) at Step `x` (`stepIndex > 0`), it verifies that the worktree and all required prior step files (`.cell/<prev-step-id>/<files-x>`) exist on disk.
@@ -153,32 +153,30 @@ Inside the target repository, the Cell creates an isolated git worktree per `Wor
 
 ### 3.1 Start-to-Finish Single-Cell Ownership & Disconnect Takeover
 
-1. **Cell Connects (`POST /api/v1/cells/enroll` & `POST /api/v1/cells/hello`)**:
-   - The Cell reads `"project"` from `<repo>/.factory/config.json` (e.g. `"software-factory"`) and authenticates with its `sf_cell_...` Safe Token, reporting:
-     - `projectId`: `"software-factory"` (from `.factory/config.json`),
-     - `allowedLines`: e.g. `["feature", "fast"]` (or `["*"]` if all local lines in `.factory/lines/*.yml` are permitted on this Cell),
-     - `runners`: e.g. `["claude", "opencode", "cursor"]`,
-     - `localWorktrees`: list of `{ orderId, completedStepIds: string[] }` currently present on its local disk.
-2. **Start-to-Finish Single-Cell Ownership (`POST /api/v1/cells/claims`)**:
+1. **Cell Claims (`POST /api/v1/cells/claims`, Factory credential + `x-cell-id`)**:
+   - A Cell has no enrollment and no token of its own. The Factory daemon picks its id (`cell-<8 hex>`, random per run) and relays with the Factory credential. HQ creates no row for a Cell.
+   - The claim body reports `projectId` (from `<repo>/.factory/config.json`), `allowedLines` (e.g. `["feature", "fast"]` or `["*"]`) and `runners` (e.g. `["claude", "opencode", "cursor"]`).
+2. **Start-to-Finish Single-Cell Ownership**:
    - **A `WorkOrder` is executed by 1 Cell at a time, and once a Cell starts a `WorkOrder`, that Cell executes every step (`0 → 1 → ... → deliver`) until the `WorkOrder` finishes.**
-   - Inside a `BEGIN IMMEDIATE` SQLite transaction, a `WorkOrder` is eligible to be claimed by `cell` **only if**:
+   - Inside a `BEGIN IMMEDIATE` SQLite transaction, a `WorkOrder` is eligible to be claimed by a Cell **only if**:
      - `work_order.state === 'queued'` and `work_order.active_cell_id IS NULL` and `work_order.active_job_id IS NULL`,
-     - `work_order.project_id === cell.project_id`,
-     - `work_order.line_name` is in `cell.allowed_lines_json` (or `cell.allowed_lines_json` contains `"*"`),
-     - `cell.cell_id` is **not** in `work_order.unavailable_line_cells_json`, **and**
-     - Either `work_order.pinned_cell_id IS NULL`, `work_order.pinned_cell_id === cell.cell_id`, or the previously pinned Cell **disconnected** (is offline / lease expired).
+     - `work_order.project_id === body.projectId`,
+     - `work_order.line_name` is in `body.allowedLines` (or it contains `"*"`),
+     - the Cell's Factory is not in `work_order.unavailable_line_factories_json`, **and**
+     - Either `work_order.pinned_factory_id IS NULL`, `work_order.pinned_factory_id === caller factory`, or the pinned Factory is **silent** (`last_seen_at + LEASE_TTL_MS <= now`).
    - Upon claim, the server atomically sets:
      - `work_order.state = 'running'`,
-     - `work_order.active_cell_id = cell.cell_id`,
+     - `work_order.active_cell_id = <x-cell-id>`,
      - `work_order.active_job_id = job.job_id`,
-     - `work_order.pinned_cell_id = cell.cell_id`,
-     - `work_order.epoch = work_order.epoch + 1` (copied onto `job.epoch`).
+     - `work_order.pinned_factory_id = caller factory`,
+     - `work_order.epoch = work_order.epoch + 1` (copied onto `job.epoch`),
+     - `job.claimed_by_cell_id = <x-cell-id>`, `job.claimed_by_factory_id = caller factory`.
    - As each step completes (`action: "complete"`), the server **never releases `active_cell_id`**—it immediately returns `nextJob` for Step `k + 1` in the response so the same Cell continues uninterrupted through `deliver`.
-3. **Only on Cell Disconnect Can a Task Move to Another Cell**:
-   - If the executing Cell **disconnects** (stops heartbeating and `lease_expires_at` passes):
-     - The lazy lease reaper marks the expired `Job` as `lost`, clears `active_cell_id = null` and `active_job_id = null`, increments `epoch`, and returns the abandoned `WorkOrder` (at Step `x`) to `queued`.
-     - If the **same Cell** reconnects first (`POST /api/v1/cells/hello`), it re-claims its warm worktree at Step `x` (`workspaceMode = 'reuse'`) and continues where it left off.
-     - If a **different Cell** claims the abandoned `WorkOrder` while the prior Cell is disconnected, the server re-pins `pinned_cell_id` and `active_cell_id` to the new Cell and dispatches Step `x` (`workspaceMode = 'reuse'`), triggering the worktree check in §3.3.
+3. **Only on Cell Loss Can a Task Move to Another Cell**:
+   - A Cell is lost when its process is gone (the Factory daemon confirms the kill, then calls `POST /api/v1/factories/cells/:id/gone`) or its lease expires without a heartbeat.
+     - The lease reaper marks the expired `Job` as `lost`, clears `active_cell_id = null` and `active_job_id = null`, increments `epoch`, and returns the abandoned `WorkOrder` (at Step `x`) to `queued`. The `job` row keeps `claimed_by_cell_id`, so history still shows which Cell ran it.
+     - A new Cell of the **same Factory** claims the `WorkOrder` (pinned to that Factory) and dispatches Step `x` (`workspaceMode = 'reuse'`), triggering the worktree check in §3.3. A Cell of another Factory may claim it only once the pinned Factory is silent.
+     - A silent Factory (no request for `LEASE_TTL_MS`) loses all its active jobs and unpins its orders at the reaper.
 
 ### 3.2 Cell Local Line Check & Automatic Re-Dispatch (`line_unavailable`)
 
@@ -198,7 +196,7 @@ Because Lines are configured locally in `<repo>/.factory/lines/<lineName>.yml`, 
      ```
    - **Server Transaction (`BEGIN IMMEDIATE`)**:
      1. **Marks the `Job`**: Sets `jobs.status = 'line_unavailable'` and stores `error_detail`.
-     2. **Records Cell on `WorkOrder` & Releases Lock**: Appends `cellId` to `work_orders.unavailable_line_cells_json` and clears `pinned_cell_id = null`, `active_job_id = null`, and `active_cell_id = null`.
+     2. **Records Factory on `WorkOrder` & Releases Lock**: Appends the Cell's Factory id to `work_orders.unavailable_line_factories_json` and clears `pinned_factory_id = null`, `active_job_id = null`, and `active_cell_id = null`.
      3. **Marks the `WorkOrder`**:
         - If another online Cell for `projectId` allows `lineName` and has not rejected it, keeps `WorkOrder.state = 'queued'` so the other Cell can exclusively claim it.
         - Otherwise, transitions **`WorkOrder.state = 'line_unavailable'`** and opens an **Incident** (`reason = 'line_unavailable'`) so the queue clearly highlights that this task has an unavailable line.
@@ -220,7 +218,7 @@ sequenceDiagram
   Note over C: 1. Check local line: Does .factory/lines/<lineName>.yml exist?
   alt Local line .factory/lines/<lineName>.yml is NOT available
     C->>S: POST /api/v1/jobs/{jobId}/transitions\n{ action: "line_unavailable", lineName, detail, epoch }
-    Note over S: BEGIN IMMEDIATE transaction:<br/>1. Mark Job status = "line_unavailable"<br/>2. Add C.cellId to work_orders.unavailable_line_cells_json & clear active_cell_id<br/>3. Mark WorkOrder state = "line_unavailable" (if no other eligible Cell)<br/>4. Claim a DIFFERENT eligible Job for C.cellId
+    Note over S: BEGIN IMMEDIATE transaction:<br/>1. Mark Job status = "line_unavailable"<br/>2. Add C.cellId to work_orders.unavailable_line_factories_json & clear active_cell_id<br/>3. Mark WorkOrder state = "line_unavailable" (if no other eligible Cell)<br/>4. Claim a DIFFERENT eligible Job for C.cellId
     S-->>C: 200 OK { markedLineUnavailable: true, nextJob: DifferentJob }
   else Local line exists -> Check worktree & prior steps
     Note over C: 2. Check local disk:<br/>Does worktree <repo>/.worktrees/<slug> exist?<br/>Does .cell/worktree.json match projectId & orderId?<br/>For each prior step 0..x-1, do .cell/<step-id>/state.json & <files-x> exist?
@@ -233,7 +231,7 @@ sequenceDiagram
       Note over C: If Step x was "deliver" (pushed branch & published PR):<br/>Cell deletes worktree (<repo>/.worktrees/<slug>)!
     else Worktree OR any ./.cell/<prev-step-id>/<files-x> is MISSING
       C->>S: POST /api/v1/jobs/{jobId}/transitions\n{ action: "worktree_missing", missingStepId, missingFiles, epoch }
-      Note over S: BEGIN IMMEDIATE transaction:<br/>1. Mark Job(step x) as "cancelled" (reason: worktree_missing)<br/>2. Reset WorkOrder: current_step_index = 0, state = "running"<br/>3. Reset all OrderSteps 0..N-1 -> Step 0 "claimed", Steps 1..N-1 "pending"<br/>4. Keep exclusive lock: active_cell_id = C.cellId, pinned_cell_id = C.cellId, worktree_resets += 1<br/>5. Create new Job for Step 0 (workspaceMode: "fresh", epoch++)
+      Note over S: BEGIN IMMEDIATE transaction:<br/>1. Mark Job(step x) as "cancelled" (reason: worktree_missing)<br/>2. Reset WorkOrder: current_step_index = 0, state = "running"<br/>3. Reset all OrderSteps 0..N-1 -> Step 0 "claimed", Steps 1..N-1 "pending"<br/>4. Keep exclusive lock: active_cell_id = C.cellId, pinned_factory_id = C.cellId, worktree_resets += 1<br/>5. Create new Job for Step 0 (workspaceMode: "fresh", epoch++)
       S-->>C: 200 OK { resetToScratch: true, nextJob: Job(stepIndex: 0, workspaceMode: "fresh") }
       Note over C: Wipe stale worktree (if partial),<br/>git worktree add --force from baseBranch,<br/>init ./.cell/worktree.json & ./.cell/<step-0-id>/,<br/>and execute from Step 0 (scratch)!
     end
@@ -248,7 +246,7 @@ When the server receives `action: "worktree_missing"` from the Cell holding the 
 2. **State Rewind (in one SQLite transaction)**:
    - `work_orders.current_step_index = 0`
    - `work_orders.head_commit_sha = null`
-   - `work_orders.pinned_cell_id = cellId` and `work_orders.active_cell_id = cellId` (exclusively locked to the Cell that will now run it from scratch)
+   - `work_orders.pinned_factory_id = cellId` and `work_orders.active_cell_id = cellId` (exclusively locked to the Cell that will now run it from scratch)
    - `order_steps`:
      - Step `0`: `state = 'claimed'`, `last_commit_sha = null`, `last_output_json = null` (`attempts_used` reset to `0`)
      - Steps `1..N-1`: `state = 'pending'`, `last_commit_sha = null`, `last_output_json = null`, `produced_files_json = '[]'`
@@ -299,17 +297,17 @@ When the server receives `action: "worktree_missing"` from the Cell holding the 
    - The server atomically inserts `order_steps[0..N-1]` (or refreshes them if resetting from scratch), binds `job.step_id = order_steps[0].step_id`, and transitions Step 0 to `running`.
 2. **Back-to-Back Step Handoff (`nextJob` Returned Inline Until Finish)**:
    - When the Cell completes Step `k` (`action: "complete"`) or fails Step `k` where `on_fail_retry_station_id` rewinds to an earlier step (e.g., `quality-gate` fails → rewinds to `build` while retry budget remains):
-     - The server **keeps `active_cell_id = cellId` and `pinned_cell_id = cellId` locked** (never dropping the `WorkOrder` back to `queued` between steps).
+     - The server **keeps `active_cell_id = cellId` and `pinned_factory_id = cellId` locked** (never dropping the `WorkOrder` back to `queued` between steps).
      - In the same transaction, the server creates the `Job` for the next step (`k + 1` or the retry target step) with `workspaceMode = 'reuse'`, sets `active_job_id = nextJob.job_id`, and returns `{ completed: true, nextJob }` directly in the response.
 3. **Final `deliver` Step (Push Branch, Publish PR, and Delete Local Worktree)**:
    - During the final `deliver` step, the Cell commits the work, pushes `factory/<order-slug>` to `origin`, and publishes/updates the PR.
    - **Immediately after `deliver` pushes and publishes the PR, the Cell deletes `<repo>/.worktrees/<order-slug>/` (`git worktree remove --force`)** and reports `action: "complete"` with `{ commitSha }` to the server.
-   - The server transitions `WorkOrder.state = 'delivered'`, clears `active_cell_id = null`, `active_job_id = null`, and `pinned_cell_id = null`, and unlocks any dependent child `WorkOrder` (`waiting_parent → queued`).
+   - The server transitions `WorkOrder.state = 'delivered'`, clears `active_cell_id = null`, `active_job_id = null`, and `pinned_factory_id = null`, and unlocks any dependent child `WorkOrder` (`waiting_parent → queued`).
 
-### 3.6 Fast Cell Reconnect Before Lease Expiry (`POST /api/v1/cells/hello`)
+### 3.6 Cell Restart
 
-- If a Cell process restarts and reconnects **before** its `leaseTtlMs` (60s) expires, its `active_job_id` is still locked to `cellId` in SQLite.
-- On `POST /api/v1/cells/hello`, if the Cell already holds an unexpired `active_job_id`, the server bumps `epoch += 1`, refreshes `lease_expires_at`, and returns `resumedJob` in the `hello` response so the Cell can immediately verify `.cell/<step-id>/` and continue finishing the `WorkOrder` without waiting for lease expiration.
+- A restarted Cell process gets a new id from its Factory daemon. There is no hello and no `resumedJob`.
+- Its old `active_job_id` stays locked until the Factory confirms the old process is dead (`gone`) or the lease expires. Then the Job is requeued and the new Cell claims it at the same step (`workspaceMode = 'reuse'`) when the worktree is intact (§3.3).
 
 ### 3.7 Cell ↔ Factory Connection & Timing Constants (`≤ 5 Cells + 1 Server`)
 
@@ -349,7 +347,7 @@ An **Incident** (Andon) is created whenever a `WorkOrder` or `OrderPlan` hits a 
 | Incident Reason              | Trigger Condition                                                                                                  | What Happens to Active Lease & Worktree                                                                                           |
 | :--------------------------- | :----------------------------------------------------------------------------------------------------------------- | :-------------------------------------------------------------------------------------------------------------------------------- |
 | **`line_unavailable`**       | Cell checks local `.factory/lines/<lineName>.yml` and reports `line_unavailable` (and no other Cell supports it)   | `Job.status = 'line_unavailable'`; `WorkOrder.state = 'line_unavailable'`; Cell is immediately given a different `Job`            |
-| **`step_retries_exhausted`** | A step (`operator` or `inspection`) fails and `attempts_used >= max_attempts`                                      | Lease is closed; `WorkOrder.state = 'blocked'`; worktree & `.cell/<step-id>/` logs stay intact on `pinned_cell_id` for inspection |
+| **`step_retries_exhausted`** | A step (`operator` or `inspection`) fails and `attempts_used >= max_attempts`                                      | Lease is closed; `WorkOrder.state = 'blocked'`; worktree & `.cell/<step-id>/` logs stay intact on `pinned_factory_id` for inspection |
 | **`operator_blocked`**       | Runner/Operator inside the Cell explicitly calls `block` (ambiguous spec, missing dependency, or question timeout) | Cell saves `.cell/<step-id>/handover.md`; lease is closed; `WorkOrder.state = 'blocked'`                                          |
 | **`workspace_failed`**       | Cell fails `git fetch` / worktree setup `2` times in a row                                                         | Lease is closed; failing Cell is placed in `avoid_cells` cooldown (10 min); `WorkOrder.state = 'blocked'`                         |
 | **`worktree_reset_limit`**   | `worktree_missing` reset-to-scratch happened `> maxWorktreeResets` (2) times without delivery                      | Lease is closed; `WorkOrder.state = 'blocked'` to prevent infinite scratch restarts                                               |
@@ -373,13 +371,13 @@ stateDiagram-v2
 ### 4.3 Three Ways an Incident is Resolved (`POST /api/v1/incidents/{id}/resolve`)
 
 1. **`retry_step` (Continue at Failed Step `x`)**:
-   - Grants `+grantRetries` (default `1`) to Step `x` (and clears `unavailable_line_cells_json` if resolving a `line_unavailable` incident after adding the line or changing `line_name`).
-   - Keeps `current_step_index = x` and keeps `pinned_cell_id` so the Cell reuses `.cell/<step-0..x-1>/` and retries Step `x` (`workspaceMode = 'reuse'`).
+   - Grants `+grantRetries` (default `1`) to Step `x` (and clears `unavailable_line_factories_json` if resolving a `line_unavailable` incident after adding the line or changing `line_name`).
+   - Keeps `current_step_index = x` and keeps `pinned_factory_id` so the Cell reuses `.cell/<step-0..x-1>/` and retries Step `x` (`workspaceMode = 'reuse'`).
    - _(If the Cell later discovers `.cell/<step-0..x-1>/` is gone, its automatic check in §3.3 will safely fall back to `worktree_missing` → scratch reset!)_
 2. **`restart_from_step` (Rewind to Earlier Step `k < x`)**:
    - Rewinds `current_step_index = k`, resets Steps `k..N-1` to `ready`/`pending`, keeps Steps `0..k-1` and their `.cell/<step-id>/` files, and queues Step `k` (`workspaceMode = 'reuse'`).
 3. **`restart_from_scratch` (Full DB + Worktree Reset to Step 0)**:
-   - Resets `current_step_index = 0`, resets `worktree_resets = 0`, clears `unavailable_line_cells_json`, resets all `order_steps` `0..N-1`, and queues Step 0 with `workspaceMode = 'fresh'`.
+   - Resets `current_step_index = 0`, resets `worktree_resets = 0`, clears `unavailable_line_factories_json`, resets all `order_steps` `0..N-1`, and queues Step 0 with `workspaceMode = 'fresh'`.
    - The next Cell that claims Step 0 wipes `.worktrees/<order-slug>` (including `.cell/`) and starts cleanly from `baseBranch`.
 
 ---
@@ -474,7 +472,7 @@ The caller (shell script or CLI running in the repository) reads `"project"` fro
   1. **Project & Line Name Pinning**: Every created/updated `OrderPlan`, `WorkOrder`, and `Job` is pinned to `projectId` and `line_name` (from `line:` frontmatter). When a Cell claims Step 0 (`start`), it checks local `.factory/lines/<line_name>.yml` and registers the Line's `stations` into `order_steps` (or reports `line_unavailable` if missing).
   2. **`mode: "dry_run"` vs `"apply"`**: `dry_run` validates frontmatter and single-parent dependency chains (rejecting cycles or multi-parent ambiguity), returning `{ created, updated, skipped, errors }` without writing to SQLite.
   3. **New `slug` (`created`)**: Creates the `OrderPlan` (if `plan:` is present), creates the `WorkOrder` with `projectId` and `line_name`, and sets initial `baseBranch` (waking any long-polling `/claims` waiters immediately).
-  4. **Existing `slug` in `waiting_parent | queued | paused | line_unavailable` (`updated`)**: Updates `title`, `description`, `priority`, `parentOrderId`, and `line_name` in place (and clears `unavailable_line_cells_json` if `line_name` changed).
+  4. **Existing `slug` in `waiting_parent | queued | paused | line_unavailable` (`updated`)**: Updates `title`, `description`, `priority`, `parentOrderId`, and `line_name` in place (and clears `unavailable_line_factories_json` if `line_name` changed).
   5. **Existing `slug` in `running | delivering | delivered | completed` (`skipped`)**: Preserves in-flight/finished work; applies `priority` change or `status: cancelled` if requested in frontmatter.
 
 ### 5.4 Direct Queue Control (`POST /api/v1/queue/actions`)
@@ -483,7 +481,7 @@ Allows quick queue manipulation without exporting/importing files:
 
 - `pause` / `unpause`: Hold or release `queued` / `waiting_parent` orders while reorganizing the queue.
 - `reprioritise`: Set `priority: 'high' | 'medium' | 'low'` on selected `orderIds`.
-- `reset_to_scratch`: Reset selected `orderIds` back to Step `0` (`workspaceMode: 'fresh'`, clearing `unavailable_line_cells_json`).
+- `reset_to_scratch`: Reset selected `orderIds` back to Step `0` (`workspaceMode: 'fresh'`, clearing `unavailable_line_factories_json`).
 - `cancel`: Cancel selected `orderIds` and release any active leases.
 
 ---
@@ -546,8 +544,10 @@ The indexes are a backstop. A second active claim fails at write time even if ap
 | Token Kind         | Prefix     | Issued By                                      | Default TTL                                | Allowed Scopes                                        | Purpose                                                                                        |
 | :----------------- | :--------- | :--------------------------------------------- | :----------------------------------------- | :---------------------------------------------------- | :--------------------------------------------------------------------------------------------- |
 | **`supervisor`**   | `sf_sup_`  | CLI Admin (`admin token create`) or Rotate API | Configurable (e.g. 30d) or local ephemeral | `supervisor:read`, `supervisor:write`, `admin:tokens` | Manage `OrderPlan`s, `WorkOrder`s, `Incident`s, Queue Import/Export, mint join tokens          |
-| **`cell_join`**    | `sf_join_` | Supervisor (`POST /api/v1/tokens/join`)        | Short-lived (15m – 24h)                    | `cell:enroll`                                         | Enrolls a `Cell` at `POST /api/v1/cells/enroll` and exchanges for a `cell_session` token       |
-| **`cell_session`** | `sf_cell_` | Server on Cell enrollment or rotation          | Rolling TTL (7d, rotatable)                | `cell:worker`                                         | Used by `Cell` for `hello`, `claims`, `heartbeats`, `jobs/{id}/transitions`, and self-rotation |
+| **`factory_join`** | `sf_join_` | Supervisor (`POST /api/v1/tokens`)             | Short-lived (15m – 24h)                    | `factory:enroll`                                      | Enrolls a Factory at `POST /api/v1/factories/enroll`; exchanged once for a `factory_session` |
+| **`factory_session`** | `sf_factory_` | Server on Factory enrollment or rotation    | Rolling TTL (7d, rotatable)                | `factory:worker`                                      | Used by the Factory daemon for `factories/heartbeat`, Cell `claims`, `heartbeats`, `jobs/{id}/transitions`, `incidents/{id}/resolve`, `factories/cells/{id}/gone`. Cells carry no token of their own |
+
+There is no Cell token kind and no Cell scope. Cells are identified by the `x-cell-id` header the Factory daemon adds.
 
 ---
 
@@ -576,7 +576,7 @@ Other job kinds (`plan_branch`, `run_inspection`, `deliver`) run Cell commands, 
 - **Environment.** The runner receives `FACTORY_OPERATOR_URL` (base URL) and `FACTORY_CYCLE_TOKEN` (one token per job). Names are provisional (§11.6).
 - **Token.** 256-bit random, lives only in Cell memory, never sent to the server, never written to disk. The Cell compares it in constant time. A missing or wrong token answers `401` before the verb is read.
 - **Token map.** The Cell maps each token to `{ jobId, role, epoch, incidentId? }`. `epoch` is the value the claim returned. The map is dropped with the listener.
-- **Not a Safe Token.** The per-job token is not a §8 Safe Token and is not stored in the server DB. The server authenticates the Cell with its `cell:worker` credential, as for every other Cell call.
+- **Not a Safe Token.** The per-job token is not a §8 Safe Token and is not stored in the server DB. The server authenticates the Cell by the Factory credential and `x-cell-id`, as for every other Cell call.
 - **HTTP shape.** Request: `POST /` with JSON `{ verb, ...fields }` plus the token. Any other method answers `405`; any other path answers `404`; a body over 1 MiB answers `413`.
 
 #### Role mapping
@@ -619,7 +619,7 @@ The Cell never decides which transition follows. It checks local facts and forwa
 - **Fence first, then state.** A transition applies only if the job is live (`claimed` or `running`), belongs to the calling Cell and carries the job's current `epoch`. Every claim bumps `epoch`, so a matching epoch proves no other Cell has taken the job since.
 - **Repeat of an applied command.** If the job already reflects the command's outcome at the same `epoch`, the server answers `200` with `already_applied: true` and changes nothing. Outcomes: `start` leaves the job running; `complete` completed; `fail` failed; `block` blocked; `worktree_missing` and `line_unavailable` released the lease.
 - **Incident resolve.** The same rule: an incident already resolved with the same action answers `200 already_applied`.
-- **Recovery is state, not history.** After a lost response or `already_applied`, the Cell calls `POST /api/v1/cells/hello`. A `resumedJob` in the reply gives the job id, `stepId`, `epoch` and lease, and the Cell continues from that step. The Cell keeps no retry log. If the Cell holds no unexpired job, `hello` returns none and the Cell waits for a claim.
+- **Recovery is state, not history.** After a lost response or `already_applied`, the Cell repeats the command with its current `epoch`. The Cell keeps no retry log. If the Cell no longer holds the job, the server answers `409 stale-lease-epoch` and the Cell waits for a claim.
 - **Retry matrix.**
 
 | Who | Retries when | Safe because |

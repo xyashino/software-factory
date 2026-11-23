@@ -55,9 +55,12 @@ const enrollSession = async (app: TestApp): Promise<string> => {
 };
 
 const heartbeat = (app: TestApp, sessionToken: string): Promise<Response> =>
-  postJson(app, '/api/v1/factories/heartbeat', undefined, {
-    authorization: `Bearer ${sessionToken}`,
-  });
+  postJson(
+    app,
+    '/api/v1/factories/heartbeat',
+    { projects: [] },
+    { authorization: `Bearer ${sessionToken}` },
+  );
 
 const listFactories = (app: TestApp) =>
   getJson(app, '/api/v1/factories', {
@@ -93,6 +96,29 @@ describe('factory heartbeat', () => {
 
     expect(body.factories).toEqual([
       expect.objectContaining({ name: 'laptop-2', online: false }),
+    ]);
+  });
+
+  it('shows the projects each factory reports in its heartbeat', async () => {
+    const { app } = setup();
+    const sessionToken = await enrollSession(app);
+    await postJson(
+      app,
+      '/api/v1/factories/heartbeat',
+      { projects: [{ projectId: 'proj-1', desired: 2, running: 1 }] },
+      { authorization: `Bearer ${sessionToken}` },
+    );
+
+    const body = (await getJson(app, '/api/v1/factories', {
+      authorization: `Bearer ${SUPERVISOR_TOKEN}`,
+    }).then((response) => response.json())) as {
+      factories: { projects: unknown[] }[];
+    };
+
+    expect(body.factories).toEqual([
+      expect.objectContaining({
+        projects: [{ projectId: 'proj-1', desired: 2, running: 1 }],
+      }),
     ]);
   });
 

@@ -254,7 +254,7 @@ const applyFile = (
       type: todo.type,
       description: todo.description,
       lineName: todo.line,
-      unavailableLineCellsJson: [],
+      unavailableLineFactoriesJson: [],
       priority: todo.priority,
       baseBranch: resolved.baseBranch,
       baseCommitSha: resolved.baseCommitSha,
@@ -324,7 +324,7 @@ const applyFile = (
     baseBranch: resolved.baseBranch,
     baseCommitSha: resolved.baseCommitSha,
   };
-  if (todo.line !== current.lineName) patch.unavailableLineCellsJson = [];
+  if (todo.line !== current.lineName) patch.unavailableLineFactoriesJson = [];
   if (!differs(current, patch)) return 'skipped';
   const row = updateWorkOrder(tx, current, patch, now);
   orders.set(todo.slug, row);

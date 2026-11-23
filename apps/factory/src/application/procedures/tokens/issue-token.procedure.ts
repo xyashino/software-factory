@@ -13,7 +13,6 @@ export const issueTokenProcedure = scopedProcedure(['admin:tokens'])(
       kind,
       name,
       scopes,
-      cellId: null,
       rotatedFromId: null,
       expiresAt,
       now: ctx.clock.now(),

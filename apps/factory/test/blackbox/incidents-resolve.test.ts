@@ -4,10 +4,7 @@ import { incidents } from '../../src/db/schema/incidents';
 import { jobs } from '../../src/db/schema/jobs';
 import { orderSteps, workOrders } from '../../src/db/schema/orders';
 import { safeTokens } from '../../src/db/schema/tokens';
-import {
-  hashToken,
-  TOKEN_PREFIXES,
-} from '../../src/application/tokens/token-hash';
+import { hashToken } from '../../src/application/tokens/token-hash';
 import { asOrderId, asTokenId } from '../../src/domain/common/brand';
 import type { Db } from '../../src/db/client';
 import {
@@ -17,9 +14,15 @@ import {
   type TestApp,
 } from '../support/test-app';
 import { seedBaseline } from '../support/test-db';
+import {
+  claimBody,
+  factoryHeaders,
+  FACTORY_TOKEN,
+} from '../support/factory-session';
 
 const PROJECT_ID = 'proj-1';
-const JOIN_TOKEN = 'sf_join_test-join-token';
+const CELL_A = 'cell-aaaaaaaa';
+const CELL_B = 'cell-bbbbbbbb';
 const SUPERVISOR_TOKEN = 'supervisor-test-token';
 const ORDER_ID = 'order-1';
 const SECOND_ORDER_ID = 'order-2';
@@ -75,15 +78,11 @@ type ResolveBody = {
   workOrder: {
     state: string;
     currentStepIndex: number;
-    pinnedCellId: string | null;
+    pinnedFactoryId: string | null;
   };
 };
 
 type ListBody = { items: IncidentBody[] };
-
-type CellsBody = {
-  cells: { name: string; activeJobId: string | null }[];
-};
 
 const bearer = (token: string) => ({ authorization: `Bearer ${token}` });
 
@@ -92,17 +91,6 @@ const setup = () => {
   seedBaseline(db);
   db.delete(workOrders)
     .where(eq(workOrders.orderId, asOrderId(SECOND_ORDER_ID)))
-    .run();
-  db.insert(safeTokens)
-    .values({
-      tokenId: asTokenId('join-1'),
-      tokenHash: hashToken(JOIN_TOKEN),
-      prefix: TOKEN_PREFIXES.join,
-      kind: 'cell_join',
-      name: 'join',
-      scopesJson: ['cell:enroll'],
-      createdAt: clock.now(),
-    })
     .run();
   db.insert(safeTokens)
     .values({
@@ -118,28 +106,12 @@ const setup = () => {
   return { app, db };
 };
 
-const enrollCell = async (app: TestApp, name: string): Promise<string> => {
-  const response = await postJson(
-    app,
-    '/api/v1/cells/enroll',
-    {
-      projectId: PROJECT_ID,
-      name,
-      allowedLines: ['feature'],
-      runners: ['claude'],
-    },
-    bearer(JOIN_TOKEN),
-  );
-  const body = (await response.json()) as { sessionToken: string };
-  return body.sessionToken;
-};
-
 const claimJob = async (app: TestApp, token: string): Promise<ClaimedJob> => {
   const response = await postJson(
     app,
     '/api/v1/cells/claims',
-    {},
-    bearer(token),
+    claimBody({}, PROJECT_ID),
+    factoryHeaders(token),
   );
   const body = (await response.json()) as { job: ClaimedJob | null };
   if (body.job === null) throw new Error('expected a claimed job');
@@ -156,7 +128,7 @@ const transition = async (
     app,
     `/api/v1/jobs/${job.jobId}/transitions`,
     { ...body, epoch: job.epoch },
-    bearer(token),
+    factoryHeaders(token),
   );
   return {
     status: response.status,
@@ -217,7 +189,7 @@ const resolveIncident = async (
     app,
     `/api/v1/incidents/${incidentId}/resolve`,
     body,
-    bearer(token),
+    token === SUPERVISOR_TOKEN ? bearer(token) : factoryHeaders(token),
   );
   return {
     status: response.status,
@@ -269,16 +241,6 @@ const buildStepId = (db: Db): string => {
   return step.stepId;
 };
 
-const cellNamed = async (app: TestApp, name: string) => {
-  const response = await getJson(
-    app,
-    '/api/v1/cells',
-    bearer(SUPERVISOR_TOKEN),
-  );
-  const body = (await response.json()) as CellsBody;
-  return body.cells.find((row) => row.name === name);
-};
-
 const exhaustBuildRetries = async (
   app: TestApp,
   token: string,
@@ -308,7 +270,7 @@ const escalatedByMechanic = async (
 describe('incident listing and resolution', () => {
   it('a supervisor lists the incidents of a project filtered by reason and status', async () => {
     const { app, db } = setup();
-    const token = await enrollCell(app, 'cell-a');
+    const token = CELL_A;
     await exhaustBuildRetries(app, token);
 
     const byReason = await listIncidents(app, '&reason=step_retries_exhausted');
@@ -326,7 +288,7 @@ describe('incident listing and resolution', () => {
 
   it('a token without supervisor:read cannot list incidents', async () => {
     const { app } = setup();
-    const token = await enrollCell(app, 'cell-a');
+    const token = FACTORY_TOKEN;
 
     const { status, body } = await listIncidents(app, '', token);
 
@@ -336,7 +298,7 @@ describe('incident listing and resolution', () => {
 
   it('a supervisor retries a failed step with a new attempt and the order requeues', async () => {
     const { app, db } = setup();
-    const token = await enrollCell(app, 'cell-a');
+    const token = CELL_A;
     await exhaustBuildRetries(app, token);
 
     const { status, body } = await resolveIncident(
@@ -356,7 +318,7 @@ describe('incident listing and resolution', () => {
 
   it('a supervisor restarts from an earlier step that is not past the failed one', async () => {
     const { app, db } = setup();
-    const token = await enrollCell(app, 'cell-a');
+    const token = CELL_A;
     await exhaustBuildRetries(app, token);
 
     const { status, body } = await resolveIncident(
@@ -375,7 +337,7 @@ describe('incident listing and resolution', () => {
 
   it('a restart step after the failed step is refused with 422', async () => {
     const { app, db } = setup();
-    const token = await enrollCell(app, 'cell-a');
+    const token = CELL_A;
     await exhaustBuildRetries(app, token);
 
     const { status, body } = await resolveIncident(
@@ -392,7 +354,7 @@ describe('incident listing and resolution', () => {
 
   it('a supervisor restarts the order from scratch on a fresh workspace', async () => {
     const { app, db } = setup();
-    const token = await enrollCell(app, 'cell-a');
+    const token = CELL_A;
     await exhaustBuildRetries(app, token);
 
     const { status, body } = await resolveIncident(
@@ -411,7 +373,7 @@ describe('incident listing and resolution', () => {
 
   it('a supervisor escalates an incident and the order stays blocked', async () => {
     const { app, db } = setup();
-    const token = await enrollCell(app, 'cell-a');
+    const token = CELL_A;
     await exhaustBuildRetries(app, token);
 
     const { status, body } = await resolveIncident(
@@ -428,10 +390,9 @@ describe('incident listing and resolution', () => {
     });
   });
 
-  it('a supervisor cancels an incident and the order is cancelled without its pinned cell', async () => {
+  it('a supervisor cancels an incident and the order is cancelled without its pinned factory', async () => {
     const { app, db } = setup();
-    const token = await enrollCell(app, 'cell-a');
-    await exhaustBuildRetries(app, token);
+    await exhaustBuildRetries(app, CELL_A);
 
     const { status, body } = await resolveIncident(
       app,
@@ -443,13 +404,13 @@ describe('incident listing and resolution', () => {
     expect(status).toBe(200);
     expect(body).toMatchObject({
       incident: { status: 'cancelled', resolutionAction: 'cancel' },
-      workOrder: { state: 'cancelled', pinnedCellId: null },
+      workOrder: { state: 'cancelled', pinnedFactoryId: null },
     });
   });
 
   it('an incident that is already resolved cannot be resolved again', async () => {
     const { app, db } = setup();
-    const token = await enrollCell(app, 'cell-a');
+    const token = CELL_A;
     await exhaustBuildRetries(app, token);
     const incidentId = onlyIncident(db).incidentId;
     await resolveIncident(app, SUPERVISOR_TOKEN, incidentId, {
@@ -471,7 +432,7 @@ describe('incident listing and resolution', () => {
 
   it('the mechanic cell claims the mechanic job for the incident its order blocked on', async () => {
     const { app } = setup();
-    const token = await enrollCell(app, 'cell-a');
+    const token = CELL_A;
     await exhaustBuildRetries(app, token);
 
     const job = await claimJob(app, token);
@@ -481,14 +442,14 @@ describe('incident listing and resolution', () => {
 
   it('the mechanic job claim names the incident it triages', async () => {
     const { app, db } = setup();
-    const token = await enrollCell(app, 'cell-a');
+    const token = CELL_A;
     await exhaustBuildRetries(app, token);
 
     const response = await postJson(
       app,
       '/api/v1/cells/claims',
-      {},
-      bearer(token),
+      claimBody({}, PROJECT_ID),
+      factoryHeaders(token),
     );
     const body = (await response.json()) as { job: { incidentId: string } };
 
@@ -497,7 +458,7 @@ describe('incident listing and resolution', () => {
 
   it('starting a mechanic job runs it without moving its order steps', async () => {
     const { app, db } = setup();
-    const token = await enrollCell(app, 'cell-a');
+    const token = CELL_A;
     await exhaustBuildRetries(app, token);
     const mechanic = await claimJob(app, token);
     const stepsBefore = db.select().from(orderSteps).all();
@@ -519,7 +480,7 @@ describe('incident listing and resolution', () => {
 
   it('the mechanic cell resolves its leased incident and its mechanic job passes', async () => {
     const { app, db } = setup();
-    const token = await enrollCell(app, 'cell-a');
+    const token = CELL_A;
     await exhaustBuildRetries(app, token);
     const mechanic = await claimJob(app, token);
 
@@ -540,12 +501,11 @@ describe('incident listing and resolution', () => {
         expect.objectContaining({ kind: 'mechanic', status: 'passed' }),
       ]),
     );
-    expect(await cellNamed(app, 'cell-a')).toMatchObject({ activeJobId: null });
   });
 
   it('a mechanic resolution with a stale epoch gets 409 StaleLeaseEpoch', async () => {
     const { app, db } = setup();
-    const token = await enrollCell(app, 'cell-a');
+    const token = CELL_A;
     await exhaustBuildRetries(app, token);
     const mechanic = await claimJob(app, token);
 
@@ -563,8 +523,8 @@ describe('incident listing and resolution', () => {
 
   it('a cell holding no mechanic lease cannot resolve the incident', async () => {
     const { app, db } = setup();
-    const token = await enrollCell(app, 'cell-a');
-    const otherToken = await enrollCell(app, 'cell-b');
+    const token = CELL_A;
+    const otherToken = CELL_B;
     await exhaustBuildRetries(app, token);
     const mechanic = await claimJob(app, token);
 
@@ -581,7 +541,7 @@ describe('incident listing and resolution', () => {
 
   it('a mechanic resolution without an epoch is refused with 400', async () => {
     const { app, db } = setup();
-    const token = await enrollCell(app, 'cell-a');
+    const token = CELL_A;
     await exhaustBuildRetries(app, token);
     await claimJob(app, token);
 
@@ -597,7 +557,7 @@ describe('incident listing and resolution', () => {
 
   it('a step that fails until its retries run out goes to the mechanic, which retries it and the order delivers', async () => {
     const { app, db } = setup();
-    const token = await enrollCell(app, 'cell-a');
+    const token = CELL_A;
     await exhaustBuildRetries(app, token);
     const mechanic = await claimJob(app, token);
     await resolveIncident(app, token, onlyIncident(db).incidentId, {
@@ -631,7 +591,7 @@ describe('incident listing and resolution', () => {
 
   it('the mechanic escalates and the supervisor restarts the order from its failed step', async () => {
     const { app, db } = setup();
-    const token = await enrollCell(app, 'cell-a');
+    const token = CELL_A;
     await escalatedByMechanic(app, db, token);
 
     const { status, body } = await resolveIncident(
@@ -650,7 +610,7 @@ describe('incident listing and resolution', () => {
 
   it('the mechanic escalates and the supervisor restarts the order from scratch', async () => {
     const { app, db } = setup();
-    const token = await enrollCell(app, 'cell-a');
+    const token = CELL_A;
     await escalatedByMechanic(app, db, token);
 
     const { status, body } = await resolveIncident(

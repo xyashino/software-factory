@@ -14,7 +14,12 @@ export const claimOnce = async (
   const reply = claimJobContract.out[200].parse(
     await runtime.ports.server.call(
       CLAIMS_ROUTE,
-      { waitMs },
+      {
+        waitMs,
+        projectId: runtime.projectId,
+        allowedLines: runtime.allowedLines,
+        runners: runtime.runners,
+      },
       runtime.session.sessionToken,
     ),
   );

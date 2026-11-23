@@ -1,34 +1,27 @@
 import { eq } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import { LEASE_TTL_MS } from '../../src/config';
-import { cells } from '../../src/db/schema/cells';
 import { jobs } from '../../src/db/schema/jobs';
 import { workOrders } from '../../src/db/schema/orders';
 import { safeTokens } from '../../src/db/schema/tokens';
-import {
-  hashToken,
-  TOKEN_PREFIXES,
-} from '../../src/application/tokens/token-hash';
-import {
-  asCellId,
-  asJobId,
-  asOrderId,
-  asTokenId,
-} from '../../src/domain/common/brand';
+import { hashToken } from '../../src/application/tokens/token-hash';
+import { asJobId, asOrderId, asTokenId } from '../../src/domain/common/brand';
 import type { Db } from '../../src/db/client';
-import {
-  createTestApp,
-  deleteJson,
-  getJson,
-  postJson,
-  type TestApp,
-} from '../support/test-app';
+import { createTestApp, postJson, type TestApp } from '../support/test-app';
 import { seedBaseline } from '../support/test-db';
+import {
+  claimBody,
+  factoryHeaders,
+  FACTORY_TOKEN,
+  seedFactory,
+} from '../support/factory-session';
 
 const PROJECT_ID = 'proj-1';
-const JOIN_TOKEN = 'sf_join_test-join-token';
 const SUPERVISOR_TOKEN = 'supervisor-test-token';
 const LONG_WAIT_MS = 5_000;
+const CELL_A = 'cell-aaaaaaaa';
+const CELL_B = 'cell-bbbbbbbb';
+const SECOND_FACTORY_TOKEN = 'sf_factory_second-token';
 
 type ErrorBody = { code: number; type: string };
 
@@ -48,37 +41,10 @@ type ClaimBody = {
   };
 };
 
-type ResumeBody = {
-  code: number;
-  resumedJob?: { jobId: string; epoch: number; leaseExpiresAt: number };
-};
-
-type CellsBody = {
-  code: number;
-  cells: {
-    cellId: string;
-    status: string;
-    activeJobId: string | null;
-    leaseExpiresAt: number | null;
-  }[];
-};
-
-const bearer = (token: string) => ({ authorization: `Bearer ${token}` });
-
 const setup = () => {
   const { app, clock, db } = createTestApp({ safeTokenAuth: true });
   seedBaseline(db);
-  db.insert(safeTokens)
-    .values({
-      tokenId: asTokenId('join-1'),
-      tokenHash: hashToken(JOIN_TOKEN),
-      prefix: TOKEN_PREFIXES.join,
-      kind: 'cell_join',
-      name: 'join',
-      scopesJson: ['cell:enroll'],
-      createdAt: clock.now(),
-    })
-    .run();
+  seedFactory(db, 'factory-2', SECOND_FACTORY_TOKEN, clock.now());
   db.insert(safeTokens)
     .values({
       tokenId: asTokenId('supervisor-1'),
@@ -93,50 +59,20 @@ const setup = () => {
   return { app, clock, db };
 };
 
-const enrollCell = async (
-  app: TestApp,
-  name: string,
-  allowedLines: string[] = ['feature'],
-): Promise<string> => {
-  const response = await postJson(
-    app,
-    '/api/v1/cells/enroll',
-    { projectId: PROJECT_ID, name, allowedLines, runners: ['claude'] },
-    bearer(JOIN_TOKEN),
-  );
-  const body = (await response.json()) as { sessionToken: string };
-  return body.sessionToken;
-};
-
-const helloCell = async (
-  app: TestApp,
-  token: string,
-  allowedLines: string[] = ['feature'],
-): Promise<ResumeBody> => {
-  const response = await postJson(
-    app,
-    '/api/v1/cells/hello',
-    {
-      projectId: PROJECT_ID,
-      allowedLines,
-      runners: ['claude'],
-      localWorktrees: [],
-    },
-    bearer(token),
-  );
-  return (await response.json()) as ResumeBody;
-};
-
 const claim = async (
   app: TestApp,
-  token: string,
-  waitMs?: number,
+  cellId: string,
+  options: { waitMs?: number; allowedLines?: string[]; token?: string } = {},
 ): Promise<{ status: number; body: ClaimBody }> => {
   const response = await postJson(
     app,
     '/api/v1/cells/claims',
-    waitMs === undefined ? {} : { waitMs },
-    bearer(token),
+    claimBody(
+      options.waitMs === undefined ? {} : { waitMs: options.waitMs },
+      PROJECT_ID,
+      options.allowedLines,
+    ),
+    factoryHeaders(cellId, options.token),
   );
   return {
     status: response.status,
@@ -146,15 +82,16 @@ const claim = async (
 
 const heartbeat = async (
   app: TestApp,
-  token: string,
+  cellId: string,
   jobId: string,
   epoch: number,
+  token: string = FACTORY_TOKEN,
 ): Promise<{ status: number; body: HeartbeatBody | ErrorBody }> => {
   const response = await postJson(
     app,
     '/api/v1/cells/heartbeats',
     { jobId, epoch },
-    bearer(token),
+    factoryHeaders(cellId, token),
   );
   return {
     status: response.status,
@@ -167,7 +104,7 @@ const transitionOrder = (app: TestApp, orderId: string, action: string) =>
     app,
     `/api/v1/work-orders/${orderId}/transitions`,
     { action },
-    bearer(SUPERVISOR_TOKEN),
+    { authorization: `Bearer ${SUPERVISOR_TOKEN}` },
   );
 
 const queueImport = (app: TestApp, slug: string, line: string) =>
@@ -192,22 +129,8 @@ const queueImport = (app: TestApp, slug: string, line: string) =>
         },
       ],
     },
-    bearer(SUPERVISOR_TOKEN),
+    { authorization: `Bearer ${SUPERVISOR_TOKEN}` },
   );
-
-const orderState = (db: Db, orderId: string) =>
-  db
-    .select()
-    .from(workOrders)
-    .where(eq(workOrders.orderId, asOrderId(orderId)))
-    .get();
-
-const cellRow = (db: Db, cellId: string) =>
-  db
-    .select()
-    .from(cells)
-    .where(eq(cells.cellId, asCellId(cellId)))
-    .get();
 
 const jobRow = (db: Db, jobId: string) =>
   db
@@ -219,14 +142,13 @@ const jobRow = (db: Db, jobId: string) =>
 describe('cell heartbeats', () => {
   it('extends the lease when the heartbeat carries the current epoch', async () => {
     const { app, clock, db } = setup();
-    const token = await enrollCell(app, 'cell-a');
-    const { body: claimed } = await claim(app, token);
+    const { body: claimed } = await claim(app, CELL_A);
     const job = claimed.job;
     clock.advance(10_000);
 
     const { status, body } = await heartbeat(
       app,
-      token,
+      CELL_A,
       job?.jobId ?? '',
       job?.epoch ?? -1,
     );
@@ -244,12 +166,11 @@ describe('cell heartbeats', () => {
 
   it('refuses a heartbeat whose epoch is stale', async () => {
     const { app } = setup();
-    const token = await enrollCell(app, 'cell-a');
-    const { body: claimed } = await claim(app, token);
+    const { body: claimed } = await claim(app, CELL_A);
 
     const { status, body } = await heartbeat(
       app,
-      token,
+      CELL_A,
       claimed.job?.jobId ?? '',
       (claimed.job?.epoch ?? 0) - 1,
     );
@@ -258,15 +179,13 @@ describe('cell heartbeats', () => {
     expect(body).toMatchObject({ type: 'stale-lease-epoch' });
   });
 
-  it('refuses a heartbeat for a job that the cell does not hold', async () => {
+  it('refuses a heartbeat for a job that another cell holds', async () => {
     const { app } = setup();
-    const holder = await enrollCell(app, 'cell-a');
-    const other = await enrollCell(app, 'cell-b');
-    const { body: claimed } = await claim(app, holder);
+    const { body: claimed } = await claim(app, CELL_A);
 
     const { status, body } = await heartbeat(
       app,
-      other,
+      CELL_B,
       claimed.job?.jobId ?? '',
       claimed.job?.epoch ?? -1,
     );
@@ -277,8 +196,7 @@ describe('cell heartbeats', () => {
 
   it('tells the cell to abort when its order is paused under it', async () => {
     const { app, db } = setup();
-    const token = await enrollCell(app, 'cell-a');
-    const { body: claimed } = await claim(app, token);
+    const { body: claimed } = await claim(app, CELL_A);
     db.update(workOrders)
       .set({ state: 'paused' })
       .where(eq(workOrders.orderId, asOrderId('order-1')))
@@ -286,7 +204,7 @@ describe('cell heartbeats', () => {
 
     const { body } = await heartbeat(
       app,
-      token,
+      CELL_A,
       claimed.job?.jobId ?? '',
       claimed.job?.epoch ?? -1,
     );
@@ -296,13 +214,12 @@ describe('cell heartbeats', () => {
 
   it('tells the cell to abort when its order is cancelled under it', async () => {
     const { app } = setup();
-    const token = await enrollCell(app, 'cell-a');
-    const { body: claimed } = await claim(app, token);
+    const { body: claimed } = await claim(app, CELL_A);
     const transition = await transitionOrder(app, 'order-1', 'cancel');
 
     const { status, body } = await heartbeat(
       app,
-      token,
+      CELL_A,
       claimed.job?.jobId ?? '',
       claimed.job?.epoch ?? -1,
     );
@@ -311,148 +228,50 @@ describe('cell heartbeats', () => {
     expect(status).toBe(200);
     expect(body).toMatchObject({ code: 200, signals: ['abort'] });
   });
-});
 
-describe('cell list', () => {
-  it('lists each cell with its status and active lease', async () => {
-    const { app, clock } = setup();
-    const token = await enrollCell(app, 'cell-a');
-    const { body: claimed } = await claim(app, token);
-
-    const response = await getJson(
-      app,
-      '/api/v1/cells',
-      bearer(SUPERVISOR_TOKEN),
-    );
-    const body = (await response.json()) as CellsBody;
-
-    expect(response.status).toBe(200);
-    expect(body.cells).toContainEqual(
-      expect.objectContaining({
-        cellId: 'proj-1:cell-a',
-        status: 'busy',
-        activeJobId: claimed.job?.jobId,
-        leaseExpiresAt: clock.now() + LEASE_TTL_MS,
-      }),
-    );
-  });
-
-  it('refuses the cell list to a cell token', async () => {
+  it('refuses a heartbeat sent with a Cell token instead of a Factory token', async () => {
     const { app } = setup();
-    const token = await enrollCell(app, 'cell-a');
+    const { body: claimed } = await claim(app, CELL_A);
 
-    const response = await getJson(app, '/api/v1/cells', bearer(token));
+    const response = await postJson(
+      app,
+      '/api/v1/cells/heartbeats',
+      {
+        jobId: claimed.job?.jobId ?? '',
+        epoch: claimed.job?.epoch ?? -1,
+      },
+      { authorization: `Bearer ${SUPERVISOR_TOKEN}`, 'x-cell-id': CELL_A },
+    );
 
     expect(response.status).toBe(403);
   });
 });
 
-describe('cell revoke', () => {
-  it('frees the order and its pin when the cell is revoked', async () => {
-    const { app, db } = setup();
-    const token = await enrollCell(app, 'cell-a');
-    const { body: claimed } = await claim(app, token);
-
-    const response = await deleteJson(
-      app,
-      '/api/v1/cells/proj-1:cell-a',
-      bearer(SUPERVISOR_TOKEN),
-    );
-
-    expect(response.status).toBe(200);
-    expect(orderState(db, 'order-1')).toMatchObject({
-      state: 'queued',
-      activeJobId: null,
-      activeCellId: null,
-      pinnedCellId: null,
-    });
-    expect(jobRow(db, claimed.job?.jobId ?? '')?.status).toBe('lost');
-    expect(cellRow(db, 'proj-1:cell-a')).toMatchObject({
-      status: 'revoked',
-      activeJobId: null,
-    });
-  });
-
-  it('hands the freed order to another cell after the revoke', async () => {
-    const { app } = setup();
-    const revoked = await enrollCell(app, 'cell-a');
-    await claim(app, revoked);
-    await deleteJson(
-      app,
-      '/api/v1/cells/proj-1:cell-a',
-      bearer(SUPERVISOR_TOKEN),
-    );
-    const next = await enrollCell(app, 'cell-b');
-
-    const { body } = await claim(app, next);
-
-    expect(body.job).toMatchObject({ orderId: 'order-1' });
-  });
-
-  it('refuses a claim from the revoked cell session', async () => {
-    const { app } = setup();
-    const token = await enrollCell(app, 'cell-a');
-    await deleteJson(
-      app,
-      '/api/v1/cells/proj-1:cell-a',
-      bearer(SUPERVISOR_TOKEN),
-    );
-
-    const { status } = await claim(app, token);
-
-    expect(status).toBe(401);
-  });
-
-  it('refuses a heartbeat from the revoked cell session', async () => {
-    const { app } = setup();
-    const token = await enrollCell(app, 'cell-a');
-    const { body: claimed } = await claim(app, token);
-    await deleteJson(
-      app,
-      '/api/v1/cells/proj-1:cell-a',
-      bearer(SUPERVISOR_TOKEN),
-    );
-
-    const { status } = await heartbeat(
-      app,
-      token,
-      claimed.job?.jobId ?? '',
-      claimed.job?.epoch ?? -1,
-    );
-
-    expect(status).toBe(401);
-  });
-});
-
 describe('lease expiry handover', () => {
-  it('hands an expired lease to another cell and deletes the silent cell', async () => {
+  it('hands an expired lease to another factory and refuses the silent cell late', async () => {
     const { app, clock, db } = setup();
-    const tokenA = await enrollCell(app, 'cell-a', ['web']);
-    const parked = claim(app, tokenA, LONG_WAIT_MS);
+    const parked = claim(app, CELL_A, {
+      allowedLines: ['web'],
+      waitMs: LONG_WAIT_MS,
+    });
     await new Promise((resolve) => setTimeout(resolve, 20));
     await queueImport(app, 'web-one', 'web');
     const { body: claimed } = await parked;
     const jobId = claimed.job?.jobId ?? '';
 
     clock.advance(30_000);
-    const beat = await heartbeat(app, tokenA, jobId, 1);
-    const resumed = await helloCell(app, tokenA, ['web']);
+    const beat = await heartbeat(app, CELL_A, jobId, 1);
     clock.advance(LEASE_TTL_MS + 1);
-    const tokenB = await enrollCell(app, 'cell-b', ['web']);
-    const takeover = await claim(app, tokenB);
-    const late = await heartbeat(
-      app,
-      tokenA,
-      jobId,
-      resumed.resumedJob?.epoch ?? -1,
-    );
+    const takeover = await claim(app, CELL_B, {
+      allowedLines: ['web'],
+      token: SECOND_FACTORY_TOKEN,
+    });
+    const late = await heartbeat(app, CELL_A, jobId, 1);
 
     expect(claimed.job).toMatchObject({ orderId: 'proj-1:web-one', epoch: 1 });
     expect(beat.body).toMatchObject({ code: 200, signals: [] });
-    expect(resumed.resumedJob).toMatchObject({ jobId, epoch: 2 });
     expect(takeover.body.job).toMatchObject({ orderId: 'proj-1:web-one' });
     expect(jobRow(db, jobId)?.status).toBe('lost');
-    expect(cellRow(db, 'proj-1:cell-a')).toBeUndefined();
-    expect(late.status).toBe(401);
+    expect(late.status).toBe(409);
   });
 });

@@ -2,11 +2,11 @@ import { hostname } from 'node:os';
 import { resolve } from 'node:path';
 import { defineCommand } from 'citty';
 import { buildContext } from '../../bootstrap/context';
-import { run, runWithoutToken, settle } from '../../bootstrap/run';
+import { runWithoutToken, settle } from '../../bootstrap/run';
 import {
+  CELL_ID_ENV,
   CELL_LINES_ENV,
   FACTORY_PID_ENV,
-  JOIN_TOKEN_ENV,
   cellLogPathOf,
   isRelayedOf,
 } from '../../config';
@@ -16,20 +16,13 @@ import { startCell } from '../../application/procedures/cell/start.procedure';
 import {
   createFactoryCell,
   type FactoryCell,
-  listCellsWithFactory,
   listFactoryCells,
   removeFactoryCell,
 } from '../../application/procedures/cell/factory-cells';
-import { revokeCell } from '../../application/procedures/cell/revoke.procedure';
-import { stopCell } from '../../application/procedures/cell/stop.procedure';
 import { cellNameOf } from '../../domain/cell/cell-name';
 import { parentGoneOf } from '../../domain/cell/parent-gone';
 import { EXIT } from '../../domain/exit-codes';
-import {
-  claimCellSlot,
-  migrateLegacyCellState,
-  releaseCellSlot,
-} from '../fs/cell-slot';
+import { claimCellSlot, releaseCellSlot } from '../fs/cell-slot';
 import {
   printError,
   printJson,
@@ -39,20 +32,9 @@ import {
 } from './output';
 import { promptSelect } from './prompt-select';
 
-const HEADERS = [
-  'id',
-  'project',
-  'state',
-  'active job',
-  'last heartbeat',
-  'pid',
-];
 const FACTORY_HEADERS = ['id', 'name', 'pid', 'repo'];
 const SUPERSEDED_LINE =
   'cell left: the server had already moved its job, nothing handed over';
-const MIGRATED_LINE = 'migrated legacy .factory-local/cell.json to this cell';
-const OFFLINE_LINE =
-  'Cell is offline, no heartbeat will deliver this; check the process or `sf cell revoke`';
 const FORCED_STOP_LINE =
   'cell stopped by a second signal: exiting now, a runner may still be alive';
 const FORCED_STOP_EXIT = 130;
@@ -61,19 +43,6 @@ const PARENT_GONE_EXIT = 1;
 const DAEMON_WATCH_MS = 1_000;
 // A claim long-polls and only sees the abort when it returns, so the exit is forced.
 const PARENT_GONE_GRACE_MS = 1_000;
-
-const orDash = (value: string | null): string => value ?? '-';
-
-const pidText = (pid: number | null): string =>
-  pid === null ? '-' : String(pid);
-
-const heartbeatText = (ms: number | null): string =>
-  ms === null ? '-' : new Date(ms).toISOString();
-
-const drainText = (force: boolean): string =>
-  force
-    ? 'draining (force): current station is aborted at the next heartbeat'
-    : 'draining: leaves after the current station; use --force to abort it now';
 
 const cliError = (message: string): Error => {
   const error = new Error(message);
@@ -162,15 +131,11 @@ const runStart = async (
   const ports = buildContext(name);
   const watch = daemonWatchOf(ports, () => onParentGone(controller));
   try {
-    if (name === cellNameOf(hostname()) && migrateLegacyCellState(cwd, name)) {
-      printLine(MIGRATED_LINE);
-    }
     const result = await settle(() =>
       startCell(ports, {
         repoRoot: cwd,
-        cellName: name,
+        cellId: process.env[CELL_ID_ENV],
         logPath: resolve(cwd, cellLogPathOf(name)),
-        joinToken: process.env[JOIN_TOKEN_ENV],
         lines: linesOf(process.env[CELL_LINES_ENV]),
         relayed: isRelayedOf(process.env),
         project,
@@ -196,89 +161,59 @@ const factoryRows = (cells: FactoryCell[]): string[][] =>
     cell.repoRoot,
   ]);
 
-const runList = async (json: boolean, here: boolean): Promise<number> => {
-  if (here) {
-    const result = await runWithoutToken(listFactoryCells, {}, () =>
-      buildContext(),
-    );
-    if (result.kind !== 'ok') {
-      return reportFailure(result);
-    }
-    if (json) {
-      printJson(result.value);
-    } else {
-      printTable(FACTORY_HEADERS, factoryRows(result.value));
-    }
-    return EXIT.ok;
-  }
-  const result = await run(listCellsWithFactory, {}, 'supervisor');
+const runList = async (json: boolean): Promise<number> => {
+  const result = await runWithoutToken(listFactoryCells, {}, () =>
+    buildContext(),
+  );
   if (result.kind !== 'ok') {
     return reportFailure(result);
   }
   if (json) {
     printJson(result.value);
-    return EXIT.ok;
+  } else {
+    printTable(FACTORY_HEADERS, factoryRows(result.value));
   }
-  printTable(
-    HEADERS,
-    result.value.map((row) => [
-      row.cellId,
-      row.projectId,
-      row.status,
-      orDash(row.activeJobId),
-      heartbeatText(row.lastHeartbeatAt),
-      pidText(row.pid),
-    ]),
-  );
   return EXIT.ok;
 };
 
-const runStopOne = async (
-  id: string,
-  force: boolean,
-  json: boolean,
+const runStop = async (
+  id: string | undefined,
+  options: { all: boolean; json: boolean },
 ): Promise<number> => {
-  const local = await runWithoutToken(listFactoryCells, {}, () =>
-    buildContext(),
-  );
-  if (local.kind !== 'ok') {
-    return reportFailure(local);
+  if (!options.all && id === undefined) {
+    throw cliError('cell id required, or --all');
   }
-  if (local.value.some((cell) => cell.cellId === id)) {
-    const removed = await runWithoutToken(removeFactoryCell, { id }, () =>
-      buildContext(),
-    );
-    if (removed.kind !== 'ok') {
-      return reportFailure(removed);
-    }
-    if (json) {
-      printJson({ cellId: removed.value });
-    } else {
-      printLine(`cell ${removed.value} stopped`);
-    }
-    return EXIT.ok;
-  }
-  const remote = await run(stopCell, { id, force }, 'supervisor');
-  if (remote.kind === 'ok') {
-    printLine(`cell ${remote.value.cellId} ${drainText(remote.value.force)}`);
-    if (remote.value.offline) printError(OFFLINE_LINE);
-    return EXIT.ok;
-  }
-  return reportFailure(remote);
-};
-
-const runStopAll = async (json: boolean): Promise<number> => {
   const listed = await runWithoutToken(listFactoryCells, {}, () =>
     buildContext(),
   );
   if (listed.kind !== 'ok') {
     return reportFailure(listed);
   }
+  if (options.all) {
+    return stopCells(
+      listed.value.map((cell) => cell.cellId),
+      options.json,
+    );
+  }
+  if (id === undefined) {
+    throw cliError('cell id required, or --all');
+  }
+  if (!listed.value.some((cell) => cell.cellId === id)) {
+    printError(`no local cell ${id}`);
+    return EXIT.refused;
+  }
+  return stopCells([id], options.json);
+};
+
+const stopCells = async (
+  cellIds: readonly string[],
+  json: boolean,
+): Promise<number> => {
   const stopped: string[] = [];
-  for (const cell of listed.value) {
+  for (const cellId of cellIds) {
     const removed = await runWithoutToken(
       removeFactoryCell,
-      { id: cell.cellId },
+      { id: cellId },
       () => buildContext(),
     );
     if (removed.kind !== 'ok') {
@@ -294,19 +229,6 @@ const runStopAll = async (json: boolean): Promise<number> => {
     }
   }
   return EXIT.ok;
-};
-
-const runStop = async (
-  id: string | undefined,
-  options: { all: boolean; force: boolean; json: boolean },
-): Promise<number> => {
-  if (options.all) {
-    return runStopAll(options.json);
-  }
-  if (id === undefined) {
-    throw cliError('cell id required, or --all');
-  }
-  return runStopOne(id, options.force, options.json);
 };
 
 const runCreate = async (options: {
@@ -364,19 +286,10 @@ const runRemove = async (id: string, json: boolean): Promise<number> => {
   return EXIT.ok;
 };
 
-const runRevoke = async (id: string, yes: boolean): Promise<number> => {
-  const result = await run(revokeCell, { id, yes }, 'supervisor');
-  if (result.kind === 'ok') {
-    printLine(`revoked ${result.value.cellId}`);
-    return EXIT.ok;
-  }
-  return reportFailure(result);
-};
-
 const startCommand = defineCommand({
   meta: {
     name: 'start',
-    description: 'Enroll this Cell if needed and run its loop',
+    description: 'Run this Cell loop (the Factory daemon starts it)',
   },
   args: {
     name: {
@@ -399,22 +312,15 @@ const startCommand = defineCommand({
 });
 
 const listCommand = defineCommand({
-  meta: { name: 'list', description: 'Show registered Cells' },
+  meta: {
+    name: 'list',
+    description: 'Show the Cells of the local Factory daemon',
+  },
   args: {
     json: { type: 'boolean', default: false },
-    here: {
-      type: 'boolean',
-      default: false,
-      description: 'Show only the Cells the local Factory daemon runs',
-    },
-    local: {
-      type: 'boolean',
-      default: false,
-      description: 'Alias of --here',
-    },
   },
   run: async ({ args }) => {
-    process.exitCode = await runList(args.json, args.here || args.local);
+    process.exitCode = await runList(args.json);
   },
 });
 
@@ -438,8 +344,7 @@ const createCommand = defineCommand({
 const stopCommand = defineCommand({
   meta: {
     name: 'stop',
-    description:
-      'Stop a local Cell through the Factory daemon, otherwise drain it via HQ',
+    description: 'Stop a local Cell through the Factory daemon',
   },
   args: {
     slot: { type: 'positional', required: false, description: 'Cell id' },
@@ -448,11 +353,6 @@ const stopCommand = defineCommand({
       type: 'boolean',
       default: false,
       description: 'Stop every Cell of the local Factory daemon',
-    },
-    force: {
-      type: 'boolean',
-      default: false,
-      description: 'Abort the running station and hand its Job over now',
     },
     json: { type: 'boolean', default: false },
   },
@@ -472,21 +372,6 @@ const removeCommand = defineCommand({
   },
 });
 
-const revokeCommand = defineCommand({
-  meta: { name: 'revoke', description: 'Revoke a Cell (needs --yes)' },
-  args: {
-    id: { type: 'string', required: true, description: 'Cell id' },
-    yes: {
-      type: 'boolean',
-      default: false,
-      description: 'Confirm the revoke',
-    },
-  },
-  run: async ({ args }) => {
-    process.exitCode = await runRevoke(args.id, args.yes);
-  },
-});
-
 export const cellCommand = defineCommand({
   meta: {
     name: 'cell',
@@ -496,7 +381,6 @@ export const cellCommand = defineCommand({
     start: startCommand,
     list: listCommand,
     stop: stopCommand,
-    revoke: revokeCommand,
     create: createCommand,
     rm: removeCommand,
   },

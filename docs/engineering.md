@@ -10,7 +10,7 @@ Source of truth for code shape, layering, transactions, and testing in `apps/fac
 2. **Standalone Backend Isolation**:
    - Scope is strictly limited to `apps/factory/`. Do **NOT** modify, wire, or connect other apps or packages from here.
    - `apps/factory` owns all of its domain, SQLite schema, contracts, procedures, and Hono adapters inside `apps/factory/src/`.
-   - All Cell interactions (`enroll`, `hello`, `claims`, `heartbeats`, `jobs/:id/transitions`, `incidents/:id/resolve`) are implemented purely as backend HTTP endpoints and verified via black-box `app.request()` HTTP tests inside `apps/factory/test/`.
+   - All Cell interactions (`claims`, `heartbeats`, `jobs/:id/transitions`, `incidents/:id/resolve`) are implemented purely as backend HTTP endpoints and verified via black-box `app.request()` HTTP tests inside `apps/factory/test/`.
 3. **Catalog dependencies only**: Pin third-party packages via `catalog:` in root `package.json` (`workspaces.catalog`) (`hono`, `drizzle-orm`, `drizzle-kit`, `zod`, `yaml`, `vitest`, `@types/bun`, `@types/node`, `typescript`, `eslint`).
 4. **Zero GitHub coupling**: Server never calls `gh` CLI, GitHub REST/GraphQL APIs, or GitHub webhooks. Cells push branches, publish PRs on `deliver`, and report git refs/commits back via REST.
 
@@ -151,7 +151,7 @@ Shared style rules (`coding-no-barrel-export`, `coding-export-order`, `coding-mi
    - Handlers receive `(input, ctx)` where `ctx` is `TransportContext` (`db`, `clock`, `auth`, `claimWaiters`, `transitionBus`, `signal`, plus `principal` on authenticated procedures).
    - Procedures never touch Hono `Context`, HTTP headers, or status helpers—they return `{ code: 200 as const, ... }` or throw `BaseError` subclasses.
 4. **Thin Hono routes (`src/adapters/hono/routes/<domain>.route.ts`)**:
-   - Routes only mount `honoAdapter(procedure)`: e.g. `.post('/enroll', honoAdapter(enrollCellProcedure))`.
+   - Routes only mount `honoAdapter(procedure)`: e.g. `.post('/claims', honoAdapter(claimJobProcedure))`.
    - Zero `try/catch` in route files or procedures. Centralized `errorHandler` (`.onError`) and `notFoundHandler` (`.notFound`) format all `BaseError` and `HTTPException` instances into `{ code, type, message }`.
    - Only `GET /api/v1/stream` (SSE) uses Hono's `streamSSE` directly in `stream.route.ts` after verifying `supervisor:read` via `ctx.auth`.
 5. **No module-level mutable state**:
@@ -168,7 +168,7 @@ Shared style rules (`coding-no-barrel-export`, `coding-export-order`, `coding-mi
    - `PRAGMA foreign_keys = ON;`
    - `PRAGMA busy_timeout = 5000;`
 2. **`immediateTx(db, fn)` for all mutating state transitions**:
-   - Every claim (`/cells/claims`), job transition (`/jobs/{id}/transitions`), queue import/action (`/queue/import`, `/queue/actions`), order/plan transition, cell hello/revoke, and incident resolution MUST execute inside a serialized `BEGIN IMMEDIATE` transaction (`db.transaction(..., { behavior: 'immediate' })`).
+   - Every claim (`/cells/claims`), job transition (`/jobs/{id}/transitions`), queue import/action (`/queue/import`, `/queue/actions`), order/plan transition, and incident resolution MUST execute inside a serialized `BEGIN IMMEDIATE` transaction (`db.transaction(..., { behavior: 'immediate' })`).
 3. **Database-enforced single-Cell exclusivity**:
    - Migrations MUST create the three partial unique indexes from [`factory.md`](./factory.md) §7:
      - `idx_jobs_one_active_per_order ON jobs(order_id) WHERE order_id IS NOT NULL AND status IN ('claimed', 'running')`
@@ -192,7 +192,7 @@ Shared style rules (`coding-no-barrel-export`, `coding-export-order`, `coding-mi
 4. **Worktree Check (`worktree_missing` -> Scratch Reset)**: When a Cell reports `action: 'worktree_missing'` on `stepIndex > 0` (`workspaceMode: 'reuse'`), the server increments `worktree_resets` (blocking with `worktree_reset_limit` Incident if `> 2`), rewinds `current_step_index = 0` and all `order_steps`, keeps `pinned_cell_id` and `active_cell_id` locked to the Cell, and returns a fresh Step 0 `Job` (`workspaceMode: 'fresh'`, `epoch + 1`) inline as `nextJob`.
 5. **Dynamic Step Materialization**: `order_steps[0..N-1]` are materialized from `lineSnapshot.stations` sent by the Cell on Step 0 `action: 'start'`.
 6. **Parent Stacking & `stale_base`**: A `WorkOrder` has at most 1 parent (`parent_order_id`). When parent `A` delivers a new `head_commit_sha` that differs from a started/delivered child `B`'s `base_commit_sha`, child `B` is marked `stale_base = 1`, transitioned to `'blocked'`, and an Incident (`reason = 'parent_rebased'`) is opened.
-7. **Safe Tokens**: Raw tokens (`sf_sup_`, `sf_join_`, `sf_cell_`) have 256 bits of CSPRNG entropy, are hashed with SHA-256 before DB storage, compared via `crypto.timingSafeEqual`, enforce `expires_at` and `revoked_at`, and support 60s rotation grace windows via `rotated_from_id`.
+7. **Safe Tokens**: Raw tokens (`sf_sup_`, `sf_join_`, `sf_factory_`) have 256 bits of CSPRNG entropy, are hashed with SHA-256 before DB storage, compared via `crypto.timingSafeEqual`, enforce `expires_at` and `revoked_at`, and support 60s rotation grace windows via `rotated_from_id`.
 
 ---
 

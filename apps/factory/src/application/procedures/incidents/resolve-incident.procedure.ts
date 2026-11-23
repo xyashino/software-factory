@@ -6,9 +6,10 @@ import { incidents } from '../../../db/schema/incidents';
 import { jobs } from '../../../db/schema/jobs';
 import { orderSteps } from '../../../db/schema/orders';
 import {
-  asCellId,
+  asFactoryId,
   asIncidentId,
   type CellId,
+  type FactoryId,
   type IncidentId,
   type OrderId,
 } from '../../../domain/common/brand';
@@ -24,8 +25,11 @@ import {
   NotFound,
   StaleLeaseEpoch,
 } from '../../core/error-handling';
-import { anyScopedProcedure } from '../../core/procedure';
-import type { Principal } from '../../ports/auth.port';
+import { cellIdOf, factoryIdOf, touchFactory } from '../../core/identity';
+import {
+  anyScopedProcedure,
+  type AuthenticatedContext,
+} from '../../core/procedure';
 import { toIncidentDto } from '../../orders/incident-views';
 import {
   toIncidentSnapshot,
@@ -35,7 +39,6 @@ import {
   flushTransitions,
   orderTransition,
   publishCommitted,
-  releaseCell,
   requireOrder,
   settle,
   updateWorkOrder,
@@ -51,18 +54,26 @@ type ResolveBody = z.infer<typeof resolveIncidentContract.in.body>;
 type IncidentRow = typeof incidents.$inferSelect;
 type JobRow = typeof jobs.$inferSelect;
 type StepRow = typeof orderSteps.$inferSelect;
-type MechanicResolver = { kind: 'mechanic'; cellId: CellId; epoch: number };
+type MechanicResolver = {
+  kind: 'mechanic';
+  cellId: CellId;
+  factoryId: FactoryId;
+  epoch: number;
+};
 type SupervisorResolver = { kind: 'supervisor'; tokenId: string };
 type Resolver = MechanicResolver | SupervisorResolver;
 
-const resolverOf = (principal: Principal, body: ResolveBody): Resolver => {
-  if (principal.scopes.includes('supervisor:write'))
-    return { kind: 'supervisor', tokenId: principal.tokenId };
-  if (principal.cellId === null)
-    throw new Forbidden('Token is not bound to a cell');
+const resolverOf = (ctx: AuthenticatedContext, body: ResolveBody): Resolver => {
+  if (ctx.principal.scopes.includes('supervisor:write'))
+    return { kind: 'supervisor', tokenId: ctx.principal.tokenId };
   if (body.epoch === undefined)
     throw new BadRequest('epoch is required for a cell resolution');
-  return { kind: 'mechanic', cellId: principal.cellId, epoch: body.epoch };
+  return {
+    kind: 'mechanic',
+    cellId: cellIdOf(ctx),
+    factoryId: factoryIdOf(ctx),
+    epoch: body.epoch,
+  };
 };
 
 const actorOf = (resolver: Resolver): Actor =>
@@ -117,7 +128,7 @@ const requireMechanicLease = (
       ),
     )
     .get();
-  if (job === undefined || job.cellId !== resolver.cellId)
+  if (job === undefined || job.claimedByCellId !== resolver.cellId)
     throw new Forbidden(
       `Cell ${resolver.cellId} holds no mechanic lease for incident ${incidentId}`,
     );
@@ -151,8 +162,6 @@ const closeMechanicJobs = (
       .set({ status, finishedAt: now })
       .where(eq(jobs.jobId, job.jobId))
       .run();
-    if (job.cellId !== null && job.status !== 'ready')
-      releaseCell(tx, job.cellId);
     log.push(
       orderTransition({
         projectId: job.projectId,
@@ -181,11 +190,13 @@ const persistOrder = (
     {
       state: next.state,
       currentStepIndex: next.currentStepIndex,
-      unavailableLineCellsJson: next.unavailableLineCells,
+      unavailableLineFactoriesJson: next.unavailableLineFactories,
       staleBase: next.staleBase,
       worktreeResets: next.worktreeResets,
-      pinnedCellId:
-        next.pinnedCellId === null ? null : asCellId(next.pinnedCellId),
+      pinnedFactoryId:
+        next.pinnedFactoryId === null
+          ? null
+          : asFactoryId(next.pinnedFactoryId),
     },
     now,
   );
@@ -266,13 +277,15 @@ const persistIncident = (
 
 export const resolveIncidentProcedure = anyScopedProcedure([
   'supervisor:write',
-  'cell:worker',
+  'factory:worker',
 ])(resolveIncidentContract)((input, ctx) => {
   const now = ctx.clock.now();
-  const resolver = resolverOf(ctx.principal, input.body);
+  const resolver = resolverOf(ctx, input.body);
   const actor = actorOf(resolver);
   const outcome = settle(() =>
     immediateTx(ctx.db, (tx) => {
+      if (resolver.kind === 'mechanic')
+        touchFactory(tx, resolver.factoryId, now);
       const incident = requireIncident(tx, input.params.id);
       const order = requireOrder(tx, incident.orderId);
       const steps = stepsOf(tx, order.orderId);

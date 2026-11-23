@@ -24,7 +24,13 @@ interface Machine {
   serverUp: boolean;
   secret: string | null;
   projects: string[];
-  cells: { cellId: string; name: string; repoRoot: string; pid: number }[];
+  cells: {
+    cellId: string;
+    name: string;
+    projectId: string;
+    repoRoot: string;
+    pid: number;
+  }[];
   gitMissing: boolean;
   actions: string[];
 }
@@ -70,7 +76,7 @@ const arrange = (overrides: Partial<Machine> = {}): Arrangement => {
           return {
             code: 201,
             tokenId: 'tok-1',
-            kind: 'cell_join',
+            kind: 'factory_join',
             token: `join-${name}`,
             scopes: [],
             expiresAt: null,
@@ -144,8 +150,9 @@ const arrange = (overrides: Partial<Machine> = {}): Arrangement => {
       post: async (_route, body) => {
         const { name } = body as { name: string };
         const cell = {
-          cellId: `id-${name}`,
+          cellId: `cell-${name}`,
           name,
+          projectId: 'proj-1',
           repoRoot: REPO,
           pid: machine.cells.length + 1,
         };

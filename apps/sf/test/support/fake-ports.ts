@@ -226,7 +226,6 @@ export const createFakePorts = (options: FakeOptions = {}): FakePorts => {
         time += ms;
       },
     },
-    cellState: { read: async () => null, write: unused },
     factoryDaemon: {
       get: async (route) => recordDaemon({ method: 'GET', route }),
       post: async (route, body) =>

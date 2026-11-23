@@ -44,7 +44,6 @@ const BARE_GROUPS: string[][] = [
 
 const MISSING_FLAGS: string[][] = [
   ['cell', 'stop'],
-  ['cell', 'revoke'],
   ['token', 'create'],
 ];
 

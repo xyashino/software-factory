@@ -11,7 +11,6 @@ export const mintAdminToken = (db: Db, clock: ClockPort): string =>
       kind: 'supervisor',
       name: 'admin',
       scopes: DEFAULT_SCOPES.supervisor,
-      cellId: null,
       rotatedFromId: null,
       expiresAt: null,
       now: clock.now(),

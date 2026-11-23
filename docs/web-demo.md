@@ -8,9 +8,8 @@ It is a demo UI: one process, read pages, two write actions, no client JavaScrip
 
 | Path | Kind | Server endpoint |
 | :--- | :--- | :-------------- |
-| `/` | read | `GET /api/v1/cells`, `GET /api/v1/work-orders`, `GET /api/v1/incidents` (counts) |
-| `/cells` | read | `GET /api/v1/cells` |
-| `/cells/[cellId]` | read (preview) | `GET /api/v1/cells`, filtered by `cellId` (no `GET /cells/{id}` exists) |
+| `/` | read | `GET /api/v1/factories`, `GET /api/v1/work-orders`, `GET /api/v1/incidents` (counts) |
+| `/factories` | read | `GET /api/v1/factories` (online state and projects per Factory; Cells are not stored in HQ) |
 | `/work-orders` | read | `GET /api/v1/work-orders?state=` |
 | `/work-orders/[id]` | read + write | `GET /api/v1/work-orders/{id}`; forms below |
 | `/incidents` | read | `GET /api/v1/incidents` |
@@ -74,4 +73,4 @@ apps/web-demo/
 
 ## 6. Out of scope
 
-Hard delete of Work orders, Cell revoke, pause/unpause, reset-to-scratch, incident resolution, SSE stream, visitor login, caching, styling framework, i18n, deployment.
+Hard delete of Work orders, pause/unpause, reset-to-scratch, incident resolution, SSE stream, visitor login, caching, styling framework, i18n, deployment.

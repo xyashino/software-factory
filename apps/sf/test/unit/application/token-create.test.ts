@@ -8,9 +8,9 @@ const JOIN_TOKEN = 'sf_join_0123456789abcdef';
 const ISSUED = {
   code: 201,
   tokenId: 'tok_1',
-  kind: 'cell_join',
+  kind: 'factory_join',
   token: JOIN_TOKEN,
-  scopes: ['cell:join'],
+  scopes: ['factory:enroll'],
   expiresAt: null,
 };
 
@@ -22,7 +22,7 @@ describe('token create', () => {
     // Act
     const result = await runProcedure(
       createToken,
-      { kind: 'cell_join', name: 'worker-1' },
+      { kind: 'factory_join', name: 'worker-1' },
       fake,
     );
 
@@ -32,7 +32,7 @@ describe('token create', () => {
       {
         method: 'POST',
         route: '/api/v1/tokens',
-        body: { kind: 'cell_join', name: 'worker-1', expiresAt: null },
+        body: { kind: 'factory_join', name: 'worker-1', expiresAt: null },
         token: 'secret-value',
       },
     ]);
@@ -45,7 +45,7 @@ describe('token create', () => {
     // Act
     const attempt = runProcedure(
       createToken,
-      { kind: 'cell_join', name: 'worker\n1' },
+      { kind: 'factory_join', name: 'worker\n1' },
       fake,
     );
 
@@ -61,7 +61,7 @@ describe('token create', () => {
     // Act
     const attempt = runProcedure(
       createToken,
-      { kind: 'cell_join', name: 'worker-1' },
+      { kind: 'factory_join', name: 'worker-1' },
       fake,
     );
 

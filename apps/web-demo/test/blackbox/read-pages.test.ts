@@ -15,17 +15,12 @@ const LOCAL_PAGES = /^http:\/\/127\.0\.0\.1[:/]/;
 
 const factory = setupServer(http.all(LOCAL_PAGES, () => passthrough()));
 
-const cell = {
-  cellId: 'cell-1',
-  projectId: 'project-1',
-  name: 'alpha',
-  status: 'busy',
-  allowedLines: ['main'],
-  runners: ['claude'],
-  activeJobId: 'job-7',
-  lastHeartbeatAt: Date.UTC(2026, 10, 19, 11, 59, 0),
-  leaseExpiresAt: Date.UTC(2026, 10, 19, 12, 5, 0),
-  factoryId: null,
+const laptop = {
+  factoryId: 'factory-1',
+  name: 'laptop',
+  lastSeenAt: Date.UTC(2026, 10, 19, 11, 59, 0),
+  online: true,
+  projects: [{ projectId: 'project-1', desired: 2, running: 1 }],
 };
 
 const order = {
@@ -40,7 +35,7 @@ const order = {
   branch: 'factory/add-login',
   staleBase: false,
   currentStepIndex: 2,
-  pinnedCellId: 'cell-1',
+  pinnedFactoryId: 'factory-1',
   activeCellId: 'cell-1',
   activeJobId: 'job-7',
   version: 3,
@@ -61,8 +56,8 @@ const incident = {
 };
 
 const happyHandlers = [
-  http.get(`${FACTORY_URL}/api/v1/cells`, () =>
-    HttpResponse.json({ code: 200, cells: [cell] }),
+  http.get(`${FACTORY_URL}/api/v1/factories`, () =>
+    HttpResponse.json({ code: 200, factories: [laptop] }),
   ),
   http.get(`${FACTORY_URL}/api/v1/work-orders`, () =>
     HttpResponse.json({ code: 200, items: [order] }),
@@ -143,8 +138,7 @@ describe('read pages', () => {
     factory.use(...happyHandlers);
     const paths = [
       '/',
-      '/cells',
-      '/cells/cell-1',
+      '/factories',
       '/work-orders',
       '/work-orders/order-1',
       '/incidents',
@@ -154,9 +148,7 @@ describe('read pages', () => {
     const pages = await Promise.all(paths.map(readBody));
 
     // Assert
-    expect(pages.map((page) => page.status)).toEqual([
-      200, 200, 200, 200, 200, 200,
-    ]);
+    expect(pages.map((page) => page.status)).toEqual([200, 200, 200, 200, 200]);
     const readOnlyPages = pages.filter(
       (_, index) => paths[index] !== '/work-orders/order-1',
     );
@@ -165,27 +157,16 @@ describe('read pages', () => {
     );
   });
 
-  it('lists the lease expiry of a busy cell', async () => {
+  it('lists the projects each factory reports as desired and running', async () => {
     // Arrange
     factory.use(...happyHandlers);
 
     // Act
-    const page = await readBody('/cells');
+    const page = await readBody('/factories');
 
     // Assert
-    expect(page.body).toContain('job-7');
-    expect(page.body).toContain('2026-11-19T12:05:00.000Z');
-  });
-
-  it('answers 404 for a cell the factory does not have', async () => {
-    // Arrange
-    factory.use(...happyHandlers);
-
-    // Act
-    const page = await readBody('/cells/unknown');
-
-    // Assert
-    expect(page.status).toBe(404);
+    expect(page.body).toContain('laptop');
+    expect(page.body).toContain('project-1 2 / 1');
   });
 
   it('answers 400 for an unknown state filter without calling the factory', async () => {
@@ -209,13 +190,13 @@ describe('read pages', () => {
   it('answers 503 when the factory fails', async () => {
     // Arrange
     factory.use(
-      http.get(`${FACTORY_URL}/api/v1/cells`, () =>
+      http.get(`${FACTORY_URL}/api/v1/factories`, () =>
         HttpResponse.json({ type: 'internal' }, { status: 500 }),
       ),
     );
 
     // Act
-    const page = await readBody('/cells');
+    const page = await readBody('/factories');
 
     // Assert
     expect(page.status).toBe(503);
@@ -227,8 +208,7 @@ describe('read pages', () => {
     factory.use(...happyHandlers);
     const paths = [
       '/',
-      '/cells',
-      '/cells/cell-1',
+      '/factories',
       '/work-orders',
       '/work-orders/order-1',
       '/incidents',

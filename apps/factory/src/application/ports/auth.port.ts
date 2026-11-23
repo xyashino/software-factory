@@ -1,11 +1,9 @@
-import type { CellId, TokenId } from '../../domain/common/brand';
+import type { FactoryId, TokenId } from '../../domain/common/brand';
 
 export const TOKEN_SCOPES = [
   'supervisor:read',
   'supervisor:write',
   'admin:tokens',
-  'cell:enroll',
-  'cell:worker',
   'factory:enroll',
   'factory:worker',
 ] as const;
@@ -14,7 +12,7 @@ export type TokenScope = (typeof TOKEN_SCOPES)[number];
 
 export type Principal = {
   tokenId: TokenId;
-  cellId: CellId | null;
+  factoryId: FactoryId | null;
   scopes: readonly TokenScope[];
 };
 

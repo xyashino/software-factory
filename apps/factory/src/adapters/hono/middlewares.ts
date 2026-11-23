@@ -1,5 +1,6 @@
 import { createMiddleware } from 'hono/factory';
 import { PayloadTooLarge } from '../../application/core/error-handling';
+import { asCellId, type CellId } from '../../domain/common/brand';
 import type { AppEnv, CreateTransport } from './types';
 
 const bearerOf = (header: string | undefined): string | null => {
@@ -27,12 +28,18 @@ export const payloadLimit = (maxBytes: number) =>
     await next();
   });
 
+const cellIdOf = (header: string | undefined): CellId | null => {
+  const value = header?.trim() ?? '';
+  return value === '' ? null : asCellId(value);
+};
+
 export const transportMiddleware = (createTransport: CreateTransport) =>
   createMiddleware<AppEnv>(async (c, next) => {
     c.set(
       'transport',
       createTransport({
         bearer: bearerOf(c.req.header('authorization')),
+        cellId: cellIdOf(c.req.header('x-cell-id')),
         signal: c.req.raw.signal,
         remoteAddress: c.env?.remoteAddress ?? null,
       }),

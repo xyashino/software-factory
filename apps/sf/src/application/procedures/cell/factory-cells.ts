@@ -1,12 +1,12 @@
 import { z } from 'zod';
 import { define, type Ports } from '../../core/procedure';
-import { type CellRow, listCells } from './list.procedure';
 
 const EmptySchema = z.object({}).strict();
 
 const FactoryCellSchema = z.object({
   cellId: z.string().min(1),
   name: z.string().min(1),
+  projectId: z.string().min(1),
   repoRoot: z.string().min(1),
   pid: z.number().int().positive(),
 });
@@ -28,12 +28,9 @@ const CELLS_ROUTE = '/cells';
 export interface FactoryCell {
   cellId: string;
   name: string;
+  projectId: string;
   repoRoot: string;
   pid: number;
-}
-
-export interface CellWithPidRow extends CellRow {
-  pid: number | null;
 }
 
 const runningCellsOf = async (ctx: Ports): Promise<FactoryCell[]> =>
@@ -60,15 +57,4 @@ export const removeFactoryCell = define({ kind: 'supervisor' })(
       ),
     );
   return reply.cellId;
-});
-
-export const listCellsWithFactory = define({ kind: 'supervisor' })(EmptySchema)<
-  CellWithPidRow[]
->(async (_input, ctx) => {
-  const running = await runningCellsOf(ctx);
-  const { rows } = await listCells.execute({}, ctx);
-  return rows.map((row) => ({
-    ...row,
-    pid: running.find((cell) => cell.name === row.name)?.pid ?? null,
-  }));
 });

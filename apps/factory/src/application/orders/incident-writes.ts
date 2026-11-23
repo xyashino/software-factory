@@ -5,7 +5,7 @@ import { orderSteps } from '../../db/schema/orders';
 import {
   asIncidentId,
   asJobId,
-  type CellId,
+  type FactoryId,
   type IncidentId,
   type JobId,
   type OrderId,
@@ -51,8 +51,8 @@ export const toWorkOrderSnapshot = (
   state: order.state,
   currentStepIndex: order.currentStepIndex,
   mechanicRuns: order.mechanicRuns,
-  pinnedCellId: order.pinnedCellId,
-  unavailableLineCells: order.unavailableLineCellsJson,
+  pinnedFactoryId: order.pinnedFactoryId,
+  unavailableLineFactories: order.unavailableLineFactoriesJson,
   staleBase: order.staleBase,
   worktreeResets: order.worktreeResets,
   steps: toOrderSteps(steps),
@@ -94,7 +94,7 @@ export const insertMechanicJob = (
   order: WorkOrderRow,
   input: {
     incidentId: IncidentId;
-    cellId: CellId;
+    factoryId: FactoryId;
     repoUrl: string;
     reason: string;
     detail: string;
@@ -119,7 +119,7 @@ export const insertMechanicJob = (
         lineName: order.lineName,
         incident: { reason: input.reason, detail: input.detail },
       },
-      cellId: input.cellId,
+      claimedByFactoryId: input.factoryId,
       epoch: 0,
       createdAt: now,
     })

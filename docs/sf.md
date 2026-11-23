@@ -26,8 +26,8 @@ sf server start
 sf server token create --save             # .factory-local/supervisor.token
 sf project add my-project --repo <url>
 sf web start                              # http://127.0.0.1:4321
-sf token create --kind cell_join --name worker-1
-FACTORY_JOIN_TOKEN=<token> sf cell start --name worker-1
+sf factory connect <hq-url> --token <factory_join>        # once per PC
+sf cell create --repo ~/code/my-project                   # Cell starts under the Factory daemon
 sf todos import && sf queue
 sf web stop && sf server stop
 ```
@@ -43,15 +43,16 @@ especially §3 (Cell lifecycle) and §11 (agent reporting). Operator CLI spec:
 | init | `sf init` | Supervisor, in a repo | none (writes `.factory/`, `.gitignore`) |
 | project | `sf project add <id> --repo <url>` | Supervisor | `POST /api/v1/projects` |
 | project | `sf project ls` | Supervisor | `GET /api/v1/projects` |
-| token | `sf token create --kind cell_join --name <n>` | Supervisor | `POST /api/v1/tokens` |
+| token | `sf token create --kind factory_join --name <n>` | Supervisor | `POST /api/v1/tokens` |
 | server | `sf server start` | Supervisor | none (spawns the embedded server) |
 | server | `sf server stop` | Supervisor | none (signals the pid file) |
 | server | `sf server token create [--save]` | Supervisor | none (admin path in server) |
 | web | `sf web start \| stop \| status` | Supervisor | none (runs the installed web UI, pid in `web.pid`) |
-| cell | `sf cell start [--name <slug>]` | Supervisor, on a Cell machine | `enroll` once, then `hello`, `claims`, `heartbeats`, `jobs/{id}/transitions` |
-| cell | `sf cell list` | Supervisor | `GET /api/v1/cells` |
-| cell | `sf cell stop --id <id>` | Supervisor | drain (§3) |
-| cell | `sf cell revoke --id <id>` | Supervisor | `DELETE /api/v1/cells/{id}` |
+| cell | `sf cell create [--repo <path>]` | Supervisor, on a Cell machine | Factory daemon `POST /cells`, then `claims`, `heartbeats`, `jobs/{id}/transitions` through its relay |
+| cell | `sf cell start [--name <slug>]` | Factory daemon child only | `claims`, `heartbeats`, `jobs/{id}/transitions` through the relay |
+| cell | `sf cell list` | Supervisor | Factory daemon `GET /cells` (local only) |
+| cell | `sf cell stop <id> \| --all` | Supervisor | Factory daemon `DELETE /cells/{id}` (kill, then HQ gone) |
+| cell | `sf cell rm <id>` | Supervisor | Factory daemon `DELETE /cells/{id}` |
 | todos | `sf todos import` | Supervisor | `POST /api/v1/queue/import` |
 | todos | `sf todos export` | Supervisor | `GET /api/v1/queue/export` |
 | queue | `sf queue` | Supervisor | `GET /api/v1/work-orders`, `GET /api/v1/order-plans` |
@@ -99,7 +100,7 @@ apps/sf/
 │   │   │                           # process.port, operator-endpoint.port, token-store.port
 │   │   └── procedures/
 │   │       ├── server/             # start, stop, token-create
-│   │       ├── cell/               # enroll, hello, claim-loop, run-job, drain, revoke, list
+│   │       ├── cell/               # start, claim-loop, run-job, leave, factory-cells
 │   │       ├── todos/              # import, export
 │   │       ├── queue/              # list, actions
 │   │       ├── incidents/          # list, resolve
@@ -138,14 +139,13 @@ Rules carried over from `apps/factory`:
 
 The Cell is the only process that talks to the server. Agents never do.
 
-1. **Enroll (once).** `sf cell start` reads `.factory/config.json` for `project` and
-   `FACTORY_JOIN_TOKEN` (`sf_join_`). It calls `POST /api/v1/cells/enroll` and stores the returned
-   `sf_cell_` token in `.factory-local/cell.json` (mode `0600`). The join token is not used again.
-2. **Hello.** `POST /api/v1/cells/hello` with `projectId`, `allowedLines` (from the local
-   `.factory/lines/`), `runners`, and `localWorktrees`. If a Job is still held, the reply carries
-   `resumedJob`.
-3. **Claim loop.** `POST /api/v1/cells/claims` with `waitMs: 25000`. An empty reply means no work;
-   loop again.
+1. **Identity.** The Factory daemon gives the Cell its id (`FACTORY_CELL_ID`, `cell-<8 hex>`) and a
+   local bearer (`FACTORY_TOKEN`). There is no enroll and no session file. HQ never stores a Cell.
+2. **Project and lines.** `sf cell start` reads `.factory/config.json` for `project` and
+   `.factory/lines/` for `allowedLines` (filtered by `CELL_LINES`).
+3. **Claim loop.** `POST {relay}/api/v1/cells/claims` with `{ waitMs: 25000, projectId,
+   allowedLines, runners }`. The relay adds the Factory credential and `x-cell-id`. An empty reply
+   means no work; loop again.
 4. **Check the Line.** If `.factory/lines/<line>.yml` is missing or invalid, send
    `transitions { action: line_unavailable }`. The reply may carry the next Job.
 5. **Check the worktree.** For `stepIndex > 0`, check `<repo>/.worktrees/<slug>/` and the prior
@@ -155,8 +155,8 @@ The Cell is the only process that talks to the server. Agents never do.
 7. **Run the station.** Open the per-job loopback endpoint (see §5), set `FACTORY_OPERATOR_URL` and
    `FACTORY_CYCLE_TOKEN`, start the runner (one of the six in §8), and write
    `.cell/<step-id>/state.json`.
-8. **Heartbeat.** Every 10 s, `POST /api/v1/cells/heartbeats`. Read `signals` in the reply, such as
-   `abort`. If 4 heartbeats in a row fail (45 s), abort the runner. The lease is 60 s.
+8. **Heartbeat.** Every 10 s, `POST {relay}/api/v1/cells/heartbeats`. Read `signals` in the reply, such
+   as `abort`. If 4 heartbeats in a row fail (45 s), abort the runner. The lease is 60 s.
 9. **Finish the station.** The agent's `done`, `verdict`, or `block` (§5) reaches the Cell. The Cell
    checks local facts (required files, git state), then sends the matching transition. The reply
    carries `nextJob`, so the same Cell keeps going without another claim.
@@ -165,15 +165,11 @@ The Cell is the only process that talks to the server. Agents never do.
 11. **Failure.** If a Cell crashes, its lease expires and the Work order returns to `queued`. The same
     Cell resumes its warm worktree on reconnect, or another Cell takes over at the same step.
 
-### Stop and revoke
+### Stop
 
-- `sf cell stop --id` **drains**. The Cell takes no new claims. It finishes or hands over its
-  current Job, then exits.
-- `sf cell revoke --id` calls `DELETE`. The server unpins the Cell's orders and releases its Job.
-  Use it only for a Cell you will not bring back.
-
-Gap: the server has no drain or leave endpoint. Until one exists, `stop` can only finish the current
-Job or let the lease expire. See §8.
+- `sf cell stop <id>` kills the Cell process (SIGTERM, then SIGKILL) and only then tells HQ the
+  Cell is gone. HQ requeues its Job at once, or when the lease expires if HQ is unreachable.
+- There is no drain and no revoke. A stopped Cell leaves no row in HQ.
 
 ## 4. Operator endpoint
 
@@ -234,8 +230,8 @@ Decided:
 
 Open:
 
-1. **Drain.** The server needs a `leave` or `drain` endpoint, so `cell stop` can hand over a Job
-   cleanly instead of waiting for the lease to expire.
+1. **Drain removal.** `leave` and the drain signal are dead code (HQ no longer has them). Removal is
+   the `cell-drain-removal` todo.
 2. **Operator verbs.** The verbs in [`operator.md`](./operator.md) §3 are the target. `answer`, `context`
    and `tell` stay open, as in [`factory.md` §11.6](./factory.md).
 

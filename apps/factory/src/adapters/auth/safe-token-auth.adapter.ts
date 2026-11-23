@@ -9,7 +9,7 @@ import {
 } from '../../application/ports/auth.port';
 import type { ClockPort } from '../../application/ports/clock.port';
 import { hashToken } from '../../application/tokens/token-hash';
-import { asCellId, asTokenId } from '../../domain/common/brand';
+import { asFactoryId, asTokenId } from '../../domain/common/brand';
 import { isExpired } from '../../domain/common/time';
 
 const isTokenScope = (value: string): value is TokenScope =>
@@ -28,7 +28,7 @@ export const createSafeTokenAuth = (db: Db, clock: ClockPort): AuthPort => ({
       return Promise.resolve(null);
     const principal: Principal = {
       tokenId: asTokenId(row.tokenId),
-      cellId: row.cellId === null ? null : asCellId(row.cellId),
+      factoryId: row.factoryId === null ? null : asFactoryId(row.factoryId),
       scopes: row.scopesJson.filter(isTokenScope),
     };
     return Promise.resolve(principal);

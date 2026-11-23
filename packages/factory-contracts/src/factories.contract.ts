@@ -1,11 +1,18 @@
 import { z } from 'zod';
 import { idParams, titleSchema } from '@repo/zod-contract-kit/fields';
 
+const factoryProjectDto = z.object({
+  projectId: z.string(),
+  desired: z.number().int().min(0),
+  running: z.number().int().min(0),
+});
+
 const factoryDto = z.object({
   factoryId: z.string(),
   name: z.string(),
   lastSeenAt: z.number().int(),
   online: z.boolean(),
+  projects: z.array(factoryProjectDto),
 });
 
 export const enrollFactoryContract = {
@@ -23,6 +30,9 @@ export const enrollFactoryContract = {
 };
 
 export const heartbeatFactoryContract = {
+  in: {
+    body: z.object({ projects: z.array(factoryProjectDto) }),
+  },
   out: {
     200: z.object({ code: z.literal(200), factoryId: z.string() }),
   },

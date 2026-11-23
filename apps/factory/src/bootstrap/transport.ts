@@ -18,6 +18,7 @@ export const createTransport =
   (request) => ({
     ...deps,
     bearer: request.bearer,
+    cellId: request.cellId,
     signal: request.signal,
     remoteAddress: request.remoteAddress,
   });

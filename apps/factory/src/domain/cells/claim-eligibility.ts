@@ -1,13 +1,19 @@
-import type { CellId, JobId, OrderId, ProjectId } from '../common/brand';
+import type {
+  CellId,
+  FactoryId,
+  JobId,
+  OrderId,
+  ProjectId,
+} from '../common/brand';
 import type { Priority, WorkOrderState } from '../orders/order-state';
 
 const PRIORITY_RANK: Record<Priority, number> = { high: 0, medium: 1, low: 2 };
 
 export type ClaimCell = {
   cellId: CellId;
+  factoryId: FactoryId;
   projectId: ProjectId;
   allowedLines: string[];
-  localWorktrees: OrderId[];
 };
 
 export type ClaimCandidate = {
@@ -17,11 +23,11 @@ export type ClaimCandidate = {
   priority: Priority;
   lineName: string;
   createdAt: number;
-  pinnedCellId: CellId | null;
-  pinnedCellUnavailable: boolean;
+  pinnedFactoryId: FactoryId | null;
+  pinnedFactoryUnavailable: boolean;
   activeCellId: CellId | null;
   activeJobId: JobId | null;
-  unavailableLineCells: CellId[];
+  unavailableLineFactories: FactoryId[];
 };
 
 export type ClaimContext = {
@@ -34,14 +40,13 @@ export const allowsLine = (
   lineName: string,
 ): boolean => allowedLines.includes('*') || allowedLines.includes(lineName);
 
-const isPinnable = (candidate: ClaimCandidate, cellId: CellId): boolean =>
-  candidate.pinnedCellId === null ||
-  candidate.pinnedCellId === cellId ||
-  candidate.pinnedCellUnavailable;
+const isPinnable = (candidate: ClaimCandidate, factoryId: FactoryId): boolean =>
+  candidate.pinnedFactoryId === null ||
+  candidate.pinnedFactoryId === factoryId ||
+  candidate.pinnedFactoryUnavailable;
 
 const isWarm = (candidate: ClaimCandidate, cell: ClaimCell): boolean =>
-  candidate.pinnedCellId === cell.cellId ||
-  cell.localWorktrees.includes(candidate.orderId);
+  candidate.pinnedFactoryId === cell.factoryId;
 
 const byClaimOrder =
   (cell: ClaimCell) =>
@@ -63,8 +68,8 @@ export const isEligible = (
   candidate.activeJobId === null &&
   candidate.projectId === cell.projectId &&
   allowsLine(cell.allowedLines, candidate.lineName) &&
-  !candidate.unavailableLineCells.includes(cell.cellId) &&
-  isPinnable(candidate, cell.cellId) &&
+  !candidate.unavailableLineFactories.includes(cell.factoryId) &&
+  isPinnable(candidate, cell.factoryId) &&
   context.runningCount < context.maxRunning;
 
 export const selectClaimable = (

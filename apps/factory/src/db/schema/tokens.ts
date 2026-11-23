@@ -4,15 +4,12 @@ import {
   text,
   type AnySQLiteColumn,
 } from 'drizzle-orm/sqlite-core';
-import type { CellId, FactoryId, TokenId } from '../../domain/common/brand';
+import type { FactoryId, TokenId } from '../../domain/common/brand';
 import { jsonColumn } from '@repo/bun-sqlite-kit/columns';
-import { cells } from './cells';
 import { factories } from './factories';
 
 export const TOKEN_KINDS = [
   'supervisor',
-  'cell_join',
-  'cell_session',
   'web_join',
   'web_session',
   'factory_join',
@@ -26,9 +23,6 @@ export const safeTokens = sqliteTable('safe_tokens', {
   kind: text('kind', { enum: TOKEN_KINDS }).notNull(),
   name: text('name').notNull(),
   scopesJson: jsonColumn<string[]>('scopes_json').notNull(),
-  cellId: text('cell_id')
-    .$type<CellId>()
-    .references(() => cells.cellId),
   factoryId: text('factory_id')
     .$type<FactoryId>()
     .references(() => factories.factoryId),

@@ -2,25 +2,24 @@ import { and, asc, eq, isNull, type SQL } from 'drizzle-orm';
 import type { z } from 'zod';
 import { LEASE_TTL_MS } from '../../../config';
 import { immediateTx, type DbTx } from '../../../db/client';
-import { cells } from '../../../db/schema/cells';
 import { jobs } from '../../../db/schema/jobs';
 import { orderSteps, workOrders } from '../../../db/schema/orders';
 import { orderPlans } from '../../../db/schema/plans';
 import { stateTransitions } from '../../../db/schema/transitions';
 import { transitionJobContract } from '@repo/factory-contracts/jobs.contract';
 import {
-  asCellId,
   asCommandId,
+  asFactoryId,
   asJobId,
   asStepId,
   type CellId,
   type CommandId,
+  type FactoryId,
   type OrderId,
   type ProjectId,
   type StepId,
 } from '../../../domain/common/brand';
 import { addMs } from '../../../domain/common/time';
-import { allowsLine } from '../../../domain/cells/claim-eligibility';
 import { triageIncident } from '../../../domain/incidents/incident-rules';
 import {
   assertArtifactsProduced,
@@ -33,7 +32,6 @@ import {
 import { stepJobPayload } from '../../orders/job-payload';
 import {
   Conflict,
-  Forbidden,
   InternalServer,
   NotFound,
   StaleLeaseEpoch,
@@ -43,7 +41,6 @@ import {
   flushTransitions,
   orderTransition,
   publishCommitted,
-  releaseCell,
   requireOrder,
   requirePlan,
   requireProject,
@@ -60,14 +57,20 @@ import {
   toWorkOrderSnapshot,
   type OpenIncident,
 } from '../../orders/incident-writes';
-import { claimNext, toClaimedJob } from '../cells/claim-job.procedure';
+import { toClaimedJob } from '../cells/claim-job.procedure';
+import { factories } from '../../../db/schema/factories';
+import {
+  cellIdOf,
+  factoryIdOf,
+  isSilent,
+  touchFactory,
+} from '../../core/identity';
 
 const JOB_KIND_BY_STEP_KIND = {
   operator: 'run_operator',
   inspection: 'run_inspection',
   deliver: 'deliver',
 } as const;
-const SERVING_CELL_STATUSES = ['online', 'busy', 'draining'] as const;
 
 type JobRow = typeof jobs.$inferSelect;
 type StepRow = typeof orderSteps.$inferSelect;
@@ -184,7 +187,7 @@ const findReplay = (
 };
 
 const fence = (job: JobRow, cellId: CellId, epoch: number): void => {
-  if (job.cellId !== cellId || job.epoch !== epoch)
+  if (job.claimedByCellId !== cellId || job.epoch !== epoch)
     throw new StaleLeaseEpoch(`Job ${job.jobId} epoch ${epoch} is stale`);
 };
 
@@ -430,7 +433,6 @@ const completePlanBranch = (
     throw new Conflict(`Job ${job.jobId} has no order plan`);
   const plan = requirePlan(tx, job.planId);
   finishJob(tx, job, completion, log);
-  releaseCell(tx, completion.cellId);
   tx.update(orderPlans)
     .set({
       state: 'active',
@@ -475,7 +477,7 @@ const deliverOrder = (
       headCommitSha: completion.commitSha,
       activeCellId: null,
       activeJobId: null,
-      pinnedCellId: null,
+      pinnedFactoryId: null,
     },
     completion.now,
   );
@@ -497,7 +499,6 @@ const deliverOrder = (
     completion,
     log,
   );
-  releaseCell(tx, completion.cellId);
   return completedResponse(null);
 };
 
@@ -552,7 +553,8 @@ const issueJob = (
           requiredFiles: prior.requiredFilesJson,
         })),
       payloadJson: stepJobPayload(order, next.stepIndex),
-      cellId,
+      claimedByCellId: cellId,
+      claimedByFactoryId: job.claimedByFactoryId,
       epoch,
       leaseExpiresAt,
       createdAt: now,
@@ -583,10 +585,6 @@ const issueJob = (
     },
     now,
   );
-  tx.update(cells)
-    .set({ activeJobId: nextJob.jobId })
-    .where(eq(cells.cellId, cellId))
-    .run();
   return toClaimedJob(nextJob, leaseExpiresAt);
 };
 
@@ -753,7 +751,6 @@ const blockOrder = (
       at: now,
     }),
   );
-  releaseCell(tx, cellId);
   const incidentId = openIncident(
     tx,
     {
@@ -773,7 +770,7 @@ const blockOrder = (
       order,
       {
         incidentId,
-        cellId: asCellId(triage.mechanicJob.pinnedCellId),
+        factoryId: asFactoryId(triage.mechanicJob.pinnedFactoryId),
         repoUrl: requireProject(tx, order.projectId).repoUrl,
         reason: incident.reason,
         detail: incident.detail,
@@ -958,34 +955,30 @@ const resetWorktree = (
   return resetResponse(nextJob);
 };
 
-const hasServingCell = (
+const hasServingFactory = (
   tx: DbTx,
   order: WorkOrderRow,
-  excludedCellIds: readonly string[],
+  excludedFactoryIds: readonly FactoryId[],
+  now: number,
 ): boolean =>
   tx
     .select()
-    .from(cells)
-    .where(eq(cells.projectId, order.projectId))
+    .from(factories)
     .all()
     .some(
-      (cell) =>
-        SERVING_CELL_STATUSES.some((status) => status === cell.status) &&
-        !excludedCellIds.includes(cell.cellId) &&
-        allowsLine(cell.allowedLinesJson, order.lineName),
+      (factory) =>
+        !isSilent(factory.lastSeenAt, now) &&
+        !excludedFactoryIds.includes(asFactoryId(factory.factoryId)) &&
+        factory.projectsJson.some(
+          (project) =>
+            project.projectId === order.projectId && project.desired > 0,
+        ),
     );
 
-const claimNextFor = (
-  tx: DbTx,
-  cellId: CellId,
-  now: number,
-  log: TransitionLog,
-): ClaimedJob | null => {
-  const cell = tx.select().from(cells).where(eq(cells.cellId, cellId)).get();
-  if (cell === undefined) throw new NotFound(`Cell ${cellId} not found`);
-  const leaseExpiresAt = addMs(now, LEASE_TTL_MS);
-  const claimed = claimNext(tx, cell, leaseExpiresAt, now, log);
-  return claimed === undefined ? null : toClaimedJob(claimed, leaseExpiresAt);
+const factoryOf = (job: JobRow): FactoryId => {
+  if (job.claimedByFactoryId === null)
+    throw new Conflict(`Job ${job.jobId} has no claiming factory`);
+  return job.claimedByFactoryId;
 };
 
 const lineUnavailable = (
@@ -999,8 +992,11 @@ const lineUnavailable = (
   if (job.status !== 'claimed' && job.status !== 'running')
     throw new Conflict(`Job ${job.jobId} cannot transition from ${job.status}`);
   const order = requireOrder(tx, orderIdOf(job));
-  const unavailableLineCells = [...order.unavailableLineCellsJson, cellId];
-  const servable = hasServingCell(tx, order, unavailableLineCells);
+  const unavailableLineFactories = [
+    ...order.unavailableLineFactoriesJson.map((id) => asFactoryId(id)),
+    factoryOf(job),
+  ];
+  const servable = hasServingFactory(tx, order, unavailableLineFactories, now);
   const state = servable ? 'queued' : 'line_unavailable';
 
   endJob(
@@ -1014,16 +1010,15 @@ const lineUnavailable = (
   );
   if (job.stepId !== null)
     setStepState(tx, job, boundStep(tx, job), 'pending', cellId, now, log);
-  releaseCell(tx, cellId);
   updateWorkOrder(
     tx,
     order,
     {
       state,
-      unavailableLineCellsJson: unavailableLineCells,
+      unavailableLineFactoriesJson: unavailableLineFactories,
       activeJobId: null,
       activeCellId: null,
-      pinnedCellId: null,
+      pinnedFactoryId: null,
     },
     now,
   );
@@ -1055,7 +1050,7 @@ const lineUnavailable = (
       },
       now,
     );
-  return lineUnavailableResponse(claimNextFor(tx, cellId, now, log));
+  return lineUnavailableResponse(null);
 };
 
 const dispatch = (
@@ -1082,16 +1077,17 @@ const dispatch = (
   }
 };
 
-export const transitionJobProcedure = scopedProcedure(['cell:worker'])(
+export const transitionJobProcedure = scopedProcedure(['factory:worker'])(
   transitionJobContract,
 )((input, ctx) => {
-  const cellId = ctx.principal.cellId;
-  if (cellId === null) throw new Forbidden('Token is not bound to a cell');
+  const cellId = cellIdOf(ctx);
+  const factoryId = factoryIdOf(ctx);
   const now = ctx.clock.now();
   const commandId = asCommandId(input.body.commandId);
 
   const outcome = settle(() =>
     immediateTx(ctx.db, (tx) => {
+      touchFactory(tx, factoryId, now);
       const job = requireJob(tx, input.params.id);
       const replay = findReplay(tx, commandId, job.jobId);
       if (replay !== undefined) return { response: replay, records: [] };

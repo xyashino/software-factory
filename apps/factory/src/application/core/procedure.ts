@@ -1,4 +1,5 @@
 import type { Db } from '../../db/client';
+import type { CellId } from '../../domain/common/brand';
 import type { AuthPort, Principal, TokenScope } from '../ports/auth.port';
 import type { ClaimWaitersPort } from '../ports/claim-waiters.port';
 import type { ClockPort } from '../ports/clock.port';
@@ -19,6 +20,7 @@ export type TransportContext = {
   claimWaiters: ClaimWaitersPort;
   transitionBus: TransitionBusPort;
   bearer: string | null;
+  cellId: CellId | null;
   signal: AbortSignal;
   remoteAddress: string | null;
 };
