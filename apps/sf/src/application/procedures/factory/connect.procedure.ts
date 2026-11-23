@@ -20,7 +20,7 @@ export const connectFactory = define({ kind: 'supervisor' })(
   ConnectSchema,
 )<ConnectFactoryResult>(async (input, ctx) => {
   const url = normalizeUrl(input.url);
-  const reply = await ctx.hq.enroll({
+  const reply = await ctx.hqLink.enroll({
     url,
     joinToken: input.token,
     name: input.name,

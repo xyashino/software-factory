@@ -5,7 +5,7 @@ import {
   hqStartCommand,
   hqStopCommand,
   hqTokenAdminCreateCommand,
-} from './server.command';
+} from './hq.command';
 import {
   hqTargetLsCommand,
   hqTargetRmCommand,

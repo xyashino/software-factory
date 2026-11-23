@@ -35,7 +35,7 @@ export const reportActivity = async (
   report: ActivityReport,
 ): Promise<void> => {
   try {
-    await runtime.ports.factoryDaemon.post(
+    await runtime.ports.factory.post(
       `/cells/${encodeURIComponent(runtime.session.cellId)}/activity`,
       report,
     );

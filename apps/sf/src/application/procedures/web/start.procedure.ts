@@ -44,7 +44,7 @@ export const startWeb = define({ kind: 'supervisor' })(
   if (previous !== null && ctx.process.isAlive(previous)) {
     throw new Refused('web already running');
   }
-  if (!(await ctx.server.probe())) {
+  if (!(await ctx.hq.probe())) {
     throw new Unreachable(
       `factory server not answering at ${input.factoryUrl}; run sf server start`,
     );

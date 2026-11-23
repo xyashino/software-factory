@@ -81,7 +81,7 @@ describe('web start', () => {
     const ports: Ports = {
       ...fake.ports,
       webPidFile: webPidFileWith(null),
-      server: { ...fake.ports.server, probe: async () => false },
+      hq: { ...fake.ports.hq, probe: async () => false },
     };
 
     // Act

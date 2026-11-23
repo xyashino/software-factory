@@ -22,7 +22,7 @@ export const PROJECTS_REPLY = {
   ],
 };
 
-export interface ServerCall {
+export interface HqCall {
   method: 'GET' | 'POST' | 'PUT';
   route: string;
   query?: Record<string, string>;
@@ -35,7 +35,7 @@ export interface FakeOptions {
   secret?: string | null;
   connectionConfig?: ConnectionConfig;
   todos?: Record<string, string>;
-  reply?: (call: ServerCall) => unknown;
+  reply?: (call: HqCall) => unknown;
   writeOutcome?: 'written' | 'refused';
   daemon?: (call: DaemonCall) => unknown;
   parentPid?: number;
@@ -53,7 +53,7 @@ export interface DaemonCall {
 
 export interface FakePorts {
   ports: Ports;
-  calls: ServerCall[];
+  calls: HqCall[];
   writes: { dir: string; filename: string; force: boolean }[];
   savedConnections: ConnectionConfig[];
   spawned: DetachedSpec[];
@@ -79,7 +79,7 @@ export const createFakePorts = (options: FakeOptions = {}): FakePorts => {
   const secret = options.secret === undefined ? 'secret-value' : options.secret;
   const todos = options.todos ?? {};
   const reply = options.reply ?? noReply;
-  const calls: ServerCall[] = [];
+  const calls: HqCall[] = [];
   const writes: FakePorts['writes'] = [];
   const savedConnections: ConnectionConfig[] = [];
   const spawned: DetachedSpec[] = [];
@@ -97,12 +97,12 @@ export const createFakePorts = (options: FakeOptions = {}): FakePorts => {
   let nextPid = 5000;
   let time = 1_000;
   let connectionConfig = options.connectionConfig ?? EMPTY_CONNECTION_CONFIG;
-  const record = (call: ServerCall): unknown => {
+  const record = (call: HqCall): unknown => {
     calls.push(call);
     return reply(call);
   };
   const ports: Ports = {
-    server: {
+    hq: {
       call: async (route, body, token) =>
         record({ method: 'POST', route, body, token }),
       get: async (route, query, token) =>
@@ -232,7 +232,7 @@ export const createFakePorts = (options: FakeOptions = {}): FakePorts => {
         time += ms;
       },
     },
-    factoryDaemon: {
+    factory: {
       get: async (route) => recordDaemon({ method: 'GET', route }),
       post: async (route, body) =>
         recordDaemon({ method: 'POST', route, body }),

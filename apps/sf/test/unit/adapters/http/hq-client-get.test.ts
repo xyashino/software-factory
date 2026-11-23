@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { Refused } from '../../../../src/application/core/errors';
-import { createServerClient } from '../../../../src/adapters/http/server-client';
+import { createHqClient } from '../../../../src/adapters/http/hq-client';
 
 const BASE_URL = 'http://factory.test';
 const TOKEN = 'secret-token-value';
 
-describe('server client get', () => {
+describe('hq client get', () => {
   it('sends the query string and bearer token', async () => {
     // Arrange
     const seen: { url: string; headers: HeadersInit | undefined }[] = [];
@@ -16,7 +16,7 @@ describe('server client get', () => {
       seen.push({ url: String(url), headers: init?.headers });
       return Response.json({ items: [] });
     }) as typeof fetch;
-    const client = createServerClient({ baseUrl: BASE_URL, fetchImpl });
+    const client = createHqClient({ baseUrl: BASE_URL, fetchImpl });
 
     // Act
     await client.get(
@@ -42,7 +42,7 @@ describe('server client get', () => {
     };
     const fetchImpl = (async () =>
       Response.json(body, { status: 422 })) as typeof fetch;
-    const client = createServerClient({ baseUrl: BASE_URL, fetchImpl });
+    const client = createHqClient({ baseUrl: BASE_URL, fetchImpl });
 
     // Act
     const attempt = client.call('/api/v1/queue/import', {}, TOKEN);

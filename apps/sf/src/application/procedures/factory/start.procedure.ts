@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { FACTORY_PORT_ENV } from '../../../config';
 import { Refused, Unreachable } from '../../core/errors';
 import { define, type Ports } from '../../core/procedure';
-import { healthPidOf } from './daemon-health';
+import { healthPidOf } from './health';
 
 const START_TIMEOUT_MS = 10_000;
 const POLL_INTERVAL_MS = 200;

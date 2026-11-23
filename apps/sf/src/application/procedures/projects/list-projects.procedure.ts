@@ -19,7 +19,7 @@ export const listProjects = define({ kind: 'supervisor' })(
 )<ListProjectsResult>(async (_input, ctx) => {
   const secret = await readSecret(ctx);
   const reply = listProjectsContract.out[200].parse(
-    await ctx.server.get(PROJECTS_ROUTE, {}, secret),
+    await ctx.hq.get(PROJECTS_ROUTE, {}, secret),
   );
   return { projects: reply.projects };
 });

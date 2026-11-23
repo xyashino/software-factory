@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { LEASE_TTL_MS, SELF_FENCE_MS } from '../../../src/config';
-import { createHqLink, HQ_TICK_MS } from '../../../src/daemon/hq-link';
-import type { HqReply } from '../../../src/application/ports/hq-client.port';
+import { createHqLink, HQ_TICK_MS } from '../../../src/factory/hq-link';
+import type { HqReply } from '../../../src/application/ports/hq-link.port';
 
 type Outcome = 'ok' | 'unreachable' | 'rejected';
 
@@ -27,7 +27,7 @@ const setup = (initial: Outcome = 'ok', connected = true) => {
           sessionToken: SESSION_TOKEN,
         }
       : null,
-    hq: {
+    hqLink: {
       enroll: () => Promise.reject(new Error('not used by the link')),
       heartbeat: () => {
         heartbeats.push(now);

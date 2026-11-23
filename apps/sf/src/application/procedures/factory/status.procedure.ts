@@ -4,7 +4,7 @@ import {
   type DaemonStatus,
 } from '../../../domain/factory/hq-state';
 import { define, type Ports } from '../../core/procedure';
-import { healthPidOf } from './daemon-health';
+import { healthPidOf } from './health';
 
 const StatusSchema = z.object({ dataDir: z.string().min(1) }).strict();
 
@@ -16,10 +16,10 @@ export interface StatusFactoryResult {
 }
 
 const daemonStatusOf = async (
-  ctx: Pick<Ports, 'factoryDaemon'>,
+  ctx: Pick<Ports, 'factory'>,
 ): Promise<DaemonStatus | null> => {
   try {
-    return DaemonStatusSchema.parse(await ctx.factoryDaemon.get('/status'));
+    return DaemonStatusSchema.parse(await ctx.factory.get('/status'));
   } catch {
     return null;
   }

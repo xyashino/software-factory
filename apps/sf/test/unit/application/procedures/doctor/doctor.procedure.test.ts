@@ -92,8 +92,8 @@ const doctorOn = (machine: Machine): Promise<DoctorResult> => {
   ]);
   const ports: Ports = {
     ...fake.ports,
-    server: {
-      ...fake.ports.server,
+    hq: {
+      ...fake.ports.hq,
       probe: async () => machine.serverUp,
     },
     runners: {

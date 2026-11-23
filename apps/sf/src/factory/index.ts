@@ -71,7 +71,7 @@ const scaler = createScaler({
     if (current === null) {
       return;
     }
-    await ports.hq.goneCell({
+    await ports.hqLink.goneCell({
       url: current.url,
       sessionToken: current.sessionToken,
       cellId,
@@ -80,7 +80,7 @@ const scaler = createScaler({
 });
 const hq = createHqLink({
   credential,
-  hq: ports.hq,
+  hqLink: ports.hqLink,
   clock: ports.clock,
   projects: () => supervisor.projects(),
   killAll: () => scaler.stopAll(),

@@ -29,16 +29,16 @@ export const FACTORY_DAEMON_PORT = Number(
 export const FACTORY_DAEMON_URL = `http://127.0.0.1:${FACTORY_DAEMON_PORT}`;
 export const DEFAULT_DATA_DIR = join(XDG_DATA_HOME, 'sf');
 export const DEFAULT_DB_PATH = defaultDbPathOf(DEFAULT_DATA_DIR);
-export const SERVER_ENTRY = fileURLToPath(
+export const HQ_ENTRY = fileURLToPath(
   new URL('../../hq/src/index.ts', import.meta.url),
 );
 export const COMPILED_URL_PATTERN = /\/(\$bunfs|~BUN)\//;
 export const IS_COMPILED = COMPILED_URL_PATTERN.test(import.meta.url);
 export const CLI_ENTRY = fileURLToPath(new URL('./cli.ts', import.meta.url));
 export const FACTORY_DAEMON_ENTRY = fileURLToPath(
-  new URL('./daemon/index.ts', import.meta.url),
+  new URL('./factory/index.ts', import.meta.url),
 );
-export const SERVER_MARKER = '__server';
+export const HQ_MARKER = '__server';
 export const WEB_MARKER = '__web';
 export const FACTORY_DAEMON_MARKER = '__factory-daemon';
 export const CLAIM_WAIT_MS = 25_000;
@@ -95,7 +95,7 @@ export const webEntryPath = (): string =>
   ]) ?? MONOREPO_WEB_ENTRY;
 
 export const serverArgsOf = (compiled: boolean): string[] =>
-  compiled ? [SERVER_MARKER] : [SERVER_ENTRY];
+  compiled ? [HQ_MARKER] : [HQ_ENTRY];
 
 export const factoryDaemonArgsOf = (compiled: boolean): string[] =>
   compiled ? [FACTORY_DAEMON_MARKER] : [FACTORY_DAEMON_ENTRY];

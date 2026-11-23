@@ -65,8 +65,8 @@ const arrange = (overrides: Partial<Machine> = {}): Arrangement => {
   const fake = createFakePorts();
   const ports: Ports = {
     ...fake.ports,
-    server: {
-      ...fake.ports.server,
+    hq: {
+      ...fake.ports.hq,
       probe: async () => machine.serverUp,
       get: async () => ({
         code: 200,
@@ -147,7 +147,7 @@ const arrange = (overrides: Partial<Machine> = {}): Arrangement => {
       read: async () => (machine.secret === null ? null : SUPERVISOR),
       secret: async () => machine.secret,
     },
-    factoryDaemon: {
+    factory: {
       get: async () => ({
         projects:
           machine.cells.length === 0

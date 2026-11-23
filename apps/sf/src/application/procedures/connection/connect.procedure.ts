@@ -29,7 +29,7 @@ export const connectTarget = define({ kind: 'supervisor' })(
   ConnectSchema,
 )<ConnectResult>(async (input, ctx) => {
   try {
-    await ctx.server.get(PROJECTS_ROUTE, {}, input.token);
+    await ctx.hq.get(PROJECTS_ROUTE, {}, input.token);
   } catch (error) {
     if (error instanceof Unauthorized) {
       throw new Refused(

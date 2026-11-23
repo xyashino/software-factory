@@ -68,6 +68,6 @@ export const runQueueAction = define({ kind: 'supervisor' })(
         }
       : { action: SERVER_ACTION[input.action], orderIds: input.orderIds };
   return ActionsReplySchema.parse(
-    await ctx.server.call(ACTIONS_ROUTE, body, secret),
+    await ctx.hq.call(ACTIONS_ROUTE, body, secret),
   );
 });

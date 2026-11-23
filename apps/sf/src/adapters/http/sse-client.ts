@@ -1,4 +1,4 @@
-import type { SseFrame } from '../../application/ports/server.port';
+import type { SseFrame } from '../../application/ports/hq.port';
 
 const FRAME_END = '\n\n';
 

@@ -4,7 +4,7 @@ export interface SseFrame {
   data: string;
 }
 
-export interface ServerPort {
+export interface HqPort {
   call(route: string, body: unknown, token: string): Promise<unknown>;
   get(
     route: string,
