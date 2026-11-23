@@ -17,7 +17,7 @@ PREFIX=$HOME/.local scripts/install.sh   # no sudo; then SF_WEB_DIR=$HOME/.local
 ```
 
 `sf web start` finds the web UI in `$SF_WEB_DIR`, then `/usr/local/share/sf/web`, then `/usr/share/sf/web`.
-State lives in `$XDG_DATA_HOME/sf` (default `~/.local/share/sf`): `factory.db`, `web.pid`, HQ server files.
+State lives in `$XDG_DATA_HOME/sf` (default `~/.local/share/sf`): `hq.db`, `web.pid`, HQ server files. An existing `factory.db` is opened when `hq.db` is absent; it is never renamed.
 
 Quickstart in any git repository (proved by `apps/sf/test/blackbox/standalone-external-repo.test.ts`):
 
@@ -88,14 +88,14 @@ Message: `deprecated: use "sf hq <sub>"`.
 
 `sf` reads the HQ address and the supervisor token from one resolver, in this order:
 
-| Setting | Order (first set wins) | Deprecated alias |
+| Setting | Order (first set wins) | Old name (fallback) |
 | :--- | :--- | :--- |
 | URL | `HQ_URL`, then the active saved target, then `http://127.0.0.1:7070` | `FACTORY_URL` |
 | Token | `HQ_TOKEN`, then `.factory-local/supervisor.token`, then the active saved target, then `~/.config/factory/token` | `FACTORY_TOKEN` |
 
-When a deprecated alias is the one used, `sf` prints once per process to stderr: `deprecated: FACTORY_URL, use HQ_URL` (or `FACTORY_TOKEN, use HQ_TOKEN`). Token values are never printed.
+Old names are read silently when the `HQ_*` name is unset. `HQ_*` wins when both are set. Token values are never printed.
 
-Other `FACTORY_*` variables (`FACTORY_PORT`, `FACTORY_DATA_DIR`, `FACTORY_DB_PATH`, `FACTORY_HOST`, `FACTORY_JOIN_TOKEN`) keep their names for now.
+HQ server settings are `HQ_PORT`, `HQ_HOST`, `HQ_DB_PATH` and `HQ_DATA_DIR`. Old `FACTORY_PORT`, `FACTORY_HOST`, `FACTORY_DB_PATH` and `FACTORY_DATA_DIR` still work as fallback, as do `FACTORY_URL` and `FACTORY_TOKEN` above. `FACTORY_JOIN_TOKEN` keeps its name. Old names stay until removed later.
 
 ## 2. Layout
 
@@ -172,7 +172,7 @@ Rules carried over from `apps/hq`:
 The Cell is the only process that talks to HQ. Agents never do.
 
 1. **Identity.** The Factory daemon gives the Cell its id (`FACTORY_CELL_ID`, `cell-<8 hex>`) and a
-   local bearer (`FACTORY_TOKEN`). There is no enroll and no session file. HQ never stores a Cell.
+   local bearer (`HQ_TOKEN`). There is no enroll and no session file. HQ never stores a Cell.
 2. **Project and lines.** `sf cell start` reads `.factory/config.json` for `project` and
    `.factory/lines/` for `allowedLines` (filtered by `CELL_LINES`).
 3. **Claim loop.** `POST {relay}/api/v1/cells/claims` with `{ waitMs: 25000, projectId,

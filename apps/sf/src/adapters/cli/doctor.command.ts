@@ -12,6 +12,7 @@ import {
   runDoctor,
   type DoctorCheck,
 } from '../../application/procedures/doctor/doctor.procedure';
+import { hqSettingOf } from '../../bootstrap/hq-env';
 import { EXIT } from '../../domain/exit-codes';
 import { printJson, printLine, reportFailure } from './output';
 
@@ -28,8 +29,8 @@ const runDiagnose = async (json: boolean): Promise<number> => {
       repoRoot: cwd,
       repoConfigPath: resolve(cwd, REPO_CONFIG_PATH),
       linesDir: resolve(cwd, LINES_DIR),
-      dataDir: process.env.FACTORY_DATA_DIR ?? DEFAULT_DATA_DIR,
-      dbPath: process.env.FACTORY_DB_PATH ?? DEFAULT_DB_PATH,
+      dataDir: hqSettingOf('DATA_DIR') ?? DEFAULT_DATA_DIR,
+      dbPath: hqSettingOf('DB_PATH') ?? DEFAULT_DB_PATH,
     },
     () => buildContext(),
   );

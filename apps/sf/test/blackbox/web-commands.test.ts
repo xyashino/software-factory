@@ -19,8 +19,8 @@ const WEB_ENTRY_SOURCE = `
 import { createServer } from 'node:http';
 createServer((request, response) => {
   response.end(JSON.stringify({
-    projectId: process.env.FACTORY_PROJECT_ID,
-    dataDir: process.env.FACTORY_DATA_DIR,
+    projectId: process.env.HQ_PROJECT_ID,
+    dataDir: process.env.HQ_DATA_DIR,
   }));
 }).listen(Number(process.env.PORT), process.env.HOST);
 `;

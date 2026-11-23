@@ -256,12 +256,7 @@ describe('factory server start and stop', () => {
 });
 
 describe('factory server data directory', () => {
-  const SERVER_FILES = [
-    'server.pid',
-    'server.log',
-    'factory.db',
-    'web-demo.join',
-  ];
+  const SERVER_FILES = ['server.pid', 'server.log', 'hq.db', 'web-demo.join'];
 
   it('stores server state under XDG_DATA_HOME/sf by default', async () => {
     // Arrange
@@ -298,7 +293,7 @@ describe('factory server data directory', () => {
     }
   });
 
-  it('writes web-demo.join into FACTORY_DATA_DIR', async () => {
+  it('writes web-demo.join into HQ_DATA_DIR', async () => {
     // Arrange
     const sandbox = await createSandbox();
 

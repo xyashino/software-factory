@@ -713,7 +713,7 @@ describe('factory relay', () => {
       const values = Object.values(cellEnv);
 
       // Assert
-      expect(cellEnv.FACTORY_URL).toBe(relayUrlOf(port));
+      expect(cellEnv.HQ_URL).toBe(relayUrlOf(port));
       expect(cellEnv.FACTORY_CELL_ID).toBe(cell.cellId);
       expect(values).not.toContain(factoryUrl);
       expect(values).not.toContain(TOKEN);
@@ -803,7 +803,7 @@ describe('factory relay', () => {
       const { env, repo, port } = await sandbox();
       await startDaemon(env);
       const cell = await createCell(env, repo);
-      const localToken = cellEnvOf(cell.pid).FACTORY_TOKEN ?? '';
+      const localToken = cellEnvOf(cell.pid).HQ_TOKEN ?? '';
       await waitFor(() => claimsOf(cell.cellId).length >= 1);
 
       // Act

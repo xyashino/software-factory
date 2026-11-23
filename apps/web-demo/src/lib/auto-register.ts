@@ -28,7 +28,7 @@ const readJoinSecret = async (
     return (await deps.read(path)).trim();
   } catch {
     throw new Error(
-      `cannot read web-demo join secret at ${path}: start factory-server with this FACTORY_DATA_DIR`,
+      `cannot read web-demo join secret at ${path}: start factory-server with this HQ_DATA_DIR`,
     );
   }
 };

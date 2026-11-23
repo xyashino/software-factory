@@ -6,15 +6,22 @@ import { createClaimWaiters } from './adapters/memory/claim-waiters.adapter';
 import { createSystemClock } from './adapters/memory/system-clock.adapter';
 import { createTransitionBus } from './adapters/memory/transition-bus.adapter';
 import { mintAdminToken } from './bootstrap/admin';
+import { hqSettingOf } from './bootstrap/env';
 import { createTransport } from './bootstrap/transport';
 import { writeWebJoinFile } from './bootstrap/web-join';
-import { DEFAULT_DB_PATH, DEFAULT_HOST, DEFAULT_PORT } from './config';
+import {
+  DEFAULT_DATA_DIR,
+  DEFAULT_HOST,
+  DEFAULT_PORT,
+  defaultDbPathOf,
+} from './config';
 import { createDb } from './db/client';
 
 const ADMIN_TOKEN_CREATE = 'admin token create';
 
-const dbPath = process.env.FACTORY_DB_PATH ?? DEFAULT_DB_PATH;
-const dataDir = process.env.FACTORY_DATA_DIR ?? dirname(dbPath);
+const dbPath =
+  hqSettingOf(process.env, 'DB_PATH') ?? defaultDbPathOf(DEFAULT_DATA_DIR);
+const dataDir = hqSettingOf(process.env, 'DATA_DIR') ?? dirname(dbPath);
 mkdirSync(dataDir, { recursive: true });
 const db = createDb(dbPath);
 const clock = createSystemClock();
@@ -22,8 +29,8 @@ const clock = createSystemClock();
 if (process.argv.slice(2).join(' ') === ADMIN_TOKEN_CREATE) {
   process.stdout.write(`${mintAdminToken(db, clock)}\n`);
 } else {
-  const port = Number(process.env.FACTORY_PORT ?? DEFAULT_PORT);
-  const hostname = process.env.FACTORY_HOST ?? DEFAULT_HOST;
+  const port = Number(hqSettingOf(process.env, 'PORT') ?? DEFAULT_PORT);
+  const hostname = hqSettingOf(process.env, 'HOST') ?? DEFAULT_HOST;
   const app = createApp(
     createTransport({
       db,
