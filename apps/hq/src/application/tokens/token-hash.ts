@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 
 export const TOKEN_PREFIXES = {
-  supervisor: 'sf_sup_',
+  operator: 'sf_op_',
   join: 'sf_join_',
   factory: 'sf_factory_',
 } as const;

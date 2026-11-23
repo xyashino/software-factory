@@ -154,7 +154,7 @@ export const createFakePorts = (options: FakeOptions = {}): FakePorts => {
       },
     },
     tokens: {
-      read: async () => (secret === null ? null : { kind: 'supervisor' }),
+      read: async () => (secret === null ? null : { kind: 'operator' }),
       secret: async () => secret,
       write: unused,
       clear: unused,
@@ -269,6 +269,6 @@ export const runProcedure = <I, O>(
   input: unknown,
   fake: FakePorts,
 ): Promise<O> => {
-  const token: Access = { kind: 'supervisor' };
+  const token: Access = { kind: 'operator' };
   return procedure.execute(input, { ...fake.ports, token, principal: token });
 };

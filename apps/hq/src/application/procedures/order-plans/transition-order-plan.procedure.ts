@@ -16,12 +16,12 @@ import {
 } from '../../orders/order-writes';
 import { toOrderPlanDto } from '../../orders/order-views';
 
-export const transitionOrderPlanProcedure = scopedProcedure([
-  'supervisor:write',
-])(transitionOrderPlanContract)((input, ctx) => {
+export const transitionOrderPlanProcedure = scopedProcedure(['operator:write'])(
+  transitionOrderPlanContract,
+)((input, ctx) => {
   const { action } = input.body;
   const now = ctx.clock.now();
-  const actor: Actor = { kind: 'supervisor', id: ctx.principal.tokenId };
+  const actor: Actor = { kind: 'operator', id: ctx.principal.tokenId };
 
   const { row, records } = immediateTx(ctx.db, (tx) => {
     const plan = requirePlan(tx, input.params.id);

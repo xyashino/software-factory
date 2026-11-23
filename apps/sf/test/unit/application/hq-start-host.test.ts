@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { startHq } from '../../../src/application/procedures/hq/start.procedure';
 import { createFakePorts } from '../../support/fake-ports';
 
-const SUPERVISOR = { kind: 'supervisor' } as const;
+const OPERATOR = { kind: 'operator' } as const;
 
 const spawnedEnvFor = async (
   host: string | undefined,
@@ -25,7 +25,7 @@ const spawnedEnvFor = async (
       port: 7070,
       ...(host === undefined ? {} : { host }),
     },
-    { ...ports, token: SUPERVISOR, principal: SUPERVISOR } as never,
+    { ...ports, token: OPERATOR, principal: OPERATOR } as never,
   );
   return { ...fake.spawned[0]?.env };
 };

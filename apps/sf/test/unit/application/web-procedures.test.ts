@@ -8,7 +8,7 @@ import { stopWeb } from '../../../src/application/procedures/web/stop.procedure'
 import type { Access } from '../../../src/domain/access';
 import { createFakePorts } from '../../support/fake-ports';
 
-const SUPERVISOR: Access = { kind: 'supervisor' };
+const OPERATOR: Access = { kind: 'operator' };
 const WEB_PID = 77;
 const SPAWNED_PID = 555;
 const START_INPUT = {
@@ -30,8 +30,8 @@ const runAs = <I, O>(
 ): Promise<O> =>
   procedure.execute(input, {
     ...ports,
-    token: SUPERVISOR,
-    principal: SUPERVISOR,
+    token: OPERATOR,
+    principal: OPERATOR,
   });
 
 const webPidFileWith = (initial: number | null): Ports['webPidFile'] => {

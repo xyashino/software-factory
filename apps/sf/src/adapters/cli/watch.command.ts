@@ -50,7 +50,7 @@ const runWatch = async (
       signal,
       onTransition: printTransition,
     },
-    'supervisor',
+    'operator',
   );
   return reportFailure(result);
 };
@@ -59,7 +59,7 @@ export const watchCommand = defineCommand({
   meta: {
     name: 'watch',
     description:
-      'Watch live state transitions; Ctrl-C exits. Needs scope supervisor:read',
+      'Watch live state transitions; Ctrl-C exits. Needs scope operator:read',
   },
   args: {
     project: {

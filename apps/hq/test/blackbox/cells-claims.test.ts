@@ -25,7 +25,7 @@ import {
 import type { Db } from '../../src/db/client';
 
 const PROJECT_ID = 'proj-1';
-const SUPERVISOR_TOKEN = 'supervisor-test-token';
+const OPERATOR_TOKEN = 'operator-test-token';
 const LONG_WAIT_MS = 5_000;
 const PROMPT_MS = 1_000;
 const CELL_A = 'cell-aaaaaaaa';
@@ -40,12 +40,12 @@ const setup = () => {
   seedBaseline(db);
   db.insert(safeTokens)
     .values({
-      tokenId: asTokenId('supervisor-1'),
-      tokenHash: hashToken(SUPERVISOR_TOKEN),
-      prefix: TOKEN_PREFIXES.supervisor,
-      kind: 'supervisor',
-      name: 'supervisor',
-      scopesJson: ['supervisor:write'],
+      tokenId: asTokenId('operator-1'),
+      tokenHash: hashToken(OPERATOR_TOKEN),
+      prefix: TOKEN_PREFIXES.operator,
+      kind: 'operator',
+      name: 'operator',
+      scopesJson: ['operator:write'],
       createdAt: clock.now(),
     })
     .run();
@@ -111,7 +111,7 @@ const queueImport = (app: TestApp, slug: string, line: string) =>
         },
       ],
     },
-    { authorization: `Bearer ${SUPERVISOR_TOKEN}` },
+    { authorization: `Bearer ${OPERATOR_TOKEN}` },
   );
 
 const orderState = (db: Db, orderId: string) =>
@@ -386,7 +386,7 @@ describe('cell claims', () => {
         title: 'Plan X',
         activate: true,
       },
-      { authorization: `Bearer ${SUPERVISOR_TOKEN}` },
+      { authorization: `Bearer ${OPERATOR_TOKEN}` },
     );
 
     const { body } = await claim(app, CELL_A);

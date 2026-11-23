@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { REPO_CONFIG_PATH } from '../../../config';
 import { joinPath } from '../../../domain/common/path';
 import { define } from '../../core/procedure';
-import { mintSupervisorToken, saveLocalTarget } from './local-token';
+import { mintOperatorToken, saveLocalTarget } from './local-token';
 
 const TokenCreateSchema = z
   .object({
@@ -20,10 +20,10 @@ export interface TokenCreateResult {
   token: string | null;
 }
 
-export const createHqToken = define({ kind: 'supervisor' })(
+export const createHqToken = define({ kind: 'operator' })(
   TokenCreateSchema,
 )<TokenCreateResult>(async (input, ctx) => {
-  const token = await mintSupervisorToken(ctx, input);
+  const token = await mintOperatorToken(ctx, input);
   if (!input.save) {
     return { token };
   }

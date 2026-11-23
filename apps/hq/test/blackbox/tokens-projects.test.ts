@@ -29,7 +29,7 @@ const setup = () => {
 const issueToken = async (
   app: TestApp,
   admin: string,
-  kind: 'supervisor' | 'factory_join',
+  kind: 'operator' | 'factory_join',
 ): Promise<TokenBody> => {
   const response = await postJson(
     app,
@@ -61,7 +61,7 @@ describe('token issuance', () => {
   it('issues a token once and lets it authenticate', async () => {
     const { app, admin } = setup();
 
-    const issued = await issueToken(app, admin, 'supervisor');
+    const issued = await issueToken(app, admin, 'operator');
     const response = await getJson(
       app,
       '/api/v1/projects',
@@ -70,7 +70,7 @@ describe('token issuance', () => {
 
     expect(issued).toMatchObject({
       code: 201,
-      token: expect.stringMatching(/^sf_sup_/),
+      token: expect.stringMatching(/^sf_op_/),
     });
     expect(response.status).toBe(200);
   });
@@ -82,7 +82,7 @@ describe('token issuance', () => {
     const response = await postJson(
       app,
       '/api/v1/tokens',
-      { kind: 'supervisor', name: 'nope' },
+      { kind: 'operator', name: 'nope' },
       bearer(joinToken.token),
     );
 
@@ -93,19 +93,19 @@ describe('token issuance', () => {
 describe('token rotation', () => {
   it('keeps the old token valid during the grace window only', async () => {
     const { app, admin, clock } = setup();
-    const supervisor = await issueToken(app, admin, 'supervisor');
+    const operator = await issueToken(app, admin, 'operator');
 
-    const rotated = await expectRotation(app, supervisor.token);
+    const rotated = await expectRotation(app, operator.token);
     const oldDuringGrace = await getJson(
       app,
       '/api/v1/projects',
-      bearer(supervisor.token),
+      bearer(operator.token),
     );
     advancePastGrace(clock);
     const oldAfterGrace = await getJson(
       app,
       '/api/v1/projects',
-      bearer(supervisor.token),
+      bearer(operator.token),
     );
     const fresh = await getJson(app, '/api/v1/projects', bearer(rotated.token));
 
@@ -116,14 +116,14 @@ describe('token rotation', () => {
 
   it('answers 409 when the same token is rotated twice', async () => {
     const { app, admin } = setup();
-    const supervisor = await issueToken(app, admin, 'supervisor');
-    await expectRotation(app, supervisor.token);
+    const operator = await issueToken(app, admin, 'operator');
+    await expectRotation(app, operator.token);
 
     const second = await postJson(
       app,
       '/api/v1/tokens/rotate',
       {},
-      bearer(supervisor.token),
+      bearer(operator.token),
     );
 
     expect(second.status).toBe(409);
@@ -133,17 +133,17 @@ describe('token rotation', () => {
 describe('token revocation', () => {
   it('revokes a token immediately', async () => {
     const { app, admin } = setup();
-    const supervisor = await issueToken(app, admin, 'supervisor');
+    const operator = await issueToken(app, admin, 'operator');
 
     const revoked = await deleteJson(
       app,
-      `/api/v1/tokens/${supervisor.tokenId}`,
+      `/api/v1/tokens/${operator.tokenId}`,
       bearer(admin),
     );
     const after = await getJson(
       app,
       '/api/v1/projects',
-      bearer(supervisor.token),
+      bearer(operator.token),
     );
 
     expect(revoked.status).toBe(200);

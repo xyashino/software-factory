@@ -10,7 +10,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 const CLI_PATH = fileURLToPath(new URL('../../src/cli.ts', import.meta.url));
 const COMMAND_TIMEOUT_MS = 30_000;
 const CYCLE_TOKEN = 'cycle-token-value';
-const SUPERVISOR_TOKEN = 'supervisor-token-value';
+const OPERATOR_TOKEN = 'operator-token-value';
 
 const EXIT_OK = 0;
 const EXIT_REFUSED = 1;
@@ -125,7 +125,7 @@ const cellEnv = (overrides: Record<string, string | undefined> = {}) => {
     HOME: current.cwd,
     FACTORY_OPERATOR_URL: current.url,
     FACTORY_CYCLE_TOKEN: CYCLE_TOKEN,
-    FACTORY_TOKEN: SUPERVISOR_TOKEN,
+    FACTORY_TOKEN: OPERATOR_TOKEN,
   };
   for (const [key, value] of Object.entries(overrides)) {
     if (value === undefined) {

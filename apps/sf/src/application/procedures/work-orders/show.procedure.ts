@@ -40,7 +40,7 @@ const ShowReplySchema = z.looseObject({
 
 export type WorkOrderDetail = z.infer<typeof ShowReplySchema>;
 
-export const showWorkOrder = define({ kind: 'supervisor' })(
+export const showWorkOrder = define({ kind: 'operator' })(
   ShowSchema,
 )<WorkOrderDetail>(async (input, ctx) => {
   const secret = await readSecret(ctx);

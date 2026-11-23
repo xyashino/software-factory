@@ -50,7 +50,7 @@ const incident = {
   reason: 'step_retries_exhausted',
   detail: 'unit tests red',
   status: 'open',
-  triageOwner: 'supervisor',
+  triageOwner: 'operator',
   createdAt: Date.UTC(2026, 10, 19, 10, 0, 0),
   resolvedAt: null,
 };

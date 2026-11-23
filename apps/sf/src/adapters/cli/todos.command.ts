@@ -68,7 +68,7 @@ const runImport = async (
       dryRun,
       paused,
     },
-    'supervisor',
+    'operator',
   );
   if (result.kind === 'ok') {
     printImport(result.value, json);
@@ -85,7 +85,7 @@ const runExport = async (dir: string, force: boolean, json: boolean) => {
       dir: resolve(cwd(), dir),
       force,
     },
-    'supervisor',
+    'operator',
   );
   if (result.kind === 'ok') {
     printExport(result.value, json);

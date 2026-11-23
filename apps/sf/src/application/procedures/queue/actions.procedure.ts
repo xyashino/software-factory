@@ -47,7 +47,7 @@ export interface QueueActionResult {
   orders: z.infer<typeof ActionsReplySchema>['orders'];
 }
 
-export const runQueueAction = define({ kind: 'supervisor' })(
+export const runQueueAction = define({ kind: 'operator' })(
   ActionsSchema,
 )<QueueActionResult>(async (input, ctx) => {
   if (input.action === 'reprioritise' && input.priority === undefined) {

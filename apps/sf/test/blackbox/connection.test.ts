@@ -319,7 +319,7 @@ describe('sf connection precedence and 401 diagnostics', () => {
     await connectLab(sandbox, ['--default']);
     mkdirSync(join(sandbox.cwd, '.factory-local'));
     writeFileSync(
-      join(sandbox.cwd, '.factory-local', 'supervisor.token'),
+      join(sandbox.cwd, '.factory-local', 'operator.token'),
       `${STALE_TOKEN}\n`,
     );
 
@@ -329,10 +329,10 @@ describe('sf connection precedence and 401 diagnostics', () => {
     // Assert
     expect(result.status).toBe(1);
     expect(result.stderr).toContain(
-      'token source: repo:.factory-local/supervisor.token',
+      'token source: repo:.factory-local/operator.token',
     );
     expect(result.stderr).toContain(
-      'fix: rm .factory-local/supervisor.token && sf server token create --save',
+      'fix: rm .factory-local/operator.token && sf server token create --save',
     );
     expect(result.stderr).not.toContain('--global');
   });
@@ -361,7 +361,7 @@ describe('sf connection precedence and 401 diagnostics', () => {
     );
   });
 
-  it('prefers the repo token file over the saved target token', async () => {
+  it('reads the legacy supervisor token file when no operator token file exists', async () => {
     // Arrange
     const sandbox = createSandbox();
     await connectLab(sandbox, ['--default']);
@@ -378,6 +378,29 @@ describe('sf connection precedence and 401 diagnostics', () => {
     expect(result.status).toBe(1);
     expect(result.stderr).toContain(
       'token source: repo:.factory-local/supervisor.token',
+    );
+    expect(result.stderr).toContain(
+      'fix: rm .factory-local/supervisor.token && sf server token create --save',
+    );
+  });
+
+  it('prefers the repo token file over the saved target token', async () => {
+    // Arrange
+    const sandbox = createSandbox();
+    await connectLab(sandbox, ['--default']);
+    mkdirSync(join(sandbox.cwd, '.factory-local'));
+    writeFileSync(
+      join(sandbox.cwd, '.factory-local', 'operator.token'),
+      `${STALE_TOKEN}\n`,
+    );
+
+    // Act
+    const result = await runCli(sandbox, ['project', 'ls']);
+
+    // Assert
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      'token source: repo:.factory-local/operator.token',
     );
   });
 

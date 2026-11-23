@@ -82,7 +82,10 @@ describe('connection resolution', () => {
     // Arrange
     const inputs = inputsWith({
       envToken: { name: 'HQ_TOKEN', value: 'env-token' },
-      repoToken: 'repo-token',
+      repoToken: {
+        path: '.factory-local/operator.token',
+        secret: 'repo-token',
+      },
       config: remoteConfig,
     });
 
@@ -113,7 +116,10 @@ describe('connection resolution', () => {
   it('prefers the repo token over the active target token', () => {
     // Arrange
     const inputs = inputsWith({
-      repoToken: 'repo-token',
+      repoToken: {
+        path: '.factory-local/operator.token',
+        secret: 'repo-token',
+      },
       config: remoteConfig,
     });
 
@@ -122,7 +128,7 @@ describe('connection resolution', () => {
 
     // Assert
     expect(connection.token).toBe('repo-token');
-    expect(connection.tokenSource).toBe('repo:.factory-local/supervisor.token');
+    expect(connection.tokenSource).toBe('repo:.factory-local/operator.token');
   });
 
   it('falls back to the legacy token when no other token exists', () => {

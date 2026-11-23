@@ -19,12 +19,12 @@ import {
 } from '../../orders/order-writes';
 import { toOrderPlanDto } from '../../orders/order-views';
 
-export const createOrderPlanProcedure = scopedProcedure(['supervisor:write'])(
+export const createOrderPlanProcedure = scopedProcedure(['operator:write'])(
   createOrderPlanContract,
 )((input, ctx) => {
   const { projectId, slug, title, baseBranch, activate } = input.body;
   const now = ctx.clock.now();
-  const actor: Actor = { kind: 'supervisor', id: ctx.principal.tokenId };
+  const actor: Actor = { kind: 'operator', id: ctx.principal.tokenId };
   const planId = asPlanId(scopedId(projectId, slug));
 
   const { row, records } = immediateTx(ctx.db, (tx) => {

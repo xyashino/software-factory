@@ -12,7 +12,7 @@ const StatusSchema = z
 export type StatusWebResult =
   { running: true; pid: number; url: string } | { running: false };
 
-export const statusWeb = define({ kind: 'supervisor' })(
+export const statusWeb = define({ kind: 'operator' })(
   StatusSchema,
 )<StatusWebResult>(async (input, ctx) => {
   const pid = await ctx.webPidFile.read(input.dataDir);

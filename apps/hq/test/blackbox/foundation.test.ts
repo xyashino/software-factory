@@ -50,12 +50,10 @@ const malformedProcedure = publicProcedure(echoContract)(() => ({
   epoch: 'not-a-number',
 }));
 
-const readProcedure = scopedProcedure(['supervisor:read'])(readContract)(
-  () => ({
-    code: 200 as const,
-    ok: true,
-  }),
-);
+const readProcedure = scopedProcedure(['operator:read'])(readContract)(() => ({
+  code: 200 as const,
+  ok: true,
+}));
 
 const mountProbes = (app: TestApp): void => {
   app.post('/probe/echo', honoAdapter(echoProcedure));
@@ -185,7 +183,7 @@ describe('HTTP foundation', () => {
   });
 
   it('answers 200 on a scoped route when the token carries the scope', async () => {
-    const { app } = createTestApp({ auth: grantingAuth(['supervisor:read']) });
+    const { app } = createTestApp({ auth: grantingAuth(['operator:read']) });
     mountProbes(app);
 
     const response = await getJson(app, '/probe/read', {

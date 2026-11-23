@@ -3,15 +3,15 @@ import { mintAdminToken } from '../../src/bootstrap/admin';
 import { getJson, createTestApp } from '../support/test-app';
 
 describe('admin token create', () => {
-  it('mints a supervisor token with the sf_sup_ prefix', () => {
+  it('mints an operator token with the sf_op_ prefix', () => {
     const { db, clock } = createTestApp({ safeTokenAuth: true });
 
     const token = mintAdminToken(db, clock);
 
-    expect(token.startsWith('sf_sup_')).toBe(true);
+    expect(token.startsWith('sf_op_')).toBe(true);
   });
 
-  it('mints a token that opens the supervisor read routes', async () => {
+  it('mints a token that opens the operator read routes', async () => {
     const { app, db, clock } = createTestApp({ safeTokenAuth: true });
     const token = mintAdminToken(db, clock);
 

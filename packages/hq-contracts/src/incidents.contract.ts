@@ -13,7 +13,7 @@ const incidentDto = z.object({
   reason: z.enum(INCIDENT_REASONS),
   detail: z.string(),
   status: z.enum(INCIDENT_STATUSES),
-  triageOwner: z.enum(['mechanic', 'supervisor']),
+  triageOwner: z.enum(['mechanic', 'operator']),
   diagnosis: z.string().nullable(),
   resolutionAction: z
     .enum([

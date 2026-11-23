@@ -34,7 +34,7 @@ const requireTarget = (
   return { config, target };
 };
 
-export const listTargets = define({ kind: 'supervisor' })(
+export const listTargets = define({ kind: 'operator' })(
   EmptySchema,
 )<TargetListResult>(async (_input, ctx) => {
   const { current, targets } = ctx.connections.read();
@@ -47,7 +47,7 @@ export const listTargets = define({ kind: 'supervisor' })(
   };
 });
 
-export const useTarget = define({ kind: 'supervisor' })(NameSchema)<TargetRow>(
+export const useTarget = define({ kind: 'operator' })(NameSchema)<TargetRow>(
   async (input, ctx) => {
     const { config, target } = requireTarget(ctx, input.name);
     ctx.connections.write({ ...config, current: input.name });
@@ -55,7 +55,7 @@ export const useTarget = define({ kind: 'supervisor' })(NameSchema)<TargetRow>(
   },
 );
 
-export const removeTarget = define({ kind: 'supervisor' })(NameSchema)<{
+export const removeTarget = define({ kind: 'operator' })(NameSchema)<{
   name: string;
 }>(async (input, ctx) => {
   const { config } = requireTarget(ctx, input.name);

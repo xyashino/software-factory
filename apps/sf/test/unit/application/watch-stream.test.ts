@@ -4,7 +4,7 @@ import type { SseFrame } from '../../../src/application/ports/hq.port';
 import { streamTransitions } from '../../../src/application/procedures/watch/stream.procedure';
 import { createFakePorts } from '../../support/fake-ports';
 
-const SUPERVISOR = { kind: 'supervisor' } as const;
+const OPERATOR = { kind: 'operator' } as const;
 
 const frameFor = (seq: number): SseFrame => ({
   event: 'transition',
@@ -64,7 +64,7 @@ describe('watch stream', () => {
           printed.push(transition.seq);
         },
       },
-      { ...fake.ports, token: SUPERVISOR, principal: SUPERVISOR },
+      { ...fake.ports, token: OPERATOR, principal: OPERATOR },
     );
 
     // Assert
@@ -95,7 +95,7 @@ describe('watch stream', () => {
         signal: controller.signal,
         onTransition: () => undefined,
       },
-      { ...fake.ports, token: SUPERVISOR, principal: SUPERVISOR },
+      { ...fake.ports, token: OPERATOR, principal: OPERATOR },
     );
 
     // Assert

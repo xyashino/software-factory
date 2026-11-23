@@ -162,7 +162,7 @@ const verdictCommand = defineCommand({
 });
 
 const blockCommand = defineCommand({
-  meta: { name: 'block', description: 'Stop and hand over to the Supervisor' },
+  meta: { name: 'block', description: 'Stop and hand over to the Operator' },
   args: {
     reason: { type: 'string', description: 'Why the job stops' },
     handover: { type: 'string', description: 'Handover file, - reads stdin' },

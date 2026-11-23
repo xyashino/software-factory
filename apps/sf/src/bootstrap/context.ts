@@ -5,7 +5,7 @@ import { createConnectionStore } from '../adapters/fs/connection-store';
 import { createFactoryCredentialStore } from '../adapters/fs/factory-credential';
 import { createPidFile } from '../adapters/fs/pid-file';
 import { createTodoFiles } from '../adapters/fs/todo-files';
-import { createTokenFile } from '../adapters/fs/token-file';
+import { createTokenFile, repoTokenPathOf } from '../adapters/fs/token-file';
 import {
   appendTextFile,
   removeFile,
@@ -35,11 +35,11 @@ import {
   FACTORY_PID_FILE,
   GLOBAL_CONFIG_PATH,
   LEGACY_TOKEN_PATH,
-  SUPERVISOR_TOKEN_PATH,
+  OPERATOR_TOKEN_PATH,
   cellLogPathOf,
 } from '../config';
 
-export type Mode = 'supervisor' | 'cell' | 'operator';
+export type Mode = 'cell' | 'operator';
 
 const processPort = createProcessAdapter();
 
@@ -55,11 +55,15 @@ export const buildContext = (cellName?: string): Ports => {
   const name = cellNameOf(cellName ?? hostname());
   const cellId = process.env[CELL_ID_ENV] ?? name;
   const connections = createConnectionStore(GLOBAL_CONFIG_PATH);
-  const repoTokenPath = resolve(process.cwd(), SUPERVISOR_TOKEN_PATH);
+  const repoTokenPath = repoTokenPathOf(process.cwd());
+  const repoSecret = readOptional(resolve(process.cwd(), repoTokenPath));
   const connection = resolveConnection({
     envUrl: hqUrlEnv(),
     envToken: hqTokenEnv(),
-    repoToken: readOptional(repoTokenPath),
+    repoToken:
+      repoSecret === undefined
+        ? undefined
+        : { path: repoTokenPath, secret: repoSecret },
     legacyToken: readOptional(LEGACY_TOKEN_PATH),
     config: connections.read(),
     defaultUrl: DEFAULT_FACTORY_URL,
@@ -78,7 +82,10 @@ export const buildContext = (cellName?: string): Ports => {
       readStdin: async () => readFileSync(0, 'utf8'),
     },
     todoFiles: createTodoFiles(),
-    tokens: createTokenFile(connection, repoTokenPath),
+    tokens: createTokenFile(
+      connection,
+      resolve(process.cwd(), OPERATOR_TOKEN_PATH),
+    ),
     operator: createLoopbackEndpoint(),
     runner: createRoutingRunner(
       createHeadlessRunner(),

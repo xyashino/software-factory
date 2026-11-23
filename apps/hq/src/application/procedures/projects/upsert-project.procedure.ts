@@ -6,7 +6,7 @@ import { asProjectId } from '../../../domain/common/brand';
 import { scopedProcedure } from '../../core/procedure';
 import { findProject } from '../../orders/order-writes';
 
-export const upsertProjectProcedure = scopedProcedure(['supervisor:write'])(
+export const upsertProjectProcedure = scopedProcedure(['operator:write'])(
   upsertProjectContract,
 )((input, ctx) => {
   const { projectId, repoUrl, defaultBaseBranch, maxRunning } = input.body;

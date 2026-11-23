@@ -14,7 +14,7 @@ import {
 import { EXIT, type ExitCode } from '../domain/exit-codes';
 import { buildContext, type Mode } from './context';
 
-const SUPERVISOR: Access = { kind: 'supervisor' };
+const OPERATOR: Access = { kind: 'operator' };
 
 const noTokenMessage = (connection: Connection): string =>
   `No token stored for ${connection.url}, cannot run this procedure\nfix: ${recoveryCommandOf(connection.url)}`;
@@ -100,7 +100,7 @@ export const runWithoutToken = <I, O>(
   settle(async () =>
     procedure.execute(input, {
       ...(typeof ports === 'function' ? ports() : ports),
-      token: SUPERVISOR,
-      principal: SUPERVISOR,
+      token: OPERATOR,
+      principal: OPERATOR,
     }),
   );

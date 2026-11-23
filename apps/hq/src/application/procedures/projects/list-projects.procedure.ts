@@ -3,7 +3,7 @@ import { projects } from '../../../db/schema/projects';
 import { listProjectsContract } from '@repo/hq-contracts/projects.contract';
 import { scopedProcedure } from '../../core/procedure';
 
-export const listProjectsProcedure = scopedProcedure(['supervisor:read'])(
+export const listProjectsProcedure = scopedProcedure(['operator:read'])(
   listProjectsContract,
 )((_input, ctx) => ({
   code: 200 as const,

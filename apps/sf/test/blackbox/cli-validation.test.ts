@@ -62,7 +62,7 @@ const REJECTED: [string[], string][] = [
   [['todos', 'export', 'extra'], 'unexpected argument extra'],
   [['token', 'create', '--kind', '--name', 'x'], '--kind requires a value'],
   [
-    ['token', 'create', '--kind', 'supervisor', '--bogus'],
+    ['token', 'create', '--kind', 'operator', '--bogus'],
     'unknown option --bogus',
   ],
   [['watch', '--bogus'], 'unknown option --bogus'],

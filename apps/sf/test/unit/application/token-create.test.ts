@@ -54,7 +54,7 @@ describe('token create', () => {
     expect(fake.calls).toEqual([]);
   });
 
-  it('refuses to mint a token without a stored supervisor token', async () => {
+  it('refuses to mint a token without a stored operator token', async () => {
     // Arrange
     const fake = createFakePorts({ secret: null, reply: () => ISSUED });
 

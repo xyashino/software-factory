@@ -44,7 +44,7 @@ const untilAborted = (signal: AbortSignal): Promise<void> =>
   });
 
 const streamTransitions = async (c: Context<AppEnv>): Promise<Response> => {
-  const ctx = await authorize(c.get('transport'), ['supervisor:read']);
+  const ctx = await authorize(c.get('transport'), ['operator:read']);
   const parsed = streamQuery.safeParse(c.req.query());
   if (!parsed.success)
     throw new BadRequest(

@@ -8,20 +8,20 @@ const TOKENS_ROUTE = '/api/v1/tokens';
 
 const TokenCreateSchema = z
   .object({
-    kind: z.enum(['factory_join', 'supervisor']),
+    kind: z.enum(['factory_join', 'operator']),
     name: titleSchema,
   })
   .strict();
 
 export interface TokenCreateResult {
   tokenId: string;
-  kind: 'supervisor' | 'factory_join' | 'factory_session';
+  kind: 'operator' | 'factory_join' | 'factory_session';
   token: string;
   scopes: string[];
   expiresAt: number | null;
 }
 
-export const createToken = define({ kind: 'supervisor' })(
+export const createToken = define({ kind: 'operator' })(
   TokenCreateSchema,
 )<TokenCreateResult>(async (input, ctx) => {
   const secret = await readSecret(ctx);

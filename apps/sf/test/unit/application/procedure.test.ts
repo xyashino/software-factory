@@ -14,7 +14,7 @@ const REFUSAL = 'Token cannot run this procedure';
 const CELL = toCellId('cell-1');
 const JOB = toJobId('job-1');
 
-const supervisorToken: Access = { kind: 'supervisor' };
+const operatorToken: Access = { kind: 'operator' };
 const cellToken: Access = { kind: 'cell', cellId: CELL };
 const otherCellToken: Access = { kind: 'cell', cellId: toCellId('cell-2') };
 const jobToken: Access = {
@@ -53,7 +53,7 @@ const buildWithToken = (token: Access) => (): Ports => ({
 });
 
 describe('procedure access rule', () => {
-  it('refuses a cell procedure run with a supervisor token', async () => {
+  it('refuses a cell procedure run with a operator token', async () => {
     // Arrange
     const { calls, handler } = countingHandler();
     const procedure = define({ kind: 'cell', cellId: CELL })(nameSchema)(
@@ -63,7 +63,7 @@ describe('procedure access rule', () => {
     // Act
     const attempt = procedure.execute(
       { name: 'x' },
-      contextWith(supervisorToken),
+      contextWith(operatorToken),
     );
 
     // Assert
@@ -174,7 +174,7 @@ describe('run maps procedure errors to exit codes', () => {
       procedure,
       { name: 'x' },
       'cell',
-      buildWithToken(supervisorToken),
+      buildWithToken(operatorToken),
     );
 
     // Assert

@@ -19,7 +19,7 @@ const INCIDENTS = {
       orderId: 'wo-1',
       reason: 'step_retries_exhausted',
       status: 'open',
-      triageOwner: 'supervisor',
+      triageOwner: 'operator',
     },
   ],
 };

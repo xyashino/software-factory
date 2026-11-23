@@ -27,7 +27,7 @@ export interface AddProjectResult {
   project: z.infer<typeof projectDto>;
 }
 
-export const addProject = define({ kind: 'supervisor' })(
+export const addProject = define({ kind: 'operator' })(
   AddSchema,
 )<AddProjectResult>(async (input, ctx) => {
   const secret = await readSecret(ctx);

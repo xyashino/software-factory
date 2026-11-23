@@ -77,7 +77,7 @@ describe('web demo join', () => {
     const minted = await postJson(
       app,
       '/api/v1/tokens',
-      { kind: 'supervisor', name: 'escalate' },
+      { kind: 'operator', name: 'escalate' },
       bearer(session.token),
     );
 

@@ -37,7 +37,7 @@ const waitUntilAnswering = async (
   return false;
 };
 
-export const startWeb = define({ kind: 'supervisor' })(
+export const startWeb = define({ kind: 'operator' })(
   StartSchema,
 )<StartWebResult>(async (input, ctx) => {
   const previous = await ctx.webPidFile.read(input.dataDir);

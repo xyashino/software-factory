@@ -15,7 +15,7 @@ const DATA_DIR = '/data/sf';
 const DB_PATH = '/data/sf/factory.db';
 const PROJECT = 'software-factory';
 const SECRET = 'top-secret-token';
-const SUPERVISOR: Access = { kind: 'supervisor' };
+const OPERATOR: Access = { kind: 'operator' };
 
 const INPUT = {
   repoRoot: REPO,
@@ -127,8 +127,8 @@ const doctorOn = (machine: Machine): Promise<DoctorResult> => {
   };
   return runDoctor.execute(INPUT, {
     ...ports,
-    token: SUPERVISOR,
-    principal: SUPERVISOR,
+    token: OPERATOR,
+    principal: OPERATOR,
   });
 };
 

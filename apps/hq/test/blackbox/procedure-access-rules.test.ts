@@ -23,7 +23,7 @@ const probeContract = {
   },
 };
 
-const allOfProbe = scopedProcedure(['supervisor:read', 'supervisor:write'])(
+const allOfProbe = scopedProcedure(['operator:read', 'operator:write'])(
   probeContract,
 )(() => ({ code: 200 as const, ok: true }));
 
@@ -45,7 +45,7 @@ const RESOLVE_BODY = { action: 'escalate' };
 describe('procedure access rules', () => {
   it('a token with every required scope reaches a scoped route', async () => {
     const { app } = createTestApp({
-      auth: grantingAuth(['supervisor:read']),
+      auth: grantingAuth(['operator:read']),
     });
 
     const response = await getJson(
@@ -63,7 +63,7 @@ describe('procedure access rules', () => {
 
   it('a token missing one of several required scopes is refused with the missing scope', async () => {
     const { app } = createTestApp({
-      auth: grantingAuth(['supervisor:read']),
+      auth: grantingAuth(['operator:read']),
     });
     mountProbes(app);
 
@@ -73,13 +73,13 @@ describe('procedure access rules', () => {
     expect(await response.json()).toMatchObject({
       code: 403,
       type: 'forbidden',
-      message: 'Token lacks scope: supervisor:write',
+      message: 'Token lacks scope: operator:write',
     });
   });
 
   it('a token with one of several allowed scopes reaches an any-scoped route', async () => {
     const { app } = createTestApp({
-      auth: grantingAuth(['supervisor:write']),
+      auth: grantingAuth(['operator:write']),
     });
 
     const response = await postJson(
@@ -99,7 +99,7 @@ describe('procedure access rules', () => {
 
   it('a token with none of the allowed scopes is refused with the allowed list', async () => {
     const { app } = createTestApp({
-      auth: grantingAuth(['supervisor:read']),
+      auth: grantingAuth(['operator:read']),
     });
 
     const response = await postJson(
@@ -113,7 +113,7 @@ describe('procedure access rules', () => {
     expect(await response.json()).toMatchObject({
       code: 403,
       type: 'forbidden',
-      message: 'Token needs one of: supervisor:write, factory:worker',
+      message: 'Token needs one of: operator:write, factory:worker',
     });
   });
 

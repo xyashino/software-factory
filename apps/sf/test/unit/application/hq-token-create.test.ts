@@ -3,7 +3,7 @@ import { createHqToken } from '../../../src/application/procedures/hq/token-crea
 import type { Access } from '../../../src/domain/access';
 import { createFakePorts, type FakeOptions } from '../../support/fake-ports';
 
-const SUPERVISOR: Access = { kind: 'supervisor' };
+const OPERATOR: Access = { kind: 'operator' };
 const URL = 'http://127.0.0.1:7070';
 const MINTED = 'sup_minted';
 
@@ -37,8 +37,8 @@ const createWith = (
   };
   const result = createHqToken.execute(request, {
     ...ports,
-    token: SUPERVISOR,
-    principal: SUPERVISOR,
+    token: OPERATOR,
+    principal: OPERATOR,
   });
   return { result, written, saved: fake.savedConnections };
 };

@@ -9,7 +9,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 const CLI_PATH = fileURLToPath(new URL('../../src/cli.ts', import.meta.url));
 const COMMAND_TIMEOUT_MS = 30_000;
 const JOIN_TOKEN = 'sf_join_blackbox0123';
-const SUPERVISOR_TOKEN = 'sf_sup_blackbox';
+const OPERATOR_TOKEN = 'sf_sup_blackbox';
 
 interface Recorded {
   method: string;
@@ -81,7 +81,7 @@ const runCli = (cwd: string, args: readonly string[]): Promise<CliResult> =>
         PATH: process.env.PATH ?? '',
         HOME: join(cwd, '..', 'home'),
         FACTORY_URL: factoryUrl,
-        FACTORY_TOKEN: SUPERVISOR_TOKEN,
+        FACTORY_TOKEN: OPERATOR_TOKEN,
       },
       signal: AbortSignal.timeout(COMMAND_TIMEOUT_MS),
     });
@@ -198,7 +198,7 @@ describe('sf project', () => {
       defaultBaseBranch: 'main',
       maxRunning: 5,
     });
-    expect(post?.authorization).toBe(`Bearer ${SUPERVISOR_TOKEN}`);
+    expect(post?.authorization).toBe(`Bearer ${OPERATOR_TOKEN}`);
   });
 
   it('lists the projects the server holds', async () => {

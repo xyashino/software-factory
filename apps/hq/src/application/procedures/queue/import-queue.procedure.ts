@@ -399,12 +399,12 @@ const importInTx = (tx: DbTx, args: ImportArgs): ImportResult => {
   };
 };
 
-export const importQueueProcedure = scopedProcedure(['supervisor:write'])(
+export const importQueueProcedure = scopedProcedure(['operator:write'])(
   importQueueContract,
 )((input, ctx) => {
   const { projectId, mode, files, commandId } = input.body;
   const now = ctx.clock.now();
-  const actor: Actor = { kind: 'supervisor', id: ctx.principal.tokenId };
+  const actor: Actor = { kind: 'operator', id: ctx.principal.tokenId };
   const dryRun = mode === 'dry_run';
   const parsed = parseFiles(files);
   const preErrors = [...parsed.errors, ...duplicateErrors(parsed.todos)];

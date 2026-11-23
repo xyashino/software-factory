@@ -27,7 +27,7 @@ Rules:
 
 1. **Only on loopback.** Auto-registration runs only when `HQ_URL` host is `127.0.0.1`, `localhost` or `::1`. Any other host requires `HQ_TOKEN` set by hand. Never auto-register against a remote server.
 2. **Trust = same OS user.** A secret is never sent over the network to get a token. The server writes a join secret to `$HQ_DATA_DIR/web-demo.join` (`0600`), the same trust as `sf hq token admin create`. The demo reads it at startup.
-3. **Join exchange.** The demo calls `POST /api/v1/tokens/join` with the join secret and gets a session token. The session is `supervisor` kind with only `supervisor:read` and `supervisor:write`. No `admin:tokens`. TTL 24 h.
+3. **Join exchange.** The demo calls `POST /api/v1/tokens/join` with the join secret and gets a session token. The session is `operator` kind with only `operator:read` and `operator:write`. No `admin:tokens`. TTL 24 h.
 4. **Keep alive.** The demo rotates its session with `POST /api/v1/tokens/rotate` before expiry (existing route, 60 s grace). The token lives only in process memory.
 5. **Missing or refused join** fails startup with a message naming the file or the status. The demo never falls back to an unauthenticated mode.
 

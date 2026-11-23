@@ -53,7 +53,7 @@ const parseStepIndex = (step: string | undefined): number | undefined => {
   return Number(step);
 };
 
-export const resolveIncident = define({ kind: 'supervisor' })(
+export const resolveIncident = define({ kind: 'operator' })(
   ResolveSchema,
 )<ResolveResult>(async (input, ctx) => {
   if (input.report !== undefined) {

@@ -23,7 +23,7 @@ import {
 const PROJECT_ID = 'proj-1';
 const CELL_A = 'cell-aaaaaaaa';
 const CELL_B = 'cell-bbbbbbbb';
-const SUPERVISOR_TOKEN = 'supervisor-test-token';
+const OPERATOR_TOKEN = 'operator-test-token';
 const ORDER_ID = 'order-1';
 const SECOND_ORDER_ID = 'order-2';
 
@@ -94,12 +94,12 @@ const setup = () => {
     .run();
   db.insert(safeTokens)
     .values({
-      tokenId: asTokenId('supervisor-1'),
-      tokenHash: hashToken(SUPERVISOR_TOKEN),
+      tokenId: asTokenId('operator-1'),
+      tokenHash: hashToken(OPERATOR_TOKEN),
       prefix: 'sf_sup_',
-      kind: 'supervisor',
-      name: 'supervisor',
-      scopesJson: ['supervisor:read', 'supervisor:write'],
+      kind: 'operator',
+      name: 'operator',
+      scopesJson: ['operator:read', 'operator:write'],
       createdAt: clock.now(),
     })
     .run();
@@ -189,7 +189,7 @@ const resolveIncident = async (
     app,
     `/api/v1/incidents/${incidentId}/resolve`,
     body,
-    token === SUPERVISOR_TOKEN ? bearer(token) : factoryHeaders(token),
+    token === OPERATOR_TOKEN ? bearer(token) : factoryHeaders(token),
   );
   return {
     status: response.status,
@@ -200,7 +200,7 @@ const resolveIncident = async (
 const listIncidents = async (
   app: TestApp,
   query: string,
-  token = SUPERVISOR_TOKEN,
+  token = OPERATOR_TOKEN,
 ): Promise<{ status: number; body: ListBody | ErrorBody }> => {
   const response = await getJson(
     app,
@@ -268,7 +268,7 @@ const escalatedByMechanic = async (
 };
 
 describe('incident listing and resolution', () => {
-  it('a supervisor lists the incidents of a project filtered by reason and status', async () => {
+  it('an operatorlists the incidents of a project filtered by reason and status', async () => {
     const { app, db } = setup();
     const token = CELL_A;
     await exhaustBuildRetries(app, token);
@@ -286,7 +286,7 @@ describe('incident listing and resolution', () => {
     expect(otherReason.body).toMatchObject({ items: [] });
   });
 
-  it('a token without supervisor:read cannot list incidents', async () => {
+  it('a token without operator:read cannot list incidents', async () => {
     const { app } = setup();
     const token = FACTORY_TOKEN;
 
@@ -296,14 +296,14 @@ describe('incident listing and resolution', () => {
     expect(body).toMatchObject({ code: 403 });
   });
 
-  it('a supervisor retries a failed step with a new attempt and the order requeues', async () => {
+  it('an operatorretries a failed step with a new attempt and the order requeues', async () => {
     const { app, db } = setup();
     const token = CELL_A;
     await exhaustBuildRetries(app, token);
 
     const { status, body } = await resolveIncident(
       app,
-      SUPERVISOR_TOKEN,
+      OPERATOR_TOKEN,
       onlyIncident(db).incidentId,
       { action: 'retry_step', stepIndex: 0 },
     );
@@ -316,14 +316,14 @@ describe('incident listing and resolution', () => {
     expect(orderOf(db)).toMatchObject({ state: 'queued' });
   });
 
-  it('a supervisor restarts from an earlier step that is not past the failed one', async () => {
+  it('an operatorrestarts from an earlier step that is not past the failed one', async () => {
     const { app, db } = setup();
     const token = CELL_A;
     await exhaustBuildRetries(app, token);
 
     const { status, body } = await resolveIncident(
       app,
-      SUPERVISOR_TOKEN,
+      OPERATOR_TOKEN,
       onlyIncident(db).incidentId,
       { action: 'restart_from_step', stepIndex: 0 },
     );
@@ -342,7 +342,7 @@ describe('incident listing and resolution', () => {
 
     const { status, body } = await resolveIncident(
       app,
-      SUPERVISOR_TOKEN,
+      OPERATOR_TOKEN,
       onlyIncident(db).incidentId,
       { action: 'restart_from_step', stepIndex: 1 },
     );
@@ -352,14 +352,14 @@ describe('incident listing and resolution', () => {
     expect(onlyIncident(db)).toMatchObject({ status: 'triaging' });
   });
 
-  it('a supervisor restarts the order from scratch on a fresh workspace', async () => {
+  it('an operatorrestarts the order from scratch on a fresh workspace', async () => {
     const { app, db } = setup();
     const token = CELL_A;
     await exhaustBuildRetries(app, token);
 
     const { status, body } = await resolveIncident(
       app,
-      SUPERVISOR_TOKEN,
+      OPERATOR_TOKEN,
       onlyIncident(db).incidentId,
       { action: 'restart_from_scratch' },
     );
@@ -371,32 +371,32 @@ describe('incident listing and resolution', () => {
     });
   });
 
-  it('a supervisor escalates an incident and the order stays blocked', async () => {
+  it('an operatorescalates an incident and the order stays blocked', async () => {
     const { app, db } = setup();
     const token = CELL_A;
     await exhaustBuildRetries(app, token);
 
     const { status, body } = await resolveIncident(
       app,
-      SUPERVISOR_TOKEN,
+      OPERATOR_TOKEN,
       onlyIncident(db).incidentId,
       { action: 'escalate' },
     );
 
     expect(status).toBe(200);
     expect(body).toMatchObject({
-      incident: { status: 'escalated', triageOwner: 'supervisor' },
+      incident: { status: 'escalated', triageOwner: 'operator' },
       workOrder: { state: 'blocked' },
     });
   });
 
-  it('a supervisor cancels an incident and the order is cancelled without its pinned factory', async () => {
+  it('an operatorcancels an incident and the order is cancelled without its pinned factory', async () => {
     const { app, db } = setup();
     await exhaustBuildRetries(app, CELL_A);
 
     const { status, body } = await resolveIncident(
       app,
-      SUPERVISOR_TOKEN,
+      OPERATOR_TOKEN,
       onlyIncident(db).incidentId,
       { action: 'cancel' },
     );
@@ -413,19 +413,14 @@ describe('incident listing and resolution', () => {
     const token = CELL_A;
     await exhaustBuildRetries(app, token);
     const incidentId = onlyIncident(db).incidentId;
-    await resolveIncident(app, SUPERVISOR_TOKEN, incidentId, {
+    await resolveIncident(app, OPERATOR_TOKEN, incidentId, {
       action: 'retry_step',
       stepIndex: 0,
     });
 
-    const { status } = await resolveIncident(
-      app,
-      SUPERVISOR_TOKEN,
-      incidentId,
-      {
-        action: 'cancel',
-      },
-    );
+    const { status } = await resolveIncident(app, OPERATOR_TOKEN, incidentId, {
+      action: 'cancel',
+    });
 
     expect(status).toBe(422);
   });
@@ -589,14 +584,14 @@ describe('incident listing and resolution', () => {
     expect(onlyIncident(db)).toMatchObject({ status: 'resolved' });
   });
 
-  it('the mechanic escalates and the supervisor restarts the order from its failed step', async () => {
+  it('the mechanic escalates and the operator restarts the order from its failed step', async () => {
     const { app, db } = setup();
     const token = CELL_A;
     await escalatedByMechanic(app, db, token);
 
     const { status, body } = await resolveIncident(
       app,
-      SUPERVISOR_TOKEN,
+      OPERATOR_TOKEN,
       onlyIncident(db).incidentId,
       { action: 'restart_from_step', stepIndex: 0 },
     );
@@ -608,14 +603,14 @@ describe('incident listing and resolution', () => {
     });
   });
 
-  it('the mechanic escalates and the supervisor restarts the order from scratch', async () => {
+  it('the mechanic escalates and the operator restarts the order from scratch', async () => {
     const { app, db } = setup();
     const token = CELL_A;
     await escalatedByMechanic(app, db, token);
 
     const { status, body } = await resolveIncident(
       app,
-      SUPERVISOR_TOKEN,
+      OPERATOR_TOKEN,
       onlyIncident(db).incidentId,
       { action: 'restart_from_scratch' },
     );

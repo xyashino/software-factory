@@ -1,8 +1,8 @@
 import type { FactoryId, TokenId } from '../../domain/common/brand';
 
 export const TOKEN_SCOPES = [
-  'supervisor:read',
-  'supervisor:write',
+  'operator:read',
+  'operator:write',
   'admin:tokens',
   'factory:enroll',
   'factory:worker',

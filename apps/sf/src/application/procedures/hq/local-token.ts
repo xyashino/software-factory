@@ -12,7 +12,7 @@ export interface MintInput {
   dbPath: string;
 }
 
-export const mintSupervisorToken = async (
+export const mintOperatorToken = async (
   ctx: Ports,
   input: MintInput,
 ): Promise<string> => {

@@ -50,6 +50,13 @@
       "when": 1795381703090,
       "tag": "0006_cell_identity_drop",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1795462937193,
+      "tag": "0007_operator_token_rename",
+      "breakpoints": true
     }
   ]
 }

@@ -1,4 +1,1 @@
-export const WEB_SESSION_SCOPES = [
-  'supervisor:read',
-  'supervisor:write',
-] as const;
+export const WEB_SESSION_SCOPES = ['operator:read', 'operator:write'] as const;

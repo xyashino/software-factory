@@ -105,7 +105,7 @@ const sendBatch = async (
   }
 };
 
-export const importTodos = define({ kind: 'supervisor' })(
+export const importTodos = define({ kind: 'operator' })(
   ImportSchema,
 )<ImportResult>(async (input, ctx) => {
   const projectId = await readProjectId(ctx, input.configPath);

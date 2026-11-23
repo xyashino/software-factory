@@ -10,7 +10,7 @@ import { listProjects } from '../projects/list-projects.procedure';
 // Spawn failure reported by the process adapter: the binary is not on PATH.
 const BINARY_NOT_FOUND = 127;
 const LINE_FILE = /\.ya?ml$/;
-const SUPERVISOR: Access = { kind: 'supervisor' };
+const OPERATOR: Access = { kind: 'operator' };
 
 const DoctorSchema = z
   .object({
@@ -198,7 +198,7 @@ const accessChecks = async (
   try {
     const reply = await listProjects.execute(
       {},
-      { ...ctx, token: SUPERVISOR, principal: SUPERVISOR },
+      { ...ctx, token: OPERATOR, principal: OPERATOR },
     );
     projectIds = reply.projects.map((project) => project.projectId);
   } catch {
@@ -258,7 +258,7 @@ const storageChecks = async (
   ];
 };
 
-export const runDoctor = define({ kind: 'supervisor' })(
+export const runDoctor = define({ kind: 'operator' })(
   DoctorSchema,
 )<DoctorResult>(async (input, ctx) => {
   const { lines, invalid } = await loadLines(ctx, input.linesDir);

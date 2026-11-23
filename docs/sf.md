@@ -25,7 +25,7 @@ Quickstart in any git repository (proved by `apps/sf/test/blackbox/standalone-ex
 cd path/to/repo
 sf init                                   # .factory/ + .gitignore entries
 sf hq start
-sf hq token admin create --save           # .factory-local/supervisor.token
+sf hq token admin create --save           # .factory-local/operator.token
 sf project add my-project --repo <url>
 sf web start                              # http://127.0.0.1:4321
 sf factory connect <hq-url> --token <factory_join>        # once per PC
@@ -86,12 +86,12 @@ Message: `deprecated: use "sf hq <sub>"`.
 
 ## HQ connection
 
-`sf` reads the HQ address and the supervisor token from one resolver, in this order:
+`sf` reads the HQ address and the operator token from one resolver, in this order:
 
 | Setting | Order (first set wins) | Old name (fallback) |
 | :--- | :--- | :--- |
 | URL | `HQ_URL`, then the active saved target, then `http://127.0.0.1:7070` | `FACTORY_URL` |
-| Token | `HQ_TOKEN`, then `.factory-local/supervisor.token`, then the active saved target, then `~/.config/factory/token` | `FACTORY_TOKEN` |
+| Token | `HQ_TOKEN`, then `.factory-local/operator.token` (or, when that file is missing, the legacy `.factory-local/supervisor.token`), then the active saved target, then `~/.config/factory/token` | `FACTORY_TOKEN` |
 
 Old names are read silently when the `HQ_*` name is unset. `HQ_*` wins when both are set. Token values are never printed.
 
@@ -125,7 +125,7 @@ apps/sf/
 │   │   ├── operator.contract.ts
 │   │   └── common.ts
 │   ├── application/
-│   │   ├── core/                   # procedure factory: access ('supervisor' | 'cell' | 'job'), schema, handler
+│   │   ├── core/                   # procedure factory: access ('operator' | 'cell' | 'job'), schema, handler
 │   │   ├── ports/                  # server.port, clock.port, fs.port, git.port, runner.port,
 │   │   │                           # process.port, operator-endpoint.port, token-store.port
 │   │   └── procedures/
@@ -140,7 +140,7 @@ apps/sf/
 │   ├── adapters/
 │   │   ├── cli/                    # citty commands; each one maps args -> procedure input
 │   │   │                           # hq.command.ts mounts the HQ group; legacy.command.ts holds the deprecated names
-│   │   ├── http/                   # server client (supervisor token, cell token), retries via commandId
+│   │   ├── http/                   # server client (operator token, cell token), retries via commandId
 │   │   ├── fs/                     # .factory-local/cell.json (0600), pid file, .cell/ files
 │   │   ├── git/                    # worktree, checkpoint commit, push
 │   │   ├── process/                # spawn factory server, spawn runner
@@ -148,7 +148,7 @@ apps/sf/
 │   │   ├── operator-endpoint/      # loopback listener per job (Hono, like `apps/hq`)
 │   │   └── memory/                 # clock, in-memory waiters for tests
 │   └── bootstrap/
-│       ├── context.ts              # builds the port set for supervisor, cell, or operator mode
+│       ├── context.ts              # builds the port set for operator or cell mode
 │       ├── hq-env.ts               # reads HQ_* with the FACTORY_* fallback and its one-time warning
 │       └── run.ts                  # runs one procedure with its context
 └── test/
@@ -164,7 +164,7 @@ Rules carried over from `apps/hq`:
 - `contracts/` is the only place wire shapes are declared. The server, the CLI and the operator use
   the same files, or a shared package later (§7).
 - The operator verbs have their own procedures. `sf operator` never reads `.factory/` or the
-  supervisor token.
+  operator token.
 - No barrel files. Imports name the concrete file (`coding-no-barrel-export`).
 
 ## 3. How a Cell works under the hood
@@ -219,8 +219,8 @@ The Cell is the only process that talks to HQ. Agents never do.
 - `sf hq start` runs the server embedded in the `sf` binary, and writes a pid file. The discovery
   address comes from `HQ_URL` (default `http://127.0.0.1:7070`).
 - `sf hq stop` signals only the server process, through its pid file. It does not stop or revoke Cells. See §8, decision 4.
-- The supervisor token (`sf_sup_`) comes from `HQ_TOKEN`, `.factory-local/supervisor.token` (written by
-  `sf hq token admin create --save`) or `~/.config/factory/token`. It is never printed.
+- The operator token (`sf_op_`; `sf_sup_` tokens minted before the rename still work) comes from `HQ_TOKEN`, `.factory-local/operator.token` (written by
+  `sf hq token admin create --save`; a legacy `.factory-local/supervisor.token` is read when it is the only one and never moved) or `~/.config/factory/token`. It is never printed.
 - Every command maps to one endpoint from §1. No command reads the database directly.
 - Output is one human-readable table by default, and `--json` for scripts.
 

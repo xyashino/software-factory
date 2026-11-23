@@ -7,6 +7,7 @@ import cellFactoryOwner from './0003_cell_factory_owner.sql' with { type: 'text'
 import cellGone from './0004_cell_gone.sql' with { type: 'text' };
 import cellIdentityAdd from './0005_cell_identity_add.sql' with { type: 'text' };
 import cellIdentityDrop from './0006_cell_identity_drop.sql' with { type: 'text' };
+import operatorTokenRename from './0007_operator_token_rename.sql' with { type: 'text' };
 
 const SQL_BY_TAG: Record<string, string> = {
   '0000_init': init,
@@ -16,6 +17,7 @@ const SQL_BY_TAG: Record<string, string> = {
   '0004_cell_gone': cellGone,
   '0005_cell_identity_add': cellIdentityAdd,
   '0006_cell_identity_drop': cellIdentityDrop,
+  '0007_operator_token_rename': operatorTokenRename,
 };
 
 export const embeddedMigrationsOf = () =>

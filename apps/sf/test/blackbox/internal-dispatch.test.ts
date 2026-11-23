@@ -26,7 +26,7 @@ afterAll(() => {
 });
 
 describe('internal server marker', () => {
-  it('prints a supervisor token for admin token create', () => {
+  it('prints a operator token for admin token create', () => {
     // Arrange
     const dbDir = makeDir();
     const env = {

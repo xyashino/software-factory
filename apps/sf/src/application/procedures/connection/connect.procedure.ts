@@ -25,7 +25,7 @@ export interface ConnectResult {
   active: boolean;
 }
 
-export const connectTarget = define({ kind: 'supervisor' })(
+export const connectTarget = define({ kind: 'operator' })(
   ConnectSchema,
 )<ConnectResult>(async (input, ctx) => {
   try {

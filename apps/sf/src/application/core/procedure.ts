@@ -59,8 +59,8 @@ export interface Procedure<I, O> {
 
 const isAllowed = (access: Access, token: Access): boolean => {
   switch (access.kind) {
-    case 'supervisor':
-      return token.kind === 'supervisor';
+    case 'operator':
+      return token.kind === 'operator';
     case 'cell':
       return token.kind === 'cell' && token.cellId === access.cellId;
     case 'job':

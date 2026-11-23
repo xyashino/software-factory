@@ -38,7 +38,7 @@ const untilAborted = (signal: AbortSignal): Promise<void> =>
     signal.addEventListener('abort', () => resolve(), { once: true });
   });
 
-export const streamTransitions = define({ kind: 'supervisor' })(
+export const streamTransitions = define({ kind: 'operator' })(
   WatchSchema,
 )<void>(async (input, ctx) => {
   const projectId =

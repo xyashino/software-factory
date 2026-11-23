@@ -21,7 +21,7 @@ const waitUntilExited = async (ctx: Ports, pid: number): Promise<boolean> => {
   return true;
 };
 
-export const stopHq = define({ kind: 'supervisor' })(StopSchema)<StopResult>(
+export const stopHq = define({ kind: 'operator' })(StopSchema)<StopResult>(
   async (input, ctx) => {
     const pid = await ctx.pidFile.read(input.dataDir);
     if (pid === null || !ctx.process.isAlive(pid)) {

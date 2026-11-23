@@ -10,7 +10,7 @@ import { addProject } from '../projects/add-project.procedure';
 import { listProjects } from '../projects/list-projects.procedure';
 import { startHq } from '../hq/start.procedure';
 
-const SUPERVISOR: Access = { kind: 'supervisor' };
+const OPERATOR: Access = { kind: 'operator' };
 const DEFAULT_BASE_BRANCH = 'main';
 const DEFAULT_MAX_RUNNING = 5;
 // Checks that setup itself repairs, so they must not block the run.
@@ -45,10 +45,10 @@ export interface SetupResult {
   steps: SetupStep[];
 }
 
-const asSupervisor = (ports: Ports): Context<Access> => ({
+const asOperator = (ports: Ports): Context<Access> => ({
   ...ports,
-  token: SUPERVISOR,
-  principal: SUPERVISOR,
+  token: OPERATOR,
+  principal: OPERATOR,
 });
 
 const formatCheck = (item: DoctorCheck): string =>
@@ -63,109 +63,109 @@ const blockingLines = (checks: DoctorCheck[]): string[] =>
     )
     .map(formatCheck);
 
-export const runSetup = define({ kind: 'supervisor' })(
-  SetupSchema,
-)<SetupResult>(async (input, ctx) => {
-  const steps: SetupStep[] = [];
+export const runSetup = define({ kind: 'operator' })(SetupSchema)<SetupResult>(
+  async (input, ctx) => {
+    const steps: SetupStep[] = [];
 
-  const doctor = await runDoctor.execute(
-    {
-      repoRoot: input.repoRoot,
-      repoConfigPath: input.repoConfigPath,
-      linesDir: input.linesDir,
-      dataDir: input.dataDir,
-      dbPath: input.dbPath,
-    },
-    ctx,
-  );
-  const blocking = blockingLines(doctor.checks);
-  if (blocking.length > 0) {
-    throw new Refused(blocking.join('\n'));
-  }
-  steps.push({ step: 'doctor', outcome: 'done' });
-
-  const configExists = await ctx.fs.exists(input.repoConfigPath);
-  if (configExists) {
-    const configured = await readProjectId(ctx, input.repoConfigPath);
-    if (input.project !== undefined && input.project !== configured) {
-      throw new ArgumentError(
-        `repo config names project ${configured}, not --project ${input.project}`,
-      );
-    }
-    steps.push({ step: 'init', outcome: 'skipped' });
-  } else {
-    await initProject.execute(
+    const doctor = await runDoctor.execute(
       {
-        root: input.repoRoot,
-        dirName: input.dirName,
-        projectId: input.project ?? null,
-        force: false,
-      },
-      ctx,
-    );
-    steps.push({ step: 'init', outcome: 'done' });
-  }
-
-  if (await ctx.hq.probe()) {
-    steps.push({ step: 'server', outcome: 'skipped' });
-  } else {
-    await startHq.execute(
-      {
-        bin: input.bin,
-        serverArgs: input.serverArgs,
-        cwd: input.repoRoot,
+        repoRoot: input.repoRoot,
+        repoConfigPath: input.repoConfigPath,
+        linesDir: input.linesDir,
         dataDir: input.dataDir,
         dbPath: input.dbPath,
-        port: input.port,
-        host: input.host,
       },
       ctx,
     );
-    steps.push({ step: 'server', outcome: 'done' });
-  }
-
-  // Server start saves the supervisor token, which the ports built before it do not see.
-  const fresh = asSupervisor(input.reconnect());
-
-  const projectId = await readProjectId(ctx, input.repoConfigPath);
-  const registered = (await listProjects.execute({}, fresh)).projects.some(
-    (project) => project.projectId === projectId,
-  );
-  if (registered) {
-    steps.push({ step: 'project', outcome: 'skipped' });
-  } else {
-    const repoUrl = await ctx.git.originUrl(input.repoRoot);
-    if (repoUrl === null) {
-      throw new ArgumentError(
-        'no git origin remote, add one with git remote add origin <url>',
-      );
+    const blocking = blockingLines(doctor.checks);
+    if (blocking.length > 0) {
+      throw new Refused(blocking.join('\n'));
     }
-    await addProject.execute(
-      {
-        projectId,
-        repoUrl,
-        defaultBaseBranch: DEFAULT_BASE_BRANCH,
-        maxRunning: DEFAULT_MAX_RUNNING,
-      },
-      fresh,
-    );
-    steps.push({ step: 'project', outcome: 'done' });
-  }
+    steps.push({ step: 'doctor', outcome: 'done' });
 
-  if (input.cell) {
-    const live = (await listFactoryProjects.execute({}, fresh)).some(
-      (project) => project.repoRoot === input.repoRoot && project.running > 0,
-    );
-    if (live) {
-      steps.push({ step: 'cell', outcome: 'skipped' });
+    const configExists = await ctx.fs.exists(input.repoConfigPath);
+    if (configExists) {
+      const configured = await readProjectId(ctx, input.repoConfigPath);
+      if (input.project !== undefined && input.project !== configured) {
+        throw new ArgumentError(
+          `repo config names project ${configured}, not --project ${input.project}`,
+        );
+      }
+      steps.push({ step: 'init', outcome: 'skipped' });
     } else {
-      await scaleFactoryCells.execute(
-        { repoRoot: input.repoRoot, count: 1 },
+      await initProject.execute(
+        {
+          root: input.repoRoot,
+          dirName: input.dirName,
+          projectId: input.project ?? null,
+          force: false,
+        },
+        ctx,
+      );
+      steps.push({ step: 'init', outcome: 'done' });
+    }
+
+    if (await ctx.hq.probe()) {
+      steps.push({ step: 'server', outcome: 'skipped' });
+    } else {
+      await startHq.execute(
+        {
+          bin: input.bin,
+          serverArgs: input.serverArgs,
+          cwd: input.repoRoot,
+          dataDir: input.dataDir,
+          dbPath: input.dbPath,
+          port: input.port,
+          host: input.host,
+        },
+        ctx,
+      );
+      steps.push({ step: 'server', outcome: 'done' });
+    }
+
+    // Server start saves the operator token, which the ports built before it do not see.
+    const fresh = asOperator(input.reconnect());
+
+    const projectId = await readProjectId(ctx, input.repoConfigPath);
+    const registered = (await listProjects.execute({}, fresh)).projects.some(
+      (project) => project.projectId === projectId,
+    );
+    if (registered) {
+      steps.push({ step: 'project', outcome: 'skipped' });
+    } else {
+      const repoUrl = await ctx.git.originUrl(input.repoRoot);
+      if (repoUrl === null) {
+        throw new ArgumentError(
+          'no git origin remote, add one with git remote add origin <url>',
+        );
+      }
+      await addProject.execute(
+        {
+          projectId,
+          repoUrl,
+          defaultBaseBranch: DEFAULT_BASE_BRANCH,
+          maxRunning: DEFAULT_MAX_RUNNING,
+        },
         fresh,
       );
-      steps.push({ step: 'cell', outcome: 'done' });
+      steps.push({ step: 'project', outcome: 'done' });
     }
-  }
 
-  return { steps };
-});
+    if (input.cell) {
+      const live = (await listFactoryProjects.execute({}, fresh)).some(
+        (project) => project.repoRoot === input.repoRoot && project.running > 0,
+      );
+      if (live) {
+        steps.push({ step: 'cell', outcome: 'skipped' });
+      } else {
+        await scaleFactoryCells.execute(
+          { repoRoot: input.repoRoot, count: 1 },
+          fresh,
+        );
+        steps.push({ step: 'cell', outcome: 'done' });
+      }
+    }
+
+    return { steps };
+  },
+);

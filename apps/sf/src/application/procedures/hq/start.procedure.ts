@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { LOCAL_TARGET } from '../../../domain/connection/connection-config';
 import { Refused, Unreachable } from '../../core/errors';
 import { define, type Ports } from '../../core/procedure';
-import { mintSupervisorToken, saveLocalTarget } from './local-token';
+import { mintOperatorToken, saveLocalTarget } from './local-token';
 
 const START_TIMEOUT_MS = 10_000;
 const POLL_INTERVAL_MS = 200;
@@ -50,7 +50,7 @@ const waitUntilAnswering = async (
   return false;
 };
 
-export const startHq = define({ kind: 'supervisor' })(StartSchema)<StartResult>(
+export const startHq = define({ kind: 'operator' })(StartSchema)<StartResult>(
   async (input, ctx) => {
     const previous = await ctx.pidFile.read(input.dataDir);
     if (previous !== null && ctx.process.isAlive(previous)) {
@@ -85,7 +85,7 @@ export const startHq = define({ kind: 'supervisor' })(StartSchema)<StartResult>(
       throw new Unreachable(`${reason}\n${tail}`);
     }
     if (ctx.connections.read().targets[LOCAL_TARGET] === undefined) {
-      const token = await mintSupervisorToken(ctx, input);
+      const token = await mintOperatorToken(ctx, input);
       saveLocalTarget(ctx, `http://127.0.0.1:${input.port}`, token);
     }
     return { pid };

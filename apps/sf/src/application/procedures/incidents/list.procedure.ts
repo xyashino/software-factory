@@ -50,7 +50,7 @@ const queryOf = (entries: Record<string, string | undefined>) =>
     ),
   );
 
-export const listIncidents = define({ kind: 'supervisor' })(
+export const listIncidents = define({ kind: 'operator' })(
   ListSchema,
 )<IncidentListResult>(async (input, ctx) => {
   const projectId =

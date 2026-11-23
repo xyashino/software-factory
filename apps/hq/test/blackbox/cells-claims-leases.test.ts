@@ -17,7 +17,7 @@ import {
 } from '../support/factory-session';
 
 const PROJECT_ID = 'proj-1';
-const SUPERVISOR_TOKEN = 'supervisor-test-token';
+const OPERATOR_TOKEN = 'operator-test-token';
 const LONG_WAIT_MS = 5_000;
 const CELL_A = 'cell-aaaaaaaa';
 const CELL_B = 'cell-bbbbbbbb';
@@ -47,12 +47,12 @@ const setup = () => {
   seedFactory(db, 'factory-2', SECOND_FACTORY_TOKEN, clock.now());
   db.insert(safeTokens)
     .values({
-      tokenId: asTokenId('supervisor-1'),
-      tokenHash: hashToken(SUPERVISOR_TOKEN),
+      tokenId: asTokenId('operator-1'),
+      tokenHash: hashToken(OPERATOR_TOKEN),
       prefix: 'sf_sup_',
-      kind: 'supervisor',
-      name: 'supervisor',
-      scopesJson: ['supervisor:read', 'supervisor:write'],
+      kind: 'operator',
+      name: 'operator',
+      scopesJson: ['operator:read', 'operator:write'],
       createdAt: clock.now(),
     })
     .run();
@@ -104,7 +104,7 @@ const transitionOrder = (app: TestApp, orderId: string, action: string) =>
     app,
     `/api/v1/work-orders/${orderId}/transitions`,
     { action },
-    { authorization: `Bearer ${SUPERVISOR_TOKEN}` },
+    { authorization: `Bearer ${OPERATOR_TOKEN}` },
   );
 
 const queueImport = (app: TestApp, slug: string, line: string) =>
@@ -129,7 +129,7 @@ const queueImport = (app: TestApp, slug: string, line: string) =>
         },
       ],
     },
-    { authorization: `Bearer ${SUPERVISOR_TOKEN}` },
+    { authorization: `Bearer ${OPERATOR_TOKEN}` },
   );
 
 const jobRow = (db: Db, jobId: string) =>
@@ -240,7 +240,7 @@ describe('cell heartbeats', () => {
         jobId: claimed.job?.jobId ?? '',
         epoch: claimed.job?.epoch ?? -1,
       },
-      { authorization: `Bearer ${SUPERVISOR_TOKEN}`, 'x-cell-id': CELL_A },
+      { authorization: `Bearer ${OPERATOR_TOKEN}`, 'x-cell-id': CELL_A },
     );
 
     expect(response.status).toBe(403);

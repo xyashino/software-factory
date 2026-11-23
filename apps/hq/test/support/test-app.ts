@@ -8,6 +8,7 @@ import type {
 } from '../../src/application/ports/auth.port';
 import type { TransitionBusPort } from '../../src/application/ports/transition-bus.port';
 import { createTransport } from '../../src/bootstrap/transport';
+import type { Db } from '../../src/db/client';
 import { asTokenId } from '../../src/domain/common/brand';
 import { createTestDb } from './test-db';
 import { createFakeClock, type FakeClock } from './test-transport';
@@ -29,6 +30,7 @@ export const grantingAuth = (scopes: readonly TokenScope[]): AuthPort => ({
 
 type TestAppOptions = {
   auth?: AuthPort;
+  db?: Db;
   safeTokenAuth?: boolean;
   transitionBus?: TransitionBusPort;
 };
@@ -43,7 +45,7 @@ export const createTestApp = (
   db: ReturnType<typeof createTestDb>;
   transitionBus: TransitionBusPort;
 } => {
-  const db = createTestDb();
+  const db = options.db ?? createTestDb();
   const clock = createFakeClock();
   const auth = options.safeTokenAuth
     ? createSafeTokenAuth(db, clock)

@@ -13,7 +13,7 @@ export type IncidentReason = (typeof INCIDENT_REASONS)[number];
 
 export type IncidentStatus = (typeof INCIDENT_STATUSES)[number];
 
-export type TriageOwner = 'mechanic' | 'supervisor';
+export type TriageOwner = 'mechanic' | 'operator';
 
 export type Resolution =
   | { action: 'retry_step'; stepIndex: number }
@@ -114,7 +114,7 @@ export const triageIncident = (
     return {
       incident: {
         status: 'triaging',
-        triageOwner: 'supervisor',
+        triageOwner: 'operator',
         failedStepIndex,
         resolutionAction: null,
       },
@@ -201,7 +201,7 @@ export const resolveIncident = (
         incident: {
           ...incident,
           status: 'escalated',
-          triageOwner: 'supervisor',
+          triageOwner: 'operator',
           resolutionAction: resolution.action,
         },
         workOrder,

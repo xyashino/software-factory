@@ -7,7 +7,7 @@ const runCreate = async (
   input: { kind: string; name: string },
   json: boolean,
 ): Promise<number> => {
-  const result = await run(createToken, input, 'supervisor');
+  const result = await run(createToken, input, 'operator');
   if (result.kind === 'ok') {
     if (json) {
       printJson(result.value);
@@ -27,7 +27,7 @@ export const hqTokenCreateCommand = defineCommand({
     kind: {
       type: 'string',
       required: true,
-      description: 'factory_join or supervisor',
+      description: 'factory_join or operator',
     },
     name: { type: 'string', required: true, description: 'Token label' },
     json: { type: 'boolean', default: false },

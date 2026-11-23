@@ -2,8 +2,6 @@ import { z } from 'zod';
 
 export const LOCAL_TARGET = 'local';
 export const TARGET_NAME_PATTERN = /^[a-z0-9][a-z0-9_-]{0,39}$/;
-export const SUPERVISOR_TOKEN_PATH = '.factory-local/supervisor.token';
-export const SUPERVISOR_TOKEN_LABEL = `repo:${SUPERVISOR_TOKEN_PATH}` as const;
 export const LEGACY_TOKEN_LABEL = 'legacy:~/.config/factory/token';
 
 export const TargetNameSchema = z
@@ -45,7 +43,7 @@ export type UrlSource =
   `env:${EnvUrl['name']}` | 'default' | `config:${string}`;
 export type TokenSource =
   | `env:${EnvToken['name']}`
-  | typeof SUPERVISOR_TOKEN_LABEL
+  | `repo:${string}`
   | typeof LEGACY_TOKEN_LABEL
   | `config:${string}`;
 
@@ -59,7 +57,7 @@ export interface Connection {
 export interface ConnectionInputs {
   envUrl: EnvUrl | undefined;
   envToken: EnvToken | undefined;
-  repoToken: string | undefined;
+  repoToken: { path: string; secret: string } | undefined;
   legacyToken: string | undefined;
   config: ConnectionConfig;
   defaultUrl: string;
@@ -106,9 +104,10 @@ const tokenOf = (
   if (env !== undefined && fromEnv !== undefined) {
     return { token: fromEnv, tokenSource: `env:${env.name}` };
   }
-  const fromRepo = presentOf(inputs.repoToken);
-  if (fromRepo !== undefined) {
-    return { token: fromRepo, tokenSource: SUPERVISOR_TOKEN_LABEL };
+  const repo = inputs.repoToken;
+  const fromRepo = presentOf(repo?.secret);
+  if (repo !== undefined && fromRepo !== undefined) {
+    return { token: fromRepo, tokenSource: `repo:${repo.path}` };
   }
   if (active !== undefined) {
     return { token: active.target.token, tokenSource: `config:${active.name}` };
@@ -172,8 +171,9 @@ export const recoveryCommandOf = (url: string): string =>
     : `sf connect ${url}`;
 
 export const tokenFixOf = (connection: Connection): string => {
-  if (connection.tokenSource === SUPERVISOR_TOKEN_LABEL) {
-    return `rm ${SUPERVISOR_TOKEN_PATH} && sf server token create --save`;
+  if (connection.tokenSource?.startsWith('repo:')) {
+    const path = connection.tokenSource.slice('repo:'.length);
+    return `rm ${path} && sf server token create --save`;
   }
   if (connection.tokenSource?.startsWith('env:')) {
     const name = connection.tokenSource.slice('env:'.length);

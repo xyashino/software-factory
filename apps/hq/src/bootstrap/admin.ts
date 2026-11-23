@@ -8,9 +8,9 @@ import {
 export const mintAdminToken = (db: Db, clock: ClockPort): string =>
   immediateTx(db, (tx) =>
     insertSafeToken(tx, {
-      kind: 'supervisor',
+      kind: 'operator',
       name: 'admin',
-      scopes: DEFAULT_SCOPES.supervisor,
+      scopes: DEFAULT_SCOPES.operator,
       rotatedFromId: null,
       expiresAt: null,
       now: clock.now(),

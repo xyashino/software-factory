@@ -11,7 +11,7 @@ import { freePort, runFactoryCommand } from '../support/factory-cli';
 const CLI_PATH = fileURLToPath(new URL('../../src/cli.ts', import.meta.url));
 const COMMAND_TIMEOUT_MS = 30_000;
 const TEST_TIMEOUT_MS = 60_000;
-const TOKEN = 'sf_supervisor_stub';
+const TOKEN = 'sf_operator_stub';
 const FEATURE_LINE = 'name: feature\nstations: []\n';
 const PROJECT_ID = 'software-factory';
 const PROJECTS_ROUTE = '/api/v1/projects';

@@ -3,7 +3,7 @@ import { factories } from '../../../db/schema/factories';
 import { isSilent } from '../../core/identity';
 import { scopedProcedure } from '../../core/procedure';
 
-export const listFactoriesProcedure = scopedProcedure(['supervisor:read'])(
+export const listFactoriesProcedure = scopedProcedure(['operator:read'])(
   listFactoriesContract,
 )((_input, ctx) => {
   const now = ctx.clock.now();

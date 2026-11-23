@@ -52,7 +52,7 @@ const runAdd = async (input: AddInput, json: boolean): Promise<number> => {
       defaultBaseBranch: input.defaultBaseBranch,
       maxRunning: input.maxRunning,
     },
-    'supervisor',
+    'operator',
   );
   if (result.kind === 'ok') {
     if (json) {
@@ -68,7 +68,7 @@ const runAdd = async (input: AddInput, json: boolean): Promise<number> => {
 };
 
 const runList = async (json: boolean): Promise<number> => {
-  const result = await run(listProjects, {}, 'supervisor');
+  const result = await run(listProjects, {}, 'operator');
   if (result.kind === 'ok') {
     const { projects } = result.value;
     if (json) {

@@ -117,7 +117,7 @@ Troubleshooting:
 | Symptom | Check | Fix |
 | --- | --- | --- |
 | Port 7070 in use: `sf hq start` prints `server started`, or `sf doctor` shows `token rejected` on an HQ you did not start | `ss -ltnp 'sport = :7070'`: owner is not your HQ server | Stop the owner: `kill <pid>`. `sf hq stop` only stops the process in the pid file, not a leaked one. Then `sf hq start` |
-| 401 after `sf hq token admin create`: `401: Missing or invalid bearer token` | Read `token source:` in the error. The `fix:` line for a saved target still prints the older `sf server token create --global` spelling, which is the same command | `repo:.factory-local/supervisor.token`: `sf hq token admin create --save` (the repo file wins over global). `env:HQ_TOKEN` (or `env:FACTORY_TOKEN`): unset it or set the new token. `config:<name>`: `sf hq token admin create --save --global` |
+| 401 after `sf hq token admin create`: `401: Missing or invalid bearer token` | Read `token source:` in the error. The `fix:` line for a saved target still prints the older `sf server token create --global` spelling, which is the same command | `repo:.factory-local/operator.token`: `sf hq token admin create --save` (the repo file wins over global). `env:HQ_TOKEN` (or `env:FACTORY_TOKEN`): unset it or set the new token. `config:<name>`: `sf hq token admin create --save --global` |
 | Missing runner: `missing: runner <name> not installed` in `sf doctor`; `sf setup` refuses | `command -v <name>` prints nothing | Install the CLI, put it on `PATH` for non-login shells too, sign in (see above), then `sf doctor` |
 
 Test runs on the same VPS: set `HQ_PORT` and `HQ_URL` together, or the probe and the doctor check still hit port 7070.
@@ -130,7 +130,7 @@ Works in any git repository, not only this monorepo:
 cd path/to/repo
 sf init                                    # .factory/ and .gitignore entries
 sf hq start                                # one HQ server per machine
-sf hq token admin create --save            # .factory-local/supervisor.token
+sf hq token admin create --save            # .factory-local/operator.token
 sf project add my-project --repo <url>
 sf web start                               # dashboard at http://127.0.0.1:4321; sf web stop to end
 sf factory connect <hq-url> --token <factory_join>         # once per PC

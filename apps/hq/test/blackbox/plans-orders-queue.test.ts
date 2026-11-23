@@ -40,7 +40,7 @@ const file = (
 
 const setup = () => {
   const { app, db } = createTestApp({
-    auth: grantingAuth(['supervisor:read', 'supervisor:write']),
+    auth: grantingAuth(['operator:read', 'operator:write']),
   });
   db.insert(projects)
     .values({

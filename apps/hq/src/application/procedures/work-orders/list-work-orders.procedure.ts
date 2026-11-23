@@ -9,7 +9,7 @@ import {
 import { scopedProcedure } from '../../core/procedure';
 import { toWorkOrderDto } from '../../orders/order-views';
 
-export const listWorkOrdersProcedure = scopedProcedure(['supervisor:read'])(
+export const listWorkOrdersProcedure = scopedProcedure(['operator:read'])(
   listWorkOrdersContract,
 )((input, ctx) => {
   const query = input.query;

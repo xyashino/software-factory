@@ -55,7 +55,7 @@ const queryOf = (entries: Record<string, string | undefined>) =>
     ),
   );
 
-export const listQueue = define({ kind: 'supervisor' })(
+export const listQueue = define({ kind: 'operator' })(
   ListSchema,
 )<QueueListResult>(async (input, ctx) => {
   const projectId = await readProjectId(ctx, input.configPath);

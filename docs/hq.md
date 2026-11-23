@@ -80,7 +80,7 @@ This backend (`apps/hq`) is a standalone, stateful control plane built on **Bun 
 9. **Queue Management & Markdown Round-Trip (`export` / `import`)**:
    - REST endpoints (`GET /api/v1/queue/export`, `POST /api/v1/queue/import`, `POST /api/v1/queue/actions`) export and import clean `todos/<slug>.md` files (with `project` from `.factory/config.json` and `line: <name>` in frontmatter).
 10. **Safe Token Security**:
-    - Opaque 256-bit tokens (`sf_sup_...`, `sf_join_...`, `sf_cell_...`) are hashed with SHA-256 at rest, verified via `timingSafeEqual`, scoped by role/permission, bounded by `expiresAt`, rotatable with grace windows, and revocable immediately.
+    - Opaque 256-bit tokens (`sf_op_...`, `sf_join_...`, `sf_cell_...`) are hashed with SHA-256 at rest, verified via `timingSafeEqual`, scoped by role/permission, bounded by `expiresAt`, rotatable with grace windows, and revocable immediately.
 
 ---
 
@@ -543,7 +543,7 @@ The indexes are a backstop. A second active claim fails at write time even if ap
 
 | Token Kind         | Prefix     | Issued By                                      | Default TTL                                | Allowed Scopes                                        | Purpose                                                                                        |
 | :----------------- | :--------- | :--------------------------------------------- | :----------------------------------------- | :---------------------------------------------------- | :--------------------------------------------------------------------------------------------- |
-| **`supervisor`**   | `sf_sup_`  | CLI Admin (`admin token create`) or Rotate API | Configurable (e.g. 30d) or local ephemeral | `supervisor:read`, `supervisor:write`, `admin:tokens` | Manage `OrderPlan`s, `WorkOrder`s, `Incident`s, Queue Import/Export, mint join tokens          |
+| **`operator`**     | `sf_op_`   | CLI Admin (`admin token create`) or Rotate API | Configurable (e.g. 30d) or local ephemeral | `operator:read`, `operator:write`, `admin:tokens`     | Manage `OrderPlan`s, `WorkOrder`s, `Incident`s, Queue Import/Export, mint join tokens. Tokens minted before the rename (`sf_sup_`, kind `supervisor`) are migrated by `0007` and keep working |
 | **`factory_join`** | `sf_join_` | Supervisor (`POST /api/v1/tokens`)             | Short-lived (15m – 24h)                    | `factory:enroll`                                      | Enrolls a Factory at `POST /api/v1/factories/enroll`; exchanged once for a `factory_session` |
 | **`factory_session`** | `sf_factory_` | Server on Factory enrollment or rotation    | Rolling TTL (7d, rotatable)                | `factory:worker`                                      | Used by the Factory daemon for `factories/heartbeat`, Cell `claims`, `heartbeats`, `jobs/{id}/transitions`, `incidents/{id}/resolve`, `factories/cells/{id}/gone`. Cells carry no token of their own |
 

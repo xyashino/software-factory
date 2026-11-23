@@ -60,12 +60,12 @@ type MechanicResolver = {
   factoryId: FactoryId;
   epoch: number;
 };
-type SupervisorResolver = { kind: 'supervisor'; tokenId: string };
-type Resolver = MechanicResolver | SupervisorResolver;
+type OperatorResolver = { kind: 'operator'; tokenId: string };
+type Resolver = MechanicResolver | OperatorResolver;
 
 const resolverOf = (ctx: AuthenticatedContext, body: ResolveBody): Resolver => {
-  if (ctx.principal.scopes.includes('supervisor:write'))
-    return { kind: 'supervisor', tokenId: ctx.principal.tokenId };
+  if (ctx.principal.scopes.includes('operator:write'))
+    return { kind: 'operator', tokenId: ctx.principal.tokenId };
   if (body.epoch === undefined)
     throw new BadRequest('epoch is required for a cell resolution');
   return {
@@ -77,8 +77,8 @@ const resolverOf = (ctx: AuthenticatedContext, body: ResolveBody): Resolver => {
 };
 
 const actorOf = (resolver: Resolver): Actor =>
-  resolver.kind === 'supervisor'
-    ? { kind: 'supervisor', id: resolver.tokenId }
+  resolver.kind === 'operator'
+    ? { kind: 'operator', id: resolver.tokenId }
     : { kind: 'mechanic', id: resolver.cellId };
 
 const toResolution = (body: ResolveBody): Resolution => {
@@ -276,7 +276,7 @@ const persistIncident = (
 };
 
 export const resolveIncidentProcedure = anyScopedProcedure([
-  'supervisor:write',
+  'operator:write',
   'factory:worker',
 ])(resolveIncidentContract)((input, ctx) => {
   const now = ctx.clock.now();

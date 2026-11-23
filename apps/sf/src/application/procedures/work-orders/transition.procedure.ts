@@ -21,7 +21,7 @@ export interface TransitionResult {
   order: { orderId: string; state: string };
 }
 
-export const transitionWorkOrder = define({ kind: 'supervisor' })(
+export const transitionWorkOrder = define({ kind: 'operator' })(
   TransitionSchema,
 )<TransitionResult>(async (input, ctx) => {
   if (input.action === 'cancel' && !input.yes) {

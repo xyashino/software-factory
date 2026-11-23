@@ -12,18 +12,16 @@ import {
   type TokenPrefix,
 } from './token-hash';
 
-export const DEFAULT_SCOPES: Record<
-  'supervisor' | 'factory_join',
-  TokenScope[]
-> = {
-  supervisor: ['supervisor:read', 'supervisor:write', 'admin:tokens'],
-  factory_join: ['factory:enroll'],
-};
+export const DEFAULT_SCOPES: Record<'operator' | 'factory_join', TokenScope[]> =
+  {
+    operator: ['operator:read', 'operator:write', 'admin:tokens'],
+    factory_join: ['factory:enroll'],
+  };
 
 const PREFIX_BY_KIND: Record<TokenKind, TokenPrefix> = {
-  supervisor: TOKEN_PREFIXES.supervisor,
+  operator: TOKEN_PREFIXES.operator,
   web_join: TOKEN_PREFIXES.join,
-  web_session: TOKEN_PREFIXES.supervisor,
+  web_session: TOKEN_PREFIXES.operator,
   factory_join: TOKEN_PREFIXES.join,
   factory_session: TOKEN_PREFIXES.factory,
 };

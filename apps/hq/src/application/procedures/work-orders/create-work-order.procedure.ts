@@ -20,12 +20,12 @@ import {
 } from '../../orders/order-writes';
 import { toWorkOrderDto } from '../../orders/order-views';
 
-export const createWorkOrderProcedure = scopedProcedure(['supervisor:write'])(
+export const createWorkOrderProcedure = scopedProcedure(['operator:write'])(
   createWorkOrderContract,
 )((input, ctx) => {
   const body = input.body;
   const now = ctx.clock.now();
-  const actor: Actor = { kind: 'supervisor', id: ctx.principal.tokenId };
+  const actor: Actor = { kind: 'operator', id: ctx.principal.tokenId };
 
   const { row, records } = immediateTx(ctx.db, (tx) => {
     const project = requireProject(tx, body.projectId);

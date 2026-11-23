@@ -35,7 +35,7 @@ const waitUntilOwnedBy = async (ctx: Ports, pid: number): Promise<boolean> => {
   return false;
 };
 
-export const startFactory = define({ kind: 'supervisor' })(
+export const startFactory = define({ kind: 'operator' })(
   StartSchema,
 )<StartFactoryResult>(async (input, ctx) => {
   const previous = await ctx.factoryPidFile.read(input.dataDir);

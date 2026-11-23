@@ -21,7 +21,7 @@ const waitUntilExited = async (ctx: Ports, pid: number): Promise<boolean> => {
   return true;
 };
 
-export const stopFactory = define({ kind: 'supervisor' })(
+export const stopFactory = define({ kind: 'operator' })(
   StopSchema,
 )<StopFactoryResult>(async (input, ctx) => {
   const pid = await ctx.factoryPidFile.read(input.dataDir);

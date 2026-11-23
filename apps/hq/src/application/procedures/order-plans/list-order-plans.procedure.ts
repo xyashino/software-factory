@@ -5,7 +5,7 @@ import { orderPlans } from '../../../db/schema/plans';
 import { scopedProcedure } from '../../core/procedure';
 import { toOrderPlanDto } from '../../orders/order-views';
 
-export const listOrderPlansProcedure = scopedProcedure(['supervisor:read'])(
+export const listOrderPlansProcedure = scopedProcedure(['operator:read'])(
   listOrderPlansContract,
 )((input, ctx) => {
   const { projectId, state } = input.query;

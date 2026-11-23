@@ -89,25 +89,26 @@ const ensureGitignore = async (
   return [...missing];
 };
 
-export const initProject = define({ kind: 'supervisor' })(
-  InitSchema,
-)<InitResult>(async (input, ctx) => {
-  const projectId =
-    input.projectId ?? (await deriveProjectId(ctx, input.root, input.dirName));
-  const written: string[] = [];
-  const skipped: string[] = [];
-  for (const file of templateFiles(projectId)) {
-    const target = repoPath(input.root, file.path);
-    if (!input.force && (await ctx.fs.exists(target))) {
-      skipped.push(file.path);
-      continue;
+export const initProject = define({ kind: 'operator' })(InitSchema)<InitResult>(
+  async (input, ctx) => {
+    const projectId =
+      input.projectId ??
+      (await deriveProjectId(ctx, input.root, input.dirName));
+    const written: string[] = [];
+    const skipped: string[] = [];
+    for (const file of templateFiles(projectId)) {
+      const target = repoPath(input.root, file.path);
+      if (!input.force && (await ctx.fs.exists(target))) {
+        skipped.push(file.path);
+        continue;
+      }
+      await ctx.fs.writeText(target, file.text);
+      written.push(file.path);
     }
-    await ctx.fs.writeText(target, file.text);
-    written.push(file.path);
-  }
-  const gitignoreUpdated = await ensureGitignore(
-    ctx,
-    repoPath(input.root, GITIGNORE),
-  );
-  return { projectId, written, skipped, gitignoreUpdated };
-});
+    const gitignoreUpdated = await ensureGitignore(
+      ctx,
+      repoPath(input.root, GITIGNORE),
+    );
+    return { projectId, written, skipped, gitignoreUpdated };
+  },
+);

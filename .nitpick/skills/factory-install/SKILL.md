@@ -62,7 +62,7 @@ Any git repo, not only this monorepo:
 cd path/to/repo
 sf init                                    # .factory/ + .gitignore entries
 sf hq start                                # one HQ server per machine
-sf hq token admin create --save            # .factory-local/supervisor.token
+sf hq token admin create --save            # .factory-local/operator.token
 sf project add <id> --repo <url>
 sf web start                               # optional; http://127.0.0.1:4321
 sf hq token create --kind factory_join --name <name>   # once per PC, prints the join token

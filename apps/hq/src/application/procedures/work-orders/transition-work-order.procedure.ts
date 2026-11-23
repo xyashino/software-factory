@@ -14,12 +14,12 @@ import {
 } from '../../orders/order-writes';
 import { toWorkOrderDto } from '../../orders/order-views';
 
-export const transitionWorkOrderProcedure = scopedProcedure([
-  'supervisor:write',
-])(transitionWorkOrderContract)((input, ctx) => {
+export const transitionWorkOrderProcedure = scopedProcedure(['operator:write'])(
+  transitionWorkOrderContract,
+)((input, ctx) => {
   const { action } = input.body;
   const now = ctx.clock.now();
-  const actor: Actor = { kind: 'supervisor', id: ctx.principal.tokenId };
+  const actor: Actor = { kind: 'operator', id: ctx.principal.tokenId };
 
   const { row, records } = immediateTx(ctx.db, (tx) => {
     const order = requireOrder(tx, input.params.id);

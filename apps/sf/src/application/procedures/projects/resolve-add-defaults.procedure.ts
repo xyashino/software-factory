@@ -21,7 +21,7 @@ export interface AddDefaults {
   warning: string | null;
 }
 
-export const resolveAddDefaults = define({ kind: 'supervisor' })(
+export const resolveAddDefaults = define({ kind: 'operator' })(
   ResolveSchema,
 )<AddDefaults>(async (input, ctx) => {
   const configured = (await ctx.fs.exists(input.configPath))

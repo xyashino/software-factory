@@ -14,7 +14,7 @@ import {
 } from '../support/test-app';
 
 const JOIN_TOKEN = 'sf_join_factory-heartbeat-join';
-const SUPERVISOR_TOKEN = 'sf_sup_factory-heartbeat-supervisor';
+const OPERATOR_TOKEN = 'sf_sup_factory-heartbeat-operator';
 
 const setup = () => {
   const { app, clock, db } = createTestApp({ safeTokenAuth: true });
@@ -30,12 +30,12 @@ const setup = () => {
         createdAt: clock.now(),
       },
       {
-        tokenId: asTokenId('supervisor-1'),
-        tokenHash: hashToken(SUPERVISOR_TOKEN),
-        prefix: TOKEN_PREFIXES.supervisor,
-        kind: 'supervisor',
-        name: 'supervisor',
-        scopesJson: ['supervisor:read'],
+        tokenId: asTokenId('operator-1'),
+        tokenHash: hashToken(OPERATOR_TOKEN),
+        prefix: TOKEN_PREFIXES.operator,
+        kind: 'operator',
+        name: 'operator',
+        scopesJson: ['operator:read'],
         createdAt: clock.now(),
       },
     ])
@@ -64,7 +64,7 @@ const heartbeat = (app: TestApp, sessionToken: string): Promise<Response> =>
 
 const listFactories = (app: TestApp) =>
   getJson(app, '/api/v1/factories', {
-    authorization: `Bearer ${SUPERVISOR_TOKEN}`,
+    authorization: `Bearer ${OPERATOR_TOKEN}`,
   }).then(
     (response) =>
       response.json() as Promise<{
@@ -110,7 +110,7 @@ describe('factory heartbeat', () => {
     );
 
     const body = (await getJson(app, '/api/v1/factories', {
-      authorization: `Bearer ${SUPERVISOR_TOKEN}`,
+      authorization: `Bearer ${OPERATOR_TOKEN}`,
     }).then((response) => response.json())) as {
       factories: { projects: unknown[] }[];
     };

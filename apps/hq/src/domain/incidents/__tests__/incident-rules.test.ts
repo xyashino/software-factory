@@ -76,7 +76,7 @@ const triggers: ReadonlyArray<readonly [IncidentReason, TriageOwner]> = [
   ['worktree_reset_limit', 'mechanic'],
   ['delivery_failed', 'mechanic'],
   ['parent_rebased', 'mechanic'],
-  ['line_unavailable', 'supervisor'],
+  ['line_unavailable', 'operator'],
 ];
 
 describe('incident triage', () => {
@@ -101,7 +101,7 @@ describe('incident triage', () => {
     expect(result.workOrder.mechanicRuns).toBe(0);
   });
 
-  it('plans the last mechanic job, then hands the next incident to the supervisor', () => {
+  it('plans the last mechanic job, then hands the next incident to the operator', () => {
     const last = triageIncident(
       'operator_blocked',
       workOrder({ mechanicRuns: MAX_MECHANIC_RUNS - 1 }),
@@ -109,17 +109,17 @@ describe('incident triage', () => {
     const afterBudget = triageIncident('operator_blocked', last.workOrder);
 
     expect(last.mechanicJob).not.toBeNull();
-    expect(afterBudget.incident.triageOwner).toBe('supervisor');
+    expect(afterBudget.incident.triageOwner).toBe('operator');
     expect(afterBudget.mechanicJob).toBeNull();
   });
 
-  it('gives the supervisor the incident when no cell is pinned', () => {
+  it('gives the operator the incident when no cell is pinned', () => {
     const result = triageIncident(
       'operator_blocked',
       workOrder({ pinnedFactoryId: null }),
     );
 
-    expect(result.incident.triageOwner).toBe('supervisor');
+    expect(result.incident.triageOwner).toBe('operator');
     expect(result.mechanicJob).toBeNull();
   });
 });
@@ -216,14 +216,14 @@ describe('incident resolutions', () => {
     ).toBe(true);
   });
 
-  it('escalate hands the incident to the supervisor and leaves the order blocked', () => {
+  it('escalate hands the incident to the operator and leaves the order blocked', () => {
     const result = resolveIncident(incident(), workOrder(), {
       action: 'escalate',
     });
 
     expect(result.incident).toMatchObject({
       status: 'escalated',
-      triageOwner: 'supervisor',
+      triageOwner: 'operator',
       resolutionAction: 'escalate',
     });
     expect(result.workOrder.state).toBe('blocked');

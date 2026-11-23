@@ -14,7 +14,7 @@ export interface ListProjectsResult {
   projects: z.infer<typeof projectDto>[];
 }
 
-export const listProjects = define({ kind: 'supervisor' })(
+export const listProjects = define({ kind: 'operator' })(
   ListSchema,
 )<ListProjectsResult>(async (_input, ctx) => {
   const secret = await readSecret(ctx);

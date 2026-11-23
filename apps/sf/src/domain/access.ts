@@ -1,7 +1,7 @@
 import type { CellId, JobId } from './common/brand';
 
 export type Access =
-  | { kind: 'supervisor' }
+  | { kind: 'operator' }
   | { kind: 'cell'; cellId: CellId }
   | {
       kind: 'job';

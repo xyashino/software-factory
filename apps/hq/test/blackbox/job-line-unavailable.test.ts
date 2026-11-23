@@ -20,7 +20,7 @@ import {
 
 const PROJECT_ID = 'proj-1';
 const SECOND_FACTORY_TOKEN = 'sf_factory_second-token';
-const SUPERVISOR_TOKEN = 'supervisor-test-token';
+const OPERATOR_TOKEN = 'operator-test-token';
 const FIRST_ORDER_ID = 'order-1';
 const SECOND_ORDER_ID = 'order-2';
 const CELL_A = 'cell-aaaaaaaa';
@@ -42,12 +42,12 @@ const setup = () => {
   seedBaseline(db);
   db.insert(safeTokens)
     .values({
-      tokenId: asTokenId('supervisor-1'),
-      tokenHash: hashToken(SUPERVISOR_TOKEN),
-      prefix: TOKEN_PREFIXES.supervisor,
-      kind: 'supervisor',
-      name: 'supervisor',
-      scopesJson: ['supervisor:read', 'supervisor:write'],
+      tokenId: asTokenId('operator-1'),
+      tokenHash: hashToken(OPERATOR_TOKEN),
+      prefix: TOKEN_PREFIXES.operator,
+      kind: 'operator',
+      name: 'operator',
+      scopesJson: ['operator:read', 'operator:write'],
       createdAt: clock.now(),
     })
     .run();
@@ -144,7 +144,7 @@ describe('job line_unavailable transition', () => {
       expect.objectContaining({
         reason: 'line_unavailable',
         status: 'triaging',
-        triageOwner: 'supervisor',
+        triageOwner: 'operator',
         failedJobId: job.jobId,
       }),
     ]);

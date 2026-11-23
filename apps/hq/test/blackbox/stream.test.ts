@@ -134,7 +134,7 @@ const seqsOf = (events: SseEvent[]): string[] => events.map((e) => e.id);
 describe('GET /api/v1/stream', () => {
   it('replays the backlog after afterSeq in seq order, then streams live events', async () => {
     const { app, db, transitionBus } = createTestApp({
-      auth: grantingAuth(['supervisor:read']),
+      auth: grantingAuth(['operator:read']),
     });
     seedBaseline(db);
     commitTransition(db, transitionBus, PROJECT_ID, 'step-1');
@@ -152,7 +152,7 @@ describe('GET /api/v1/stream', () => {
 
   it('replays the full backlog from the start when afterSeq is omitted', async () => {
     const { app, db, transitionBus } = createTestApp({
-      auth: grantingAuth(['supervisor:read']),
+      auth: grantingAuth(['operator:read']),
     });
     seedBaseline(db);
     commitTransition(db, transitionBus, PROJECT_ID, 'step-1');
@@ -166,7 +166,7 @@ describe('GET /api/v1/stream', () => {
 
   it('excludes other projects from backlog and live events when projectId is given', async () => {
     const { app, db, transitionBus } = createTestApp({
-      auth: grantingAuth(['supervisor:read']),
+      auth: grantingAuth(['operator:read']),
     });
     seedBaseline(db);
     seedOtherProject(db);
@@ -186,7 +186,7 @@ describe('GET /api/v1/stream', () => {
 
   it('sends each transition as a transition event with seq id and matching JSON data', async () => {
     const { app, db, transitionBus } = createTestApp({
-      auth: grantingAuth(['supervisor:read']),
+      auth: grantingAuth(['operator:read']),
     });
     seedBaseline(db);
     commitTransition(db, transitionBus, PROJECT_ID, 'step-1');
@@ -218,7 +218,7 @@ describe('GET /api/v1/stream', () => {
     expect(body.type).toBe('unauthorized');
   });
 
-  it('rejects a token without supervisor:read before the stream opens', async () => {
+  it('rejects a token without operator:read before the stream opens', async () => {
     const { app, db } = createTestApp({ auth: grantingAuth([]) });
     seedBaseline(db);
 
@@ -233,7 +233,7 @@ describe('GET /api/v1/stream', () => {
 
   it('rejects a non-numeric afterSeq with a bad request', async () => {
     const { app, db } = createTestApp({
-      auth: grantingAuth(['supervisor:read']),
+      auth: grantingAuth(['operator:read']),
     });
     seedBaseline(db);
 
@@ -260,7 +260,7 @@ describe('GET /api/v1/stream', () => {
       },
     };
     const { app, db } = createTestApp({
-      auth: grantingAuth(['supervisor:read']),
+      auth: grantingAuth(['operator:read']),
       transitionBus,
     });
     seedBaseline(db);

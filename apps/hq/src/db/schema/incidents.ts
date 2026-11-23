@@ -39,7 +39,7 @@ export const incidents = sqliteTable('incidents', {
   detail: text('detail').notNull(),
   status: text('status', { enum: INCIDENT_STATUSES }).notNull(),
   triageOwner: text('triage_owner', {
-    enum: ['mechanic', 'supervisor'],
+    enum: ['mechanic', 'operator'],
   }).notNull(),
   diagnosis: text('diagnosis'),
   resolutionAction: text('resolution_action', {

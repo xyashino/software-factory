@@ -7,7 +7,7 @@ import { scopedProcedure } from '../../core/procedure';
 import { requireOrder } from '../../orders/order-writes';
 import { toWorkOrderDto } from '../../orders/order-views';
 
-export const getWorkOrderProcedure = scopedProcedure(['supervisor:read'])(
+export const getWorkOrderProcedure = scopedProcedure(['operator:read'])(
   getWorkOrderContract,
 )((input, ctx) => {
   const order = requireOrder(ctx.db, input.params.id);

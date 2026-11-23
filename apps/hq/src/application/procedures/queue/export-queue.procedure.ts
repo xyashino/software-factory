@@ -17,7 +17,7 @@ const statusOf = (state: WorkOrderState): TodoStatus => {
   return 'queued';
 };
 
-export const exportQueueProcedure = scopedProcedure(['supervisor:read'])(
+export const exportQueueProcedure = scopedProcedure(['operator:read'])(
   exportQueueContract,
 )((input, ctx) => {
   const { projectId, planSlug, states } = input.query;

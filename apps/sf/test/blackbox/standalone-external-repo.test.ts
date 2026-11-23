@@ -135,7 +135,7 @@ describe.skipIf(!built)('compiled sf in an external repository', () => {
     expect(existsSync(join(repo, '.factory', 'config.json'))).toBe(true);
   });
 
-  it('starts the server and saves a supervisor token', () => {
+  it('starts the server and saves a operator token', () => {
     // Arrange
     // Act
     const start = run(['server', 'start']);
@@ -144,7 +144,7 @@ describe.skipIf(!built)('compiled sf in an external repository', () => {
     // Assert
     expect(start.status).toBe(0);
     expect(token.status).toBe(0);
-    expect(existsSync(join(repo, '.factory-local', 'supervisor.token'))).toBe(
+    expect(existsSync(join(repo, '.factory-local', 'operator.token'))).toBe(
       true,
     );
   });

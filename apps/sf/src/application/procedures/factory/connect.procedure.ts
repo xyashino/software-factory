@@ -16,7 +16,7 @@ export interface ConnectFactoryResult {
   expiresAt: number;
 }
 
-export const connectFactory = define({ kind: 'supervisor' })(
+export const connectFactory = define({ kind: 'operator' })(
   ConnectSchema,
 )<ConnectFactoryResult>(async (input, ctx) => {
   const url = normalizeUrl(input.url);

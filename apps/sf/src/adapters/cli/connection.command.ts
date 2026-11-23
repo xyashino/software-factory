@@ -87,7 +87,7 @@ const runConnect = async (input: {
 export const connectCommand = defineCommand({
   meta: {
     name: 'connect',
-    description: 'Save an HQ URL and its supervisor token',
+    description: 'Save an HQ URL and its operator token',
   },
   args: {
     url: {
@@ -96,11 +96,11 @@ export const connectCommand = defineCommand({
       description: 'HQ URL',
     },
     name: { type: 'string', description: 'Target name' },
-    token: { type: 'string', description: 'Supervisor token' },
+    token: { type: 'string', description: 'Operator token' },
     'token-stdin': {
       type: 'boolean',
       default: false,
-      description: 'Read the supervisor token from stdin',
+      description: 'Read the operator token from stdin',
     },
     default: {
       type: 'boolean',

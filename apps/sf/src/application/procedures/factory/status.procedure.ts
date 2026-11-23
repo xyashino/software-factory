@@ -25,7 +25,7 @@ const daemonStatusOf = async (
   }
 };
 
-export const statusFactory = define({ kind: 'supervisor' })(
+export const statusFactory = define({ kind: 'operator' })(
   StatusSchema,
 )<StatusFactoryResult>(async (input, ctx) => {
   const filePid = await ctx.factoryPidFile.read(input.dataDir);

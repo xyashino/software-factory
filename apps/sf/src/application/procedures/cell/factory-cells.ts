@@ -34,14 +34,14 @@ const SCALE_ROUTE = '/scale';
 
 export type FactoryProject = z.infer<typeof ProjectSchema>;
 
-export const listFactoryProjects = define({ kind: 'supervisor' })(EmptySchema)<
+export const listFactoryProjects = define({ kind: 'operator' })(EmptySchema)<
   FactoryProject[]
 >(
   async (_input, ctx) =>
     ProjectsReplySchema.parse(await ctx.factory.get(SCALE_ROUTE)).projects,
 );
 
-export const scaleFactoryCells = define({ kind: 'supervisor' })(ScaleSchema)<{
+export const scaleFactoryCells = define({ kind: 'operator' })(ScaleSchema)<{
   projectId: string;
 }>(async (input, ctx) =>
   z

@@ -84,12 +84,12 @@ const applyAction = (
   }
 };
 
-export const queueActionsProcedure = scopedProcedure(['supervisor:write'])(
+export const queueActionsProcedure = scopedProcedure(['operator:write'])(
   queueActionsContract,
 )((input, ctx) => {
   const body = input.body;
   const now = ctx.clock.now();
-  const actor: Actor = { kind: 'supervisor', id: ctx.principal.tokenId };
+  const actor: Actor = { kind: 'operator', id: ctx.principal.tokenId };
   const orderIds = [...new Set(body.orderIds)];
 
   const { orders, records } = immediateTx(ctx.db, (tx) => {

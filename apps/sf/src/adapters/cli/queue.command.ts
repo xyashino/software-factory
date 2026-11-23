@@ -62,7 +62,7 @@ const runList = async (
       configPath: resolve(process.cwd(), REPO_CONFIG_PATH),
       ...filters,
     },
-    'supervisor',
+    'operator',
   );
   if (result.kind === 'ok') {
     printList(result.value, json);
@@ -79,7 +79,7 @@ const runAction = async (
   const result = await run(
     runQueueAction,
     { action, orderIds, priority: options.priority, yes: options.yes },
-    'supervisor',
+    'operator',
   );
   if (result.kind === 'ok') {
     printActions(result.value, options.json);

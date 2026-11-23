@@ -64,7 +64,7 @@ const printTransition = (result: TransitionResult, json: boolean): void => {
 };
 
 const runShow = async (orderId: string, json: boolean): Promise<number> => {
-  const result = await run(showWorkOrder, { orderId }, 'supervisor');
+  const result = await run(showWorkOrder, { orderId }, 'operator');
   if (result.kind === 'ok') {
     printShow(result.value, json);
     return EXIT.ok;
@@ -80,7 +80,7 @@ const runTransition = async (
   const result = await run(
     transitionWorkOrder,
     { orderId, action, yes: options.yes },
-    'supervisor',
+    'operator',
   );
   if (result.kind === 'ok') {
     printTransition(result.value, options.json);
@@ -93,7 +93,7 @@ const showCommand = defineCommand({
   meta: {
     name: 'show',
     description:
-      'Show one work order with steps, jobs and incidents. Needs scope supervisor:read',
+      'Show one work order with steps, jobs and incidents. Needs scope operator:read',
   },
   args: {
     id: { type: 'positional', required: true, description: 'Work order id' },
@@ -132,7 +132,7 @@ export const orderCommand = defineCommand({
   meta: {
     name: 'order',
     description:
-      'Show and change one work order. Needs scope supervisor:write for changes',
+      'Show and change one work order. Needs scope operator:write for changes',
   },
   subCommands: {
     show: showCommand,

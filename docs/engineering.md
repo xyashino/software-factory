@@ -147,13 +147,13 @@ Shared style rules (`coding-no-barrel-export`, `coding-export-order`, `coding-mi
    - `parseInput` validates `{ params, query, body }` and maps `ZodError` to `BadRequest(400, "Invalid request payload: <path>: <msg>")`.
    - `parseOutput` validates handler output against `contract.out[output.code]`; undeclared codes or schema mismatches throw `InternalServer(500)`.
 3. **Procedures (`src/application/procedures/<domain>/<action>.procedure.ts`)**:
-   - Built via `publicProcedure`, `authenticatedProcedure`, or `scopedProcedure(['supervisor:write'])`.
+   - Built via `publicProcedure`, `authenticatedProcedure`, or `scopedProcedure(['operator:write'])`.
    - Handlers receive `(input, ctx)` where `ctx` is `TransportContext` (`db`, `clock`, `auth`, `claimWaiters`, `transitionBus`, `signal`, plus `principal` on authenticated procedures).
    - Procedures never touch Hono `Context`, HTTP headers, or status helpers—they return `{ code: 200 as const, ... }` or throw `BaseError` subclasses.
 4. **Thin Hono routes (`src/adapters/hono/routes/<domain>.route.ts`)**:
    - Routes only mount `honoAdapter(procedure)`: e.g. `.post('/claims', honoAdapter(claimJobProcedure))`.
    - Zero `try/catch` in route files or procedures. Centralized `errorHandler` (`.onError`) and `notFoundHandler` (`.notFound`) format all `BaseError` and `HTTPException` instances into `{ code, type, message }`.
-   - Only `GET /api/v1/stream` (SSE) uses Hono's `streamSSE` directly in `stream.route.ts` after verifying `supervisor:read` via `ctx.auth`.
+   - Only `GET /api/v1/stream` (SSE) uses Hono's `streamSSE` directly in `stream.route.ts` after verifying `operator:read` via `ctx.auth`.
 5. **No module-level mutable state**:
    - `createTransport` is called per request (or holds per-app injected instances of `db`, `clock`, `claimWaiters`, `transitionBus`).
    - Never cache DB connections, timers, or waiter sets in module-global variables so parallel `createTestApp()` instances remain 100% isolated.
@@ -192,7 +192,7 @@ Shared style rules (`coding-no-barrel-export`, `coding-export-order`, `coding-mi
 4. **Worktree Check (`worktree_missing` -> Scratch Reset)**: When a Cell reports `action: 'worktree_missing'` on `stepIndex > 0` (`workspaceMode: 'reuse'`), the server increments `worktree_resets` (blocking with `worktree_reset_limit` Incident if `> 2`), rewinds `current_step_index = 0` and all `order_steps`, keeps `pinned_cell_id` and `active_cell_id` locked to the Cell, and returns a fresh Step 0 `Job` (`workspaceMode: 'fresh'`, `epoch + 1`) inline as `nextJob`.
 5. **Dynamic Step Materialization**: `order_steps[0..N-1]` are materialized from `lineSnapshot.stations` sent by the Cell on Step 0 `action: 'start'`.
 6. **Parent Stacking & `stale_base`**: A `WorkOrder` has at most 1 parent (`parent_order_id`). When parent `A` delivers a new `head_commit_sha` that differs from a started/delivered child `B`'s `base_commit_sha`, child `B` is marked `stale_base = 1`, transitioned to `'blocked'`, and an Incident (`reason = 'parent_rebased'`) is opened.
-7. **Safe Tokens**: Raw tokens (`sf_sup_`, `sf_join_`, `sf_factory_`) have 256 bits of CSPRNG entropy, are hashed with SHA-256 before DB storage, compared via `crypto.timingSafeEqual`, enforce `expires_at` and `revoked_at`, and support 60s rotation grace windows via `rotated_from_id`.
+7. **Safe Tokens**: Raw tokens (`sf_op_`, `sf_join_`, `sf_factory_`; legacy `sf_sup_` still accepted) have 256 bits of CSPRNG entropy, are hashed with SHA-256 before DB storage, compared via `crypto.timingSafeEqual`, enforce `expires_at` and `revoked_at`, and support 60s rotation grace windows via `rotated_from_id`.
 
 ---
 

@@ -58,7 +58,7 @@ const runList = async (
   const result = await run(
     listIncidents,
     { configPath: resolve(process.cwd(), REPO_CONFIG_PATH), ...filters },
-    'supervisor',
+    'operator',
   );
   if (result.kind === 'ok') {
     printList(result.value, json);
@@ -76,7 +76,7 @@ const runResolve = async (
   },
   json: boolean,
 ): Promise<number> => {
-  const result = await run(resolveIncident, input, 'supervisor');
+  const result = await run(resolveIncident, input, 'operator');
   if (result.kind === 'ok') {
     printResolve(result.value, json);
     return EXIT.ok;
@@ -97,7 +97,7 @@ const LIST_ARGS = {
 const listCommand = defineCommand({
   meta: {
     name: 'list',
-    description: 'List incidents. Needs scope supervisor:read',
+    description: 'List incidents. Needs scope operator:read',
   },
   args: LIST_ARGS,
   run: async ({ args }) => {
@@ -116,7 +116,7 @@ const listCommand = defineCommand({
 const resolveCommand = defineCommand({
   meta: {
     name: 'resolve',
-    description: `Resolve an incident: ${RESOLVE_ACTIONS.join('|')}. Needs scope supervisor:write`,
+    description: `Resolve an incident: ${RESOLVE_ACTIONS.join('|')}. Needs scope operator:write`,
   },
   args: {
     id: { type: 'positional', required: true, description: 'Incident id' },
@@ -150,7 +150,7 @@ const resolveCommand = defineCommand({
 export const incidentCommand = defineCommand({
   meta: {
     name: 'incident',
-    description: 'List and resolve incidents (Supervisor escalation path)',
+    description: 'List and resolve incidents (Operator escalation path)',
   },
   args: LIST_ARGS,
   default: 'list',

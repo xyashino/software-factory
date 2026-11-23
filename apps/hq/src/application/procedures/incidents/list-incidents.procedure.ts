@@ -5,7 +5,7 @@ import { asOrderId, asProjectId } from '../../../domain/common/brand';
 import { scopedProcedure } from '../../core/procedure';
 import { toIncidentDto } from '../../orders/incident-views';
 
-export const listIncidentsProcedure = scopedProcedure(['supervisor:read'])(
+export const listIncidentsProcedure = scopedProcedure(['operator:read'])(
   listIncidentsContract,
 )((input, ctx) => {
   const query = input.query;

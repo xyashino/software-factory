@@ -25,7 +25,7 @@ export interface ExportResult {
   refused: string[];
 }
 
-export const exportTodos = define({ kind: 'supervisor' })(
+export const exportTodos = define({ kind: 'operator' })(
   ExportSchema,
 )<ExportResult>(async (input, ctx) => {
   const projectId = await readProjectId(ctx, input.configPath);

@@ -15,9 +15,9 @@ const DATA_DIR = '/data/sf';
 const DB_PATH = '/data/sf/factory.db';
 const ORIGIN = 'https://example.test/software-factory.git';
 const PROJECT = 'software-factory';
-const MINTED = 'minted-supervisor-token';
+const MINTED = 'minted-operator-token';
 const SERVER_ARG = '/src/server.ts';
-const SUPERVISOR: Access = { kind: 'supervisor' };
+const OPERATOR: Access = { kind: 'operator' };
 
 interface Machine {
   files: Map<string, string>;
@@ -144,7 +144,7 @@ const arrange = (overrides: Partial<Machine> = {}): Arrangement => {
     },
     tokens: {
       ...fake.ports.tokens,
-      read: async () => (machine.secret === null ? null : SUPERVISOR),
+      read: async () => (machine.secret === null ? null : OPERATOR),
       secret: async () => machine.secret,
     },
     factory: {
@@ -202,7 +202,7 @@ const runSetupOn = (
       reconnect: () => ports,
       ...overrides,
     },
-    { ...ports, token: SUPERVISOR, principal: SUPERVISOR },
+    { ...ports, token: OPERATOR, principal: OPERATOR },
   );
 
 const configuredMachine = (): Partial<Machine> => ({

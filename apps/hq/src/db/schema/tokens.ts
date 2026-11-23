@@ -9,7 +9,7 @@ import { jsonColumn } from '@repo/bun-sqlite-kit/columns';
 import { factories } from './factories';
 
 export const TOKEN_KINDS = [
-  'supervisor',
+  'operator',
   'web_join',
   'web_session',
   'factory_join',

@@ -7,9 +7,4 @@ export const ENTITY_TYPES = [
   'cell',
 ] as const;
 
-export const ACTOR_KINDS = [
-  'supervisor',
-  'mechanic',
-  'cell',
-  'system',
-] as const;
+export const ACTOR_KINDS = ['operator', 'mechanic', 'cell', 'system'] as const;
