@@ -1,0 +1,50 @@
+name: gemini
+description: Fast direct builder build with Gemini runner (antigravity), quality gate and direct delivery
+
+workspace:
+  sync:
+    timeout: 2m
+    exec:
+      - git fetch origin
+  setup:
+    timeout: 10m
+    exec:
+      - bun install --frozen-lockfile
+      - bun run --if-present nitpick:sync
+
+operators:
+  builder:
+    profile: builder
+    runner: antigravity
+    model: gemini-3.8-flash-medium
+    timeout: 40m
+    headless: false
+    permission: write
+
+mechanic:
+  profile: mechanic
+  runner: antigravity
+  model: gemini-3.8-flash-medium
+  timeout: 20m
+  headless: false
+  permission: read
+
+stations:
+  - id: build
+    kind: operator
+    operator: builder
+    inputs: []
+
+  - id: quality-gate
+    kind: inspection
+    timeout: 15m
+    exec:
+      - bun run ci:verify
+    onFail:
+      retry: build
+      max: 3
+
+deliver:
+  commit: build.commit
+  report: build.report
+  to: new-pr
