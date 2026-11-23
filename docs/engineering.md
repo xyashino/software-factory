@@ -177,7 +177,7 @@ Shared style rules (`coding-no-barrel-export`, `coding-export-order`, `coding-mi
 4. **Monotonic `epoch` fencing & state-based idempotency**:
    - Every Cell mutation (`start`, `complete`, `fail`, `block`, `line_unavailable`, `worktree_missing`, `heartbeats`) verifies `job.cell_id === principal.cellId` and `job.epoch === body.epoch`. Mismatch throws `StaleLeaseEpoch` (`409`, `type: 'stale-lease-epoch'`).
    - The server stores no command ids and no replay results. A transition is applied only if the job is live, owned by the caller and at the current `epoch`.
-   - If the job already reflects the command's outcome at the same `epoch`, the server answers `200 already_applied` and changes nothing (PLAN §11.4).
+   - If the job already reflects the command's outcome at the same `epoch`, the server answers `200 already_applied` and changes nothing ([`factory.md`](./factory.md) §11.4).
    - `state_transitions` is history only, written for the SSE stream. It is never read to answer a retry.
 5. **Post-commit side effects (`claimWaiters` & `transitionBus`)**:
    - Only after `immediateTx` commits successfully may a procedure call `ctx.claimWaiters.wakeAll()` (when work becomes `queued`/`ready`) or `ctx.transitionBus.publish(transitions)`.

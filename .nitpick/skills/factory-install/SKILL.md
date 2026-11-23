@@ -61,23 +61,25 @@ Any git repo, not only this monorepo:
 ```bash
 cd path/to/repo
 sf init                                    # .factory/ + .gitignore entries
-sf server start                            # one server per machine
-sf server token create --save              # .factory-local/supervisor.token
+sf hq start                                # one HQ server per machine
+sf hq token admin create --save            # .factory-local/supervisor.token
 sf project add <id> --repo <url>
 sf web start                               # optional; http://127.0.0.1:4321
-sf token create --kind cell_join --name <name>
-FACTORY_JOIN_TOKEN=<token> sf cell start --name <name>
+sf hq token create --kind factory_join --name <name>   # once per PC, prints the join token
+sf factory connect <hq-url> --token -     # join token from stdin, once per PC
+sf factory start
+sf cell scale 2 --repo <path>              # Cells start under the Factory daemon
 sf todos import                            # push todos/*.md
 sf queue
 ```
 
-- Pass the join token via env only; do not echo it.
-- Repeat `sf init`, `sf project add`, `sf cell start` per repo to share one server.
+- Pass the join token with `--token -` (stdin); do not echo it.
+- Repeat `sf init`, `sf project add`, `sf cell scale N --repo <path>` per repo to share one HQ.
 
 ## 4. Multi-cell and remote brain
 
-- Several Cells on one PC: unique `--name` each.
-- Remote server: start with `FACTORY_HOST=0.0.0.0` only behind Tailscale or TLS. Remote Cells and CLI set `FACTORY_URL` (default `http://127.0.0.1:7070`) and use a `cell_join` token.
+- Several Cells on one PC: `sf cell scale N`, one count per repo project.
+- Remote HQ: start with `FACTORY_HOST=0.0.0.0` only behind Tailscale or TLS. Remote Factories join with `sf factory connect <hq-url>` and a `factory_join` token.
 - Data dir: `$XDG_DATA_HOME/sf` (default `~/.local/share/sf`).
 
 ## 5. Verify and stop
@@ -86,8 +88,9 @@ sf queue
 sf queue
 sf cell list
 sf web stop
-sf cell stop --id <id>                     # id from sf cell list
-sf server stop
+sf cell scale 0 --repo <path>              # stops this repo's Cells
+sf factory stop
+sf hq stop
 ```
 
 Report to user: what is installed where, what is running, anything skipped.

@@ -31,9 +31,9 @@ Rules:
 4. **Keep alive.** The demo rotates its session with `POST /api/v1/tokens/rotate` before expiry (existing route, 60 s grace). The token lives only in process memory.
 5. **Missing or refused join** fails startup with a message naming the file or the status. The demo never falls back to an unauthenticated mode.
 
-Open decision: whether the join secret is multi-use for 24 h (simple) or single-use and re-minted on each start (stricter, like `cell_join`). Recommended: single-use, re-minted by the server on each `sf hq start`.
+Open decision: whether the join secret is multi-use for 24 h (simple) or single-use and re-minted on each start (stricter). Recommended: single-use, re-minted by the server on each `sf hq start`.
 
-Note: [`factory.md`](./factory.md) §11 lists `POST /api/v1/tokens/join` for `cell_join`. The join contract in `apps/factory/src/contracts/tokens.contract.ts` takes a `joinSecret` but has no web client kind yet.
+Note: the join contract in `apps/factory/src/contracts/tokens.contract.ts` takes a `joinSecret` but has no web client kind yet.
 
 ## 3. Security
 

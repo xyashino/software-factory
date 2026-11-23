@@ -3,7 +3,7 @@
 One binary: `sf`. It is the only CLI (the old `factory` CLI, `apps/cli`, was removed) and serves the Supervisor (you),
 the Cell daemon (each machine that runs work), and the Operator and Mechanic verbs (agents inside a job).
 
-Names used here follow the [glossary](./README.md#glossary): **HQ** is the external server, **Factory** is the local daemon (planned, not built yet), **Cell** is the worker.
+Names used here follow the [glossary](./README.md#glossary): **HQ** is the external server, **Factory** is the local daemon (`sf factory`), **Cell** is the worker.
 
 ## 0. Install and quickstart
 
@@ -45,14 +45,13 @@ especially §3 (Cell lifecycle) and §11 (agent reporting). Operator CLI spec:
 | init | `sf init` | Supervisor, in a repo | none (writes `.factory/`, `.gitignore`) |
 | project | `sf project add <id> --repo <url>` | Supervisor | `POST /api/v1/projects` |
 | project | `sf project ls` | Supervisor | `GET /api/v1/projects` |
-| token | `sf token create --kind factory_join --name <n>` | Supervisor | `POST /api/v1/tokens` |
-| server | `sf server start` | Supervisor | none (spawns the embedded server) |
-| server | `sf server stop` | Supervisor | none (signals the pid file) |
-| server | `sf server token create [--save]` | Supervisor | none (admin path in server) |
+| hq | `sf hq start` | Supervisor | none (spawns the embedded server) |
+| hq | `sf hq stop` | Supervisor | none (signals the pid file) |
+| hq | `sf hq token create --kind factory_join --name <n>` | Supervisor | `POST /api/v1/tokens` |
+| hq | `sf hq token admin create [--save]` | Supervisor | none (admin path in server) |
 | web | `sf web start \| stop \| status` | Supervisor | none (runs the installed web UI, pid in `web.pid`) |
 | cell | `sf cell scale N [--repo <path>]` | Supervisor, on a Cell machine | Factory daemon `PUT /scale` (converges Cells to N) |
 | cell | `sf cell start [--name <slug>]` | Factory daemon child only | `claims`, `heartbeats`, `jobs/{id}/transitions` through the relay |
-| cell | `sf cell list` | Supervisor | Factory daemon `GET /cells` (local only) |
 | cell | `sf cell create\|stop\|rm` | removed | exit 2, `use "sf cell scale N"` |
 | cell | `sf cell list` | Supervisor | Factory daemon `GET /scale` |
 | todos | `sf todos import` | Supervisor | `POST /api/v1/queue/import` |
@@ -207,7 +206,7 @@ The Cell is the only process that talks to HQ. Agents never do.
 ## 4. Operator endpoint
 
 - The Cell opens `127.0.0.1` on an OS-assigned port when a Job starts, and closes it when the Job
-  ends (`apps/factory` PLAN §11.2).
+  ends ([`factory.md`](./factory.md) §11.2).
 - The token is random, per Job, held only in Cell memory.
 - The Cell maps the token to `{ jobId, role, incidentId?, epoch }`, and refuses verbs the role
   cannot use.
@@ -217,11 +216,11 @@ The Cell is the only process that talks to HQ. Agents never do.
 
 ## 5. Supervisor side
 
-- `sf server start` runs the server embedded in the `sf` binary, and writes a pid file. The discovery
-  address comes from `FACTORY_URL` (default `http://127.0.0.1:7070`).
-- `sf server stop` signals only the server process, through its pid file. It does not stop or revoke Cells. See §8, decision 4.
-- The supervisor token (`sf_sup_`) comes from `FACTORY_TOKEN`, `.factory-local/supervisor.token` (written by
-  `sf server token create --save`) or `~/.config/factory/token`. It is never printed.
+- `sf hq start` runs the server embedded in the `sf` binary, and writes a pid file. The discovery
+  address comes from `HQ_URL` (default `http://127.0.0.1:7070`).
+- `sf hq stop` signals only the server process, through its pid file. It does not stop or revoke Cells. See §8, decision 4.
+- The supervisor token (`sf_sup_`) comes from `HQ_TOKEN`, `.factory-local/supervisor.token` (written by
+  `sf hq token admin create --save`) or `~/.config/factory/token`. It is never printed.
 - Every command maps to one endpoint from §1. No command reads the database directly.
 - Output is one human-readable table by default, and `--json` for scripts.
 
@@ -236,9 +235,7 @@ The Cell is the only process that talks to HQ. Agents never do.
 
 ## 7. Shared contracts
 
-The HQ server, the CLI, the Cell and the operator all parse the same request and reply shapes. During
-implementation, each app keeps its own copy of the schemas. A later step moves them into one shared
-package. Names and scope are in [`plans/contracts-plan.md`](./plans/contracts-plan.md): `@repo/factory-contracts`. `@repo/cell-contracts` went with `apps/cell`. No naming rule forbids the `factory-` prefix. The server's [`engineering.md`](./engineering.md) would need an explicit exception when that happens.
+Request and reply shapes for HQ live in `@repo/factory-contracts` (`packages/factory-contracts`). `@repo/cell-contracts` went with `apps/cell`.
 
 ## 8. Decisions and open questions
 
@@ -254,7 +251,7 @@ Decided:
    cut-over. The new one is cleaner, so nothing is migrated from the old code.
 4. **`hq stop` does not stop Cells.** It stops only the HQ server process. Cells keep running and
    retry their requests with the same `commandId`. If HQ stays down past the self-fence window
-   (45 s), a Cell aborts its runner, and its Job is lost once the lease ends (`apps/factory` PLAN §3.7).
+   (45 s), a Cell aborts its runner, and its Job is lost once the lease ends ([`factory.md`](./factory.md) §3.7).
    `sf hq start` brings HQ back, and Cells resume.
 5. **Cell token storage.** Not important for now. Keep the simplest option that works.
 6. **Runners in v2.0.** All six ship: `claude`, `codex`, `cursor`, `antigravity`, `opencode`, `copilot`. They match
