@@ -9,7 +9,6 @@ import type {
   RunHandle,
   RunOutcome,
 } from '../../../src/application/ports/runner.port';
-import { drainStateOf } from '../../../src/cell/drain-signal';
 import {
   HEARTBEAT_INTERVAL_MS,
   LINES_DIR,
@@ -52,7 +51,6 @@ const LINE_PATH = joinPath(REPO, LINES_DIR, 'feature.yml');
 const PROFILE_PATH = joinPath(REPO, OPERATORS_DIR, 'builder.md');
 const WORKTREE = joinPath(REPO, WORKTREES_DIR, slugOf('order-1'));
 const HEARTBEATS_ROUTE = '/api/v1/cells/heartbeats';
-const LEAVE_ROUTE = '/api/v1/cells/leave';
 // eslint-disable-next-line no-control-regex
 const ANSI = /\u001b\[[0-9;]*m/g;
 
@@ -147,9 +145,6 @@ const harness = (options: {
           leaseExpiresAt: null,
           signals: control.beat.signals,
         };
-      }
-      if (call.route === LEAVE_ROUTE) {
-        return { code: 200, status: 'left' };
       }
       const action = (call.body as { action?: string } | undefined)?.action;
       if (action === 'start') {
@@ -248,7 +243,6 @@ const harness = (options: {
       repoRoot: REPO,
       logPath: '/repo/cell.log',
       signal: new AbortController().signal,
-      drain: drainStateOf(),
     },
     lines: () =>
       log.map((text) => text.replace(ANSI, '').trim().replace(/\s+/g, ' ')),
@@ -427,7 +421,7 @@ describe('cell run outcome log', () => {
     await paneLogged(h);
 
     await fireAfter(h, BUILD_TIMEOUT_MS);
-    await job;
+    await expect(job).rejects.toThrow(/runner still alive after abort/);
 
     expect(h.lines()).toContainEqual(
       expect.stringMatching(/build abort reason=timeout confirmed=no$/),
@@ -441,17 +435,16 @@ describe('cell run outcome log', () => {
     await paneLogged(h);
 
     await fireAfter(h, BUILD_TIMEOUT_MS);
-    await job;
+    await expect(job).rejects.toThrow(/runner still alive after abort/);
 
     expect(h.lines()).toContainEqual(
       expect.stringMatching(
         /build fail .*runner still alive after abort, Cell left without claiming$/,
       ),
     );
-    expect(h.routes()).toContain(LEAVE_ROUTE);
   });
 
-  it('aborts the runner and hands the job back when the signal fires mid-job', async () => {
+  it('aborts the runner when the signal fires mid-job', async () => {
     // Arrange
     const h = harness({ interactive: true });
     const stop = new AbortController();
@@ -466,8 +459,9 @@ describe('cell run outcome log', () => {
     // Assert
     expect(next).toBeNull();
     expect(h.control.aborts).toBe(1);
-    expect(h.routes()).toContain(LEAVE_ROUTE);
-    expect(h.runtime.drain.left).toBe(true);
+    expect(h.lines()).toContainEqual(
+      expect.stringMatching(/build end kind=stopped/),
+    );
   });
 
   it('fails the job and stops claiming when the runner survives the signal', async () => {
@@ -480,34 +474,33 @@ describe('cell run outcome log', () => {
 
     // Act
     stop.abort();
-    const next = await job;
 
     // Assert
-    expect(next).toBeNull();
+    await expect(job).rejects.toThrow(/runner still alive after abort/);
     expect(h.lines()).toContainEqual(
       expect.stringMatching(/build fail .*runner still alive after abort/),
     );
-    expect(h.routes()).toContain(LEAVE_ROUTE);
-    expect(h.runtime.drain.left).toBe(true);
   });
 
-  it('logs the drain-force end and the abort of the runner', async () => {
+  it('logs the heartbeat abort end and the abort of the runner', async () => {
     const h = harness({ interactive: true });
     const job = runJob(h.runtime, jobOf({}));
     await paneLogged(h);
 
-    h.control.beat.signals = ['force'];
+    h.control.beat.signals = ['abort'];
     await fireAfter(h, HEARTBEAT_INTERVAL_MS);
     await job;
 
     const lines = h.lines();
     expect(lines).toContainEqual(
       expect.stringMatching(
-        /build end kind=drain-force exit=pending duration=10s$/,
+        /build end kind=aborted exit=pending duration=10s$/,
       ),
     );
     expect(lines).toContainEqual(
-      expect.stringMatching(/build abort reason=drain-force confirmed=yes$/),
+      expect.stringMatching(
+        /build abort reason=heartbeat failures=0 confirmed=yes$/,
+      ),
     );
   });
 

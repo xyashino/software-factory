@@ -10,7 +10,7 @@ const BEARER = 'Bearer ';
 const CELL_HEADER = 'x-cell-id';
 const JSON_HEADERS = { 'content-type': 'application/json' };
 const ALLOWED_ROUTES = [
-  /^\/api\/v1\/cells\/(claims|heartbeats|leave)$/,
+  /^\/api\/v1\/cells\/(claims|heartbeats)$/,
   /^\/api\/v1\/jobs\/[^/]+\/transitions$/,
   /^\/api\/v1\/incidents\/[^/]+\/resolve$/,
 ];

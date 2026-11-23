@@ -1,6 +1,5 @@
 import type { z } from 'zod';
 import { startHeartbeat } from '../../../cell/heartbeat';
-import { observeDrain } from '../../../cell/drain-signal';
 import {
   HEARTBEAT_INTERVAL_MS,
   LINES_DIR,
@@ -19,7 +18,6 @@ import type { RunHandle } from '../../ports/runner.port';
 import { commandIdOf } from '../../../domain/cell/command-id';
 import { renderLogLine } from '../../../domain/cell/log-line';
 import type { OperatorOutcome } from '../../../domain/cell/cell-loop';
-import { drainPolicy } from '../../../domain/cell/drain-policy';
 import {
   lockVerdictOf,
   parseStepLock,
@@ -44,7 +42,7 @@ import {
 } from './cell-runtime';
 import { checkpointStation } from './checkpoint.procedure';
 import { deliverWorkOrder } from './deliver.procedure';
-import { leaveCell } from './leave.procedure';
+import { Refused } from '../../core/errors';
 
 const HEARTBEATS_ROUTE = '/api/v1/cells/heartbeats';
 const LINE_SUFFIX = '.yml';
@@ -91,7 +89,7 @@ type RunEnd =
   | { kind: 'exited'; exitCode: number }
   | { kind: 'aborted' }
   | { kind: 'timeout' }
-  | { kind: 'drain-force' };
+  | { kind: 'stopped' };
 
 interface Launch {
   command: string;
@@ -550,9 +548,7 @@ const finish = async (
 ): Promise<ClaimedJob | null> => {
   switch (end.kind) {
     case 'aborted':
-      return null;
-    case 'drain-force':
-      await leaveCell(runtime, job);
+    case 'stopped':
       return null;
     case 'timeout':
       return finishWithFail(
@@ -636,7 +632,6 @@ const beatOnce = async (
       runtime.session.sessionToken,
     ),
   );
-  observeDrain(runtime.drain, signals);
   return signals;
 };
 
@@ -1098,7 +1093,7 @@ const runOperator = async (
   const startedAt = ports.clock.now();
   const cycleToken = cycleTokenOf();
   const end = deferred<RunEnd>();
-  const onSignal = (): void => end.resolve({ kind: 'drain-force' });
+  const onSignal = (): void => end.resolve({ kind: 'stopped' });
   runtime.signal.addEventListener('abort', onSignal, { once: true });
   if (runtime.signal.aborted) onSignal();
   const endpoint = await ports.operator.open(
@@ -1165,27 +1160,12 @@ const runOperator = async (
       end.resolve({ kind: 'timeout' });
     });
   }
-  let forced = false;
   let heartbeatFailures = 0;
   let stopped = false;
   const heartbeat = startHeartbeat({
     clock: ports.clock,
     intervalMs: HEARTBEAT_INTERVAL_MS,
-    beat: async () => {
-      const signals = await beatOnce(runtime, job);
-      if (
-        !forced &&
-        drainPolicy({
-          jobHeld: true,
-          force: runtime.drain.force,
-          stationFinished: false,
-        }) === 'abort_then_leave'
-      ) {
-        forced = true;
-        end.resolve({ kind: 'drain-force' });
-      }
-      return signals;
-    },
+    beat: () => beatOnce(runtime, job),
     onAbort: (failures) => {
       heartbeatFailures = failures;
       end.resolve({ kind: 'aborted' });
@@ -1225,8 +1205,9 @@ const runOperator = async (
           'runner still alive after abort, Cell left without claiming',
           ranOf(),
         );
-        await leaveCell(runtime, null);
-        return null;
+        throw new Refused(
+          'runner still alive after abort, Cell stops claiming',
+        );
       }
       stopped = true;
     }
@@ -1366,9 +1347,7 @@ const finishMechanic = async (
 ): Promise<ClaimedJob | null> => {
   switch (end.kind) {
     case 'aborted':
-      return null;
-    case 'drain-force':
-      await leaveCell(runtime, job);
+    case 'stopped':
       return null;
     case 'timeout':
       return finishWithFail(

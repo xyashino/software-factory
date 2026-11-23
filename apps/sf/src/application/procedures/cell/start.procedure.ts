@@ -1,4 +1,3 @@
-import { drainStateOf } from '../../../cell/drain-signal';
 import { LINES_DIR } from '../../../config';
 import { ArgumentError, Refused } from '../../core/errors';
 import type { Ports } from '../../core/procedure';
@@ -23,8 +22,6 @@ export interface StartInput {
   signal: AbortSignal;
 }
 
-export type StartOutcome = 'superseded' | 'stopped';
-
 const installedRunnersOf = async (ports: Ports): Promise<string[]> => {
   const installed: string[] = [];
   for (const name of ports.runners.names()) {
@@ -44,7 +41,7 @@ const lineNamesOf = async (ports: Ports, dir: string): Promise<string[]> =>
 export const startCell = async (
   ports: Ports,
   input: StartInput,
-): Promise<StartOutcome> => {
+): Promise<void> => {
   const { cellId } = input;
   const bearer = ports.connection.token;
   if (!input.relayed || cellId === undefined || bearer === null) {
@@ -79,8 +76,6 @@ export const startCell = async (
     repoRoot,
     logPath: input.logPath,
     signal: input.signal,
-    drain: drainStateOf(),
   };
   await claimLoop(runtime, null);
-  return runtime.drain.superseded ? 'superseded' : 'stopped';
 };

@@ -86,7 +86,7 @@ sf queue
 sf queue
 sf cell list
 sf web stop
-sf cell stop --id <id>                     # id from sf cell list; drains
+sf cell stop --id <id>                     # id from sf cell list
 sf server stop
 ```
 

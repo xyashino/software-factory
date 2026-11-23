@@ -57,7 +57,6 @@ export const claimJobContract = {
     200: z.object({
       code: z.literal(200),
       job: claimedJobDto.nullable(),
-      signals: z.array(z.enum(['drain'])),
     }),
   },
 };
@@ -73,7 +72,7 @@ export const heartbeatCellContract = {
     200: z.object({
       code: z.literal(200),
       leaseExpiresAt: z.number().int().nullable(),
-      signals: z.array(z.enum(['abort', 'drain', 'force'])),
+      signals: z.array(z.enum(['abort'])),
     }),
   },
 };

@@ -1,6 +1,5 @@
 import type { z } from 'zod';
 import type { claimedJobDto } from '@repo/factory-contracts/cells.contract';
-import type { DrainState } from '../../../cell/drain-signal';
 import { Unreachable } from '../../core/errors';
 import type { Ports } from '../../core/procedure';
 
@@ -22,7 +21,6 @@ export interface CellRuntime {
   repoRoot: string;
   logPath: string;
   signal: AbortSignal;
-  drain: DrainState;
 }
 
 export const sendWithRetry = async <T>(

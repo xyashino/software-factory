@@ -9,7 +9,6 @@ import type {
   RunOutcome,
   RunSpec,
 } from '../../../src/application/ports/runner.port';
-import { drainStateOf } from '../../../src/cell/drain-signal';
 import { LINES_DIR, OPERATORS_DIR, WORKTREES_DIR } from '../../../src/config';
 import { joinPath } from '../../../src/domain/common/path';
 import { slugOf } from '../../../src/domain/git/branch-names';
@@ -157,7 +156,6 @@ const harness = (options: { timeoutFires?: boolean } = {}): Harness => {
       projectId: 'proj-1',
       repoRoot: REPO,
       signal: new AbortController().signal,
-      drain: drainStateOf(),
     },
     calls: fake.calls,
     runs,

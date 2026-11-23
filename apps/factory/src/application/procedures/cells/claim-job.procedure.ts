@@ -376,8 +376,8 @@ export const claimJobProcedure = scopedProcedure(['factory:worker'])(
   const waitMs = Math.min(input.body.waitMs, CLAIM_WAIT_MS);
   const first = attemptClaim(ctx, cell);
   if (first.job !== null || waitMs === 0)
-    return { code: 200 as const, job: first.job, signals: [] };
+    return { code: 200 as const, job: first.job };
   await ctx.claimWaiters.waitForWake(waitMs, ctx.signal);
   const second = attemptClaim(ctx, cell);
-  return { code: 200 as const, job: second.job, signals: [] };
+  return { code: 200 as const, job: second.job };
 });
