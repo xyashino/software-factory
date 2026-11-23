@@ -588,7 +588,9 @@ const issueJob = (
   return toClaimedJob(
     nextJob,
     leaseExpiresAt,
-    input.orderPatch.headCommitSha ?? order.headCommitSha ?? order.baseCommitSha,
+    input.orderPatch.headCommitSha ??
+      order.headCommitSha ??
+      order.baseCommitSha,
   );
 };
 

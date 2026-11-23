@@ -29,7 +29,7 @@ sf hq token admin create --save           # .factory-local/supervisor.token
 sf project add my-project --repo <url>
 sf web start                              # http://127.0.0.1:4321
 sf factory connect <hq-url> --token <factory_join>        # once per PC
-sf cell create --repo ~/code/my-project                   # Cell starts under the Factory daemon
+sf cell scale 2 --repo ~/code/my-project                  # Cells start under the Factory daemon
 sf todos import && sf queue
 sf web stop && sf hq stop
 ```
@@ -50,11 +50,11 @@ especially §3 (Cell lifecycle) and §11 (agent reporting). Operator CLI spec:
 | server | `sf server stop` | Supervisor | none (signals the pid file) |
 | server | `sf server token create [--save]` | Supervisor | none (admin path in server) |
 | web | `sf web start \| stop \| status` | Supervisor | none (runs the installed web UI, pid in `web.pid`) |
-| cell | `sf cell create [--repo <path>]` | Supervisor, on a Cell machine | Factory daemon `POST /cells`, then `claims`, `heartbeats`, `jobs/{id}/transitions` through its relay |
+| cell | `sf cell scale N [--repo <path>]` | Supervisor, on a Cell machine | Factory daemon `PUT /scale` (converges Cells to N) |
 | cell | `sf cell start [--name <slug>]` | Factory daemon child only | `claims`, `heartbeats`, `jobs/{id}/transitions` through the relay |
 | cell | `sf cell list` | Supervisor | Factory daemon `GET /cells` (local only) |
-| cell | `sf cell stop <id> \| --all` | Supervisor | Factory daemon `DELETE /cells/{id}` (kill, then HQ gone) |
-| cell | `sf cell rm <id>` | Supervisor | Factory daemon `DELETE /cells/{id}` |
+| cell | `sf cell create\|stop\|rm` | removed | exit 2, `use "sf cell scale N"` |
+| cell | `sf cell list` | Supervisor | Factory daemon `GET /scale` |
 | todos | `sf todos import` | Supervisor | `POST /api/v1/queue/import` |
 | todos | `sf todos export` | Supervisor | `GET /api/v1/queue/export` |
 | queue | `sf queue` | Supervisor | `GET /api/v1/work-orders`, `GET /api/v1/order-plans` |
@@ -200,7 +200,7 @@ The Cell is the only process that talks to HQ. Agents never do.
 
 ### Stop
 
-- `sf cell stop <id>` kills the Cell process (SIGTERM, then SIGKILL) and only then tells HQ the
+- Scale down kills the Cell process (SIGTERM, then SIGKILL) and only then tells HQ the
   Cell is gone. HQ requeues its Job at once, or when the lease expires if HQ is unreachable.
 - There is no revoke. A stopped Cell leaves no row in HQ.
 
@@ -248,7 +248,7 @@ Decided:
 2. **One binary, named `sf`.**
    The Cell daemon (`sf cell start`) lives in `apps/sf/src/application/procedures/cell/`, with helpers
    in `apps/sf/src/cell/`. The Factory daemon (`sf factory start|stop|status`) is one per PC, listens on
-   `127.0.0.1:7072` (`SF_FACTORY_PORT`) and spawns, lists and kills Cell daemons. `sf cell create|list|stop|rm`
+   `127.0.0.1:7072` (`SF_FACTORY_PORT`) and spawns, lists and kills Cell daemons. `sf cell scale|list`
    call it. `apps/cell` and `sf cell server` are removed.
 3. **Coexistence.** The new approach is built alongside the current implementation, which stays until
    cut-over. The new one is cleaner, so nothing is migrated from the old code.

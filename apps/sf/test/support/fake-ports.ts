@@ -23,7 +23,7 @@ export const PROJECTS_REPLY = {
 };
 
 export interface ServerCall {
-  method: 'GET' | 'POST' | 'DELETE';
+  method: 'GET' | 'POST' | 'PUT';
   route: string;
   query?: Record<string, string>;
   body?: unknown;
@@ -236,7 +236,7 @@ export const createFakePorts = (options: FakeOptions = {}): FakePorts => {
       get: async (route) => recordDaemon({ method: 'GET', route }),
       post: async (route, body) =>
         recordDaemon({ method: 'POST', route, body }),
-      delete: async (route) => recordDaemon({ method: 'DELETE', route }),
+      put: async (route, body) => recordDaemon({ method: 'PUT', route, body }),
     },
     factoryPidFile: {
       read: async () => pidFile,

@@ -43,6 +43,11 @@ export const createFactoryDaemonAdapter = ({
         headers: JSON_HEADERS,
         body: JSON.stringify(body),
       }),
-    delete: (route) => send(route, { method: 'DELETE' }),
+    put: (route, body) =>
+      send(route, {
+        method: 'PUT',
+        headers: JSON_HEADERS,
+        body: JSON.stringify(body),
+      }),
   };
 };

@@ -14,10 +14,9 @@ import { Refused } from '../../application/core/errors';
 import type { Ports } from '../../application/core/procedure';
 import { startCell } from '../../application/procedures/cell/start.procedure';
 import {
-  createFactoryCell,
-  type FactoryCell,
-  listFactoryCells,
-  removeFactoryCell,
+  type FactoryProject,
+  listFactoryProjects,
+  scaleFactoryCells,
 } from '../../application/procedures/cell/factory-cells';
 import { cellNameOf } from '../../domain/cell/cell-name';
 import { parentGoneOf } from '../../domain/cell/parent-gone';
@@ -30,9 +29,18 @@ import {
   printTable,
   reportFailure,
 } from './output';
-import { promptSelect } from './prompt-select';
 
-const FACTORY_HEADERS = ['id', 'name', 'pid', 'repo'];
+const PROJECT_HEADERS = [
+  'project',
+  'repo',
+  'desired',
+  'running',
+  'cell',
+  'state',
+  'flag',
+];
+const CRASH_LOOP_FLAG = 'crash loop';
+const COUNT_PATTERN = /^\d+$/;
 const FORCED_STOP_LINE =
   'cell stopped by a second signal: exiting now, a runner may still be alive';
 const FORCED_STOP_EXIT = 130;
@@ -41,12 +49,6 @@ const PARENT_GONE_EXIT = 1;
 const DAEMON_WATCH_MS = 1_000;
 // A claim long-polls and only sees the abort when it returns, so the exit is forced.
 const PARENT_GONE_GRACE_MS = 1_000;
-
-const cliError = (message: string): Error => {
-  const error = new Error(message);
-  error.name = 'CLIError';
-  return error;
-};
 
 const linesOf = (raw: string | undefined): string[] | undefined => {
   const lines = raw
@@ -76,9 +78,6 @@ const claimSlot = async (
   }
 };
 
-const chooserOf = (): typeof promptSelect | undefined =>
-  process.stdin.isTTY ? promptSelect : undefined;
-
 const daemonWatchOf = (
   ports: Ports,
   onGone: () => void,
@@ -106,10 +105,7 @@ const onParentGone = (controller: AbortController): void => {
   ).unref();
 };
 
-const runStart = async (
-  requested: string | undefined,
-  project: string | undefined,
-): Promise<number> => {
+const runStart = async (requested: string | undefined): Promise<number> => {
   const cwd = process.cwd();
   const claim = await settle(() => claimSlot(cwd, requested));
   if (claim.kind === 'failed') {
@@ -136,8 +132,6 @@ const runStart = async (
         logPath: resolve(cwd, cellLogPathOf(name)),
         lines: linesOf(process.env[CELL_LINES_ENV]),
         relayed: isRelayedOf(process.env),
-        project,
-        choose: chooserOf(),
         signal: controller.signal,
       }),
     );
@@ -148,16 +142,28 @@ const runStart = async (
   }
 };
 
-const factoryRows = (cells: FactoryCell[]): string[][] =>
-  cells.map((cell) => [
-    cell.cellId,
-    cell.name,
-    String(cell.pid),
-    cell.repoRoot,
-  ]);
+const projectRows = (projects: FactoryProject[]): string[][] =>
+  projects.flatMap((project) => {
+    const head = [
+      project.projectId,
+      project.repoRoot,
+      String(project.desired),
+      String(project.running),
+    ];
+    const flag = project.crashLoop ? CRASH_LOOP_FLAG : '-';
+    if (project.cells.length === 0) {
+      return [[...head, '-', '-', flag]];
+    }
+    return project.cells.map((cell) => [
+      ...head,
+      cell.cellId,
+      cell.state,
+      flag,
+    ]);
+  });
 
 const runList = async (json: boolean): Promise<number> => {
-  const result = await runWithoutToken(listFactoryCells, {}, () =>
+  const result = await runWithoutToken(listFactoryProjects, {}, () =>
     buildContext(),
   );
   if (result.kind !== 'ok') {
@@ -166,117 +172,33 @@ const runList = async (json: boolean): Promise<number> => {
   if (json) {
     printJson(result.value);
   } else {
-    printTable(FACTORY_HEADERS, factoryRows(result.value));
+    printTable(PROJECT_HEADERS, projectRows(result.value));
   }
   return EXIT.ok;
 };
 
-const runStop = async (
-  id: string | undefined,
-  options: { all: boolean; json: boolean },
-): Promise<number> => {
-  if (!options.all && id === undefined) {
-    throw cliError('cell id required, or --all');
-  }
-  const listed = await runWithoutToken(listFactoryCells, {}, () =>
-    buildContext(),
-  );
-  if (listed.kind !== 'ok') {
-    return reportFailure(listed);
-  }
-  if (options.all) {
-    return stopCells(
-      listed.value.map((cell) => cell.cellId),
-      options.json,
-    );
-  }
-  if (id === undefined) {
-    throw cliError('cell id required, or --all');
-  }
-  if (!listed.value.some((cell) => cell.cellId === id)) {
-    printError(`no local cell ${id}`);
-    return EXIT.refused;
-  }
-  return stopCells([id], options.json);
-};
-
-const stopCells = async (
-  cellIds: readonly string[],
+const runScale = async (
+  count: string,
+  repo: string,
+  lines: string | undefined,
   json: boolean,
 ): Promise<number> => {
-  const stopped: string[] = [];
-  for (const cellId of cellIds) {
-    const removed = await runWithoutToken(
-      removeFactoryCell,
-      { id: cellId },
-      () => buildContext(),
-    );
-    if (removed.kind !== 'ok') {
-      return reportFailure(removed);
-    }
-    stopped.push(removed.value);
-  }
-  if (json) {
-    printJson(stopped.map((cellId) => ({ cellId })));
-  } else {
-    for (const cellId of stopped) {
-      printLine(`cell ${cellId} stopped`);
-    }
-  }
-  return EXIT.ok;
-};
-
-const runCreate = async (options: {
-  repo: string;
-  name: string | undefined;
-  count: string;
-  lines: string | undefined;
-  json: boolean;
-}): Promise<number> => {
-  const count = Number(options.count);
-  if (!Number.isInteger(count) || count < 1) {
-    printError('count must be a positive integer');
+  if (!COUNT_PATTERN.test(count)) {
+    printError('count must be an integer >= 0');
     return EXIT.argument;
   }
-  if (options.name !== undefined && count > 1) {
-    printError('name is only allowed with count 1');
-    return EXIT.argument;
-  }
-  const created: FactoryCell[] = [];
-  for (let index = 0; index < count; index += 1) {
-    const result = await runWithoutToken(
-      createFactoryCell,
-      {
-        repoRoot: resolve(options.repo),
-        name: options.name,
-        lines: linesOf(options.lines),
-      },
-      () => buildContext(),
-    );
-    if (result.kind !== 'ok') {
-      return reportFailure(result);
-    }
-    created.push(result.value);
-  }
-  if (options.json) {
-    printJson(created);
-  } else {
-    printTable(FACTORY_HEADERS, factoryRows(created));
-  }
-  return EXIT.ok;
-};
-
-const runRemove = async (id: string, json: boolean): Promise<number> => {
-  const result = await runWithoutToken(removeFactoryCell, { id }, () =>
-    buildContext(),
+  const result = await runWithoutToken(
+    scaleFactoryCells,
+    { repoRoot: resolve(repo), count: Number(count), lines: linesOf(lines) },
+    () => buildContext(),
   );
   if (result.kind !== 'ok') {
     return reportFailure(result);
   }
   if (json) {
-    printJson({ cellId: result.value });
+    printJson(result.value);
   } else {
-    printLine(`removed ${result.value}`);
+    printLine(`project ${result.value.projectId} scaled to ${count}`);
   }
   return EXIT.ok;
 };
@@ -292,24 +214,16 @@ const startCommand = defineCommand({
       description:
         'Cell name, unique while running (default: hostname, then hostname-2, ...)',
     },
-    project: {
-      type: 'string',
-      description:
-        'Factory project id, required outside a repo with .factory/config.json',
-    },
   },
   run: async ({ args }) => {
-    process.exitCode = await runStart(
-      args.name ?? process.env.CELL_NAME,
-      args.project,
-    );
+    process.exitCode = await runStart(args.name ?? process.env.CELL_NAME);
   },
 });
 
 const listCommand = defineCommand({
   meta: {
     name: 'list',
-    description: 'Show the Cells of the local Factory daemon',
+    description: 'Show the projects and Cells of the local Factory daemon',
   },
   args: {
     json: { type: 'boolean', default: false },
@@ -319,53 +233,49 @@ const listCommand = defineCommand({
   },
 });
 
-const createCommand = defineCommand({
+const scaleCommand = defineCommand({
   meta: {
-    name: 'create',
-    description: 'Start Cells in a project repo via the local Factory daemon',
+    name: 'scale',
+    description: 'Set how many Cells run for this repo project on this PC',
   },
   args: {
+    count: {
+      type: 'positional',
+      required: true,
+      description: 'Desired Cell count (0 stops all)',
+    },
     repo: { type: 'string', default: '.', description: 'Repository root' },
-    name: { type: 'string', description: 'Cell name (count 1 only)' },
-    count: { type: 'string', default: '1', description: 'Number of Cells' },
     lines: { type: 'string', description: 'Comma-separated line names' },
     json: { type: 'boolean', default: false },
   },
   run: async ({ args }) => {
-    process.exitCode = await runCreate(args);
+    process.exitCode = await runScale(
+      args.count,
+      args.repo,
+      args.lines,
+      args.json,
+    );
   },
 });
 
-const stopCommand = defineCommand({
-  meta: {
-    name: 'stop',
-    description: 'Stop a local Cell through the Factory daemon',
-  },
-  args: {
-    slot: { type: 'positional', required: false, description: 'Cell id' },
-    id: { type: 'string', description: 'Cell id (same as the positional)' },
-    all: {
-      type: 'boolean',
-      default: false,
-      description: 'Stop every Cell of the local Factory daemon',
+const removedCommand = (name: string) =>
+  defineCommand({
+    meta: { name, description: 'Removed: use "sf cell scale N"' },
+    args: {
+      target: { type: 'positional', required: false },
+      id: { type: 'string' },
+      all: { type: 'boolean', default: false },
+      json: { type: 'boolean', default: false },
+      repo: { type: 'string' },
+      name: { type: 'string' },
+      count: { type: 'string' },
+      lines: { type: 'string' },
     },
-    json: { type: 'boolean', default: false },
-  },
-  run: async ({ args }) => {
-    process.exitCode = await runStop(args.slot ?? args.id, args);
-  },
-});
-
-const removeCommand = defineCommand({
-  meta: { name: 'rm', description: 'Stop and remove a local Cell' },
-  args: {
-    id: { type: 'positional', required: true, description: 'Cell id' },
-    json: { type: 'boolean', default: false },
-  },
-  run: async ({ args }) => {
-    process.exitCode = await runRemove(args.id, args.json);
-  },
-});
+    run: () => {
+      printError(`"sf cell ${name}" was removed: use "sf cell scale N"`);
+      process.exitCode = EXIT.argument;
+    },
+  });
 
 export const cellCommand = defineCommand({
   meta: {
@@ -375,8 +285,9 @@ export const cellCommand = defineCommand({
   subCommands: {
     start: startCommand,
     list: listCommand,
-    stop: stopCommand,
-    create: createCommand,
-    rm: removeCommand,
+    scale: scaleCommand,
+    create: removedCommand('create'),
+    stop: removedCommand('stop'),
+    rm: removedCommand('rm'),
   },
 });

@@ -33,7 +33,7 @@ describe('sf entrypoint', () => {
   });
 
   it.each([
-    [['cell', '--help'], 'start|list|stop|create|rm'],
+    [['cell', '--help'], 'start|list|scale|create|stop|rm'],
     [['cell', 'start', '--help'], 'Run this Cell loop'],
     [['server', 'token', '--help'], 'create'],
     [['operator', 'block', '--help'], 'block'],

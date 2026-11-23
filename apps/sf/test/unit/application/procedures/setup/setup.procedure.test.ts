@@ -30,6 +30,8 @@ interface Machine {
     projectId: string;
     repoRoot: string;
     pid: number;
+    state: 'idle' | 'running';
+    writes: boolean;
   }[];
   gitMissing: boolean;
   actions: string[];
@@ -146,22 +148,36 @@ const arrange = (overrides: Partial<Machine> = {}): Arrangement => {
       secret: async () => machine.secret,
     },
     factoryDaemon: {
-      get: async () => ({ cells: machine.cells }),
-      post: async (_route, body) => {
-        const { name } = body as { name: string };
-        const cell = {
-          cellId: `cell-${name}`,
-          name,
-          projectId: 'proj-1',
-          repoRoot: REPO,
-          pid: machine.cells.length + 1,
-        };
-        machine.cells.push(cell);
+      get: async () => ({
+        projects:
+          machine.cells.length === 0
+            ? []
+            : [
+                {
+                  projectId: 'proj-1',
+                  repoRoot: REPO,
+                  desired: machine.cells.length,
+                  running: machine.cells.length,
+                  crashLoop: false,
+                  cells: machine.cells,
+                },
+              ],
+      }),
+      put: async (_route, body) => {
+        const { count } = body as { count: number };
+        if (count > 0 && machine.cells.length === 0) {
+          machine.cells.push({
+            cellId: 'cell-dev-box',
+            name: 'dev-box',
+            projectId: 'proj-1',
+            repoRoot: REPO,
+            pid: 1,
+            state: 'idle',
+            writes: false,
+          });
+        }
         machine.actions.push('spawn:cell');
-        return cell;
-      },
-      delete: async () => {
-        throw new Refused('not used by setup');
+        return { projectId: 'proj-1' };
       },
     },
   };
@@ -170,7 +186,7 @@ const arrange = (overrides: Partial<Machine> = {}): Arrangement => {
 
 const runSetupOn = (
   ports: Ports,
-  overrides: { cell?: string; project?: string } = {},
+  overrides: { cell?: boolean; project?: string } = {},
 ): Promise<{ steps: SetupStep[] }> =>
   runSetup.execute(
     {
@@ -271,16 +287,16 @@ describe('sf setup', () => {
     expect(result.steps.map((step) => step.step)).not.toContain('cell');
   });
 
-  it('--cell starts one local cell and skips when already live', async () => {
+  it('--cell scales the repo to one cell and skips when one runs', async () => {
     // Arrange
     const { machine, ports } = arrange();
-    await runSetupOn(ports, { cell: 'dev-box' });
+    await runSetupOn(ports, { cell: true });
     const spawnedFirst = machine.actions.filter((action) =>
       action.startsWith('spawn:cell'),
     );
 
     // Act
-    const result = await runSetupOn(ports, { cell: 'dev-box' });
+    const result = await runSetupOn(ports, { cell: true });
 
     // Assert
     expect(spawnedFirst).toEqual(['spawn:cell']);
