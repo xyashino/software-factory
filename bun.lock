@@ -20,7 +20,7 @@
       "version": "0.0.0",
       "dependencies": {
         "@repo/bun-sqlite-kit": "workspace:*",
-        "@repo/factory-contracts": "workspace:*",
+        "@repo/hq-contracts": "workspace:*",
         "@repo/zod-contract-kit": "workspace:*",
         "drizzle-orm": "catalog:",
         "hono": "catalog:",
@@ -45,7 +45,7 @@
         "sf": "./src/cli.ts",
       },
       "dependencies": {
-        "@repo/factory-contracts": "workspace:*",
+        "@repo/hq-contracts": "workspace:*",
         "@repo/zod-contract-kit": "workspace:*",
         "citty": "catalog:",
         "picocolors": "catalog:",
@@ -67,7 +67,7 @@
       "version": "0.0.0",
       "dependencies": {
         "@astrojs/node": "catalog:",
-        "@repo/factory-contracts": "workspace:*",
+        "@repo/hq-contracts": "workspace:*",
         "astro": "catalog:",
         "zod": "catalog:",
       },
@@ -114,8 +114,8 @@
         "typescript-eslint": "catalog:",
       },
     },
-    "packages/factory-contracts": {
-      "name": "@repo/factory-contracts",
+    "packages/hq-contracts": {
+      "name": "@repo/hq-contracts",
       "version": "0.0.0",
       "dependencies": {
         "@repo/zod-contract-kit": "workspace:*",
@@ -517,7 +517,7 @@
 
     "@repo/hq": ["@repo/hq@workspace:apps/hq"],
 
-    "@repo/factory-contracts": ["@repo/factory-contracts@workspace:packages/factory-contracts"],
+    "@repo/hq-contracts": ["@repo/hq-contracts@workspace:packages/hq-contracts"],
 
     "@repo/nitpick": ["@repo/nitpick@workspace:packages/nitpick"],
 

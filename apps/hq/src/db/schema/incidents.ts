@@ -7,7 +7,7 @@ import {
 import {
   INCIDENT_REASONS,
   INCIDENT_STATUSES,
-} from '@repo/factory-contracts/enums/incidents';
+} from '@repo/hq-contracts/enums/incidents';
 import type {
   IncidentId,
   JobId,

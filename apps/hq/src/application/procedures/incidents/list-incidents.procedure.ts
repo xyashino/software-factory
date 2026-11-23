@@ -1,5 +1,5 @@
 import { and, eq } from 'drizzle-orm';
-import { listIncidentsContract } from '@repo/factory-contracts/incidents.contract';
+import { listIncidentsContract } from '@repo/hq-contracts/incidents.contract';
 import { incidents } from '../../../db/schema/incidents';
 import { asOrderId, asProjectId } from '../../../domain/common/brand';
 import { scopedProcedure } from '../../core/procedure';

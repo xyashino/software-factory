@@ -1,7 +1,4 @@
-import {
-  ACTOR_KINDS,
-  ENTITY_TYPES,
-} from '@repo/factory-contracts/enums/events';
+import { ACTOR_KINDS, ENTITY_TYPES } from '@repo/hq-contracts/enums/events';
 import type { CommandId, ProjectId } from './brand';
 
 export type EntityType = (typeof ENTITY_TYPES)[number];

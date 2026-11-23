@@ -5,7 +5,7 @@ import { factories } from '../../../db/schema/factories';
 import { jobs } from '../../../db/schema/jobs';
 import { orderSteps, workOrders } from '../../../db/schema/orders';
 import { projects } from '../../../db/schema/projects';
-import { claimJobContract } from '@repo/factory-contracts/cells.contract';
+import { claimJobContract } from '@repo/hq-contracts/cells.contract';
 import {
   selectClaimable,
   type ClaimCandidate,

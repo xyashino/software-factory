@@ -1,4 +1,4 @@
-import { goneCellContract } from '@repo/factory-contracts/factories.contract';
+import { goneCellContract } from '@repo/hq-contracts/factories.contract';
 import { immediateTx } from '../../../db/client';
 import { asCellId } from '../../../domain/common/brand';
 import { factoryIdOf, touchFactory } from '../../core/identity';

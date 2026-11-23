@@ -6,7 +6,7 @@ import {
   type AnySQLiteColumn,
 } from 'drizzle-orm/sqlite-core';
 import { sql } from 'drizzle-orm';
-import { WORK_ORDER_STATES } from '@repo/factory-contracts/enums/orders';
+import { WORK_ORDER_STATES } from '@repo/hq-contracts/enums/orders';
 import type {
   CellId,
   FactoryId,

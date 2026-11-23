@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { transitionDto } from '@repo/factory-contracts/stream.contract';
+import { transitionDto } from '@repo/hq-contracts/stream.contract';
 import { projects } from '../../src/db/schema/projects';
 import { stateTransitions } from '../../src/db/schema/transitions';
 import { createTransitionBus } from '../../src/adapters/memory/transition-bus.adapter';

@@ -1,5 +1,5 @@
 import type { z } from 'zod';
-import type { claimedJobDto } from '@repo/factory-contracts/cells.contract';
+import type { claimedJobDto } from '@repo/hq-contracts/cells.contract';
 import { Unreachable } from '../../core/errors';
 import type { Ports } from '../../core/procedure';
 

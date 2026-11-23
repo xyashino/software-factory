@@ -1,5 +1,5 @@
 import { immediateTx } from '../../../db/client';
-import { transitionOrderPlanContract } from '@repo/factory-contracts/order-plans.contract';
+import { transitionOrderPlanContract } from '@repo/hq-contracts/order-plans.contract';
 import { nextPlanState } from '../../../domain/orders/order-state';
 import { Conflict } from '../../core/error-handling';
 import { scopedProcedure } from '../../core/procedure';

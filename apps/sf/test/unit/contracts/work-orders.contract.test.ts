@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   listWorkOrdersContract,
   transitionWorkOrderContract,
-} from '@repo/factory-contracts/work-orders.contract';
+} from '@repo/hq-contracts/work-orders.contract';
 
 describe('work-orders contract', () => {
   it('accepts a list query scoped to a project', () => {

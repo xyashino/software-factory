@@ -1,4 +1,4 @@
-import { claimJobContract } from '@repo/factory-contracts/cells.contract';
+import { claimJobContract } from '@repo/hq-contracts/cells.contract';
 import { nextStep, type NextStep } from '../../../domain/cell/cell-loop';
 import {
   type CellRuntime,

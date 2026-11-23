@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { listOrderPlansContract } from '@repo/factory-contracts/order-plans.contract';
+import { listOrderPlansContract } from '@repo/hq-contracts/order-plans.contract';
 
 describe('order-plans contract', () => {
   it('accepts a list query with a plan state filter', () => {

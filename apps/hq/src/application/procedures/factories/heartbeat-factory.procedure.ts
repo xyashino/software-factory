@@ -1,5 +1,5 @@
 import { eq } from 'drizzle-orm';
-import { heartbeatFactoryContract } from '@repo/factory-contracts/factories.contract';
+import { heartbeatFactoryContract } from '@repo/hq-contracts/factories.contract';
 import { immediateTx } from '../../../db/client';
 import { factories } from '../../../db/schema/factories';
 import { factoryIdOf } from '../../core/identity';

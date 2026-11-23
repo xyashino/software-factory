@@ -1,5 +1,5 @@
 import { immediateTx } from '../../../db/client';
-import { createOrderPlanContract } from '@repo/factory-contracts/order-plans.contract';
+import { createOrderPlanContract } from '@repo/hq-contracts/order-plans.contract';
 import { asPlanId } from '../../../domain/common/brand';
 import { scopedId } from '../../../domain/common/scoped-id';
 import type { PlanState } from '../../../domain/orders/order-state';

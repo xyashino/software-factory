@@ -1,5 +1,5 @@
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
-import { PLAN_STATES } from '@repo/factory-contracts/enums/orders';
+import { PLAN_STATES } from '@repo/hq-contracts/enums/orders';
 import type { PlanId, ProjectId } from '../../domain/common/brand';
 import { timestamps } from '@repo/bun-sqlite-kit/columns';
 import { projects } from './projects';

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { transitionJobContract } from '@repo/factory-contracts/jobs.contract';
+import { transitionJobContract } from '@repo/hq-contracts/jobs.contract';
 
 const body = transitionJobContract.in.body;
 

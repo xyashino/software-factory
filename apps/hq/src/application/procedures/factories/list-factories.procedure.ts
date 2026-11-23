@@ -1,4 +1,4 @@
-import { listFactoriesContract } from '@repo/factory-contracts/factories.contract';
+import { listFactoriesContract } from '@repo/hq-contracts/factories.contract';
 import { factories } from '../../../db/schema/factories';
 import { isSilent } from '../../core/identity';
 import { scopedProcedure } from '../../core/procedure';
