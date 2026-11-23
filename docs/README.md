@@ -9,7 +9,8 @@ Index of project docs, by topic. Each app keeps a short `README.md` pointing her
 - [cell.md](./cell.md): Cell daemon, Factory daemon (`sf factory`), operator endpoint, local data.
 - [web-demo.md](./web-demo.md): Astro web UI served by `sf web start`.
 - [engineering.md](./engineering.md): backend layering, transactions, SQLite, testing.
-- [plans/](./plans/): open designs. Contracts, SQLite kit, docs.
+- [hq-factory-cell-plan.md](./hq-factory-cell-plan.md): Factory and Cell design, open gaps.
+- [onboarding-plan.md](./onboarding-plan.md): open onboarding gap.
 - Repo rules (style, commits, tests): `.nitpick/`, generated into `CLAUDE.md` and `.agents/`.
 
 ## Glossary
@@ -31,4 +32,4 @@ Defined once here. Other docs link to this section.
 | **Work order** | One `todos/*.md` item travelling down a Line                                                         |
 | **Supervisor** | The human who runs HQ and resolves Incidents                                                         |
 
-Code keeps older names: `apps/factory` is HQ, `apps/sf` holds the Cell daemon, `apps/cell` is the local cell supervisor until the Factory daemon replaces it. Docs use the terms above. Old command and env names are listed in [sf.md](./sf.md#deprecated-names).
+Code keeps older names: `apps/factory` is HQ, `apps/sf` holds the Cell and Factory daemons. Docs use the terms above. Old command and env names are listed in [sf.md](./sf.md#deprecated-names).

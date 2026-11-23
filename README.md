@@ -8,7 +8,7 @@ Monorepo hosting **SoftwareFactory** ([docs](docs/README.md): [architecture](doc
 The system is modeled as an automated software factory:
 
 - **HQ** (external server) is the single control point holding blueprints (Lines, Stations, Operators), the schedule, **Traveler** records (append-only event logs), and the board.
-- **Factory** (local daemon, one per PC) is the only holder of the HQ credential. It will spawn, supervise and kill Cells. It is planned, not built yet.
+- **Factory** (local daemon, one per PC) is the only holder of the HQ credential. It spawns, supervises and kills Cells.
 - **Cells** are disposable workers that connect outbound to HQ, claim a **Job** for a **Station**, execute it, push git checkpoints and artifacts, and can disconnect at any time without losing completed work.
 - **Lines** are declarative production workflows composed of **Stations**—either an **Operator** (an AI specialist such as `planner`, `builder`, `reviewer`, `auditor`) or an **Inspection** (a deterministic command gate).
 - **Work orders** (`todos/*.md`) travel down a Line from station to station. If an Operator or Inspection hits a blocker, it raises an **Andon** (releasing the Cell immediately) with a **Handover** so a human supervisor can resolve it and resume on any available Cell.
@@ -110,19 +110,12 @@ ssh -L 4321:127.0.0.1:4321 <user>@<vps>   # laptop
 
 HQ listens on loopback by default. Set `FACTORY_HOST` (for example a Tailscale address) only behind Tailscale or TLS: it exposes the HQ API to the network.
 
-Keep a Cell running after you log out. `sf service install` is not available yet, so use `tmux`:
-
-```bash
-tmux new -s cell-vps-1
-sf cell start --name vps-1                # runs in the foreground
-# detach: Ctrl-b d    reattach: tmux attach -t cell-vps-1
-```
+Keep HQ running after you log out. On Linux, `sf service install` writes systemd user units for the server; `sf service uninstall` removes them.
 
 Troubleshooting:
 
 | Symptom | Check | Fix |
 | --- | --- | --- |
-| Install fails: `missing .../apps/factory/dist/sf: run bun run build:sf first` even after `bun run build:sf` | `ls apps/sf/dist/sf` exists | Installer default source is stale. Pass it: `node scripts/install.mjs --source apps/sf/dist` |
 | Port 7070 in use: `sf hq start` prints `server started`, or `sf doctor` shows `token rejected` on an HQ you did not start | `ss -ltnp 'sport = :7070'`: owner is not your HQ server | Stop the owner: `kill <pid>`. `sf hq stop` only stops the process in the pid file, not a leaked one. Then `sf hq start` |
 | 401 after `sf hq token admin create`: `401: Missing or invalid bearer token` | Read `token source:` in the error. The `fix:` line for a saved target still prints the older `sf server token create --global` spelling, which is the same command | `repo:.factory-local/supervisor.token`: `sf hq token admin create --save` (the repo file wins over global). `env:HQ_TOKEN` (or `env:FACTORY_TOKEN`): unset it or set the new token. `config:<name>`: `sf hq token admin create --save --global` |
 | Missing runner: `missing: runner <name> not installed` in `sf doctor`; `sf setup` refuses | `command -v <name>` prints nothing | Install the CLI, put it on `PATH` for non-login shells too, sign in (see above), then `sf doctor` |
@@ -146,7 +139,7 @@ sf todos import && sf queue                # push todos/*.md, see the queue
 sf hq stop
 ```
 
-Run `sf init`, `sf project add` and `sf cell start` in each repository to share one server across repositories. Command reference: [docs/sf.md](docs/sf.md). The flow is proved end to end by `apps/sf/test/blackbox/standalone-external-repo.test.ts` (runs after `bun run build:sf`, skipped without build output).
+Run `sf init`, `sf project add` and `sf cell scale N --repo <path>` in each repository to share one server across repositories. Command reference: [docs/sf.md](docs/sf.md). The flow is proved end to end by `apps/sf/test/blackbox/standalone-external-repo.test.ts` (runs after `bun run build:sf`, skipped without build output).
 
 ## Credits
 
