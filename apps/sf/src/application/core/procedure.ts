@@ -3,17 +3,17 @@ import type { Connection } from '../../domain/connection/connection-config';
 import type { ConnectionStorePort } from '../ports/connection-store.port';
 import type { ClockPort } from '../ports/clock.port';
 import type { FactoryCredentialPort } from '../ports/factory-credential.port';
-import type { FactoryDaemonPort } from '../ports/factory-daemon.port';
+import type { FactoryPort } from '../ports/factory.port';
 import type { FsPort } from '../ports/fs.port';
-import type { HqClientPort } from '../ports/hq-client.port';
 import type { GitPort } from '../ports/git.port';
+import type { HqLinkPort } from '../ports/hq-link.port';
+import type { HqPort } from '../ports/hq.port';
 import type { OperatorEndpointPort } from '../ports/operator-endpoint.port';
 import type { PidFilePort } from '../ports/pid-file.port';
 import type { PrPort } from '../ports/pr.port';
 import type { ProcessPort } from '../ports/process.port';
 import type { RunnerCatalogPort } from '../ports/runner-catalog.port';
 import type { RunnerPort } from '../ports/runner.port';
-import type { ServerPort } from '../ports/server.port';
 import type { TodoFilesPort } from '../ports/todo-files.port';
 import type { TokenStorePort } from '../ports/token-store.port';
 import { ArgumentError, Refused } from './errors';
@@ -21,7 +21,7 @@ import { ArgumentError, Refused } from './errors';
 const REFUSAL_MESSAGE = 'Token cannot run this procedure';
 
 export interface Ports {
-  server: ServerPort;
+  hq: HqPort;
   connection: Connection;
   connections: ConnectionStorePort;
   fs: FsPort;
@@ -36,10 +36,10 @@ export interface Ports {
   pidFile: PidFilePort;
   webPidFile: PidFilePort;
   clock: ClockPort;
-  factoryDaemon: FactoryDaemonPort;
+  factory: FactoryPort;
   factoryPidFile: PidFilePort;
   factoryCredential: FactoryCredentialPort;
-  hq: HqClientPort;
+  hqLink: HqLinkPort;
 }
 
 export type Context<A extends Access> = Ports & {

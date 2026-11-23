@@ -7,7 +7,7 @@ export interface HqEnrollment {
   expiresAt: number;
 }
 
-export interface HqClientPort {
+export interface HqLinkPort {
   enroll(input: {
     url: string;
     joinToken: string;

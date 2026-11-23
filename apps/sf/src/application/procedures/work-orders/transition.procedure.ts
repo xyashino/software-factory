@@ -31,7 +31,7 @@ export const transitionWorkOrder = define({ kind: 'supervisor' })(
   }
   const secret = await readSecret(ctx);
   return TransitionReplySchema.parse(
-    await ctx.server.call(
+    await ctx.hq.call(
       `/api/v1/work-orders/${encodeURIComponent(input.orderId)}/transitions`,
       { action: input.action },
       secret,

@@ -13,15 +13,15 @@ import {
 } from '../adapters/fs/write-text';
 import { createGitAdapter } from '../adapters/git/git';
 import { createPrAdapter } from '../adapters/git/gh';
-import { createFactoryDaemonAdapter } from '../adapters/http/factory-daemon.adapter';
+import { createFactoryAdapter } from '../adapters/http/factory.adapter';
 import { createHqClient } from '../adapters/http/hq-client';
-import { createServerClient } from '../adapters/http/server-client';
+import { createHqLinkClient } from '../adapters/http/hq-link-client';
 import { createLoopbackEndpoint } from '../adapters/operator-endpoint/loopback';
 import { createRunnerCatalog } from '../adapters/runners/catalog';
 import { createHeadlessRunner } from '../adapters/runners/headless';
 import { createHerdrRunner } from '../adapters/runners/herdr';
 import { createRoutingRunner } from '../adapters/runners/routing';
-import { createProcessAdapter } from '../adapters/process/spawn-server';
+import { createProcessAdapter } from '../adapters/process/spawn';
 import { createSystemClock } from '../adapters/process/system-clock';
 import type { Ports } from '../application/core/procedure';
 import { cellNameOf } from '../domain/cell/cell-name';
@@ -65,7 +65,7 @@ export const buildContext = (cellName?: string): Ports => {
     defaultUrl: DEFAULT_FACTORY_URL,
   });
   return {
-    server: createServerClient({ baseUrl: connection.url }),
+    hq: createHqClient({ baseUrl: connection.url }),
     connection,
     connections,
     fs: {
@@ -94,9 +94,9 @@ export const buildContext = (cellName?: string): Ports => {
     pidFile: createPidFile(),
     webPidFile: createPidFile('web.pid'),
     clock: createSystemClock(),
-    factoryDaemon: createFactoryDaemonAdapter({ baseUrl: FACTORY_DAEMON_URL }),
+    factory: createFactoryAdapter({ baseUrl: FACTORY_DAEMON_URL }),
     factoryPidFile: createPidFile(FACTORY_PID_FILE),
     factoryCredential: createFactoryCredentialStore(FACTORY_CREDENTIAL_PATH),
-    hq: createHqClient(),
+    hqLink: createHqLinkClient(),
   };
 };

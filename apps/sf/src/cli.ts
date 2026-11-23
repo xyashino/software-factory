@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 import { defineCommand, runCommand, showUsage } from 'citty';
-import { dispatchInternal } from './bootstrap/server-dispatch';
+import { dispatchInternal } from './bootstrap/entry-dispatch';
 import { cellCommand } from './adapters/cli/cell.command';
 import { doctorCommand } from './adapters/cli/doctor.command';
 import { factoryCommand } from './adapters/cli/factory.command';

@@ -229,7 +229,7 @@ const transition = async (
   });
   return sendWithRetry(runtime, async () =>
     transitionJobContract.out[200].parse(
-      await runtime.ports.server.call(
+      await runtime.ports.hq.call(
         `/api/v1/jobs/${encodeURIComponent(job.jobId)}/transitions`,
         { ...body, commandId, epoch: job.epoch },
         runtime.session.sessionToken,
@@ -735,7 +735,7 @@ const beatOnce = async (
   job: ClaimedJob,
 ): Promise<readonly string[]> => {
   const { signals } = heartbeatCellContract.out[200].parse(
-    await runtime.ports.server.call(
+    await runtime.ports.hq.call(
       HEARTBEATS_ROUTE,
       { jobId: job.jobId, epoch: job.epoch },
       runtime.session.sessionToken,
@@ -1472,7 +1472,7 @@ const resolveIncidentOf = async (
   );
   await logLine(runtime, job, 'incident', `${outcome.action} ${ran}`);
   await sendWithRetry(runtime, () =>
-    runtime.ports.server.call(
+    runtime.ports.hq.call(
       `/api/v1/incidents/${encodeURIComponent(incidentId)}/resolve`,
       {
         action: outcome.action,

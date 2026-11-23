@@ -77,7 +77,7 @@ export const resolveIncident = define({ kind: 'supervisor' })(
       ? { action: input.action }
       : { action: input.action, stepIndex };
   return ResolveReplySchema.parse(
-    await ctx.server.call(
+    await ctx.hq.call(
       `/api/v1/incidents/${encodeURIComponent(input.incidentId)}/resolve`,
       body,
       secret,

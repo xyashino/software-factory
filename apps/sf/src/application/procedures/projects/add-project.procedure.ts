@@ -32,7 +32,7 @@ export const addProject = define({ kind: 'supervisor' })(
 )<AddProjectResult>(async (input, ctx) => {
   const secret = await readSecret(ctx);
   const reply = ProjectReplySchema.parse(
-    await ctx.server.call(PROJECTS_ROUTE, input, secret),
+    await ctx.hq.call(PROJECTS_ROUTE, input, secret),
   );
   return { project: reply.project };
 });

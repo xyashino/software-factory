@@ -11,7 +11,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createGitAdapter } from '../../../../src/adapters/git/git';
-import { createProcessAdapter } from '../../../../src/adapters/process/spawn-server';
+import { createProcessAdapter } from '../../../../src/adapters/process/spawn';
 import type { GitPort } from '../../../../src/application/ports/git.port';
 
 const EMAIL = 'factory-test@example.invalid';

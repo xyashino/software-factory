@@ -1,5 +1,5 @@
 import type { ClockPort } from '../application/ports/clock.port';
-import type { HqClientPort } from '../application/ports/hq-client.port';
+import type { HqLinkPort } from '../application/ports/hq-link.port';
 import type { FactoryCredential } from '../domain/factory/factory-credential';
 import type { HqState } from '../domain/factory/hq-state';
 import { HEARTBEAT_INTERVAL_MS, SELF_FENCE_MS } from '../config';
@@ -11,7 +11,7 @@ const NOT_CONNECTED: HqState = { kind: 'not_connected' };
 
 export interface HqLinkDeps {
   credential: FactoryCredential | null;
-  hq: HqClientPort;
+  hqLink: HqLinkPort;
   clock: ClockPort;
   projects: () => ProjectReport[];
   killAll: () => Promise<void>;
@@ -25,7 +25,7 @@ export interface HqLink {
 
 export const createHqLink = ({
   credential,
-  hq,
+  hqLink,
   clock,
   projects,
   killAll,
@@ -50,7 +50,7 @@ export const createHqLink = ({
   const beat = async (current: FactoryCredential): Promise<void> => {
     const attemptedAt = clock.now();
     lastAttemptAt = attemptedAt;
-    const reply = await hq.heartbeat({
+    const reply = await hqLink.heartbeat({
       url: current.url,
       sessionToken: current.sessionToken,
       projects: projects(),

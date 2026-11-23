@@ -8,7 +8,7 @@ import { runDoctor, type DoctorCheck } from '../doctor/doctor.procedure';
 import { initProject } from '../init/init.procedure';
 import { addProject } from '../projects/add-project.procedure';
 import { listProjects } from '../projects/list-projects.procedure';
-import { startServer } from '../server/start.procedure';
+import { startHq } from '../hq/start.procedure';
 
 const SUPERVISOR: Access = { kind: 'supervisor' };
 const DEFAULT_BASE_BRANCH = 'main';
@@ -106,10 +106,10 @@ export const runSetup = define({ kind: 'supervisor' })(
     steps.push({ step: 'init', outcome: 'done' });
   }
 
-  if (await ctx.server.probe()) {
+  if (await ctx.hq.probe()) {
     steps.push({ step: 'server', outcome: 'skipped' });
   } else {
-    await startServer.execute(
+    await startHq.execute(
       {
         bin: input.bin,
         serverArgs: input.serverArgs,

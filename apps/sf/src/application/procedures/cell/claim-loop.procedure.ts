@@ -14,7 +14,7 @@ export const claimOnce = async (
   waitMs: number,
 ): Promise<ClaimedJob | null> =>
   claimJobContract.out[200].parse(
-    await runtime.ports.server.call(
+    await runtime.ports.hq.call(
       CLAIMS_ROUTE,
       {
         waitMs,

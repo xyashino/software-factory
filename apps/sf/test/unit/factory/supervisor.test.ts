@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Ports } from '../../../src/application/core/procedure';
-import { createSupervisor } from '../../../src/daemon/supervisor';
+import { createSupervisor } from '../../../src/factory/supervisor';
 
 const LOG_DIR = '/data/sf/cells';
 const BASE_NAME = 'dev-box';

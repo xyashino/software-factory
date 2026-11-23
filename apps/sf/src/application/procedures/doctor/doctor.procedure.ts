@@ -174,7 +174,7 @@ const accessChecks = async (
   projectId: string | null,
 ): Promise<DoctorCheck[]> => {
   const url = ctx.connection.url;
-  if (!(await ctx.server.probe())) {
+  if (!(await ctx.hq.probe())) {
     return [
       check(
         'server',
