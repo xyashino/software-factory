@@ -46,7 +46,7 @@ export const startWeb = define({ kind: 'supervisor' })(
   }
   if (!(await ctx.server.probe())) {
     throw new Unreachable(
-      `factory server not answering at ${input.factoryUrl}; run sf server start`,
+      `factory server not answering at ${input.factoryUrl}; run sf hq start`,
     );
   }
   if (!(await ctx.fs.exists(input.webEntry))) {

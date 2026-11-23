@@ -309,7 +309,7 @@ describe('sf connection precedence and 401 diagnostics', () => {
     expect(result.status).toBe(1);
     expect(result.stderr).toContain('token source: config:lab');
     expect(result.stderr).toContain(
-      'fix: sf server token create --save --global',
+      'fix: sf hq token admin create --save --global',
     );
   });
 
@@ -332,7 +332,7 @@ describe('sf connection precedence and 401 diagnostics', () => {
       'token source: repo:.factory-local/supervisor.token',
     );
     expect(result.stderr).toContain(
-      'fix: rm .factory-local/supervisor.token && sf server token create --save',
+      'fix: rm .factory-local/supervisor.token && sf hq token admin create --save',
     );
     expect(result.stderr).not.toContain('--global');
   });
@@ -357,7 +357,7 @@ describe('sf connection precedence and 401 diagnostics', () => {
       'token source: legacy:~/.config/factory/token',
     );
     expect(result.stderr).toContain(
-      'fix: sf server token create --save --global',
+      'fix: sf hq token admin create --save --global',
     );
   });
 
@@ -394,7 +394,7 @@ describe('sf connection precedence and 401 diagnostics', () => {
       'No token stored for http://127.0.0.1:7070',
     );
     expect(result.stderr).toContain(
-      'fix: sf server token create --save --global',
+      'fix: sf hq token admin create --save --global',
     );
   });
 });

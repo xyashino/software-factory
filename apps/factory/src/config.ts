@@ -3,7 +3,6 @@ import { join } from 'node:path';
 
 export const CLAIM_WAIT_MS = 25_000;
 export const HEARTBEAT_INTERVAL_MS = 10_000;
-export const SELF_FENCE_MS = 45_000;
 export const LEASE_TTL_MS = 60_000;
 export const MAX_WORKTREE_RESETS = 2;
 export const MAX_MECHANIC_RUNS = 2;
