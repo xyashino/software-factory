@@ -129,6 +129,9 @@ const memoryFs = (files: Record<string, string>): Ports['fs'] => ({
   appendText: async (path, text) => {
     files[path] = (files[path] ?? '') + text;
   },
+  remove: async (path) => {
+    delete files[path];
+  },
   readStdin: async () => '',
 });
 

@@ -6,7 +6,11 @@ import { createFactoryCredentialStore } from '../adapters/fs/factory-credential'
 import { createPidFile } from '../adapters/fs/pid-file';
 import { createTodoFiles } from '../adapters/fs/todo-files';
 import { createTokenFile } from '../adapters/fs/token-file';
-import { appendTextFile, writeTextFile } from '../adapters/fs/write-text';
+import {
+  appendTextFile,
+  removeFile,
+  writeTextFile,
+} from '../adapters/fs/write-text';
 import { createGitAdapter } from '../adapters/git/git';
 import { createPrAdapter } from '../adapters/git/gh';
 import { createFactoryDaemonAdapter } from '../adapters/http/factory-daemon.adapter';
@@ -67,6 +71,7 @@ export const buildContext = (cellName?: string): Ports => {
       readText: async (path) => readFileSync(path, 'utf8'),
       writeText: writeTextFile,
       appendText: appendTextFile,
+      remove: removeFile,
       exists: async (path) => existsSync(path),
       list: async (dir) => (existsSync(dir) ? readdirSync(dir) : []),
       readStdin: async () => readFileSync(0, 'utf8'),

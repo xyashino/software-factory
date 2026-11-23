@@ -50,6 +50,9 @@ const BUILD_TIMEOUT_MS = 60_000;
 const LINE_PATH = joinPath(REPO, LINES_DIR, 'feature.yml');
 const PROFILE_PATH = joinPath(REPO, OPERATORS_DIR, 'builder.md');
 const WORKTREE = joinPath(REPO, WORKTREES_DIR, slugOf('order-1'));
+const BUILD_DIR = joinPath(WORKTREE, '.cell', 'build');
+const STATE_PATH = joinPath(BUILD_DIR, 'state.json');
+const FEEDBACK_PATH = joinPath(BUILD_DIR, 'feedback.md');
 const HEARTBEATS_ROUTE = '/api/v1/cells/heartbeats';
 // eslint-disable-next-line no-control-regex
 const ANSI = /\u001b\[[0-9;]*m/g;
@@ -108,6 +111,7 @@ const jobOf = (patch: Partial<ClaimedJob>): ClaimedJob => ({
 
 const harness = (options: {
   interactive: boolean;
+  dirty?: boolean;
   stopConfirmed?: boolean;
   alivePids?: number[];
   psStart?: string;
@@ -172,12 +176,20 @@ const harness = (options: {
         log.push(text);
       },
       exists: async (path) => files.has(path),
+      remove: async (path) => {
+        files.delete(path);
+      },
+      list: async (dir) =>
+        [...files.keys()]
+          .filter((path) => path.startsWith(`${dir}/`))
+          .map((path) => path.slice(dir.length + 1))
+          .filter((name) => !name.includes('/')),
     },
     git: {
       ...fake.ports.git,
       worktreeAdd: async () => undefined,
       excludeLocally: async () => undefined,
-      status: async () => '',
+      status: async () => (options.dirty ? ' M src/app.ts' : ''),
       headSha: async () => 'sha',
     },
     process: {
@@ -702,5 +714,81 @@ describe('step runner lock', () => {
     expect(await h.runtime.ports.fs.readText(RUNNER_PATH)).not.toContain(
       'runId',
     );
+  });
+});
+
+describe('cell step files', () => {
+  it('writes the complete marker once the checkpoint passes', async () => {
+    // Arrange
+    const h = harness({ interactive: true });
+    const job = runJob(h.runtime, jobOf({}));
+    await paneLogged(h);
+
+    // Act
+    await h.control.handler?.({
+      verb: 'done',
+      token: h.control.env?.FACTORY_CYCLE_TOKEN,
+    });
+    await job;
+
+    // Assert
+    expect(await h.runtime.ports.fs.exists(STATE_PATH)).toBe(true);
+  });
+
+  it('leaves no complete marker when the checkpoint fails', async () => {
+    // Arrange
+    const h = harness({ interactive: true, dirty: true });
+    const job = runJob(h.runtime, jobOf({}));
+    await paneLogged(h);
+
+    // Act
+    await h.control.handler?.({
+      verb: 'done',
+      token: h.control.env?.FACTORY_CYCLE_TOKEN,
+    });
+    await job;
+
+    // Assert
+    expect(h.lines()).toContainEqual(
+      expect.stringMatching(/build fail .*checkpoint failed/),
+    );
+    expect(await h.runtime.ports.fs.exists(STATE_PATH)).toBe(false);
+  });
+
+  it('drops the marker and feedback an earlier attempt left', async () => {
+    // Arrange
+    const h = harness({ interactive: true });
+    await h.runtime.ports.fs.writeText(STATE_PATH, '{"outcome":"complete"}\n');
+    await h.runtime.ports.fs.writeText(FEEDBACK_PATH, 'old verdict');
+    const job = runJob(h.runtime, jobOf({ epoch: 2 }));
+    await paneLogged(h);
+
+    // Act
+    h.control.exit?.({ exitCode: 0 });
+    await job;
+
+    // Assert
+    expect(await h.runtime.ports.fs.exists(STATE_PATH)).toBe(false);
+    expect(await h.runtime.ports.fs.exists(FEEDBACK_PATH)).toBe(false);
+  });
+
+  it('removes staged files left by a killed write when the worktree is reused', async () => {
+    // Arrange
+    const h = harness({ interactive: true });
+    const staged = joinPath(BUILD_DIR, 'state.json.tmp-42');
+    const stagedTask = joinPath(WORKTREE, '.cell', 'task.md.tmp-42');
+    await h.runtime.ports.fs.writeText(WORKTREE, '');
+    await h.runtime.ports.fs.writeText(staged, '{"outcome"');
+    await h.runtime.ports.fs.writeText(stagedTask, '# ta');
+    const job = runJob(h.runtime, jobOf({}));
+    await paneLogged(h);
+
+    // Act
+    h.control.exit?.({ exitCode: 0 });
+    await job;
+
+    // Assert
+    expect(await h.runtime.ports.fs.exists(staged)).toBe(false);
+    expect(await h.runtime.ports.fs.exists(stagedTask)).toBe(false);
   });
 });

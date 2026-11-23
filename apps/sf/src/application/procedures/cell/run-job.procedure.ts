@@ -63,6 +63,7 @@ const SHELL = 'bash';
 const OUTPUT_TAIL_CHARS = 2000;
 const SETUP_LOG = 'setup.log';
 const FEEDBACK_FILE = 'feedback.md';
+const STAGED_MARK = '.tmp-';
 const RUNNER_FILE = 'runner.json';
 const DECISIONS_DIR = 'decisions/';
 const MAX_DIFF_CHARS = 60_000;
@@ -494,6 +495,17 @@ const writeFeedback = async (
   }
 };
 
+// A marker left by an earlier attempt must not count as this attempt's completion.
+const clearStepMarkers = async (
+  runtime: CellRuntime,
+  job: ClaimedJob,
+  station: StepLine,
+): Promise<void> => {
+  const dir = stepDirOf(runtime, job, station);
+  await runtime.ports.fs.remove(joinPath(dir, STATE_FILE));
+  await runtime.ports.fs.remove(joinPath(dir, FEEDBACK_FILE));
+};
+
 const finishWithFail = async (
   runtime: CellRuntime,
   job: ClaimedJob,
@@ -528,12 +540,6 @@ const finishComplete = async (
   let commitSha: string | undefined;
   try {
     await writeFeedback(runtime, job, station, '');
-    if (station !== undefined) {
-      await runtime.ports.fs.writeText(
-        joinPath(stepDirOf(runtime, job, station), STATE_FILE),
-        `${JSON.stringify({ jobId: job.jobId, epoch: job.epoch, outcome: 'complete' })}\n`,
-      );
-    }
     const worktree = worktreeOf(runtime, job);
     // The server needs a sha on every complete; a station that changed nothing reports the current HEAD.
     commitSha =
@@ -543,6 +549,12 @@ const finishComplete = async (
         stepId: station?.stationId ?? '',
         producedFiles: produced,
       })) ?? (await runtime.ports.git.headSha(worktree));
+    if (station !== undefined) {
+      await runtime.ports.fs.writeText(
+        joinPath(stepDirOf(runtime, job, station), STATE_FILE),
+        `${JSON.stringify({ jobId: job.jobId, epoch: job.epoch, outcome: 'complete' })}\n`,
+      );
+    }
   } catch (error) {
     return finishWithFail(
       runtime,
@@ -725,6 +737,28 @@ const runShell = async (
   }
 };
 
+// Staged files from a write killed before its rename must never read as step output.
+const removeStagedFiles = async (
+  runtime: CellRuntime,
+  worktree: string,
+  snapshot: LineSnapshot,
+): Promise<void> => {
+  const { fs } = runtime.ports;
+  const cellDir = joinPath(worktree, CELL_DIR);
+  const dirs = [
+    cellDir,
+    joinPath(cellDir, MECHANIC_DIR),
+    ...snapshot.stations.map((station) => joinPath(cellDir, station.stationId)),
+  ];
+  for (const dir of dirs) {
+    for (const name of await fs.list(dir)) {
+      if (name.includes(STAGED_MARK)) {
+        await fs.remove(joinPath(dir, name));
+      }
+    }
+  }
+};
+
 const prepareWorktree = async (
   runtime: CellRuntime,
   job: ClaimedJob,
@@ -736,6 +770,7 @@ const prepareWorktree = async (
   try {
     if (await fs.exists(worktree)) {
       await logLine(runtime, job, 'worktree', `reuse path=${worktree}`);
+      await removeStagedFiles(runtime, worktree, snapshot);
     } else {
       await logLine(
         runtime,
@@ -1484,6 +1519,9 @@ export const runJob = async (
   }
   stationNames.set(job, station?.stationId ?? '-');
   await logLine(runtime, job, 'claim', claimDetail);
+  if (station !== undefined) {
+    await clearStepMarkers(runtime, job, station);
+  }
   if (station?.kind === 'deliver') {
     return deliverStation(runtime, job, snapshot);
   }
