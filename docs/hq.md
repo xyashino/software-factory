@@ -46,7 +46,7 @@ This backend (`apps/hq`) is a standalone, stateful control plane built on **Bun 
 1. **Repository Project Identity (`<repo>/.factory/config.json`)**:
    - Every repository defines its canonical project identifier in `.factory/config.json` via `"project": "<project-id>"` (e.g., `"project": "software-factory"`).
    - **Every `OrderPlan`, `WorkOrder`, and `Job` has a pinned `projectId`**.
-   - **Cells** read `.factory/config.json` on startup and register with that `project` to the server, optionally declaring **`allowedLines`** (e.g., `["feature", "fast"]`) to restrict which Lines that Cell is allowed to execute.
+   - **Cells** read `.factory/config.json` on startup and send that `project` with every claim, optionally declaring **`allowedLines`** (e.g., `["feature", "fast"]`) to restrict which Lines that Cell is allowed to execute.
 2. **3-Level HQ Hierarchy (`OrderPlan` → `WorkOrder` → `OrderStep` / `Job`)**:
    - **`OrderPlan`** _(optional)_: Groups related `WorkOrder`s under a shared incremental integration branch (`feat/<plan-slug>` branched from `baseBranch`, e.g., `main`), pinned to `projectId`.
    - **`WorkOrder`**: A deliverable unit of work pinned to `projectId`, owning a target feature branch (`factory/<order-slug>`) and referencing a `line` (`feature`, `standard`, `fast`). Can run **standalone** (`main → factory/<order-slug>`) or **inside an `OrderPlan`** (starting from the `OrderPlan` root branch `feat/<plan-slug>` or stacked on **at most 1 parent `WorkOrder`** via `parent_order_id`).
@@ -114,7 +114,7 @@ Each repository roots its factory configuration in `.factory/config.json`, which
 The server stores structured relational state in SQLite (WAL mode, `BEGIN IMMEDIATE` transactions, no event-replay folding required). Columns and enums live in `apps/hq/src/db/schema`, not here:
 
 - **Plans, orders, steps**: `order_plans`, `work_orders` (owning Cell and lease `epoch`), `order_steps` (one row per Line station).
-- **Execution**: `jobs` (one attempt per step, with lease fencing), `cells` (registered Cells, allowed Lines, local worktrees).
+- **Execution**: `jobs` (one attempt per step, with lease fencing; `claimed_by_cell_id` is plain text, no Cell table), `factories` (enrolled Factories, last seen, projects).
 - **Triage and audit**: `incidents`, and `state_transitions` as history for the SSE stream. Retries never read history.
 
 ### 2.3 Cell Worktree State (`./.cell/<step-id>/`) & Post-Deliver Cleanup
@@ -144,7 +144,7 @@ Inside the target repository, the Cell creates an isolated git worktree per `Wor
 │   └── <step-2-id>/                          # Station "quality-gate" (stepIndex: 2)
 │       ├── state.json                        # { stepId, stationId: "quality-gate", stepIndex: 2, status: "running" }
 │       └── gate.json                         # Per-command exit codes and failure tails
-└── src/                                      # Uncommitted code edits accumulated across Steps 0..k
+└── src/                                      # Code. Only the builder station commits (one commit per build attempt)
 ```
 
 ---
@@ -218,7 +218,7 @@ sequenceDiagram
   Note over C: 1. Check local line: Does .factory/lines/<lineName>.yml exist?
   alt Local line .factory/lines/<lineName>.yml is NOT available
     C->>S: POST /api/v1/jobs/{jobId}/transitions\n{ action: "line_unavailable", lineName, detail, epoch }
-    Note over S: BEGIN IMMEDIATE transaction:<br/>1. Mark Job status = "line_unavailable"<br/>2. Add C.cellId to work_orders.unavailable_line_factories_json & clear active_cell_id<br/>3. Mark WorkOrder state = "line_unavailable" (if no other eligible Cell)<br/>4. Claim a DIFFERENT eligible Job for C.cellId
+    Note over S: BEGIN IMMEDIATE transaction:<br/>1. Mark Job status = "line_unavailable"<br/>2. Add C's Factory to work_orders.unavailable_line_factories_json & clear active_cell_id<br/>3. Mark WorkOrder state = "line_unavailable" (if no other eligible Cell)<br/>4. Claim a DIFFERENT eligible Job for C.cellId
     S-->>C: 200 OK { markedLineUnavailable: true, nextJob: DifferentJob }
   else Local line exists -> Check worktree & prior steps
     Note over C: 2. Check local disk:<br/>Does worktree <repo>/.worktrees/<slug> exist?<br/>Does .cell/worktree.json match projectId & orderId?<br/>For each prior step 0..x-1, do .cell/<step-id>/state.json & <files-x> exist?
@@ -231,12 +231,14 @@ sequenceDiagram
       Note over C: If Step x was "deliver" (pushed branch & published PR):<br/>Cell deletes worktree (<repo>/.worktrees/<slug>)!
     else Worktree OR any ./.cell/<prev-step-id>/<files-x> is MISSING
       C->>S: POST /api/v1/jobs/{jobId}/transitions\n{ action: "worktree_missing", missingStepId, missingFiles, epoch }
-      Note over S: BEGIN IMMEDIATE transaction:<br/>1. Mark Job(step x) as "cancelled" (reason: worktree_missing)<br/>2. Reset WorkOrder: current_step_index = 0, state = "running"<br/>3. Reset all OrderSteps 0..N-1 -> Step 0 "claimed", Steps 1..N-1 "pending"<br/>4. Keep exclusive lock: active_cell_id = C.cellId, pinned_factory_id = C.cellId, worktree_resets += 1<br/>5. Create new Job for Step 0 (workspaceMode: "fresh", epoch++)
+      Note over S: BEGIN IMMEDIATE transaction:<br/>1. Mark Job(step x) as "failed" (detail: missingStepId, missingFiles)<br/>2. Reset WorkOrder: current_step_index = 0, state = "running"<br/>3. Reset all OrderSteps 0..N-1 -> Step 0 "claimed", Steps 1..N-1 "pending"<br/>4. Keep exclusive lock: active_cell_id = C.cellId, pinned_factory_id = C's Factory, worktree_resets += 1<br/>5. Create new Job for Step 0 (workspaceMode: "fresh", epoch++)
       S-->>C: 200 OK { resetToScratch: true, nextJob: Job(stepIndex: 0, workspaceMode: "fresh") }
       Note over C: Wipe stale worktree (if partial),<br/>git worktree add --force from baseBranch,<br/>init ./.cell/worktree.json & ./.cell/<step-0-id>/,<br/>and execute from Step 0 (scratch)!
     end
   end
 ```
+
+Resume in an intact worktree: the Cell hard resets to the Job's `headCommitSha` (base commit before the first build, last build commit after) and cleans, then reruns the step. Reset fails or commit missing: worktree deleted, start from scratch. Step files are written atomically, `state.json` last, so an existing `state.json` means the step finished.
 
 ### 3.4 Exact Server Reset-to-Scratch Rules (`worktree_missing`)
 
@@ -245,8 +247,7 @@ When the server receives `action: "worktree_missing"` from the Cell holding the 
 1. **Loop Guard**: Increments `work_orders.worktree_resets`. If `worktree_resets > maxWorktreeResets` (default `2`), the server does **not** loop again—it transitions `WorkOrder.state → 'blocked'`, clears `active_cell_id` and `active_job_id`, and opens an **Incident** (`reason = 'worktree_reset_limit'`).
 2. **State Rewind (in one SQLite transaction)**:
    - `work_orders.current_step_index = 0`
-   - `work_orders.head_commit_sha = null`
-   - `work_orders.pinned_factory_id = cellId` and `work_orders.active_cell_id = cellId` (exclusively locked to the Cell that will now run it from scratch)
+   - `work_orders.pinned_factory_id` = the caller's Factory and `work_orders.active_cell_id = cellId` (exclusively locked to the Cell that will now run it from scratch)
    - `order_steps`:
      - Step `0`: `state = 'claimed'`, `last_commit_sha = null`, `last_output_json = null` (`attempts_used` reset to `0`)
      - Steps `1..N-1`: `state = 'pending'`, `last_commit_sha = null`, `last_output_json = null`, `produced_files_json = '[]'`
@@ -297,10 +298,10 @@ When the server receives `action: "worktree_missing"` from the Cell holding the 
    - The server atomically inserts `order_steps[0..N-1]` (or refreshes them if resetting from scratch), binds `job.step_id = order_steps[0].step_id`, and transitions Step 0 to `running`.
 2. **Back-to-Back Step Handoff (`nextJob` Returned Inline Until Finish)**:
    - When the Cell completes Step `k` (`action: "complete"`) or fails Step `k` where `on_fail_retry_station_id` rewinds to an earlier step (e.g., `quality-gate` fails → rewinds to `build` while retry budget remains):
-     - The server **keeps `active_cell_id = cellId` and `pinned_factory_id = cellId` locked** (never dropping the `WorkOrder` back to `queued` between steps).
+     - The server **keeps `active_cell_id = cellId` and `pinned_factory_id` (the caller's Factory) locked** (never dropping the `WorkOrder` back to `queued` between steps).
      - In the same transaction, the server creates the `Job` for the next step (`k + 1` or the retry target step) with `workspaceMode = 'reuse'`, sets `active_job_id = nextJob.job_id`, and returns `{ completed: true, nextJob }` directly in the response.
 3. **Final `deliver` Step (Push Branch, Publish PR, and Delete Local Worktree)**:
-   - During the final `deliver` step, the Cell commits the work, pushes `factory/<order-slug>` to `origin`, and publishes/updates the PR.
+   - During the final `deliver` step, the Cell pushes the builder's commits on `factory/<order-slug>` to `origin`, and publishes/updates the PR.
    - **Immediately after `deliver` pushes and publishes the PR, the Cell deletes `<repo>/.worktrees/<order-slug>/` (`git worktree remove --force`)** and reports `action: "complete"` with `{ commitSha }` to the server.
    - The server transitions `WorkOrder.state = 'delivered'`, clears `active_cell_id = null`, `active_job_id = null`, and `pinned_factory_id = null`, and unlocks any dependent child `WorkOrder` (`waiting_parent → queued`).
 
@@ -328,11 +329,13 @@ For up to **5 Cells and 1 web server (`Bun.serve` + Hono + `bun:sqlite`)**, the 
    - Bun's HTTP keep-alive reuses 1 TCP connection per Cell (same wire cost as a WebSocket).
    - If the web server restarts during a 15-minute LLM build step, the Cell's next HTTP heartbeat/transition simply retries (`200ms → 400ms → 800ms`) with the same `epoch`—nothing drops or desyncs. A step the server already applied answers `already_applied` (§11.4).
 
+Waiters are capped at 5 (`MAX_CLAIM_WAITERS`, all Factories together). A 6th idle Cell gets an empty reply at once and claims again. See [gaps](./hq-factory-cell-plan.md#gaps).
+
 | Parameter                 | Value                              | Why                                                                                                                   |
 | :------------------------ | :--------------------------------- | :-------------------------------------------------------------------------------------------------------------------- |
 | **`claimWaitMs`**         | `25_000` (25s)                     | Stays safely under 30s reverse-proxy/NAT idle timeouts while keeping idle traffic to `0.2 req/sec` across all 5 Cells |
 | **`heartbeatIntervalMs`** | `10_000` (10s)                     | Max `0.5 req/sec` total load on the server; fast enough for abort signals                                             |
-| **`selfFenceMs` (Cell)**  | `45_000` (45s)                     | Cell aborts its local runner only if 4 consecutive heartbeats fail                                                    |
+| **`selfFenceMs` (Factory)** | `45_000` (45s)                   | Factory kills all its Cells after 45 s without an HQ answer. A Cell also aborts after 4 failed heartbeats (about 40 s) |
 | **`leaseTtlMs` (Server)** | `60_000` (60s)                     | Server guarantees `leaseTtlMs > selfFenceMs` (15s safety margin) before another Cell can take over an abandoned task  |
 | **HTTP Retry**            | 3 attempts (`200ms, 400ms, 800ms`) | Idempotent by state: same `epoch`, outcome already applied answers `already_applied` (§11.4)                                             |
 
@@ -547,13 +550,16 @@ The indexes are a backstop. A second active claim fails at write time even if ap
 | **`factory_join`** | `sf_join_` | Supervisor (`POST /api/v1/tokens`)             | Short-lived (15m – 24h)                    | `factory:enroll`                                      | Enrolls a Factory at `POST /api/v1/factories/enroll`; exchanged once for a `factory_session` |
 | **`factory_session`** | `sf_factory_` | Server on Factory enrollment or rotation    | Rolling TTL (7d, rotatable)                | `factory:worker`                                      | Used by the Factory daemon for `factories/heartbeat`, Cell `claims`, `heartbeats`, `jobs/{id}/transitions`, `incidents/{id}/resolve`, `factories/cells/{id}/gone`. Cells carry no token of their own |
 
+| **`web_join`** | `sf_join_` | HQ on start, file `web-demo.join` (`0600`) | Until used (single-use) | none | Exchanged once at `POST /api/v1/tokens/join` (loopback only) for a `web_session`. See [web-demo.md](./web-demo.md) §2 |
+| **`web_session`** | `sf_sup_` | HQ on web join, or rotation | 24 h, rotatable | `supervisor:read`, `supervisor:write` | Web demo calls to HQ. No `admin:tokens` |
+
 There is no Cell token kind and no Cell scope. Cells are identified by the `x-cell-id` header the Factory daemon adds.
 
 ---
 
 ## 9. API Endpoints
 
-Routes, request and reply shapes live in `apps/hq/src/contracts`, one file per resource. Token kinds and their scopes are in §8.
+Routes live in `apps/hq/src/adapters/hono/routes`. Request and reply shapes live in `packages/hq-contracts/src`, one file per resource. Token kinds and their scopes are in §8.
 
 ---
 
@@ -561,7 +567,7 @@ Routes, request and reply shapes live in `apps/hq/src/contracts`, one file per r
 
 ### 11.1 Scope
 
-An LLM agent running inside a Job reports back through a localhost endpoint of its Cell. The server never sees the agent's token or its HTTP calls. The Cell turns each agent verb into a server call from the routes in `apps/hq/src/contracts`: `POST /api/v1/jobs/{id}/transitions` for station jobs, `POST /api/v1/incidents/{id}/resolve` for Mechanic jobs.
+An LLM agent running inside a Job reports back through a localhost endpoint of its Cell. The server never sees the agent's token or its HTTP calls. The Cell turns each agent verb into a server call from the contracts in `packages/hq-contracts/src`: `POST /api/v1/jobs/{id}/transitions` for station jobs, `POST /api/v1/incidents/{id}/resolve` for Mechanic jobs.
 
 Two roles use the endpoint:
 
@@ -572,7 +578,7 @@ Other job kinds (`plan_branch`, `run_inspection`, `deliver`) run Cell commands, 
 
 ### 11.2 Endpoint and per-job token
 
-- **Lifecycle.** The Cell opens a listener on `127.0.0.1` with an OS-assigned port when it claims a job, and closes it when the job reaches any end state: `complete` with no `nextJob` for this Cell, `fail`, `block`, `line_unavailable`, `worktree_missing` (reset), lease loss, or revoke. A `stale_epoch` or `not_live` reply from the server also closes it.
+- **Lifecycle.** The Cell opens a listener on `127.0.0.1` with an OS-assigned port when it claims a job, and closes it when the job reaches any end state: `complete` with no `nextJob` for this Cell, `fail`, `block`, `line_unavailable`, `worktree_missing` (reset), lease loss, or Cell kill. A `stale_epoch` or `not_live` reply from the server also closes it.
 - **Environment.** The runner receives `FACTORY_OPERATOR_URL` (base URL) and `FACTORY_CYCLE_TOKEN` (one token per job). Names are provisional (§11.6).
 - **Token.** 256-bit random, lives only in Cell memory, never sent to the server, never written to disk. The Cell compares it in constant time. A missing or wrong token answers `401` before the verb is read.
 - **Token map.** The Cell maps each token to `{ jobId, role, epoch, incidentId? }`. `epoch` is the value the claim returned. The map is dropped with the listener.
@@ -591,7 +597,7 @@ A verb sent with the wrong role, or in a state where the server would refuse it,
 
 ### 11.3 Verb to server call
 
-Contract references are to `apps/hq/src/contracts/`. A mismatch with a contract is a gap, listed in the last column.
+Contract references are to `packages/hq-contracts/src/`. A mismatch with a contract is a gap, listed in the last column.
 
 | Role | Verb | Cell does locally | Server call | Gap |
 | :--- | :--- | :--- | :--- | :--- |

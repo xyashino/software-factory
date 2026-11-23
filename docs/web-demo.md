@@ -1,4 +1,4 @@
-# `@repo/web-demo` — plan
+# `@repo/web-demo`
 
 A small Astro SSR web server that shows HQ and lets the Supervisor resume or cancel Work orders. It is a client of the HQ server ([`hq.md`](./hq.md)) and holds no state of its own.
 
@@ -21,19 +21,15 @@ It is a demo UI: one process, read pages, two write actions, no client JavaScrip
 
 ## 2. Auto-registration on localhost
 
-Goal: when the demo runs on the same machine as HQ (`apps/hq`), it registers itself without the Supervisor copying a token by hand, the way a Cell enrolls.
+Goal: when the demo runs on the same machine as HQ (`apps/hq`), it registers itself without the Supervisor copying a token by hand.
 
 Rules:
 
 1. **Only on loopback.** Auto-registration runs only when `HQ_URL` host is `127.0.0.1`, `localhost` or `::1`. Any other host requires `HQ_TOKEN` set by hand. Never auto-register against a remote server.
-2. **Trust = same OS user.** A secret is never sent over the network to get a token. The server writes a join secret to `$HQ_DATA_DIR/web-demo.join` (`0600`), the same trust as `sf hq token admin create`. The demo reads it at startup.
-3. **Join exchange.** The demo calls `POST /api/v1/tokens/join` with the join secret and gets a session token. The session is `supervisor` kind with only `supervisor:read` and `supervisor:write`. No `admin:tokens`. TTL 24 h.
+2. **Trust = same OS user.** A secret is never sent over the network to get a token. On start, HQ writes a join secret to `$HQ_DATA_DIR/web-demo.join` (`0600`, token kind `web_join`), the same trust as `sf hq token admin create`. The demo reads it at startup.
+3. **Join exchange.** The demo calls `POST /api/v1/tokens/join` with the join secret and gets a session token. Loopback callers only. The join secret is single-use: HQ revokes it on exchange. The session is `web_session` kind with only `supervisor:read` and `supervisor:write`. No `admin:tokens`. TTL 24 h.
 4. **Keep alive.** The demo rotates its session with `POST /api/v1/tokens/rotate` before expiry (existing route, 60 s grace). The token lives only in process memory.
 5. **Missing or refused join** fails startup with a message naming the file or the status. The demo never falls back to an unauthenticated mode.
-
-Open decision: whether the join secret is multi-use for 24 h (simple) or single-use and re-minted on each start (stricter). Recommended: single-use, re-minted by the server on each `sf hq start`.
-
-Note: the join contract in `apps/hq/src/contracts/tokens.contract.ts` takes a `joinSecret` but has no web client kind yet.
 
 ## 3. Security
 
@@ -46,7 +42,7 @@ Note: the join contract in `apps/hq/src/contracts/tokens.contract.ts` takes a `j
 
 | Env | Default | Required |
 | :-- | :------ | :------- |
-| `HQ_URL` | `http://127.0.0.1:7070` | no. The HQ address |
+| `HQ_URL` | `http://127.0.0.1:7070` | no. The HQ address. Old `FACTORY_*` names work as fallback |
 | `HQ_PROJECT_ID` | none | yes |
 | `HQ_DATA_DIR` | server default | only for auto-register |
 | `HQ_TOKEN` | none | only for a non-loopback `HQ_URL` |
@@ -62,9 +58,9 @@ apps/web-demo/
 ├── astro.config.mjs
 ├── README.md
 ├── src/
-│   ├── lib/          config.ts, factory-schemas.ts, factory-client.ts, auto-register.ts, write-guard.ts
+│   ├── lib/          config, session, auto-register, startup, factory-client, factory-schemas, write-guard, view-model, ...
 │   ├── layouts/      Base.astro
-│   └── pages/        index, cells/, work-orders/, incidents, actions/
+│   └── pages/        index, factories/, work-orders/, incidents, actions/
 └── test/             unit/, blackbox/
 ```
 

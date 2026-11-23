@@ -22,9 +22,9 @@ Status: the design is built except the Gaps below.
 
 | Edge | Direction | Credential |
 | --- | --- | --- |
-| Operator (`sf`, web) to HQ | outbound | operator token |
-| Factory to HQ | outbound only | machine credential |
-| Cell to Factory | loopback only | none stored; Factory relays |
+| Supervisor (`sf`, web) to HQ | outbound | supervisor token |
+| Factory to HQ | outbound only | Factory credential (`factory_session`) |
+| Cell to Factory | loopback only | local bearer, memory only; Factory relays |
 | Cell to HQ | none | none |
 
 No open port on local PC.
@@ -39,11 +39,11 @@ No open port on local PC.
 
 1. `sf hq start`: starts HQ. Admin token: `sf hq token admin create --save`.
 2. `sf hq token create --kind factory_join --name <n>`: one-time join token, scope `factory:enroll`.
-3. PC: `sf factory connect <url> --token <join>`: exchanged for machine credential, one file `0600`.
+3. PC: `sf factory connect <url> --token <join>`: exchanged for the Factory credential, one file `0600` (`$XDG_CONFIG_HOME/sf/factory.json`).
 4. `sf factory start`.
 5. In repo: `sf cell scale N`.
 
-Operator token and join token stay separate.
+Supervisor token and join token stay separate.
 
 ## Repo gate
 
@@ -70,7 +70,7 @@ scale up -> idle -> running -> idle ...
 - Factory holds one long-poll to HQ for all Cells. See Gaps.
 - Claim wait must stay under proxy timeout. Make configurable.
 - Factory lost HQ for 45 s: kill all Cells. HQ reaps at lease expiry (60 s). Kill must come before reap, else dying Cell and new Cell overlap.
-- Upstream 401 for a Cell session: Factory re-enrolls that Cell once, then kills it. 401 for the Factory credential: kill all Cells, stop, user runs `sf factory connect` again. Cells never see either.
+- HQ answers 401 for the Factory credential: kill all Cells, stop, user runs `sf factory connect` again. Cells have no HQ credential of their own.
 
 ## Gone Cell cleanup
 
@@ -121,27 +121,24 @@ Kill is immediate. Cleanup as above. No capacity cap. HQ shows count per Factory
 - Removed: kill Cell, report `worktree_missing`. Counts toward cap.
 - Logs live outside worktree. Already true: local slot logs in `$XDG_DATA_HOME/sf/cells/<slot>.log`. Removal keeps the preview.
 
-## Code to remove
+## Done
 
-Removed in `cell-drain-removal`: `drain` and `force` signals, `leaveCell`, draining state, handover path, per-Cell token, `revoked` status and `sf cell revoke`, `pinned_cell_id`. Drain was fixed 2026-11-21 (ADR `20261121-175500`); this reverses it.
-
-## DB change
-
-- `jobs.cell_id`: plain text, no foreign key. History survives.
-- `work_orders.pinned_cell_id` to `pinned_factory_id`.
-- Cell rows and tokens go away.
+- Removed: drain and force signals, `leaveCell`, handover, per-Cell token, `revoked` status, `sf cell revoke`, `pinned_cell_id`.
+- DB: `jobs.claimed_by_cell_id` plain text, no foreign key. `work_orders.pinned_factory_id`. No Cell table; migration `0006_cell_identity_drop` rebuilt `safe_tokens` without Cell token kinds.
+- Code renames: `apps/hq`, `@repo/hq-contracts`, `HQ_*` env (`FACTORY_*` fallback), `hq.db` (`factory.db` fallback), `apps/sf/src/factory/`.
 
 ## Gaps
 
-Still open vs plan:
-
-- Factory does not watch Cell worktrees. `apps/sf/src/factory/` has no worktree check (see Workspace watch).
-- One long-poll per idle Cell, not one per Factory. HQ caps waiters at `MAX_CLAIM_WAITERS = 5` (`apps/hq/src/config.ts:14`), global.
-- `CLAIM_WAIT_MS` hardcoded 25 s in `apps/hq/src/config.ts:4` and `apps/sf/src/config.ts:43`.
-- Relay 401 kills one Cell (`apps/sf/src/factory/relay.ts`), not all.
-
-## Open
-
-- SQLite table rebuild for FK changes? Not checked.
-- Worktree removal runs on deliver and run-job (`apps/sf/src/application/procedures/cell/deliver.procedure.ts:77`, `run-job.procedure.ts:649`). Cancelled orders: not checked.
-- Free hosting for HQ: Google e2-micro fits by estimate, not tested. Build binary off the VM.
+| Gap | Where |
+| --- | --- |
+| One long-poll per idle Cell, not one per Factory. HQ caps waiters at 5 globally (`MAX_CLAIM_WAITERS`); a 6th idle Cell gets an empty reply at once and spins | `apps/hq/src/adapters/memory/claim-waiters.adapter.ts`, `apps/sf/src/factory/relay.ts` |
+| Claim wait hardcoded 25 s, not configurable for proxy timeouts | `CLAIM_WAIT_MS` in `apps/hq/src/config.ts`, `apps/sf/src/config.ts` |
+| Relay 401 kills only the calling Cell; others die at next HQ heartbeat (up to 10 s) | `apps/sf/src/factory/relay.ts` |
+| Factory does not watch Cell worktrees; a deleted worktree is seen only at next resume | `apps/sf/src/factory/` |
+| Scale-down "newest" sorts by Cell start, not step start (`activity.since` is sent but unused) | `killOrder` in `apps/sf/src/factory/scaler.ts` |
+| `sf service install --cell` writes a unit running `sf cell start --project`; Cells refuse without the Factory and `--project` is gone. Needs a Factory daemon unit | `apps/sf/src/adapters/cli/service.command.ts` |
+| Worktrees of cancelled orders are never removed | `apps/sf` (only deliver and discard remove) |
+| `.factory/templates/pr/blocked.md` unused; no draft PR for blocked work | `.factory/templates/pr/` |
+| Verify: after `worktree_missing` reset, fresh Step 0 job may carry the old `headCommitSha` (not cleared in the reset patch) | `apps/hq/src/application/procedures/jobs/transition-job.procedure.ts` |
+| HQ hosting: Google e2-micro fits by estimate, not tested | ops |
+| CI never runs install or quickstart | [onboarding-plan.md](./onboarding-plan.md) |

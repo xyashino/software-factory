@@ -61,25 +61,25 @@ Any git repo, not only this monorepo:
 ```bash
 cd path/to/repo
 sf init                                    # .factory/ + .gitignore entries
-sf hq start                                # one HQ server per machine
+sf hq start                                # one HQ per machine
 sf hq token admin create --save            # .factory-local/supervisor.token
 sf project add <id> --repo <url>
 sf web start                               # optional; http://127.0.0.1:4321
-sf hq token create --kind factory_join --name <name>   # once per PC, prints the join token
-sf factory connect <hq-url> --token -     # join token from stdin, once per PC
-sf factory start
-sf cell scale 2 --repo <path>              # Cells start under the Factory daemon
+sf hq token create --kind factory_join --name <pc>   # one-time join token
+sf factory connect http://127.0.0.1:7070 --token -   # join token from stdin, once per PC
+sf factory start                           # local daemon, owns the Cells
+sf cell scale 1                            # Cells for this repo project
 sf todos import                            # push todos/*.md
 sf queue
 ```
 
-- Pass the join token with `--token -` (stdin); do not echo it.
-- Repeat `sf init`, `sf project add`, `sf cell scale N --repo <path>` per repo to share one HQ.
+- Pass the join token with `--token -` (stdin); never echo it.
+- Repeat `sf init`, `sf project add`, `sf cell scale N` per repo to share one HQ.
 
-## 4. Multi-cell and remote brain
+## 4. Multi-cell and remote HQ
 
-- Several Cells on one PC: `sf cell scale N`, one count per repo project.
-- Remote HQ: start with `FACTORY_HOST=0.0.0.0` only behind Tailscale or TLS. Remote Factories join with `sf factory connect <hq-url>` and a `factory_join` token.
+- Several Cells on one PC: `sf cell scale N`. One Factory per PC.
+- Remote HQ: start with `HQ_HOST=0.0.0.0` only behind Tailscale or TLS. Remote PCs run `sf factory connect <hq-url> --token <join>`; the CLI uses `HQ_URL`.
 - Data dir: `$XDG_DATA_HOME/sf` (default `~/.local/share/sf`).
 
 ## 5. Verify and stop
@@ -88,7 +88,7 @@ sf queue
 sf queue
 sf cell list
 sf web stop
-sf cell scale 0 --repo <path>              # stops this repo's Cells
+sf cell scale 0
 sf factory stop
 sf hq stop
 ```

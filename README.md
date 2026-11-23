@@ -1,6 +1,6 @@
 # software-factory
 
-Monorepo hosting **SoftwareFactory** ([docs](docs/README.md): [architecture](docs/architecture.md), [sf](docs/sf.md), [hq](docs/hq.md)), an autonomous AI harness that turns
+Monorepo hosting **SoftwareFactory** ([docs](docs/README.md): [architecture](docs/architecture.md), [sf](docs/sf.md), [factory](docs/hq.md)), an autonomous AI harness that turns
 `todos/*.md` work orders into verified Pull Requests via declarative production lines.
 
 ## Main idea
@@ -8,20 +8,21 @@ Monorepo hosting **SoftwareFactory** ([docs](docs/README.md): [architecture](doc
 The system is modeled as an automated software factory:
 
 - **HQ** (external server) is the single control point holding blueprints (Lines, Stations, Operators), the schedule, **Traveler** records (append-only event logs), and the board.
-- **Factory** (local daemon, one per PC) is the only holder of the HQ credential. It spawns, supervises and kills Cells.
-- **Cells** are disposable workers that connect outbound to HQ, claim a **Job** for a **Station**, execute it, push git checkpoints and artifacts, and can disconnect at any time without losing completed work.
+- **Factory** (local daemon, one per PC) is the only holder of the HQ credential. It spawns, supervises and kills Cells (`sf factory start`, `sf cell scale N`).
+- **Cells** are disposable workers. They talk only to their Factory, which relays to HQ. A Cell claims a **Job** for a **Station** and executes it; only the builder station commits. A killed Cell loses no committed work.
 - **Lines** are declarative production workflows composed of **Stations**—either an **Operator** (an AI specialist such as `planner`, `builder`, `reviewer`, `auditor`) or an **Inspection** (a deterministic command gate).
 - **Work orders** (`todos/*.md`) travel down a Line from station to station. If an Operator or Inspection hits a blocker, it raises an **Andon** (releasing the Cell immediately) with a **Handover** so a human supervisor can resolve it and resume on any available Cell.
 
-| Package                      | Purpose                                                         |
-| ---------------------------- | --------------------------------------------------------------- |
-| `apps/sf`                    | `sf`: the single CLI binary (server, Cell, Supervisor commands, local Factory daemon) |
-| `apps/hq`                    | HQ HTTP server and storage                                      |
-| `apps/web-demo`              | Web UI served by `sf web start`                                 |
-| `packages/nitpick`           | Rules/skills engine; generates `.agents/` from `.nitpick/`      |
-| `packages/prompt`            | Prompt building blocks                                          |
-| `packages/eslint-config`     | Shared ESLint config                                            |
-| `packages/typescript-config` | Shared tsconfig presets                                         |
+| Package                      | Purpose                                                                     |
+| ---------------------------- | --------------------------------------------------------------------------- |
+| `apps/sf`                    | `sf`: the single CLI binary (HQ, Factory daemon, Cell, Supervisor commands) |
+| `apps/hq`                    | HQ HTTP server and storage                                                  |
+| `apps/web-demo`              | Web UI served by `sf web start`                                             |
+| `packages/hq-contracts`      | HQ wire contracts shared by HQ, `sf` and web                                |
+| `packages/nitpick`           | Rules/skills engine; generates `.agents/` from `.nitpick/`                  |
+| `packages/prompt`            | Prompt building blocks                                                      |
+| `packages/eslint-config`     | Shared ESLint config                                                        |
+| `packages/typescript-config` | Shared tsconfig presets                                                     |
 
 ## Prerequisites
 
@@ -83,7 +84,7 @@ Install from a checkout:
 git clone <repo-url> software-factory && cd software-factory
 mise install && bun install
 bun run build:sf                                  # apps/sf/dist/sf + web UI
-node scripts/install.mjs --source apps/sf/dist    # ~/.local/bin/sf (see troubleshooting)
+node scripts/install.mjs                          # ~/.local/bin/sf
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
@@ -110,14 +111,23 @@ ssh -L 4321:127.0.0.1:4321 <user>@<vps>   # laptop
 
 HQ listens on loopback by default. Set `HQ_HOST` (for example a Tailscale address) only behind Tailscale or TLS: it exposes the HQ API to the network.
 
-Keep HQ running after you log out. On Linux, `sf service install` writes systemd user units for the server; `sf service uninstall` removes them.
+Keep HQ running after you log out: on Linux, `sf service install` writes a systemd user unit for HQ; `sf service uninstall` removes it.
+
+Run Cells. The Factory daemon starts detached and owns the Cells; `sf service` does not manage it yet:
+
+```bash
+sf hq token create --kind factory_join --name vps-1   # prints a one-time join token
+sf factory connect http://127.0.0.1:7070 --token -     # paste the join token
+sf factory start
+sf cell scale 1                                       # in the repo
+```
 
 Troubleshooting:
 
 | Symptom | Check | Fix |
 | --- | --- | --- |
 | Port 7070 in use: `sf hq start` prints `server started`, or `sf doctor` shows `token rejected` on an HQ you did not start | `ss -ltnp 'sport = :7070'`: owner is not your HQ server | Stop the owner: `kill <pid>`. `sf hq stop` only stops the process in the pid file, not a leaked one. Then `sf hq start` |
-| 401 after `sf hq token admin create`: `401: Missing or invalid bearer token` | Read `token source:` in the error. The `fix:` line for a saved target still prints the older `sf server token create --global` spelling, which is the same command | `repo:.factory-local/supervisor.token`: `sf hq token admin create --save` (the repo file wins over global). `env:HQ_TOKEN` (or `env:FACTORY_TOKEN`): unset it or set the new token. `config:<name>`: `sf hq token admin create --save --global` |
+| 401 after `sf hq token admin create`: `401: Missing or invalid bearer token` | Read `token source:` in the error. | `repo:.factory-local/supervisor.token`: `sf hq token admin create --save` (the repo file wins over global). `env:HQ_TOKEN` (or `env:HQ_TOKEN`): unset it or set the new token. `config:<name>`: `sf hq token admin create --save --global` |
 | Missing runner: `missing: runner <name> not installed` in `sf doctor`; `sf setup` refuses | `command -v <name>` prints nothing | Install the CLI, put it on `PATH` for non-login shells too, sign in (see above), then `sf doctor` |
 
 Test runs on the same VPS: set `HQ_PORT` and `HQ_URL` together, or the probe and the doctor check still hit port 7070.
@@ -139,7 +149,7 @@ sf todos import && sf queue                # push todos/*.md, see the queue
 sf hq stop
 ```
 
-Run `sf init`, `sf project add` and `sf cell scale N --repo <path>` in each repository to share one server across repositories. Command reference: [docs/sf.md](docs/sf.md). The flow is proved end to end by `apps/sf/test/blackbox/standalone-external-repo.test.ts` (runs after `bun run build:sf`, skipped without build output).
+Run `sf init`, `sf project add` and `sf cell scale N` in each repository to share one server across repositories. Command reference: [docs/sf.md](docs/sf.md). The flow is proved end to end by `apps/sf/test/blackbox/standalone-external-repo.test.ts` (runs after `bun run build:sf`, skipped without build output).
 
 ## Credits
 

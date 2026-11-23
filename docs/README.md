@@ -9,8 +9,8 @@ Index of project docs, by topic. Each app keeps a short `README.md` pointing her
 - [cell.md](./cell.md): Cell daemon, Factory daemon (`sf factory`), operator endpoint, local data.
 - [web-demo.md](./web-demo.md): Astro web UI served by `sf web start`.
 - [engineering.md](./engineering.md): backend layering, transactions, SQLite, testing.
-- [hq-factory-cell-plan.md](./hq-factory-cell-plan.md): Factory and Cell design, open gaps.
-- [onboarding-plan.md](./onboarding-plan.md): open onboarding gap.
+- [hq-factory-cell-plan.md](./hq-factory-cell-plan.md): HQ, Factory, Cell design, status and gaps.
+- [onboarding-plan.md](./onboarding-plan.md): open onboarding gap (CI smoke test).
 - Repo rules (style, commits, tests): `.nitpick/`, generated into `CLAUDE.md` and `.agents/`.
 
 ## Glossary

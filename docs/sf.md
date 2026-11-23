@@ -1,9 +1,9 @@
-# `sf` CLI — plan
+# `sf` CLI
 
 One binary: `sf`. It is the only CLI (the old `factory` CLI, `apps/cli`, was removed) and serves the Supervisor (you),
 the Cell daemon (each machine that runs work), and the Operator and Mechanic verbs (agents inside a job).
 
-Names used here follow the [glossary](./README.md#glossary): **HQ** is the external server, **Factory** is the local daemon (`sf factory`), **Cell** is the worker.
+Names used here follow the [glossary](./README.md#glossary): **HQ** is the external server, **Factory** is the local daemon, **Cell** is the worker.
 
 ## 0. Install and quickstart
 
@@ -45,15 +45,17 @@ especially §3 (Cell lifecycle) and §11 (agent reporting). Operator CLI spec:
 | init | `sf init` | Supervisor, in a repo | none (writes `.factory/`, `.gitignore`) |
 | project | `sf project add <id> --repo <url>` | Supervisor | `POST /api/v1/projects` |
 | project | `sf project ls` | Supervisor | `GET /api/v1/projects` |
-| hq | `sf hq start` | Supervisor | none (spawns the embedded server) |
+| hq | `sf hq start` | Supervisor | none (spawns the embedded HQ server) |
 | hq | `sf hq stop` | Supervisor | none (signals the pid file) |
+| hq | `sf hq token admin create [--save] [--global]` | Supervisor | none (admin path in HQ) |
 | hq | `sf hq token create --kind factory_join --name <n>` | Supervisor | `POST /api/v1/tokens` |
-| hq | `sf hq token admin create [--save]` | Supervisor | none (admin path in server) |
+| factory | `sf factory connect <url> --token <join\|->` | Supervisor, once per PC | `POST /api/v1/factories/enroll` |
+| factory | `sf factory start \| stop \| status` | Supervisor, on a Cell machine | Factory daemon `127.0.0.1:7072` |
 | web | `sf web start \| stop \| status` | Supervisor | none (runs the installed web UI, pid in `web.pid`) |
 | cell | `sf cell scale N [--repo <path>]` | Supervisor, on a Cell machine | Factory daemon `PUT /scale` (converges Cells to N) |
 | cell | `sf cell start [--name <slug>]` | Factory daemon child only | `claims`, `heartbeats`, `jobs/{id}/transitions` through the relay |
+| cell | `sf cell list` | Supervisor | Factory daemon `GET /scale` (local only) |
 | cell | `sf cell create\|stop\|rm` | removed | exit 2, `use "sf cell scale N"` |
-| cell | `sf cell list` | Supervisor | Factory daemon `GET /scale` |
 | todos | `sf todos import` | Supervisor | `POST /api/v1/queue/import` |
 | todos | `sf todos export` | Supervisor | `GET /api/v1/queue/export` |
 | queue | `sf queue` | Supervisor | `GET /api/v1/work-orders`, `GET /api/v1/order-plans` |
@@ -105,71 +107,48 @@ Each command is a procedure. Adapters are the only code that does I/O.
 
 ```text
 apps/sf/
-├── README.md
 ├── src/
 │   ├── cli.ts                      # entrypoint: citty root, registers adapters/cli groups
-│   ├── config.ts                   # env and timing constants (HQ URL default, waitMs 25000, 10s heartbeat)
-│   ├── domain/                     # pure, no I/O, no clock
-│   │   ├── common/                 # brand.ts (CellId, JobId, OrderId, IncidentId), time.ts
-│   │   ├── connection/             # HQ URL and token resolution (HQ_* with FACTORY_* fallback)
-│   │   ├── repo-config/            # parse .factory/config.json (project, rules, skills)
-│   │   ├── line/                   # parse .factory/lines/<name>.yml -> lineSnapshot
-│   │   ├── operator/               # verb model: done, verdict, block, read, incident actions
-│   │   └── exit-codes.ts           # 0 ok, 1 refused, 2 bad args, 3 unreachable
-│   ├── contracts/                  # Zod schemas: one file per route group and per operator verb
-│   │   ├── cells.contract.ts
-│   │   ├── jobs.contract.ts
-│   │   ├── queue.contract.ts
-│   │   ├── incidents.contract.ts
-│   │   ├── work-orders.contract.ts
-│   │   ├── operator.contract.ts
-│   │   └── common.ts
+│   ├── config.ts                   # paths, ports, env names, timing (25 s claim wait, 10 s heartbeat, 45 s self-fence)
+│   ├── domain/                     # pure, no I/O: access, cell, common, connection, factory, git,
+│   │                               # init, line, repo-config, service, todo, exit-codes
+│   ├── contracts/                  # operator.contract.ts (HQ contracts: @repo/hq-contracts)
 │   ├── application/
 │   │   ├── core/                   # procedure factory: access ('supervisor' | 'cell' | 'job'), schema, handler
-│   │   ├── ports/                  # server.port, clock.port, fs.port, git.port, runner.port,
-│   │   │                           # process.port, operator-endpoint.port, token-store.port
-│   │   └── procedures/
-│   │       ├── server/             # start, stop, token-create
-│   │       ├── cell/               # start, claim-loop, run-job, factory-cells
-│   │       ├── todos/              # import, export
-│   │       ├── queue/              # list, actions
-│   │       ├── incidents/          # list, resolve
-│   │       ├── work-orders/        # show, transition
-│   │       ├── watch/              # SSE
-│   │       └── operator/           # done, verdict, block, context, read, incident
+│   │   ├── ports/                  # hq, hq-link, factory, factory-credential, git, pr,
+│   │   │                           # process, runner, operator-endpoint, fs, clock, ...
+│   │   └── procedures/             # one folder per command group: cell, connection, doctor, factory,
+│   │                               # hq, incidents, init, operator, projects, queue, setup,
+│   │                               # todos, tokens, watch, web, work-orders
 │   ├── adapters/
-│   │   ├── cli/                    # citty commands; each one maps args -> procedure input
-│   │   │                           # hq.command.ts mounts the HQ group; legacy.command.ts holds the deprecated names
-│   │   ├── http/                   # server client (supervisor token, cell token), retries via commandId
-│   │   ├── fs/                     # .factory-local/cell.json (0600), pid file, .cell/ files
-│   │   ├── git/                    # worktree, checkpoint commit, push
-│   │   ├── process/                # spawn factory server, spawn runner
-│   │   ├── runners/                # claude, codex, cursor, antigravity, opencode, copilot (one file each)
-│   │   ├── operator-endpoint/      # loopback listener per job (Hono, like `apps/hq`)
-│   │   └── memory/                 # clock, in-memory waiters for tests
-│   └── bootstrap/
-│       ├── context.ts              # builds the port set for supervisor, cell, or operator mode
-│       ├── hq-env.ts               # reads HQ_* with the FACTORY_* fallback and its one-time warning
-│       └── run.ts                  # runs one procedure with its context
-└── test/
-    ├── blackbox/                   # run commands against a fake server (app.request-style)
-    ├── support/                    # fake server, fake runner, fake git, fake clock
-    └── unit/                       # domain and contracts only
+│   │   ├── cli/                    # citty commands; hq.command.ts mounts HQ, legacy.command.ts holds deprecated names
+│   │   ├── http/                   # HQ client, HQ link client, Factory daemon client, SSE client
+│   │   ├── fs/                     # Factory credential (0600), connection store, pid files, .cell/ files
+│   │   ├── git/                    # git.ts (worktree, commit, reset, push), gh.ts (PR publish)
+│   │   ├── process/                # spawn HQ, Factory daemon, runners
+│   │   ├── runners/                # claude, codex, cursor, antigravity, opencode, copilot; herdr panes
+│   │   ├── operator-endpoint/      # loopback listener per job
+│   │   └── operator-client/        # `sf operator` client
+│   ├── factory/                    # Factory daemon: supervisor, scaler, relay, hq-link, routes
+│   ├── cell/                       # Cell helpers (heartbeat)
+│   └── bootstrap/                  # context.ts (port set), hq-env.ts (HQ_* with FACTORY_* fallback),
+│                                   # run.ts, entry-dispatch.ts (HQ or Factory daemon entry)
+└── test/                           # blackbox/, support/, unit/
 ```
 
 Rules carried over from `apps/hq`:
 
 - `domain/` imports nothing from `application/`, `adapters/` or `bootstrap/`.
 - `application/procedures/` imports ports, never adapters. An adapter is picked in `bootstrap/`.
-- `contracts/` is the only place wire shapes are declared. The server, the CLI and the operator use
-  the same files, or a shared package later (§7).
+- Wire shapes live in contracts only: `@repo/hq-contracts` for HQ, `src/contracts/` for the
+  operator endpoint (§7).
 - The operator verbs have their own procedures. `sf operator` never reads `.factory/` or the
   supervisor token.
 - No barrel files. Imports name the concrete file (`coding-no-barrel-export`).
 
 ## 3. How a Cell works under the hood
 
-The Cell is the only process that talks to HQ. Agents never do.
+Only the Factory daemon talks to HQ. The Cell talks to the Factory relay. Agents talk to their Cell.
 
 1. **Identity.** The Factory daemon gives the Cell its id (`FACTORY_CELL_ID`, `cell-<8 hex>`) and a
    local bearer (`HQ_TOKEN`). There is no enroll and no session file. HQ never stores a Cell.
@@ -181,21 +160,23 @@ The Cell is the only process that talks to HQ. Agents never do.
 4. **Check the Line.** If `.factory/lines/<line>.yml` is missing or invalid, send
    `transitions { action: line_unavailable }`. The reply may carry the next Job.
 5. **Check the worktree.** For `stepIndex > 0`, check `<repo>/.worktrees/<slug>/` and the prior
-   `.cell/<step-id>/` files. If any are missing, send `worktree_missing` and start again from step 0.
+   `.cell/<step-id>/` files. Complete: hard reset to the order `headCommitSha`, clean, resume.
+   Worktree or files missing: send `worktree_missing` and start again from step 0.
 6. **Start the Job.** Send `transitions { action: start, epoch, lineSnapshot }`. HQ
    materializes the steps.
 7. **Run the station.** Open the per-job loopback endpoint (see §5), set `FACTORY_OPERATOR_URL` and
    `FACTORY_CYCLE_TOKEN`, start the runner (one of the six in §8), and write
    `.cell/<step-id>/state.json`.
 8. **Heartbeat.** Every 10 s, `POST {relay}/api/v1/cells/heartbeats`. Read `signals` in the reply, such
-   as `abort`. If 4 heartbeats in a row fail (45 s), abort the runner. The lease is 60 s.
+   as `abort`. If 4 heartbeats in a row fail (about 40 s), abort the runner. The lease is 60 s.
 9. **Finish the station.** The agent's `done`, `verdict`, or `block` (§5) reaches the Cell. The Cell
    checks local facts (required files, git state), then sends the matching transition. The reply
    carries `nextJob`, so the same Cell keeps going without another claim.
 10. **Deliver.** The `deliver` station pushes `factory/<slug>` and publishes the PR. The Cell then
     removes the worktree and sends `complete` with the commit sha.
-11. **Failure.** If a Cell crashes, its lease expires and the Work order returns to `queued`. The same
-    Cell resumes its warm worktree on reconnect, or another Cell takes over at the same step.
+11. **Failure.** If a Cell crashes, the Factory reports it gone (or the lease expires) and the Work
+    order returns to `queued`, pinned to that Factory. A new Cell on the same PC resumes the worktree
+    at the same step. Only the builder station commits; other stations write only `.cell/` files.
 
 ### Stop
 
@@ -206,7 +187,7 @@ The Cell is the only process that talks to HQ. Agents never do.
 ## 4. Operator endpoint
 
 - The Cell opens `127.0.0.1` on an OS-assigned port when a Job starts, and closes it when the Job
-  ends ([`hq.md`](./hq.md) §11.2).
+  ends ([`hq.md` §11.2](./hq.md)).
 - The token is random, per Job, held only in Cell memory.
 - The Cell maps the token to `{ jobId, role, incidentId?, epoch }`, and refuses verbs the role
   cannot use.
@@ -216,11 +197,10 @@ The Cell is the only process that talks to HQ. Agents never do.
 
 ## 5. Supervisor side
 
-- `sf hq start` runs the server embedded in the `sf` binary, and writes a pid file. The discovery
-  address comes from `HQ_URL` (default `http://127.0.0.1:7070`).
-- `sf hq stop` signals only the server process, through its pid file. It does not stop or revoke Cells. See §8, decision 4.
-- The supervisor token (`sf_sup_`) comes from `HQ_TOKEN`, `.factory-local/supervisor.token` (written by
-  `sf hq token admin create --save`) or `~/.config/factory/token`. It is never printed.
+- `sf hq start` runs HQ embedded in the `sf` binary, and writes a pid file. Address and token: see
+  [HQ connection](#hq-connection).
+- `sf hq stop` signals only the HQ process, through its pid file. It does not stop Cells. See §8, decision 4.
+- The supervisor token (`sf_sup_`) is written by `sf hq token admin create --save`. It is never printed.
 - Every command maps to one endpoint from §1. No command reads the database directly.
 - Output is one human-readable table by default, and `--json` for scripts.
 
@@ -235,7 +215,9 @@ The Cell is the only process that talks to HQ. Agents never do.
 
 ## 7. Shared contracts
 
-Request and reply shapes for HQ live in `@repo/hq-contracts` (`packages/hq-contracts`). `@repo/cell-contracts` went with `apps/cell`.
+HQ, the CLI, the Factory daemon and the web UI parse the same HQ request and reply shapes from
+`@repo/hq-contracts` (`packages/hq-contracts`). The operator endpoint contract is local to
+`apps/sf/src/contracts/operator.contract.ts`.
 
 ## 8. Decisions and open questions
 
@@ -245,17 +227,15 @@ Decided:
 2. **One binary, named `sf`.**
    The Cell daemon (`sf cell start`) lives in `apps/sf/src/application/procedures/cell/`, with helpers
    in `apps/sf/src/cell/`. The Factory daemon (`sf factory start|stop|status`) is one per PC, listens on
-   `127.0.0.1:7072` (`SF_FACTORY_PORT`) and spawns, lists and kills Cell daemons. `sf cell scale|list`
-   call it. `apps/cell` and `sf cell server` are removed.
-3. **Coexistence.** The new approach is built alongside the current implementation, which stays until
-   cut-over. The new one is cleaner, so nothing is migrated from the old code.
-4. **`hq stop` does not stop Cells.** It stops only the HQ server process. Cells keep running and
-   retry their requests with the same `commandId`. If HQ stays down past the self-fence window
-   (45 s), a Cell aborts its runner, and its Job is lost once the lease ends ([`hq.md`](./hq.md) §3.7).
-   `sf hq start` brings HQ back, and Cells resume.
-5. **Cell token storage.** Not important for now. Keep the simplest option that works.
-6. **Runners in v2.0.** All six ship: `claude`, `codex`, `cursor`, `antigravity`, `opencode`, `copilot`. They match
-   the adapters in the legacy `registry.ts` runner registry.
+   `127.0.0.1:7072` (`SF_FACTORY_PORT`) and spawns and kills Cell daemons. `sf cell scale|list`
+   call it.
+3. **`hq stop` does not stop Cells.** It stops only the HQ process. If HQ stays down past the
+   self-fence window (45 s), the Factory kills its Cells, and their Jobs are requeued when HQ reaps
+   the leases ([`hq.md` §3.7](./hq.md)). `sf hq start` brings HQ back; `sf cell scale N`
+   starts Cells again.
+4. **No Cell token.** Cells hold only a local bearer from their Factory. The Factory credential is
+   the only HQ credential on a PC (`$XDG_CONFIG_HOME/sf/factory.json`, `0600`).
+5. **Runners.** Six ship: `claude`, `codex`, `cursor`, `antigravity`, `opencode`, `copilot`.
 
 Open:
 
@@ -267,4 +247,4 @@ Open:
 - The Operator's runner integration (Herdr, panes, headless). That is part of the Cell's runner
   adapters, to be planned separately.
 - Web UI internals. `sf web start` only runs the installed build; the SSE stream (`sf watch`) is the CLI live view.
-- `sf factory ...` (the local Factory daemon commands). Planned separately.
+- Factory daemon internals: [cell.md](./cell.md#factory-daemon).
