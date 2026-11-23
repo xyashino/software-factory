@@ -1,5 +1,5 @@
 import { immediateTx } from '../../../db/client';
-import { issueTokenContract } from '@repo/factory-contracts/tokens.contract';
+import { issueTokenContract } from '@repo/hq-contracts/tokens.contract';
 import { scopedProcedure } from '../../core/procedure';
 import { DEFAULT_SCOPES, insertSafeToken } from '../../tokens/token-writes';
 

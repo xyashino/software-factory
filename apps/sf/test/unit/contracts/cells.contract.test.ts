@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   claimJobContract,
   heartbeatCellContract,
-} from '@repo/factory-contracts/cells.contract';
+} from '@repo/hq-contracts/cells.contract';
 
 const CLAIM_BODY = {
   waitMs: 25_000,

@@ -1,10 +1,10 @@
 import { z } from 'zod';
-import { listFactoriesContract } from '@repo/factory-contracts/factories.contract';
-import { listIncidentsContract } from '@repo/factory-contracts/incidents.contract';
+import { listFactoriesContract } from '@repo/hq-contracts/factories.contract';
+import { listIncidentsContract } from '@repo/hq-contracts/incidents.contract';
 import {
   getWorkOrderContract,
   workOrderDto,
-} from '@repo/factory-contracts/work-orders.contract';
+} from '@repo/hq-contracts/work-orders.contract';
 
 // The pages read only these fields; the factory wire carries more.
 const orderSummaryDto = workOrderDto.pick({

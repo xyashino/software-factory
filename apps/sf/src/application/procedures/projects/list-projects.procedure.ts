@@ -1,7 +1,7 @@
 import {
   listProjectsContract,
   projectDto,
-} from '@repo/factory-contracts/projects.contract';
+} from '@repo/hq-contracts/projects.contract';
 import { z } from 'zod';
 import { define } from '../../core/procedure';
 import { readSecret } from '../../core/repo-access';

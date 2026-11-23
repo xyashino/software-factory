@@ -10,8 +10,8 @@ import {
 import {
   heartbeatCellContract,
   stepJobPayloadDto,
-} from '@repo/factory-contracts/cells.contract';
-import { transitionJobContract } from '@repo/factory-contracts/jobs.contract';
+} from '@repo/hq-contracts/cells.contract';
+import { transitionJobContract } from '@repo/hq-contracts/jobs.contract';
 import { slugSchema } from '@repo/zod-contract-kit/fields';
 import { operatorRequest } from '../../../contracts/operator.contract';
 import type { RunHandle } from '../../ports/runner.port';

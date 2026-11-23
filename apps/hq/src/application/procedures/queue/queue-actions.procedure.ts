@@ -1,5 +1,5 @@
 import { immediateTx, type DbTx } from '../../../db/client';
-import { queueActionsContract } from '@repo/factory-contracts/queue.contract';
+import { queueActionsContract } from '@repo/hq-contracts/queue.contract';
 import type { WorkOrderAction } from '../../../domain/orders/order-state';
 import { nextWorkOrderState } from '../../../domain/orders/order-state';
 import { Conflict } from '../../core/error-handling';

@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm';
 import { immediateTx } from '../../../db/client';
 import { projects } from '../../../db/schema/projects';
-import { upsertProjectContract } from '@repo/factory-contracts/projects.contract';
+import { upsertProjectContract } from '@repo/hq-contracts/projects.contract';
 import { asProjectId } from '../../../domain/common/brand';
 import { scopedProcedure } from '../../core/procedure';
 import { findProject } from '../../orders/order-writes';

@@ -1,5 +1,5 @@
 import { eq } from 'drizzle-orm';
-import { getOrderPlanContract } from '@repo/factory-contracts/order-plans.contract';
+import { getOrderPlanContract } from '@repo/hq-contracts/order-plans.contract';
 import { workOrders } from '../../../db/schema/orders';
 import { scopedProcedure } from '../../core/procedure';
 import { requirePlan } from '../../orders/order-writes';

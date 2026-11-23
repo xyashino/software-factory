@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm';
 import { FACTORY_SESSION_TTL_MS } from '../../../config';
-import { enrollFactoryContract } from '@repo/factory-contracts/factories.contract';
+import { enrollFactoryContract } from '@repo/hq-contracts/factories.contract';
 import { immediateTx } from '../../../db/client';
 import { factories } from '../../../db/schema/factories';
 import { safeTokens } from '../../../db/schema/tokens';

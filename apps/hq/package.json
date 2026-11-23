@@ -12,7 +12,7 @@
   },
   "dependencies": {
     "@repo/bun-sqlite-kit": "workspace:*",
-    "@repo/factory-contracts": "workspace:*",
+    "@repo/hq-contracts": "workspace:*",
     "@repo/zod-contract-kit": "workspace:*",
     "drizzle-orm": "catalog:",
     "hono": "catalog:",

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   listIncidentsContract,
   resolveIncidentContract,
-} from '@repo/factory-contracts/incidents.contract';
+} from '@repo/hq-contracts/incidents.contract';
 
 const body = resolveIncidentContract.in.body;
 

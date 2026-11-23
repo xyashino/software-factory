@@ -2,7 +2,7 @@ import { z } from 'zod';
 import {
   INCIDENT_REASONS,
   INCIDENT_STATUSES,
-} from '@repo/factory-contracts/enums/incidents';
+} from '@repo/hq-contracts/enums/incidents';
 import { define } from '../../core/procedure';
 import { readProjectId, readSecret } from '../../core/repo-access';
 

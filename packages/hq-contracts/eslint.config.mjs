@@ -17,7 +17,7 @@ export default [
     rules: {
       'no-restricted-globals': [
         'error',
-        { name: 'process', message: 'factory-contracts holds schemas only.' },
+        { name: 'process', message: 'hq-contracts holds schemas only.' },
       ],
       'no-restricted-imports': [
         'error',
@@ -25,7 +25,7 @@ export default [
           patterns: [
             {
               group: ['node:*', 'bun:*', 'hono', 'hono/*', '**/apps/**'],
-              message: 'factory-contracts holds schemas only.',
+              message: 'hq-contracts holds schemas only.',
             },
           ],
         },

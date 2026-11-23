@@ -1,8 +1,5 @@
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
-import {
-  ACTOR_KINDS,
-  ENTITY_TYPES,
-} from '@repo/factory-contracts/enums/events';
+import { ACTOR_KINDS, ENTITY_TYPES } from '@repo/hq-contracts/enums/events';
 import type { ProjectId } from '../../domain/common/brand';
 import { jsonColumn } from '@repo/bun-sqlite-kit/columns';
 import { projects } from './projects';

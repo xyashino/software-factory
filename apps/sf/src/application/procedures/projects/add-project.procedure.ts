@@ -1,7 +1,7 @@
 import {
   projectDto,
   upsertProjectContract,
-} from '@repo/factory-contracts/projects.contract';
+} from '@repo/hq-contracts/projects.contract';
 import { slugSchema } from '@repo/zod-contract-kit/fields';
 import { z } from 'zod';
 import { define } from '../../core/procedure';
