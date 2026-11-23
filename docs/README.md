@@ -10,6 +10,7 @@ Index of project docs, by topic. Each app keeps a short `README.md` pointing her
 - [web-demo.md](./web-demo.md): Astro web UI served by `sf web start`.
 - [engineering.md](./engineering.md): backend layering, transactions, SQLite, testing.
 - [hq-factory-cell-plan.md](./hq-factory-cell-plan.md): HQ, Factory, Cell design, status and gaps.
+- [standalone-factory-plan.md](./standalone-factory-plan.md): plan to extract `apps/factory` and support `--local` execution without HQ.
 - [onboarding-plan.md](./onboarding-plan.md): open onboarding gap (CI smoke test).
 - Repo rules (style, commits, tests): `.nitpick/`, generated into `CLAUDE.md` and `.agents/`.
 
@@ -17,19 +18,19 @@ Index of project docs, by topic. Each app keeps a short `README.md` pointing her
 
 Defined once here. Other docs link to this section.
 
-| Term           | Meaning                                                                                              |
-| :------------- | :--------------------------------------------------------------------------------------------------- |
-| **HQ**         | External server: state, queue, projects, work orders, jobs, leases. Holds the transition log         |
-| **Factory**    | Local daemon, one per PC. Only holder of the HQ credential. Spawns, supervises and kills Cells       |
-| **Cell**       | Disposable worker: one process, one job at a time, runs inside a repo. Talks only to its Factory     |
-| **Project**    | A repo containing `.factory/config.json` (field `project`)                                           |
-| **Line**       | Declarative workflow: an ordered list of Stations (`.factory/lines/<name>.yml`)                      |
-| **Station**    | One step of a Line. An Operator run or a deterministic Inspection                                    |
-| **Operator**   | The LLM agent running one Station of a Line                                                          |
-| **Mechanic**   | The LLM agent that triages an Incident when a Line is blocked                                        |
-| **Job**        | One execution attempt of one Station, claimed by a Cell. Also a Mechanic run                        |
-| **Incident**   | An Andon: a block that normal retries could not fix. Releases the Cell                               |
-| **Work order** | One `todos/*.md` item travelling down a Line                                                         |
-| **Supervisor** | The human who runs HQ and resolves Incidents                                                         |
+| Term           | Meaning                                                                                          |
+| :------------- | :----------------------------------------------------------------------------------------------- |
+| **HQ**         | External server: state, queue, projects, work orders, jobs, leases. Holds the transition log     |
+| **Factory**    | Local daemon, one per PC. Only holder of the HQ credential. Spawns, supervises and kills Cells   |
+| **Cell**       | Disposable worker: one process, one job at a time, runs inside a repo. Talks only to its Factory |
+| **Project**    | A repo containing `.factory/config.json` (field `project`)                                       |
+| **Line**       | Declarative workflow: an ordered list of Stations (`.factory/lines/<name>.yml`)                  |
+| **Station**    | One step of a Line. An Operator run or a deterministic Inspection                                |
+| **Operator**   | The LLM agent running one Station of a Line                                                      |
+| **Mechanic**   | The LLM agent that triages an Incident when a Line is blocked                                    |
+| **Job**        | One execution attempt of one Station, claimed by a Cell. Also a Mechanic run                     |
+| **Incident**   | An Andon: a block that normal retries could not fix. Releases the Cell                           |
+| **Work order** | One `todos/*.md` item travelling down a Line                                                     |
+| **Supervisor** | The human who runs HQ and resolves Incidents                                                     |
 
 Code paths: `apps/hq` is HQ, `apps/sf` holds the Cell and Factory daemons. Docs use the terms above. Old command and env names are listed in [sf.md](./sf.md#deprecated-names).
