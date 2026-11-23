@@ -25,11 +25,16 @@ export interface RunOutcome {
   exitCode: number;
 }
 
+export interface AbortOptions {
+  /** the run's processes stop but its pane stays open for reading */
+  keepPane?: boolean;
+}
+
 export interface RunnerPort {
   prepare(): Promise<void>;
   start(spec: RunSpec): Promise<RunHandle>;
   /** Resolves once the run's processes are gone; false when they outlive the adapter's limit. */
-  abort(handle: RunHandle): Promise<boolean>;
+  abort(handle: RunHandle, options?: AbortOptions): Promise<boolean>;
   wait(handle: RunHandle): Promise<RunOutcome>;
   interactiveAvailable(): Promise<boolean>;
 }

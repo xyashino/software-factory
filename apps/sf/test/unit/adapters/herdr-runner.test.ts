@@ -202,6 +202,21 @@ describe('herdr pane runner', () => {
     expect(calls).toContainEqual(['herdr', 'tab', 'close', 'w1:t7']);
   });
 
+  it('does not close a kept tab when the next run starts', async () => {
+    // Arrange
+    const dir = stepDir();
+    const { port, calls } = fakeHerdr();
+    const runner = createHerdrRunner(port, CELL);
+    const first = await runner.start(specIn(dir));
+    await runner.abort(first, { keepPane: true });
+
+    // Act
+    await runner.start(specIn(dir));
+
+    // Assert
+    expect(calls).not.toContainEqual(['herdr', 'tab', 'close', 'w1:t7']);
+  });
+
   it('closes the tab on abort and ends the wait as aborted', async () => {
     const dir = stepDir();
     const { port, calls } = fakeHerdr();
@@ -421,6 +436,22 @@ describe('herdr pane runner abort', () => {
     expect(gone).toBe(true);
     expect(kills).toEqual([['-TERM', '100', '200', '300']]);
     expect(calls).toContainEqual(['herdr', 'tab', 'close', 'w1:t7']);
+  });
+
+  it('stops the agent but keeps its tab open when asked to keep the pane', async () => {
+    // Arrange
+    const dir = stepDir();
+    const { port, calls, kills } = processTree();
+    const runner = createHerdrRunner(port, CELL);
+    const handle = await startWithPid(runner, dir);
+
+    // Act
+    const gone = await runner.abort(handle, { keepPane: true });
+
+    // Assert
+    expect(gone).toBe(true);
+    expect(kills).toEqual([['-TERM', '100', '200', '300']]);
+    expect(calls).not.toContainEqual(['herdr', 'tab', 'close', 'w1:t7']);
   });
 
   it('escalates to SIGKILL when the tree ignores SIGTERM', async () => {

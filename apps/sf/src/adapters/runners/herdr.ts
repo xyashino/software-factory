@@ -384,12 +384,17 @@ export const createHerdrRunner = (
       const pid = await pidWithin(pidFile, PID_WAIT_MS);
       return { id, pane: { workspaceId, tabId, paneId }, pid };
     },
-    abort: async (handle) => {
+    abort: async (handle, options) => {
       const run = runs.get(handle.id);
       if (run === undefined) return true;
       run.aborted = true;
       const gone = await stopTree(processPort, run);
-      await processPort.run(HERDR, ['tab', 'close', run.tabId], run.cwd);
+      if (options?.keepPane === true) {
+        // The next start closes `previous`; a kept pane must outlive it.
+        if (previous?.runId === handle.id) previous = undefined;
+      } else {
+        await processPort.run(HERDR, ['tab', 'close', run.tabId], run.cwd);
+      }
       return gone;
     },
     interactiveAvailable: async () =>
