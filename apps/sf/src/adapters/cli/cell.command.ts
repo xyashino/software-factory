@@ -8,6 +8,7 @@ import {
   FACTORY_PID_ENV,
   JOIN_TOKEN_ENV,
   cellLogPathOf,
+  isRelayedOf,
 } from '../../config';
 import { Refused } from '../../application/core/errors';
 import type { Ports } from '../../application/core/procedure';
@@ -171,6 +172,7 @@ const runStart = async (
         logPath: resolve(cwd, cellLogPathOf(name)),
         joinToken: process.env[JOIN_TOKEN_ENV],
         lines: linesOf(process.env[CELL_LINES_ENV]),
+        relayed: isRelayedOf(process.env),
         project,
         choose: chooserOf(),
         signal: controller.signal,

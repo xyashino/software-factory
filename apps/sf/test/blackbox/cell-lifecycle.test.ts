@@ -326,6 +326,7 @@ const runScenario = async (scenario: Scenario) => {
     cellName: 'Dev Box',
     logPath: join(REPO, cellLogPathOf('dev-box')),
     joinToken: 'joinToken' in scenario ? scenario.joinToken : JOIN_TOKEN,
+    relayed: false,
     signal: controller.signal,
   });
   return { calls: fake.calls, runs, stateWrites: state.writes, files };
@@ -619,6 +620,7 @@ describe('cell lifecycle', () => {
             activeJobId: 'job-1',
             lastHeartbeatAt: 0,
             leaseExpiresAt: null,
+            factoryId: null,
           },
         ],
       }),

@@ -3,13 +3,13 @@ import { z } from 'zod';
 import {
   CELL_LINES_ENV,
   CLI_ENTRY,
+  FACTORY_DAEMON_URL,
   FACTORY_PID_ENV,
   IS_COMPILED,
   JOIN_TOKEN_ENV,
   REPO_CONFIG_PATH,
   cellWorkerLauncherOf,
 } from '../config';
-import type { Access } from '../domain/access';
 import { cellNameOf } from '../domain/cell/cell-name';
 import { joinPath } from '../domain/common/path';
 import {
@@ -19,12 +19,11 @@ import {
 } from '../application/core/errors';
 import type { Ports } from '../application/core/procedure';
 import { resolveCellTarget } from '../application/procedures/cell/resolve-project-target';
-import { createToken } from '../application/procedures/tokens/token-create.procedure';
 import type { DaemonStatus, HqState } from '../domain/factory/hq-state';
 import type { HqLink } from './hq-link';
+import { RELAY_PATH, type Relay } from './relay';
 import type { CellRecord, Supervisor } from './supervisor';
 
-const SUPERVISOR: Access = { kind: 'supervisor' };
 const CREATED = 201;
 const OK = 200;
 const BAD_REQUEST = 400;
@@ -33,6 +32,7 @@ const CONFLICT = 409;
 const UNREACHABLE = 503;
 const INTERNAL = 500;
 const CELL_ROUTE = /^\/cells\/([^/]+)$/;
+const RELAY_URL = `${FACTORY_DAEMON_URL}${RELAY_PATH}`;
 const cellLauncher = cellWorkerLauncherOf(IS_COMPILED, CLI_ENTRY);
 
 const CreateSchema = z
@@ -47,6 +47,7 @@ export interface RouteDeps {
   ports: Ports;
   supervisor: Supervisor;
   hq: HqLink;
+  relay: Relay;
   identity: { url: string; factoryId: string } | null;
 }
 
@@ -92,16 +93,14 @@ const readCreateBody = async (request: Request): Promise<unknown> => {
 };
 
 const workerEnvOf = (
-  ports: Ports,
-  joinToken: string,
+  localToken: string,
   lines: readonly string[] | undefined,
 ): Record<string, string> => ({
   [FACTORY_PID_ENV]: String(process.pid),
-  FACTORY_URL: ports.connection.url,
-  ...(ports.connection.token === null
-    ? {}
-    : { FACTORY_TOKEN: ports.connection.token }),
-  [JOIN_TOKEN_ENV]: joinToken,
+  FACTORY_URL: RELAY_URL,
+  FACTORY_TOKEN: localToken,
+  // Blank, so a join token inherited from the daemon's env never reaches the Cell.
+  [JOIN_TOKEN_ENV]: '',
   ...(lines === undefined ? {} : { [CELL_LINES_ENV]: lines.join(',') }),
 });
 
@@ -124,6 +123,7 @@ const createCell = async (
     repoRoot: input.repoRoot,
     requested: undefined,
     choose: undefined,
+    relayed: false,
   });
   const gate = hqGateOf(deps.hq.state());
   if (gate !== null) {
@@ -133,22 +133,19 @@ const createCell = async (
     repoRoot: target.repoRoot,
     name: input.name,
     baseName: cellNameOf(hostname()),
-    start: async (name) => {
-      const minted = await createToken.execute(
-        { kind: 'cell_join', name },
-        { ...ports, token: SUPERVISOR, principal: SUPERVISOR },
-      );
-      return {
-        args: [...cellLauncher, 'cell', 'start', '--name', name],
-        env: workerEnvOf(ports, minted.token, input.lines),
-      };
-    },
+    start: async (name, cellId) => ({
+      args: [...cellLauncher, 'cell', 'start', '--name', name],
+      env: workerEnvOf(deps.relay.issue(cellId), input.lines),
+    }),
   });
 };
 
 const handle = async (deps: RouteDeps, request: Request): Promise<Response> => {
   const { pathname } = new URL(request.url);
   const cellId = CELL_ROUTE.exec(pathname)?.[1];
+  if (pathname === RELAY_PATH || pathname.startsWith(`${RELAY_PATH}/`)) {
+    return deps.relay.handle(request);
+  }
   if (request.method === 'GET' && pathname === '/health') {
     return reply(OK, { pid: process.pid });
   }

@@ -1,0 +1,1 @@
+ALTER TABLE `cells` ADD `factory_id` text REFERENCES factories(factory_id);
