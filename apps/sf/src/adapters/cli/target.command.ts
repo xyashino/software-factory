@@ -43,43 +43,37 @@ const runRemove = async (name: string): Promise<number> => {
   return reportFailure(result);
 };
 
-export const targetCommand = defineCommand({
-  meta: {
-    name: 'target',
-    description: 'List, select and remove saved factory targets',
+export const hqTargetLsCommand = defineCommand({
+  meta: { name: 'ls', description: 'List saved HQ targets' },
+  run: async () => {
+    process.exitCode = await runList();
   },
-  subCommands: {
-    ls: defineCommand({
-      meta: { name: 'ls', description: 'List saved targets' },
-      run: async () => {
-        process.exitCode = await runList();
-      },
-    }),
-    use: defineCommand({
-      meta: { name: 'use', description: 'Make a saved target active' },
-      args: {
-        name: {
-          type: 'positional',
-          required: true,
-          description: 'Target name',
-        },
-      },
-      run: async ({ args }) => {
-        process.exitCode = await runUse(args.name);
-      },
-    }),
-    rm: defineCommand({
-      meta: { name: 'rm', description: 'Remove a saved target' },
-      args: {
-        name: {
-          type: 'positional',
-          required: true,
-          description: 'Target name',
-        },
-      },
-      run: async ({ args }) => {
-        process.exitCode = await runRemove(args.name);
-      },
-    }),
+});
+
+export const hqTargetUseCommand = defineCommand({
+  meta: { name: 'use', description: 'Make a saved HQ target active' },
+  args: {
+    name: {
+      type: 'positional',
+      required: true,
+      description: 'Target name',
+    },
+  },
+  run: async ({ args }) => {
+    process.exitCode = await runUse(args.name);
+  },
+});
+
+export const hqTargetRmCommand = defineCommand({
+  meta: { name: 'rm', description: 'Remove a saved HQ target' },
+  args: {
+    name: {
+      type: 'positional',
+      required: true,
+      description: 'Target name',
+    },
+  },
+  run: async ({ args }) => {
+    process.exitCode = await runRemove(args.name);
   },
 });

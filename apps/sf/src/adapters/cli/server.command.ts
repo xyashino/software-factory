@@ -12,6 +12,7 @@ import {
 import { startServer } from '../../application/procedures/server/start.procedure';
 import { stopServer } from '../../application/procedures/server/stop.procedure';
 import { createServerToken } from '../../application/procedures/server/token-create.procedure';
+import { hqUrlEnv } from '../../bootstrap/hq-env';
 import { printError, printJson, printLine, reportFailure } from './output';
 import { parsePort } from './validate';
 
@@ -89,7 +90,7 @@ const runTokenCreate = async (
       serverArgs: serverArgsOf(IS_COMPILED),
       cwd: process.cwd(),
       dbPath: pathsFromEnv().dbPath,
-      url: process.env.FACTORY_URL ?? DEFAULT_FACTORY_URL,
+      url: hqUrlEnv()?.value ?? DEFAULT_FACTORY_URL,
       save,
       global,
     },
@@ -105,60 +106,45 @@ const runTokenCreate = async (
   return reportFailure(result);
 };
 
-export const serverCommand = defineCommand({
-  meta: {
-    name: 'server',
-    description: 'Start, stop and provision the factory server',
+export const hqStartCommand = defineCommand({
+  meta: { name: 'start', description: 'Start the HQ server on this PC' },
+  args: { json: { type: 'boolean', default: false } },
+  run: async ({ args }) => {
+    process.exitCode = await runStart(args.json);
   },
-  subCommands: {
-    start: defineCommand({
-      meta: { name: 'start', description: 'Start the factory server' },
-      args: { json: { type: 'boolean', default: false } },
-      run: async ({ args }) => {
-        process.exitCode = await runStart(args.json);
-      },
-    }),
-    stop: defineCommand({
-      meta: {
-        name: 'stop',
-        description: 'Stop the factory server process only',
-      },
-      args: { json: { type: 'boolean', default: false } },
-      run: async ({ args }) => {
-        process.exitCode = await runStop(args.json);
-      },
-    }),
-    token: defineCommand({
-      meta: { name: 'token', description: 'Manage the supervisor token' },
-      subCommands: {
-        create: defineCommand({
-          meta: {
-            name: 'create',
-            description: 'Create a supervisor token and print it once',
-          },
-          args: {
-            json: { type: 'boolean', default: false },
-            save: {
-              type: 'boolean',
-              default: false,
-              description:
-                'Save the token (repo token file, or global config outside a factory repo), print nothing',
-            },
-            global: {
-              type: 'boolean',
-              default: false,
-              description: 'Save the token in the global config',
-            },
-          },
-          run: async ({ args }) => {
-            process.exitCode = await runTokenCreate(
-              args.json,
-              args.save,
-              args.global,
-            );
-          },
-        }),
-      },
-    }),
+});
+
+export const hqStopCommand = defineCommand({
+  meta: {
+    name: 'stop',
+    description: 'Stop the HQ server process only',
+  },
+  args: { json: { type: 'boolean', default: false } },
+  run: async ({ args }) => {
+    process.exitCode = await runStop(args.json);
+  },
+});
+
+export const hqTokenAdminCreateCommand = defineCommand({
+  meta: {
+    name: 'create',
+    description: 'Create an admin token for HQ and print it once',
+  },
+  args: {
+    json: { type: 'boolean', default: false },
+    save: {
+      type: 'boolean',
+      default: false,
+      description:
+        'Save the token (repo token file, or global config outside a factory repo), print nothing',
+    },
+    global: {
+      type: 'boolean',
+      default: false,
+      description: 'Save the token in the global config',
+    },
+  },
+  run: async ({ args }) => {
+    process.exitCode = await runTokenCreate(args.json, args.save, args.global);
   },
 });

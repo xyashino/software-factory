@@ -31,9 +31,20 @@ export const EMPTY_CONNECTION_CONFIG: ConnectionConfig = {
 
 export type ConnectionConfig = z.infer<typeof ConnectionConfigSchema>;
 export type ConnectionTarget = z.infer<typeof TargetSchema>;
-export type UrlSource = 'env:FACTORY_URL' | 'default' | `config:${string}`;
+export interface EnvUrl {
+  name: 'HQ_URL' | 'FACTORY_URL';
+  value: string;
+}
+
+export interface EnvToken {
+  name: 'HQ_TOKEN' | 'FACTORY_TOKEN';
+  value: string;
+}
+
+export type UrlSource =
+  `env:${EnvUrl['name']}` | 'default' | `config:${string}`;
 export type TokenSource =
-  | 'env:FACTORY_TOKEN'
+  | `env:${EnvToken['name']}`
   | typeof SUPERVISOR_TOKEN_LABEL
   | typeof LEGACY_TOKEN_LABEL
   | `config:${string}`;
@@ -46,8 +57,8 @@ export interface Connection {
 }
 
 export interface ConnectionInputs {
-  envUrl: string | undefined;
-  envToken: string | undefined;
+  envUrl: EnvUrl | undefined;
+  envToken: EnvToken | undefined;
   repoToken: string | undefined;
   legacyToken: string | undefined;
   config: ConnectionConfig;
@@ -75,9 +86,10 @@ const urlOf = (
   inputs: ConnectionInputs,
   active: ReturnType<typeof activeOf>,
 ): Pick<Connection, 'url' | 'urlSource'> => {
-  const fromEnv = presentOf(inputs.envUrl);
-  if (fromEnv !== undefined) {
-    return { url: fromEnv, urlSource: 'env:FACTORY_URL' };
+  const env = inputs.envUrl;
+  const fromEnv = presentOf(env?.value);
+  if (env !== undefined && fromEnv !== undefined) {
+    return { url: fromEnv, urlSource: `env:${env.name}` };
   }
   if (active !== undefined) {
     return { url: active.target.url, urlSource: `config:${active.name}` };
@@ -89,9 +101,10 @@ const tokenOf = (
   inputs: ConnectionInputs,
   active: ReturnType<typeof activeOf>,
 ): Pick<Connection, 'token' | 'tokenSource'> => {
-  const fromEnv = presentOf(inputs.envToken);
-  if (fromEnv !== undefined) {
-    return { token: fromEnv, tokenSource: 'env:FACTORY_TOKEN' };
+  const env = inputs.envToken;
+  const fromEnv = presentOf(env?.value);
+  if (env !== undefined && fromEnv !== undefined) {
+    return { token: fromEnv, tokenSource: `env:${env.name}` };
   }
   const fromRepo = presentOf(inputs.repoToken);
   if (fromRepo !== undefined) {
@@ -162,8 +175,9 @@ export const tokenFixOf = (connection: Connection): string => {
   if (connection.tokenSource === SUPERVISOR_TOKEN_LABEL) {
     return `rm ${SUPERVISOR_TOKEN_PATH} && sf server token create --save`;
   }
-  if (connection.tokenSource === 'env:FACTORY_TOKEN') {
-    return 'unset FACTORY_TOKEN, or set it to a token the server accepts';
+  if (connection.tokenSource?.startsWith('env:')) {
+    const name = connection.tokenSource.slice('env:'.length);
+    return `unset ${name}, or set it to a token the server accepts`;
   }
   return recoveryCommandOf(connection.url);
 };

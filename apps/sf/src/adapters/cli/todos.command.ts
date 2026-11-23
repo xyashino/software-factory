@@ -97,13 +97,13 @@ const runExport = async (dir: string, force: boolean, json: boolean) => {
 export const todosCommand = defineCommand({
   meta: {
     name: 'todos',
-    description: 'Move todos/*.md between files and the factory server',
+    description: 'Move todos/*.md between files and HQ',
   },
   subCommands: {
     import: defineCommand({
       meta: {
         name: 'import',
-        description: 'Push todos/*.md to the factory server',
+        description: 'Push todos/*.md to HQ',
       },
       args: {
         dir: { type: 'string', default: DEFAULT_TODO_DIR },

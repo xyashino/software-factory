@@ -91,7 +91,7 @@ const runList = async (json: boolean): Promise<number> => {
 export const projectCommand = defineCommand({
   meta: {
     name: 'project',
-    description: 'Register and list projects on the factory server',
+    description: 'Register and list projects on HQ',
   },
   subCommands: {
     add: defineCommand({
@@ -133,7 +133,7 @@ export const projectCommand = defineCommand({
       },
     }),
     ls: defineCommand({
-      meta: { name: 'ls', description: 'List projects on the factory server' },
+      meta: { name: 'ls', description: 'List projects on HQ' },
       args: { json: { type: 'boolean', default: false } },
       run: async ({ args }) => {
         process.exitCode = await runList(args.json);

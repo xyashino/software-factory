@@ -18,32 +18,24 @@ const runCreate = async (
   return reportFailure(result);
 };
 
-export const tokenCommand = defineCommand({
+export const hqTokenCreateCommand = defineCommand({
   meta: {
-    name: 'token',
-    description: 'Mint tokens through the factory server API',
+    name: 'create',
+    description: 'Mint a token on HQ and print it once',
   },
-  subCommands: {
-    create: defineCommand({
-      meta: {
-        name: 'create',
-        description: 'Create a token and print it once',
-      },
-      args: {
-        kind: {
-          type: 'string',
-          required: true,
-          description: 'factory_join or supervisor',
-        },
-        name: { type: 'string', required: true, description: 'Token label' },
-        json: { type: 'boolean', default: false },
-      },
-      run: async ({ args }) => {
-        process.exitCode = await runCreate(
-          { kind: args.kind, name: args.name },
-          args.json,
-        );
-      },
-    }),
+  args: {
+    kind: {
+      type: 'string',
+      required: true,
+      description: 'factory_join or supervisor',
+    },
+    name: { type: 'string', required: true, description: 'Token label' },
+    json: { type: 'boolean', default: false },
+  },
+  run: async ({ args }) => {
+    process.exitCode = await runCreate(
+      { kind: args.kind, name: args.name },
+      args.json,
+    );
   },
 });

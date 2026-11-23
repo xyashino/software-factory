@@ -181,7 +181,7 @@ describe('sf argument validation', () => {
 
   it('rejects a bad FACTORY_PORT without starting the server', async () => {
     // Act
-    const result = await runSf(['server', 'start'], { FACTORY_PORT: 'abc' });
+    const result = await runSf(['hq', 'start'], { FACTORY_PORT: 'abc' });
 
     // Assert
     expectRejected(

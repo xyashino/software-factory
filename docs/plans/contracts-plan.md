@@ -7,12 +7,12 @@ Stop hand-copying wire contracts. One source per API, imported by server and cli
 ## Verified facts
 
 - `apps/cell/.../schema/types.ts` and `apps/factory/.../schema/types.ts` byte-identical. `errorResponse` in both `contracts/common.ts` same except trailing blank line.
-- Factory contracts: 9 files + `common.ts`. Imports from factory domain: `order-state` (states, priorities, actions, plan states/actions), `common/events` (`ACTOR_KINDS`, `ENTITY_TYPES`), `incidents/incident-rules`. Import count: 30 src + 4 test files use `contracts/`.
+- HQ contracts (`@repo/factory-contracts`): 9 files + `common.ts`. Imports from factory domain: `order-state` (states, priorities, actions, plan states/actions), `common/events` (`ACTOR_KINDS`, `ENTITY_TYPES`), `incidents/incident-rules`. Import count: 30 src + 4 test files use `contracts/`.
 - Cell contracts: 5 files + `common.ts` (`errorResponse` only). Domain imports: `RUNTIME_STATUSES` (`domain/cells/cell-slot`), `RUNNERS` (`domain/settings/preferences`). 14 src + 1 test.
 - sf `contracts/` mirrors FACTORY API: `cells.contract.ts` has enroll/hello/claim/heartbeat/list/revoke, same as factory. It does NOT combine cell API. (Earlier claim "sf cells.contract combines two APIs" was wrong.)
 - sf `contracts/common.ts` (127 lines) redefines factory enums + error replies. Drift risk: new factory state not added in sf, no compile error.
 - sf `workOrderDto` identical to factory. Diff sizes sf vs factory: projects 2 lines, stream 3, work-orders 31, tokens 38, incidents 40, order-plans 43, queue 47, jobs 84, cells 152 (not yet classified: import-only or real drift).
-- sf calls cell-server (`/api/v1/factories`, etc.) with raw route strings via `ctx.cellServer`. No cell contracts used. So cell-contracts for sf = new typing, not dedupe.
+- sf calls the local cell supervisor (`/api/v1/factories`, etc.) with raw route strings via `ctx.cellServer`. No cell contracts used. So cell-contracts for sf = new typing, not dedupe.
 - sf `mapReply` returns unvalidated body, maps error status to `Refused` / `Unauthorized` / `Unreachable`. Does not validate against contract.
 - web-demo imports zero contracts. Own `lib/factory-schemas.ts` (13 `z.object`) = likely third copy. Not compared.
 - sf `operator.contract.ts` is the only operator contract. The orphaned operator app and protocol package were retired by `operator-retire-app-and-protocol`.
@@ -38,7 +38,7 @@ Stop hand-copying wire contracts. One source per API, imported by server and cli
 | `sf-adopt-factory-contracts` | Classify drift, sf drops its copies | factory-contracts |
 | `web-demo-adopt-factory-contracts` | Evaluate + replace `factory-schemas.ts` | factory-contracts |
 | `cell-contracts-package` | Create package, move contracts + enums, cell switches | kit |
-| `sf-adopt-cell-contracts` | sf validates cell-server replies | cell-contracts |
+| `sf-adopt-cell-contracts` | sf validates local cell supervisor replies | cell-contracts |
 
 Each todo = one ADR when done. Package todos stay separate from sf switch: sf step carries drift risk and 28 files.
 
