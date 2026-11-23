@@ -3,7 +3,7 @@ import {
   exportQueueContract,
   importQueueContract,
   queueActionsContract,
-} from '@repo/factory-contracts/queue.contract';
+} from '@repo/hq-contracts/queue.contract';
 
 describe('queue contract', () => {
   it('parses a comma-separated states query into a list', () => {

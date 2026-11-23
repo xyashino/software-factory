@@ -16,7 +16,7 @@ This todo is one step of a redesign of how the software factory runs work. You d
 
 | Target name | Meaning | Name in code today |
 | --- | --- | --- |
-| HQ | External server: state, queue, projects, work orders, jobs, leases | "HQ": `apps/hq`, package `@repo/hq`, contracts `@repo/factory-contracts` |
+| HQ | External server: state, queue, projects, work orders, jobs, leases | "HQ": `apps/hq`, package `@repo/hq`, contracts `@repo/hq-contracts` |
 | Factory | Local daemon, one per PC. Only holder of the HQ credential. Spawns, supervises and kills Cells | Does not exist. Closest: cell-server `apps/cell` (`@repo/cell`, port 7071, own SQLite) and local slots (`slots.json`) |
 | Cell | Disposable worker: one process, one job at a time, runs inside a repo | Cell daemon: `sf cell start`, code in `apps/sf/src/application/procedures/cell/*` |
 | Line | Pipeline template `.factory/lines/<name>.yml` (stations in order) | same |
@@ -53,7 +53,7 @@ sf / web (operator) --> HQ <-- Factory (local PC) <-- Cells (loopback only)
 - Bun + turbo monorepo. Package manager is bun (the root `CLAUDE.md` still says pnpm; it is generated and stale). Verify with `bun run ci:verify`.
 - `apps/sf`: CLI and Cell daemon. Hexagonal: `application/procedures/*` use ports from `application/ports/*`; adapters in `adapters/{cli,fs,git,http,process,runners}`; domain in `domain/*`; tests in `test/{unit,blackbox}`.
 - `apps/hq` (HQ): Hono routes in `adapters/hono/routes`, procedures in `application/procedures`, drizzle schema in `db/schema`, migrations in `db/migrations`, SQLite via `@repo/bun-sqlite-kit` (`immediateTx` = `BEGIN IMMEDIATE`).
-- Wire contracts (zod): `packages/factory-contracts`, `packages/cell-contracts`.
+- Wire contracts (zod): `packages/hq-contracts`, `packages/cell-contracts`.
 - Constants: `apps/sf/src/config.ts` and `apps/hq/src/config.ts` (`CLAIM_WAIT_MS` 25 s, `HEARTBEAT_INTERVAL_MS` 10 s, `LEASE_TTL_MS` 60 s, `SELF_FENCE_MS` 45 s, `MAX_WORKTREE_RESETS` 2).
 - A Cell works in `<repo>/.worktrees/<orderSlug>` (one worktree per order, branch `factory/<slug>`, created with `git worktree add`). Per-step files live in `<worktree>/.cell/` and are git-excluded: `.cell/worktree.json`, `.cell/task.md`, `.cell/<stationId>/state.json`, `prompt`, feedback, logs.
 
@@ -76,7 +76,7 @@ The Factory becomes a registered machine in HQ. `sf factory connect <url> --toke
 - `POST /api/v1/tokens/join` is the WEB join (loopback only, exchanges a `web_join` secret for a `web_session`). It is not the Cell join. Cells enroll with `POST /api/v1/cells/enroll` using a `cell_join` token (`enroll-cell.procedure.ts`).
 - Where an `sf` command finds the HQ URL and token today: env `FACTORY_URL`/`FACTORY_TOKEN`, global config `~/.config/sf/config.json`, repo token file, legacy `~/.config/factory/token` (`adapters/fs/connection-store.ts`, `token-file.ts`; ADR `20261121-143000` lists the precedence). 401s were repeatedly caused by this spread.
 - Constants (`apps/sf/src/config.ts`): `HEARTBEAT_INTERVAL_MS` 10 s, `LEASE_TTL_MS` 60 s, `SELF_FENCE_MS` 45 s (defined, currently unused in `apps/sf/src`).
-- HQ routes are Hono routers in `apps/hq/src/adapters/hono/routes/*.route.ts`; procedures use `scopedProcedure([...scopes])(contract)(handler)`; contracts in `packages/factory-contracts`.
+- HQ routes are Hono routers in `apps/hq/src/adapters/hono/routes/*.route.ts`; procedures use `scopedProcedure([...scopes])(contract)(handler)`; contracts in `packages/hq-contracts`.
 - The daemon from `factory-daemon-sf` exists, with no HQ knowledge.
 
 ## Target behavior
@@ -87,7 +87,7 @@ HQ:
 - `POST /api/v1/factories/enroll` (scope `factory:enroll`): returns `{ factoryId, sessionToken, expiresAt }`.
 - `POST /api/v1/factories/heartbeat` (scope `factory:worker`): updates `lastSeenAt`.
 - `GET /api/v1/factories` (supervisor): list with `lastSeenAt` and an `online` flag (seen within `LEASE_TTL_MS`).
-- Contracts in `packages/factory-contracts/src/factories.contract.ts`.
+- Contracts in `packages/hq-contracts/src/factories.contract.ts`.
 
 sf and daemon:
 - `sf factory connect <url> --token <join>` (also accept the token on stdin with `--token -`, never echo it): calls enroll, writes `$XDG_CONFIG_HOME/sf/factory.json` with mode `0600` and atomic write: `{ url, factoryId, sessionToken }`. This file is the only place the HQ machine credential lives. Re-running connect replaces it.
@@ -98,7 +98,7 @@ sf and daemon:
 
 ## Scope
 
-- **Target**: `apps/hq` (table, tokens, routes), `packages/factory-contracts`, `apps/sf` (command, daemon heartbeat, credential file)
+- **Target**: `apps/hq` (table, tokens, routes), `packages/hq-contracts`, `apps/sf` (command, daemon heartbeat, credential file)
 - **Classification**: `Integration`
 - **Out of scope**: relaying Cell calls, removing per-Cell tokens, reaping Cells when a Factory goes silent (HQ side, `cell-gone-transaction`), the `hq` rename.
 

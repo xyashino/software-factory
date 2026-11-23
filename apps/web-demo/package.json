@@ -13,7 +13,7 @@
   },
   "dependencies": {
     "@astrojs/node": "catalog:",
-    "@repo/factory-contracts": "workspace:*",
+    "@repo/hq-contracts": "workspace:*",
     "astro": "catalog:",
     "zod": "catalog:"
   },

@@ -235,7 +235,7 @@ The Cell is the only process that talks to HQ. Agents never do.
 
 ## 7. Shared contracts
 
-Request and reply shapes for HQ live in `@repo/factory-contracts` (`packages/factory-contracts`). `@repo/cell-contracts` went with `apps/cell`.
+Request and reply shapes for HQ live in `@repo/hq-contracts` (`packages/hq-contracts`). `@repo/cell-contracts` went with `apps/cell`.
 
 ## 8. Decisions and open questions
 

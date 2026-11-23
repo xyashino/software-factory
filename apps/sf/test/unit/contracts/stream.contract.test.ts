@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { streamQuery } from '@repo/factory-contracts/stream.contract';
+import { streamQuery } from '@repo/hq-contracts/stream.contract';
 
 describe('stream contract', () => {
   it('defaults afterSeq to zero when the query omits it', () => {

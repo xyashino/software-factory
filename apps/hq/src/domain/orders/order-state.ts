@@ -5,7 +5,7 @@ import {
   PRIORITIES,
   WORK_ORDER_ACTIONS,
   WORK_ORDER_STATES,
-} from '@repo/factory-contracts/enums/orders';
+} from '@repo/hq-contracts/enums/orders';
 
 export type PlanState = (typeof PLAN_STATES)[number];
 export type WorkOrderState = (typeof WORK_ORDER_STATES)[number];

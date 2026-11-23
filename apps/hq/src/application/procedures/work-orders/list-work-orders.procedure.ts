@@ -1,5 +1,5 @@
 import { and, eq } from 'drizzle-orm';
-import { listWorkOrdersContract } from '@repo/factory-contracts/work-orders.contract';
+import { listWorkOrdersContract } from '@repo/hq-contracts/work-orders.contract';
 import { workOrders } from '../../../db/schema/orders';
 import {
   asFactoryId,

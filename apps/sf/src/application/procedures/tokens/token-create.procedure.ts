@@ -1,4 +1,4 @@
-import { issueTokenContract } from '@repo/factory-contracts/tokens.contract';
+import { issueTokenContract } from '@repo/hq-contracts/tokens.contract';
 import { titleSchema } from '@repo/zod-contract-kit/fields';
 import { z } from 'zod';
 import { define } from '../../core/procedure';
