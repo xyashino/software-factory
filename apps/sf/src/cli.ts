@@ -4,6 +4,7 @@ import { dispatchInternal } from './bootstrap/server-dispatch';
 import { cellCommand } from './adapters/cli/cell.command';
 import { connectCommand } from './adapters/cli/connection.command';
 import { doctorCommand } from './adapters/cli/doctor.command';
+import { factoryCommand } from './adapters/cli/factory.command';
 import { incidentCommand } from './adapters/cli/incident.command';
 import { initCommand } from './adapters/cli/init.command';
 import { operatorCommand } from './adapters/cli/operator.command';
@@ -38,6 +39,7 @@ const main = defineCommand({
     setup: setupCommand,
     connect: connectCommand,
     doctor: doctorCommand,
+    factory: factoryCommand,
     target: targetCommand,
     todos: todosCommand,
     queue: queueCommand,

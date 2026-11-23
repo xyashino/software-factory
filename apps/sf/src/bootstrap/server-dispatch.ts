@@ -1,4 +1,4 @@
-import { CELL_SERVER_MARKER, SERVER_MARKER, WEB_MARKER } from '../config';
+import { FACTORY_DAEMON_MARKER, SERVER_MARKER, WEB_MARKER } from '../config';
 
 export const dispatchInternal = async (
   args: readonly string[],
@@ -9,8 +9,8 @@ export const dispatchInternal = async (
     await import('../../../factory/src/index');
     return true;
   }
-  if (marker === CELL_SERVER_MARKER) {
-    await import('../../../cell/src/index');
+  if (marker === FACTORY_DAEMON_MARKER) {
+    await import('../daemon/index');
     return true;
   }
   const [entry] = rest;

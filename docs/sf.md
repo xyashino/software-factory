@@ -210,7 +210,7 @@ Job or let the lease expire. See §8.
 
 The server, the CLI, the Cell and the operator all parse the same request and reply shapes. During
 implementation, each app keeps its own copy of the schemas. A later step moves them into one shared
-package. Names and scope are in [`plans/contracts-plan.md`](./plans/contracts-plan.md): `@repo/factory-contracts` and `@repo/cell-contracts`. No naming rule forbids the `factory-` prefix. The server's [`engineering.md`](./engineering.md) would need an explicit exception when that happens.
+package. Names and scope are in [`plans/contracts-plan.md`](./plans/contracts-plan.md): `@repo/factory-contracts`. `@repo/cell-contracts` went with `apps/cell`. No naming rule forbids the `factory-` prefix. The server's [`engineering.md`](./engineering.md) would need an explicit exception when that happens.
 
 ## 8. Decisions and open questions
 
@@ -219,10 +219,9 @@ Decided:
 1. **Name.** `sf cell`. Not `call`.
 2. **One binary, named `sf`.**
    The Cell daemon (`sf cell start`) lives in `apps/sf/src/application/procedures/cell/`, with helpers
-   in `apps/sf/src/cell/`. `apps/cell` (`@repo/cell`) is not legacy: it is the live cell-server, run by
-   `sf cell server start|stop|status` as a detached process (`CELL_SERVER_URL`, default
-   `http://127.0.0.1:7071`). sf calls its HTTP API for projects, factories, settings and cells. It stays
-   a separate app; the Cell daemon is in sf.
+   in `apps/sf/src/cell/`. The Factory daemon (`sf factory start|stop|status`) is one per PC, listens on
+   `127.0.0.1:7072` (`SF_FACTORY_PORT`) and spawns, lists and kills Cell daemons. `sf cell create|list|stop|rm`
+   call it. `apps/cell` and `sf cell server` are removed.
 3. **Coexistence.** The new approach is built alongside the current implementation, which stays until
    cut-over. The new one is cleaner, so nothing is migrated from the old code.
 4. **`server stop` does not stop Cells.** It stops only the server process. Cells keep running and

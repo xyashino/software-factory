@@ -21,6 +21,8 @@ export interface ProcessPort {
   ): Promise<ProcessResult>;
   spawnDetached(spec: DetachedSpec): Promise<number>;
   isAlive(pid: number): boolean;
+  parentPid(): number;
   terminate(pid: number): void;
+  forceKill(pid: number): void;
   probeUrl(url: string): Promise<boolean>;
 }

@@ -14,9 +14,8 @@ The system is modeled as an automated software factory:
 
 | Package                      | Purpose                                                         |
 | ---------------------------- | --------------------------------------------------------------- |
-| `apps/sf`                    | `sf`: the single CLI binary (server, Cell, Supervisor commands) |
+| `apps/sf`                    | `sf`: the single CLI binary (server, Cell, Supervisor commands, local Factory daemon) |
 | `apps/factory`               | Factory HTTP server and storage                                 |
-| `apps/cell`                  | Cell server: runs Cell slots for a Factory                      |
 | `apps/web-demo`              | Web UI served by `sf web start`                                 |
 | `packages/nitpick`           | Rules/skills engine; generates `.agents/` from `.nitpick/`      |
 | `packages/prompt`            | Prompt building blocks                                          |

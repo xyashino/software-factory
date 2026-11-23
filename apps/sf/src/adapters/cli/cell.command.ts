@@ -5,34 +5,30 @@ import { buildContext } from '../../bootstrap/context';
 import { run, runWithoutToken, settle } from '../../bootstrap/run';
 import {
   CELL_LINES_ENV,
-  IS_COMPILED,
+  FACTORY_PID_ENV,
   JOIN_TOKEN_ENV,
   cellLogPathOf,
-  cellWorkerLauncherOf,
 } from '../../config';
 import { Refused } from '../../application/core/errors';
+import type { Ports } from '../../application/core/procedure';
 import { startCell } from '../../application/procedures/cell/start.procedure';
-import { createLocalCells } from '../../application/procedures/cell/local-create.procedure';
 import {
-  type LocalSlotRow,
-  listCellsWithLocal,
-  listLocalSlots,
-} from '../../application/procedures/cell/local-list.procedure';
-import { removeLocalCell } from '../../application/procedures/cell/local-rm.procedure';
-import {
-  stopAllLocalCells,
-  stopLocalCell,
-} from '../../application/procedures/cell/local-stop.procedure';
+  createFactoryCell,
+  type FactoryCell,
+  listCellsWithFactory,
+  listFactoryCells,
+  removeFactoryCell,
+} from '../../application/procedures/cell/factory-cells';
 import { revokeCell } from '../../application/procedures/cell/revoke.procedure';
 import { stopCell } from '../../application/procedures/cell/stop.procedure';
 import { cellNameOf } from '../../domain/cell/cell-name';
+import { parentGoneOf } from '../../domain/cell/parent-gone';
 import { EXIT } from '../../domain/exit-codes';
 import {
   claimCellSlot,
   migrateLegacyCellState,
   releaseCellSlot,
 } from '../fs/cell-slot';
-import { cellServerCommand } from './cell-server.command';
 import {
   printError,
   printJson,
@@ -50,7 +46,7 @@ const HEADERS = [
   'last heartbeat',
   'pid',
 ];
-const LOCAL_HEADERS = ['id', 'name', 'factory', 'state', 'pid', 'repo'];
+const FACTORY_HEADERS = ['id', 'name', 'pid', 'repo'];
 const SUPERSEDED_LINE =
   'cell left: the server had already moved its job, nothing handed over';
 const MIGRATED_LINE = 'migrated legacy .factory-local/cell.json to this cell';
@@ -59,6 +55,11 @@ const OFFLINE_LINE =
 const FORCED_STOP_LINE =
   'cell stopped by a second signal: exiting now, a runner may still be alive';
 const FORCED_STOP_EXIT = 130;
+const PARENT_GONE_LINE = 'factory daemon is gone: stopping this cell';
+const PARENT_GONE_EXIT = 1;
+const DAEMON_WATCH_MS = 1_000;
+// A claim long-polls and only sees the abort when it returns, so the exit is forced.
+const PARENT_GONE_GRACE_MS = 1_000;
 
 const orDash = (value: string | null): string => value ?? '-';
 
@@ -110,6 +111,33 @@ const claimSlot = async (
 const chooserOf = (): typeof promptSelect | undefined =>
   process.stdin.isTTY ? promptSelect : undefined;
 
+const daemonWatchOf = (
+  ports: Ports,
+  onGone: () => void,
+): ReturnType<typeof setInterval> | undefined => {
+  const raw = process.env[FACTORY_PID_ENV];
+  if (raw === undefined) {
+    return undefined;
+  }
+  const daemonPid = Number(raw);
+  const timer = setInterval(() => {
+    if (parentGoneOf(daemonPid, ports.process.parentPid())) {
+      clearInterval(timer);
+      onGone();
+    }
+  }, DAEMON_WATCH_MS);
+  return timer;
+};
+
+const onParentGone = (controller: AbortController): void => {
+  printError(PARENT_GONE_LINE);
+  controller.abort();
+  setTimeout(
+    () => process.exit(PARENT_GONE_EXIT),
+    PARENT_GONE_GRACE_MS,
+  ).unref();
+};
+
 const runStart = async (
   requested: string | undefined,
   project: string | undefined,
@@ -130,12 +158,14 @@ const runStart = async (
   };
   process.on('SIGINT', stop);
   process.on('SIGTERM', stop);
+  const ports = buildContext(name);
+  const watch = daemonWatchOf(ports, () => onParentGone(controller));
   try {
     if (name === cellNameOf(hostname()) && migrateLegacyCellState(cwd, name)) {
       printLine(MIGRATED_LINE);
     }
     const result = await settle(() =>
-      startCell(buildContext(name), {
+      startCell(ports, {
         repoRoot: cwd,
         cellName: name,
         logPath: resolve(cwd, cellLogPathOf(name)),
@@ -151,38 +181,35 @@ const runStart = async (
     }
     return reportFailure(result);
   } finally {
+    clearInterval(watch);
     await releaseCellSlot(cwd, name);
   }
 };
 
-const localRows = (slots: LocalSlotRow[]): string[][] =>
-  slots.map((slot) => [
-    slot.slotId,
-    slot.name,
-    slot.factory,
-    slot.state,
-    pidText(slot.pid),
-    slot.repoRoot,
+const factoryRows = (cells: FactoryCell[]): string[][] =>
+  cells.map((cell) => [
+    cell.cellId,
+    cell.name,
+    String(cell.pid),
+    cell.repoRoot,
   ]);
-
-const runLocalList = async (json: boolean): Promise<number> => {
-  const result = await runWithoutToken(listLocalSlots, {}, buildContext());
-  if (result.kind !== 'ok') {
-    return reportFailure(result);
-  }
-  if (json) {
-    printJson(result.value);
-  } else {
-    printTable(LOCAL_HEADERS, localRows(result.value));
-  }
-  return EXIT.ok;
-};
 
 const runList = async (json: boolean, here: boolean): Promise<number> => {
   if (here) {
-    return runLocalList(json);
+    const result = await runWithoutToken(listFactoryCells, {}, () =>
+      buildContext(),
+    );
+    if (result.kind !== 'ok') {
+      return reportFailure(result);
+    }
+    if (json) {
+      printJson(result.value);
+    } else {
+      printTable(FACTORY_HEADERS, factoryRows(result.value));
+    }
+    return EXIT.ok;
   }
-  const result = await run(listCellsWithLocal, {}, 'supervisor');
+  const result = await run(listCellsWithFactory, {}, 'supervisor');
   if (result.kind !== 'ok') {
     return reportFailure(result);
   }
@@ -204,33 +231,28 @@ const runList = async (json: boolean, here: boolean): Promise<number> => {
   return EXIT.ok;
 };
 
-const runStopAll = async (force: boolean, json: boolean): Promise<number> => {
-  const result = await run(stopAllLocalCells, { force }, 'supervisor');
-  if (result.kind !== 'ok') {
-    return reportFailure(result);
-  }
-  if (json) {
-    printJson(result.value);
-  } else {
-    printTable(LOCAL_HEADERS, localRows(result.value));
-  }
-  return EXIT.ok;
-};
-
 const runStopOne = async (
   id: string,
   force: boolean,
   json: boolean,
 ): Promise<number> => {
-  const local = await run(stopLocalCell, { id, force }, 'supervisor');
+  const local = await runWithoutToken(listFactoryCells, {}, () =>
+    buildContext(),
+  );
   if (local.kind !== 'ok') {
     return reportFailure(local);
   }
-  if (local.value !== null) {
+  if (local.value.some((cell) => cell.cellId === id)) {
+    const removed = await runWithoutToken(removeFactoryCell, { id }, () =>
+      buildContext(),
+    );
+    if (removed.kind !== 'ok') {
+      return reportFailure(removed);
+    }
     if (json) {
-      printJson(local.value);
+      printJson({ cellId: removed.value });
     } else {
-      printLine(`cell ${local.value.slotId} ${local.value.state}`);
+      printLine(`cell ${removed.value} stopped`);
     }
     return EXIT.ok;
   }
@@ -243,12 +265,41 @@ const runStopOne = async (
   return reportFailure(remote);
 };
 
+const runStopAll = async (json: boolean): Promise<number> => {
+  const listed = await runWithoutToken(listFactoryCells, {}, () =>
+    buildContext(),
+  );
+  if (listed.kind !== 'ok') {
+    return reportFailure(listed);
+  }
+  const stopped: string[] = [];
+  for (const cell of listed.value) {
+    const removed = await runWithoutToken(
+      removeFactoryCell,
+      { id: cell.cellId },
+      () => buildContext(),
+    );
+    if (removed.kind !== 'ok') {
+      return reportFailure(removed);
+    }
+    stopped.push(removed.value);
+  }
+  if (json) {
+    printJson(stopped.map((cellId) => ({ cellId })));
+  } else {
+    for (const cellId of stopped) {
+      printLine(`cell ${cellId} stopped`);
+    }
+  }
+  return EXIT.ok;
+};
+
 const runStop = async (
   id: string | undefined,
   options: { all: boolean; force: boolean; json: boolean },
 ): Promise<number> => {
   if (options.all) {
-    return runStopAll(options.force, options.json);
+    return runStopAll(options.json);
   }
   if (id === undefined) {
     throw cliError('cell id required, or --all');
@@ -258,48 +309,53 @@ const runStop = async (
 
 const runCreate = async (options: {
   repo: string;
-  project: string | undefined;
   name: string | undefined;
   count: string;
   lines: string | undefined;
   json: boolean;
 }): Promise<number> => {
-  const result = await run(
-    createLocalCells,
-    {
-      repoRoot: resolve(options.repo),
-      project: options.project,
-      choose: chooserOf(),
-      count: Number(options.count),
-      name: options.name,
-      baseName: cellNameOf(hostname()),
-      lines: linesOf(options.lines),
-      launcher: cellWorkerLauncherOf(IS_COMPILED, process.argv[1] ?? ''),
-    },
-    'supervisor',
-  );
-  if (result.kind !== 'ok') {
-    return reportFailure(result);
+  const count = Number(options.count);
+  if (!Number.isInteger(count) || count < 1) {
+    printError('count must be a positive integer');
+    return EXIT.argument;
+  }
+  if (options.name !== undefined && count > 1) {
+    printError('name is only allowed with count 1');
+    return EXIT.argument;
+  }
+  const created: FactoryCell[] = [];
+  for (let index = 0; index < count; index += 1) {
+    const result = await runWithoutToken(
+      createFactoryCell,
+      {
+        repoRoot: resolve(options.repo),
+        name: options.name,
+        lines: linesOf(options.lines),
+      },
+      () => buildContext(),
+    );
+    if (result.kind !== 'ok') {
+      return reportFailure(result);
+    }
+    created.push(result.value);
   }
   if (options.json) {
-    printJson(result.value);
+    printJson(created);
   } else {
-    printTable(LOCAL_HEADERS, localRows(result.value));
+    printTable(FACTORY_HEADERS, factoryRows(created));
   }
   return EXIT.ok;
 };
 
-const runRemove = async (slotId: string, json: boolean): Promise<number> => {
-  const result = await runWithoutToken(
-    removeLocalCell,
-    { id: slotId },
+const runRemove = async (id: string, json: boolean): Promise<number> => {
+  const result = await runWithoutToken(removeFactoryCell, { id }, () =>
     buildContext(),
   );
   if (result.kind !== 'ok') {
     return reportFailure(result);
   }
   if (json) {
-    printJson({ slotId: result.value });
+    printJson({ cellId: result.value });
   } else {
     printLine(`removed ${result.value}`);
   }
@@ -347,7 +403,7 @@ const listCommand = defineCommand({
     here: {
       type: 'boolean',
       default: false,
-      description: 'Show only the local slots on this machine',
+      description: 'Show only the Cells the local Factory daemon runs',
     },
     local: {
       type: 'boolean',
@@ -363,17 +419,12 @@ const listCommand = defineCommand({
 const createCommand = defineCommand({
   meta: {
     name: 'create',
-    description: 'Start local Cell slots on this machine',
+    description: 'Start Cells in a project repo via the local Factory daemon',
   },
   args: {
     repo: { type: 'string', default: '.', description: 'Repository root' },
-    project: {
-      type: 'string',
-      description:
-        'Factory project id, required outside a repo with .factory/config.json',
-    },
-    name: { type: 'string', description: 'Slot name (count 1 only)' },
-    count: { type: 'string', default: '1', description: 'Number of slots' },
+    name: { type: 'string', description: 'Cell name (count 1 only)' },
+    count: { type: 'string', default: '1', description: 'Number of Cells' },
     lines: { type: 'string', description: 'Comma-separated line names' },
     json: { type: 'boolean', default: false },
   },
@@ -386,7 +437,7 @@ const stopCommand = defineCommand({
   meta: {
     name: 'stop',
     description:
-      'Stop a Cell: local slots directly, otherwise drain it via the Factory',
+      'Stop a local Cell through the Factory daemon, otherwise drain it via HQ',
   },
   args: {
     slot: { type: 'positional', required: false, description: 'Cell id' },
@@ -394,7 +445,7 @@ const stopCommand = defineCommand({
     all: {
       type: 'boolean',
       default: false,
-      description: 'Stop every local slot',
+      description: 'Stop every Cell of the local Factory daemon',
     },
     force: {
       type: 'boolean',
@@ -409,9 +460,9 @@ const stopCommand = defineCommand({
 });
 
 const removeCommand = defineCommand({
-  meta: { name: 'rm', description: 'Remove a stopped local slot' },
+  meta: { name: 'rm', description: 'Stop and remove a local Cell' },
   args: {
-    id: { type: 'positional', required: true, description: 'Slot id' },
+    id: { type: 'positional', required: true, description: 'Cell id' },
     json: { type: 'boolean', default: false },
   },
   run: async ({ args }) => {
@@ -446,6 +497,5 @@ export const cellCommand = defineCommand({
     revoke: revokeCommand,
     create: createCommand,
     rm: removeCommand,
-    server: cellServerCommand,
   },
 });

@@ -35,7 +35,7 @@ const sandboxEnv = async (): Promise<Record<string, string>> => {
     PATH: process.env.PATH ?? '',
     HOME: home,
     XDG_DATA_HOME: join(home, 'data'),
-    CELL_SERVER_URL: `http://127.0.0.1:${await closedPort()}`,
+    SF_FACTORY_PORT: String(await closedPort()),
     FACTORY_URL: `http://127.0.0.1:${await closedPort()}`,
   };
 };
@@ -67,7 +67,7 @@ describe('cell stop routing', () => {
     expect(result.stderr).toContain('cell id required, or --all');
   });
 
-  it('takes the id as a positional and falls back to the Factory when no local cell server answers', async () => {
+  it('refuses a stop by id when no Factory daemon runs', async () => {
     // Arrange
     const env = await sandboxEnv();
 
@@ -75,11 +75,13 @@ describe('cell stop routing', () => {
     const result = runSf(env, ['cell', 'stop', 'dev-box-2']);
 
     // Assert
-    expect(result.status).toBe(EXIT.refused);
-    expect(result.stderr).toContain('No token stored');
+    expect(result.status).toBe(EXIT.unreachable);
+    expect(result.stderr).toContain(
+      'factory not running: run "sf factory start"',
+    );
   });
 
-  it('needs a Factory token for --all without contacting a cell server', async () => {
+  it('refuses a stop of all cells when no Factory daemon runs', async () => {
     // Arrange
     const env = await sandboxEnv();
 
@@ -87,7 +89,9 @@ describe('cell stop routing', () => {
     const result = runSf(env, ['cell', 'stop', '--all']);
 
     // Assert
-    expect(result.status).toBe(EXIT.refused);
-    expect(result.stderr).toContain('No token stored');
+    expect(result.status).toBe(EXIT.unreachable);
+    expect(result.stderr).toContain(
+      'factory not running: run "sf factory start"',
+    );
   });
 });

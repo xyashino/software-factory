@@ -1,12 +1,11 @@
 import type { Access } from '../../domain/access';
 import type { Connection } from '../../domain/connection/connection-config';
-import type { CellServerPort } from '../ports/cell-server.port';
 import type { CellStatePort } from '../ports/cell-state.port';
 import type { ConnectionStorePort } from '../ports/connection-store.port';
 import type { ClockPort } from '../ports/clock.port';
+import type { FactoryDaemonPort } from '../ports/factory-daemon.port';
 import type { FsPort } from '../ports/fs.port';
 import type { GitPort } from '../ports/git.port';
-import type { LocalSlotStorePort } from '../ports/local-slot-store.port';
 import type { OperatorEndpointPort } from '../ports/operator-endpoint.port';
 import type { PidFilePort } from '../ports/pid-file.port';
 import type { PrPort } from '../ports/pr.port';
@@ -37,9 +36,8 @@ export interface Ports {
   webPidFile: PidFilePort;
   clock: ClockPort;
   cellState: CellStatePort;
-  cellServer: CellServerPort;
-  cellServerPidFile: PidFilePort;
-  localSlots: LocalSlotStorePort;
+  factoryDaemon: FactoryDaemonPort;
+  factoryPidFile: PidFilePort;
 }
 
 export type Context<A extends Access> = Ports & {

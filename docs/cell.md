@@ -7,41 +7,53 @@ Terms: [glossary](./README.md#glossary). Protocol and timing: [factory.md §3](.
 - Cell = replaceable machine process. Connects out to Factory. Claims Jobs, runs them, reports transitions.
 - Factory owns state. Cell holds lease only while it works. Disconnect → lease expires → Job goes to another Cell or same Cell on reconnect.
 - Agents never call Factory. Agent talks to its Cell over loopback ([operator endpoint](#operator-endpoint)).
-- Two processes named "Cell" in code: **Cell daemon** (`sf cell start`) does the work. **cell-server** (`apps/cell`) supervises Cell daemons on one machine.
+- Two names in code: **Cell daemon** (`sf cell start`) does the work. **Factory daemon** (`sf factory start`) runs one per PC and supervises the Cell daemons on it.
 
 ## Which code runs what
 
 | Piece | Code | Runs as | Talks to |
 | :--- | :--- | :--- | :--- |
 | Cell daemon | `apps/sf/src/application/procedures/cell/*`, helpers `apps/sf/src/cell/*`, CLI `apps/sf/src/adapters/cli/cell.command.ts` | `sf cell start`, one per Cell, cwd = repo root | Factory `/api/v1/cells/*`, `/api/v1/jobs/*`; loopback operator endpoint |
-| cell-server | `apps/cell/src` (`@repo/cell`), entry `apps/cell/src/index.ts` | detached Bun process, started by `sf cell server start`, default `127.0.0.1:7071` | Factory (`enroll`, `tokens`, `projects`); spawns Cell daemons; own SQLite |
-| Local slots | `apps/sf/src/application/procedures/cell/local-*.ts`, `apps/sf/src/adapters/fs/local-slot-store.ts` | `sf cell create` spawns detached `sf cell start --name` | `slots.json` only |
-| cell-server client | `apps/sf/src/adapters/cli/cell-server.command.ts`, `apps/sf/src/application/procedures/cell-server/` | inside `sf` | cell-server `health`, `settings`, `factories` |
+| Factory daemon | `apps/sf/src/daemon/*`, CLI `apps/sf/src/adapters/cli/factory.command.ts` | detached `sf factory start`, `127.0.0.1:7072` | Factory `/api/v1/tokens`, `/api/v1/projects` (supervisor token); spawns and kills Cell daemons |
+| Factory daemon client | `apps/sf/src/application/procedures/cell/factory-cells.ts`, `apps/sf/src/adapters/http/factory-daemon.adapter.ts` | inside `sf cell create|list|stop|rm` | Factory daemon loopback API |
 
-Two launch paths, not shared:
+## Factory daemon
 
-- **Direct**: `sf cell create`. Slot list in `slots.json`. cell-server never sees these.
-- **Managed**: `sf cell server start` → cell-server → `sf cell start` children. Slots live in cell-server SQLite.
+Start, stop, status (`apps/sf/src/application/procedures/factory/*`):
 
-Gap: `sf` calls no `/api/v1/cells` route on cell-server. Managed slot create/start/stop/remove is HTTP-only until an `sf` verb exists.
+- `sf factory start`: refuses if the pid file names a live process (`factory already running, pid N`) or another process answers on the port. Spawns `sf __factory-daemon` detached, cwd `$XDG_DATA_HOME/sf`, log `factory.log`. Writes pid file `factory.pid`. Polls `/health` up to 10 s until the answer carries the spawned pid.
+- `sf factory stop`: SIGTERM the pid, waits up to 30 s, removes the pid file. Not running → `factory not running`.
+- `sf factory status [--json]`: `running` only when the pid file pid is alive and `/health` answers with that pid. `healthy` is false for a foreign listener. Exit 0 running, 1 not.
+- Port: `SF_FACTORY_PORT`, default `7072`. Listens on `127.0.0.1` only.
+- Loopback API, used by `sf` only:
 
-## Slots (cell-server)
+| Route | Reply |
+| :--- | :--- |
+| `GET /health` | `{ pid }` |
+| `GET /cells` | `{ cells: [{ cellId, name, repoRoot, pid }] }` |
+| `POST /cells` `{ repoRoot, name?, lines? }` | `201` cell record |
+| `DELETE /cells/:cellId` | `{ cellId }`, or `404` |
 
-Slot = row in `cells` table: `slotId` (UUID), `name`, `factoryId`, `repoRoot`, `cellId`, `sessionToken`, `logPath`, `desiredState`, `runtimeStatus`, `pid`, `lastError`. Unique on `(repoRoot, name)`.
+Errors: `{ code, type, message }`. `400` argument, `409` refused (name taken, project not registered), `503` Factory unreachable.
 
-- Desired state: `running` | `stopped`. Set by user intent.
-- Runtime status: `starting` | `running` | `stopping` | `stopped` | `failed`. Set by supervisor.
-- Names: first slot = hostname, then `host-2`, `host-3`, … (`allocateSlotNames`).
-- Count: 1 … `max_local_cells` (default 4, max 64).
+Cell supervision (`apps/sf/src/daemon/supervisor.ts`):
 
-Transitions (`application/procedures/cells/slot-runtime.ts`, `adapters/supervisor/cell-supervisor.adapter.ts`):
+- Cell id = random UUID, memory only. Names: `hostname`, `hostname-2`, … against live Cells.
+- Create: daemon checks `.factory/config.json` in the repo, checks the project on Factory, mints a `cell_join` token per Cell, spawns `sf cell start --name <name>` with cwd = repo root and env `FACTORY_URL`, `FACTORY_TOKEN`, `FACTORY_JOIN_TOKEN`, `CELL_LINES` (if set), `SF_FACTORY_PID` = daemon pid.
+- Kill: SIGTERM, wait 10 s, SIGKILL, wait until the pid is gone. Resolves only after exit.
+- A dead Cell drops from `GET /cells` on the next call.
+- Parent watch: each Cell checks once per second that its parent is still the daemon (`SF_FACTORY_PID`). If not, it aborts, and exits after a 1 s grace if a claim is still waiting. A `kill -9` of the daemon therefore takes its Cells down within about 2 s.
+- Stop/SIGTERM of the daemon kills all Cells first, then removes the pid file and exits.
+- The daemon keeps no state on disk except the pid file. Logs: Cell output in `$XDG_DATA_HOME/sf/cells/<cellId>.log`.
+- Only the daemon holds the HQ credential. The CLI mints nothing for Cells.
 
-- **create**: enroll one Cell per slot at Factory, insert row `stopped/stopped`, then start.
-- **start**: desired `running`, status `starting`, spawn child. Spawn ok → `running` + pid. Spawn throws → `failed`.
-- **child exit while wanted**: status `failed` with `lastError` (`worker exited with code N`). Relaunch after `restart_backoff_ms × 2^attempt`, capped at 60 s. Relaunch ok → `running`.
-- **stop**: desired `stopped`. Only `starting`/`running` get killed: SIGTERM, wait 10 s, then SIGKILL. `force` skips SIGTERM.
-- **remove**: only when status is not `starting`/`running`/`stopping`.
-- **boot**: restart every row with desired `running`. **shutdown** (SIGTERM/SIGINT): SIGTERM all children.
+`sf cell create|list|stop|rm` call the daemon. Daemon down → `factory not running: run "sf factory start"`.
+
+- `cell create [--repo path] [--count N] [--name slug] [--lines a,b] [--json]`: `--name` only with count 1. No `--project`: the project comes from the repo config.
+- `cell list`: HQ rows with a `pid` column from the daemon. `--here` lists daemon Cells only.
+- `cell stop <id>`: a daemon Cell is removed (killed). Any other id drains the HQ Cell as before (`--force` aborts the station).
+- `cell rm <id>`: removes a daemon Cell (kills it). Unknown id is refused.
+- `slots.json` and the old per-slot files are ignored. No migration.
 
 ## Cell daemon: start to Job
 
@@ -58,6 +70,7 @@ Transitions (`application/procedures/cells/slot-runtime.ts`, `adapters/superviso
    - `drain` → finish or hand over via `POST /api/v1/cells/leave`, take no new claims.
    - `force` → stop now.
    - Superseded → exit without handover.
+8. With `SF_FACTORY_PID` set (started by the Factory daemon): exit when the parent changes.
 
 Timing constants live in `apps/sf/src/config.ts` (`HEARTBEAT_INTERVAL_MS`, `LEASE_TTL_MS`, `SELF_FENCE_MS`).
 
@@ -69,46 +82,20 @@ Timing constants live in `apps/sf/src/config.ts` (`HEARTBEAT_INTERVAL_MS`, `LEAS
 - Body > 1 MiB rejected. Non-JSON → 400 `invalid`. Unknown verb → 400.
 - Verbs, roles, exit codes: [operator.md](./operator.md). Client: `sf operator`.
 
-## cell-server: workspace, enroll, spawn
+## Settings and env
 
-Create (`application/procedures/cells/create-cells.procedure.ts`):
-
-1. `projectId` given → list projects on Factory with supervisor token. Ensure workspace clone at `$XDG_DATA_HOME/sf/workspaces/<projectId>`. Refuse dir that is not a clone of the project URL, or has uncommitted changes.
-2. `repoRoot` (or workspace) must contain `.factory/config.json` and `.factory/lines/*.yml`.
-3. Join credential: request `joinToken` → factory join token → mint from supervisor token. None → 400.
-4. Per name: `POST /api/v1/cells/enroll`. Insert row with session token and log path `$XDG_DATA_HOME/sf/cells/<slotId>.log`.
-5. Start child: `sf cell start` (must be on `PATH`), cwd = `repoRoot`, stdout/stderr → log file.
-
-Child env set by cell-server (`cell-supervisor.adapter.ts`): `FACTORY_URL`, `CELL_NAME`, `CELL_SESSION_TOKEN`, `CELL_LOG_PATH`, `HERDR_ENABLED`.
-
-Gap, from code: `sf cell start` reads only `CELL_NAME`, `FACTORY_URL` (via connection config), `FACTORY_JOIN_TOKEN`, `CELL_LINES`. `CELL_SESSION_TOKEN`, `CELL_LOG_PATH`, `HERDR_ENABLED` are set but unread. Child session comes from `.factory-local/cells/<name>.json` or inherited join/supervisor credentials, not from the row's token. Not verified end to end.
-
-## Settings and factory profiles
-
-- Machine: `CELL_SERVER_HOST` (default `127.0.0.1`), `CELL_SERVER_PORT` (default `7071`). `sf` reads `CELL_SERVER_URL` for the same address.
-- Preferences (`settings` table; `sf cell server config get|set`):
-
-| Key | Default | Range / values |
-| :--- | :--- | :--- |
-| `herdr_enabled` | `false` | bool. Passed to child as `HERDR_ENABLED` |
-| `default_runner` | `claude` | `claude`, `codex`, `cursor`, `antigravity`, `opencode`, `copilot` |
-| `restart_backoff_ms` | `1000` | 0 … 600000 |
-| `max_local_cells` | `4` | 0 … 64 |
-| `git_fetch_on_worktree` | `true` | bool. Stored; no reader found in code |
-
-- Factory profiles (`factories` table; `sf cell server factory add|ls|use|rm`): name, url, join token, supervisor token, one default. Default used when a create omits `factory`.
-- Shared config `$XDG_CONFIG_HOME/sf/config.json`: `current` + `targets` (name → url, token). Read at boot; target synced as default factory. `CELL_SERVER_FACTORY` picks a target by name. Unknown name → boot error.
-- Tokens are stored plain in cell-server SQLite (file mode 0600).
+- Factory daemon port: `SF_FACTORY_PORT` (default `7072`).
+- Daemon child env: `FACTORY_URL`, `FACTORY_TOKEN` (inherited from the start command's connection), `FACTORY_JOIN_TOKEN`, `CELL_LINES`, `SF_FACTORY_PID`. Tokens are never logged.
+- Shared config `$XDG_CONFIG_HOME/sf/config.json`: connection targets, read by `sf`.
 
 ## Local data
 
 | Path | Written by | Content |
 | :--- | :--- | :--- |
-| `$XDG_DATA_HOME/sf/cell-server.db` | cell-server | `factories`, `cells`, `settings`. WAL. Mode 0600. Holds tokens |
-| `$XDG_DATA_HOME/sf/cell-server.log` | `sf cell server start` | cell-server stdout/stderr |
-| `$XDG_DATA_HOME/sf/cells/<slotId>.log` | cell-server child | Cell daemon output for a managed slot |
-| `$XDG_DATA_HOME/sf/cells/slots.json`, `<slotId>.pid`, `<slotId>.log` | `sf cell create` | Local slot list and per-slot files |
-| `$XDG_DATA_HOME/sf/workspaces/<projectId>` | cell-server | Git clone of the project |
+| `$XDG_DATA_HOME/sf/factory.pid` | `sf factory start` | Factory daemon pid. Removed on stop |
+| `$XDG_DATA_HOME/sf/factory.log` | Factory daemon | Daemon stdout/stderr |
+| `$XDG_DATA_HOME/sf/cells/<cellId>.log` | Factory daemon child | Cell daemon output |
+| `$XDG_DATA_HOME/sf/cells/slots.json`, `<slotId>.pid`, `<slotId>.log` | old `sf cell create` | Ignored since the Factory daemon. Removable |
 | `$XDG_CONFIG_HOME/sf/config.json` | user / `sf` | Shared factory targets |
 | `<repo>/.factory-local/cells/<name>.json` | Cell daemon | Session `{cellId, sessionToken}`. Mode 0600 |
 | `<repo>/.factory-local/cells/<name>.pid` | Cell daemon | Claims name; second start with same name refused |
@@ -119,8 +106,6 @@ Legacy `.factory-local/cell.json` moves to `cells/<hostname>.json` on first star
 
 ## Open
 
-- No `sf` verb for managed slots. HTTP only.
-- Child env contract: session token and log path set but unread (see above).
-- Two slot stores (cell-server SQLite vs `slots.json`) do not know each other.
-- `git_fetch_on_worktree` has no reader.
-- [architecture.md](./architecture.md) says `sf` calls cell-server for projects and cells. Code: `sf` calls only health, settings, factories.
+- Cell daemon started by hand (tmux, systemd) has no parent watch. Only daemon-started Cells exit with the daemon.
+- `sf setup --cell` and `sf cell create` need a running Factory daemon.
+- The Factory daemon does not start on boot. `sf service` does not manage it yet.
