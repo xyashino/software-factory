@@ -1,7 +1,7 @@
 # `sf operator` — plan
 
 Terms: [glossary](./README.md#glossary). Source of truth for the endpoint, the verbs' effects and the server rules:
-[`factory.md` §11](./factory.md) and [`engineering.md`](./engineering.md). This file describes
+[`hq.md` §11](./hq.md) and [`engineering.md`](./engineering.md). This file describes
 only the client. Wire shapes: `apps/sf/src/contracts/operator.contract.ts`.
 
 ## Client rules
@@ -22,7 +22,7 @@ It does three things:
 3. Send one request to `$FACTORY_OPERATOR_URL` with the token from `$FACTORY_CYCLE_TOKEN`, and print the reply.
 
 It never decides what happens next. The Cell checks local facts, and the server decides every state
-change ([`factory.md`](./factory.md) §11.3).
+change ([`hq.md`](./hq.md) §11.3).
 
 ## 2. Callers
 
@@ -90,7 +90,7 @@ File contents go in the request body as UTF-8 text. The CLI never sends a file p
 
 ## 7. Not in the CLI
 
-- `answer` for the Supervisor. The Supervisor uses `sf answer`, if that exists ([`factory.md`](./factory.md) §11.6).
+- `answer` for the Supervisor. The Supervisor uses `sf answer`, if that exists ([`hq.md`](./hq.md) §11.6).
 - `ask` and `tell`. Not in the current design (§8).
 - `--change`. The Mechanic does not edit files or config (decision `20261113-230000`).
 - `resume`, `nudge`, `repair`. Not in the new core.
@@ -98,7 +98,7 @@ File contents go in the request body as UTF-8 text. The CLI never sends a file p
 
 ## 8. Open
 
-These are decided in [`factory.md`](./factory.md) §11.6. The CLI follows that decision.
+These are decided in [`hq.md`](./hq.md) §11.6. The CLI follows that decision.
 
 1. `answer` (Mechanic): no question exists in the new core. Included only if a question entity is added.
 2. `context` (Operator): keep or drop.

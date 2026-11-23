@@ -1,10 +1,10 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { findDependencyCycle } from '../apps/factory/src/domain/queue/dag';
+import { findDependencyCycle } from '../apps/hq/src/domain/queue/dag';
 import {
   parseTodoMarkdown,
   type TodoFile,
-} from '../apps/factory/src/domain/queue/todo-markdown';
+} from '../apps/hq/src/domain/queue/todo-markdown';
 
 const TODOS_DIR = 'todos';
 const LINES_DIR = '.factory/lines';

@@ -1,6 +1,6 @@
 # Cell
 
-Terms: [glossary](./README.md#glossary). Protocol and timing: [factory.md §3](./factory.md). Command tree: [sf.md](./sf.md).
+Terms: [glossary](./README.md#glossary). Protocol and timing: [hq.md §3](./hq.md). Command tree: [sf.md](./sf.md).
 
 ## Role
 
@@ -66,7 +66,7 @@ Cell supervision (`apps/sf/src/daemon/supervisor.ts`):
 2. Lines = `.factory/lines/*.yml`, filtered by `CELL_LINES`. None → error.
 3. Cell id from `FACTORY_CELL_ID`, bearer from `FACTORY_TOKEN`. No enroll, no session file.
 4. Claim loop: `POST /relay/api/v1/cells/claims` with `{ waitMs, projectId, allowedLines, runners }`, `waitMs` 25 s. Empty reply → claim again.
-5. Run Job station by station. Reply `nextJob` continues without re-claim. Details: [factory.md §3](./factory.md).
+5. Run Job station by station. Reply `nextJob` continues without re-claim. Details: [hq.md §3](./hq.md).
 6. Heartbeat every 10 s (`POST /relay/api/v1/cells/heartbeats`). Reply `signals` drive the loop:
    - `abort`, or 4 failed beats in a row → abort runner.
 7. With `SF_FACTORY_PID` set (started by the Factory daemon): exit when the parent changes.
@@ -97,7 +97,7 @@ Timing constants live in `apps/sf/src/config.ts` (`HEARTBEAT_INTERVAL_MS`, `LEAS
 | `$XDG_CONFIG_HOME/sf/config.json` | user / `sf` | Shared factory targets |
 | `<repo>/.factory-local/cells/<name>.pid` | Cell daemon | Claims name; second start with same name refused |
 | `<repo>/.worktrees/<order-slug>/` | Cell daemon | Job worktree. Deleted after `deliver` |
-| `<worktree>/.cell/<station-id>/` | Cell daemon, operator | Prompt, state, step log, runner info. Git-excluded. See [factory.md §2.3](./factory.md) |
+| `<worktree>/.cell/<station-id>/` | Cell daemon, operator | Prompt, state, step log, runner info. Git-excluded. See [hq.md §2.3](./hq.md) |
 
 ## Open
 

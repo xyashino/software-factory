@@ -136,8 +136,8 @@ Removed in `cell-drain-removal`: `drain` and `force` signals, `leaveCell`, drain
 Still open vs plan:
 
 - Factory does not watch Cell worktrees. `apps/sf/src/daemon/` has no worktree check (see Workspace watch).
-- One long-poll per idle Cell, not one per Factory. HQ caps waiters at `MAX_CLAIM_WAITERS = 5` (`apps/factory/src/config.ts:14`), global.
-- `CLAIM_WAIT_MS` hardcoded 25 s in `apps/factory/src/config.ts:4` and `apps/sf/src/config.ts:43`.
+- One long-poll per idle Cell, not one per Factory. HQ caps waiters at `MAX_CLAIM_WAITERS = 5` (`apps/hq/src/config.ts:14`), global.
+- `CLAIM_WAIT_MS` hardcoded 25 s in `apps/hq/src/config.ts:4` and `apps/sf/src/config.ts:43`.
 - Relay 401 kills one Cell (`apps/sf/src/daemon/relay.ts`), not all.
 
 ## Open

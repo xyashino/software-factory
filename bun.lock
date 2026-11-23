@@ -15,8 +15,8 @@
         "typescript": "catalog:",
       },
     },
-    "apps/factory": {
-      "name": "@repo/factory",
+    "apps/hq": {
+      "name": "@repo/hq",
       "version": "0.0.0",
       "dependencies": {
         "@repo/bun-sqlite-kit": "workspace:*",
@@ -515,7 +515,7 @@
 
     "@repo/eslint-config": ["@repo/eslint-config@workspace:packages/eslint-config"],
 
-    "@repo/factory": ["@repo/factory@workspace:apps/factory"],
+    "@repo/hq": ["@repo/hq@workspace:apps/hq"],
 
     "@repo/factory-contracts": ["@repo/factory-contracts@workspace:packages/factory-contracts"],
 

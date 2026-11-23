@@ -1,4 +1,4 @@
-# `@repo/factory` — Backend State Management, Cell Worktree & Incident Plan
+# `@repo/hq` — Backend State Management, Cell Worktree & Incident Plan
 
 ## 0. Abstract Flow (At a Glance)
 
@@ -39,7 +39,7 @@ flowchart TD
 
 ## 1. Core Principles & Nomenclature
 
-This backend (`apps/factory`) is a standalone, stateful control plane built on **Bun + Hono + Drizzle ORM (`bun:sqlite` WAL) + Zod**.
+This backend (`apps/hq`) is a standalone, stateful control plane built on **Bun + Hono + Drizzle ORM (`bun:sqlite` WAL) + Zod**.
 
 ### Hard Architectural Rules
 
@@ -111,7 +111,7 @@ Each repository roots its factory configuration in `.factory/config.json`, which
 
 ### 2.2 Server Database State (`factory.db`)
 
-The server stores structured relational state in SQLite (WAL mode, `BEGIN IMMEDIATE` transactions, no event-replay folding required). Columns and enums live in `apps/factory/src/db/schema`, not here:
+The server stores structured relational state in SQLite (WAL mode, `BEGIN IMMEDIATE` transactions, no event-replay folding required). Columns and enums live in `apps/hq/src/db/schema`, not here:
 
 - **Plans, orders, steps**: `order_plans`, `work_orders` (owning Cell and lease `epoch`), `order_steps` (one row per Line station).
 - **Execution**: `jobs` (one attempt per step, with lease fencing), `cells` (registered Cells, allowed Lines, local worktrees).
@@ -527,7 +527,7 @@ Every `Job` dispatched to a `Cell` includes an explicit, non-null `projectId`, `
 
 ## 7. Database Schema
 
-The schema lives in `apps/factory/src/db/schema` (Drizzle on `bun:sqlite`). It is not copied here.
+The schema lives in `apps/hq/src/db/schema` (Drizzle on `bun:sqlite`). It is not copied here.
 
 Exclusivity (1 Cell per `WorkOrder` at a time) is backed by three partial unique indexes in that schema:
 
@@ -553,7 +553,7 @@ There is no Cell token kind and no Cell scope. Cells are identified by the `x-ce
 
 ## 9. API Endpoints
 
-Routes, request and reply shapes live in `apps/factory/src/contracts`, one file per resource. Token kinds and their scopes are in §8.
+Routes, request and reply shapes live in `apps/hq/src/contracts`, one file per resource. Token kinds and their scopes are in §8.
 
 ---
 
@@ -561,7 +561,7 @@ Routes, request and reply shapes live in `apps/factory/src/contracts`, one file 
 
 ### 11.1 Scope
 
-An LLM agent running inside a Job reports back through a localhost endpoint of its Cell. The server never sees the agent's token or its HTTP calls. The Cell turns each agent verb into a server call from the routes in `apps/factory/src/contracts`: `POST /api/v1/jobs/{id}/transitions` for station jobs, `POST /api/v1/incidents/{id}/resolve` for Mechanic jobs.
+An LLM agent running inside a Job reports back through a localhost endpoint of its Cell. The server never sees the agent's token or its HTTP calls. The Cell turns each agent verb into a server call from the routes in `apps/hq/src/contracts`: `POST /api/v1/jobs/{id}/transitions` for station jobs, `POST /api/v1/incidents/{id}/resolve` for Mechanic jobs.
 
 Two roles use the endpoint:
 
@@ -591,7 +591,7 @@ A verb sent with the wrong role, or in a state where the server would refuse it,
 
 ### 11.3 Verb to server call
 
-Contract references are to `apps/factory/src/contracts/`. A mismatch with a contract is a gap, listed in the last column.
+Contract references are to `apps/hq/src/contracts/`. A mismatch with a contract is a gap, listed in the last column.
 
 | Role | Verb | Cell does locally | Server call | Gap |
 | :--- | :--- | :--- | :--- | :--- |

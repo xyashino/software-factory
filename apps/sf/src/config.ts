@@ -29,7 +29,7 @@ export const FACTORY_DAEMON_URL = `http://127.0.0.1:${FACTORY_DAEMON_PORT}`;
 export const DEFAULT_DATA_DIR = join(XDG_DATA_HOME, 'sf');
 export const DEFAULT_DB_PATH = join(DEFAULT_DATA_DIR, 'factory.db');
 export const SERVER_ENTRY = fileURLToPath(
-  new URL('../../factory/src/index.ts', import.meta.url),
+  new URL('../../hq/src/index.ts', import.meta.url),
 );
 export const COMPILED_URL_PATTERN = /\/(\$bunfs|~BUN)\//;
 export const IS_COMPILED = COMPILED_URL_PATTERN.test(import.meta.url);

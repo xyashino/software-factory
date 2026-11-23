@@ -3,7 +3,7 @@
 Index of project docs, by topic. Each app keeps a short `README.md` pointing here.
 
 - [architecture.md](./architecture.md): apps, who calls whom, one diagram.
-- [factory.md](./factory.md): HQ server design. State, Cell lifecycle, incidents, queue, tokens, agent reporting.
+- [hq.md](./hq.md): HQ server design. State, Cell lifecycle, incidents, queue, tokens, agent reporting.
 - [sf.md](./sf.md): `sf` CLI. Command tree (`sf hq` for HQ), Cell daemon, operator verbs, shared contracts.
 - [operator.md](./operator.md): `sf operator` client. Commands, exit codes, request shape.
 - [cell.md](./cell.md): Cell daemon, Factory daemon (`sf factory`), operator endpoint, local data.
@@ -32,4 +32,4 @@ Defined once here. Other docs link to this section.
 | **Work order** | One `todos/*.md` item travelling down a Line                                                         |
 | **Supervisor** | The human who runs HQ and resolves Incidents                                                         |
 
-Code keeps older names: `apps/factory` is HQ, `apps/sf` holds the Cell and Factory daemons. Docs use the terms above. Old command and env names are listed in [sf.md](./sf.md#deprecated-names).
+Code paths: `apps/hq` is HQ, `apps/sf` holds the Cell and Factory daemons. Docs use the terms above. Old command and env names are listed in [sf.md](./sf.md#deprecated-names).
