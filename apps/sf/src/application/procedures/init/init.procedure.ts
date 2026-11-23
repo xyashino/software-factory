@@ -3,7 +3,10 @@ import {
   BUILDER_PROFILE,
   DOCTOR_PROFILE,
   LINE_FAST,
+  LINE_FEATURE,
   LINE_STANDARD,
+  MECHANIC_PROFILE,
+  PLANNER_PROFILE,
   PR_BODY_TEMPLATE,
   repoConfigText,
 } from '../../../domain/init/templates';
@@ -47,8 +50,11 @@ const templateFiles = (projectId: string): TemplateFile[] => [
   { path: REPO_CONFIG_PATH, text: repoConfigText(projectId) },
   { path: `${LINES_DIR}/standard.yml`, text: LINE_STANDARD },
   { path: `${LINES_DIR}/fast.yml`, text: LINE_FAST },
+  { path: `${LINES_DIR}/feature.yml`, text: LINE_FEATURE },
   { path: `${OPERATORS_DIR}/builder.md`, text: BUILDER_PROFILE },
   { path: `${OPERATORS_DIR}/doctor.md`, text: DOCTOR_PROFILE },
+  { path: `${OPERATORS_DIR}/planner.md`, text: PLANNER_PROFILE },
+  { path: `${OPERATORS_DIR}/mechanic.md`, text: MECHANIC_PROFILE },
   { path: PR_TEMPLATE_PATH, text: PR_BODY_TEMPLATE },
 ];
 
