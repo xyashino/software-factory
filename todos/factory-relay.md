@@ -16,7 +16,7 @@ This todo is one step of a redesign of how the software factory runs work. You d
 
 | Target name | Meaning | Name in code today |
 | --- | --- | --- |
-| HQ | External server: state, queue, projects, work orders, jobs, leases | "Factory": `apps/factory`, package `@repo/factory`, contracts `@repo/factory-contracts` |
+| HQ | External server: state, queue, projects, work orders, jobs, leases | "HQ": `apps/hq`, package `@repo/hq`, contracts `@repo/factory-contracts` |
 | Factory | Local daemon, one per PC. Only holder of the HQ credential. Spawns, supervises and kills Cells | Does not exist. Closest: cell-server `apps/cell` (`@repo/cell`, port 7071, own SQLite) and local slots (`slots.json`) |
 | Cell | Disposable worker: one process, one job at a time, runs inside a repo | Cell daemon: `sf cell start`, code in `apps/sf/src/application/procedures/cell/*` |
 | Line | Pipeline template `.factory/lines/<name>.yml` (stations in order) | same |
@@ -52,9 +52,9 @@ sf / web (operator) --> HQ <-- Factory (local PC) <-- Cells (loopback only)
 
 - Bun + turbo monorepo. Package manager is bun (the root `CLAUDE.md` still says pnpm; it is generated and stale). Verify with `bun run ci:verify`.
 - `apps/sf`: CLI and Cell daemon. Hexagonal: `application/procedures/*` use ports from `application/ports/*`; adapters in `adapters/{cli,fs,git,http,process,runners}`; domain in `domain/*`; tests in `test/{unit,blackbox}`.
-- `apps/factory` (HQ): Hono routes in `adapters/hono/routes`, procedures in `application/procedures`, drizzle schema in `db/schema`, migrations in `db/migrations`, SQLite via `@repo/bun-sqlite-kit` (`immediateTx` = `BEGIN IMMEDIATE`).
+- `apps/hq` (HQ): Hono routes in `adapters/hono/routes`, procedures in `application/procedures`, drizzle schema in `db/schema`, migrations in `db/migrations`, SQLite via `@repo/bun-sqlite-kit` (`immediateTx` = `BEGIN IMMEDIATE`).
 - Wire contracts (zod): `packages/factory-contracts`, `packages/cell-contracts`.
-- Constants: `apps/sf/src/config.ts` and `apps/factory/src/config.ts` (`CLAIM_WAIT_MS` 25 s, `HEARTBEAT_INTERVAL_MS` 10 s, `LEASE_TTL_MS` 60 s, `SELF_FENCE_MS` 45 s, `MAX_WORKTREE_RESETS` 2).
+- Constants: `apps/sf/src/config.ts` and `apps/hq/src/config.ts` (`CLAIM_WAIT_MS` 25 s, `HEARTBEAT_INTERVAL_MS` 10 s, `LEASE_TTL_MS` 60 s, `SELF_FENCE_MS` 45 s, `MAX_WORKTREE_RESETS` 2).
 - A Cell works in `<repo>/.worktrees/<orderSlug>` (one worktree per order, branch `factory/<slug>`, created with `git worktree add`). Per-step files live in `<worktree>/.cell/` and are git-excluded: `.cell/worktree.json`, `.cell/task.md`, `.cell/<stationId>/state.json`, `prompt`, feedback, logs.
 
 ### Repo rules you must follow
@@ -75,7 +75,7 @@ A Cell never learns the HQ URL or any HQ credential. It talks to the Factory dae
 - A Cell is started by `startCell` (`apps/sf/src/application/procedures/cell/start.procedure.ts`): it resolves its project and repo (`resolveCellTarget`), lists installed runners and line files, reads a persisted session from `ports.cellState` (file `cellStatePathOf(name)` under the repo's `.factory-local`, `apps/sf/src/config.ts:72`, `bootstrap/context.ts:62`), enrolls with `POST /api/v1/cells/enroll` using a join token if no session exists, then `hello`, then the claim loop. All calls go through `ports.server.call|get|remove` (`adapters/http/server-client.ts`), which sends `${baseUrl}${route}` with `authorization: Bearer <token>`. Claims long-poll up to `waitMs` (25 s).
 - The Cell's HQ URL and token come from the connection resolver (`FACTORY_URL`, `FACTORY_TOKEN`, config files). `local-create.procedure.ts` copies them into the child's env today, so every Cell holds credentials.
 - HQ derives the Cell identity from the token principal (`ctx.principal.cellId`) in `claim-job`, `heartbeat-cell`, `hello-cell`, `leave`, transitions.
-- HQ enroll: `apps/factory/src/application/procedures/cells/enroll-cell.procedure.ts` (scope `cell:enroll`, creates the `cells` row, mints a `cell_session` token valid 30 days).
+- HQ enroll: `apps/hq/src/application/procedures/cells/enroll-cell.procedure.ts` (scope `cell:enroll`, creates the `cells` row, mints a `cell_session` token valid 30 days).
 - The Cell routes the Cell calls (7 `server.call` sites plus hello): under `/api/v1/cells/*` (enroll, hello, claims, heartbeats, leave), `/api/v1/jobs/*` (transitions), `/api/v1/incidents/*/resolve`. List the exact set with `git grep -n "server.call(\|server.get(\|server.remove(" -- apps/sf/src/application/procedures/cell` before building the allowlist.
 - After `factory-hq-link` the daemon has an HQ credential (`factory.json`, scope `factory:worker`) and a heartbeat, but no relay.
 
@@ -93,7 +93,7 @@ Daemon relay (loopback only, same listener or a second loopback port; Cells get 
 
 ## Scope
 
-- **Target**: `apps/sf` (daemon relay, Cell start env, cellState path), `apps/factory` (enroll scope, `factory_id` column), `packages/factory-contracts`
+- **Target**: `apps/sf` (daemon relay, Cell start env, cellState path), `apps/hq` (enroll scope, `factory_id` column), `packages/factory-contracts`
 - **Classification**: `Integration`, `Security`
 - **Out of scope**: removing per-Cell tokens and `cells` rows in HQ (todo `cell-identity-slim`), the gone-Cell transaction, one shared long-poll for all Cells.
 

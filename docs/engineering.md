@@ -1,6 +1,6 @@
-# Engineering rules: `apps/factory` backend
+# Engineering rules: `apps/hq` backend
 
-Source of truth for code shape, layering, transactions, and testing in `apps/factory`. When a plan or todo diverges from this file on code shape, **this file wins**.
+Source of truth for code shape, layering, transactions, and testing in `apps/hq`. When a plan or todo diverges from this file on code shape, **this file wins**.
 
 ---
 
@@ -8,9 +8,9 @@ Source of truth for code shape, layering, transactions, and testing in `apps/fac
 
 1. **Stack**: Bun (`Bun.serve`, `bun:sqlite` WAL) + Hono (`^4.13`) + Drizzle ORM (`drizzle-orm/bun-sqlite`) + Zod (`^4.6`).
 2. **Standalone Backend Isolation**:
-   - Scope is strictly limited to `apps/factory/`. Do **NOT** modify, wire, or connect other apps or packages from here.
-   - `apps/factory` owns all of its domain, SQLite schema, contracts, procedures, and Hono adapters inside `apps/factory/src/`.
-   - All Cell interactions (`claims`, `heartbeats`, `jobs/:id/transitions`, `incidents/:id/resolve`) are implemented purely as backend HTTP endpoints and verified via black-box `app.request()` HTTP tests inside `apps/factory/test/`.
+   - Scope is strictly limited to `apps/hq/`. Do **NOT** modify, wire, or connect other apps or packages from here.
+   - `apps/hq` owns all of its domain, SQLite schema, contracts, procedures, and Hono adapters inside `apps/hq/src/`.
+   - All Cell interactions (`claims`, `heartbeats`, `jobs/:id/transitions`, `incidents/:id/resolve`) are implemented purely as backend HTTP endpoints and verified via black-box `app.request()` HTTP tests inside `apps/hq/test/`.
 3. **Catalog dependencies only**: Pin third-party packages via `catalog:` in root `package.json` (`workspaces.catalog`) (`hono`, `drizzle-orm`, `drizzle-kit`, `zod`, `yaml`, `vitest`, `@types/bun`, `@types/node`, `typescript`, `eslint`).
 4. **Zero GitHub coupling**: Server never calls `gh` CLI, GitHub REST/GraphQL APIs, or GitHub webhooks. Cells push branches, publish PRs on `deliver`, and report git refs/commits back via REST.
 
@@ -19,7 +19,7 @@ Source of truth for code shape, layering, transactions, and testing in `apps/fac
 ## 2. Directory Layout & Layering
 
 ```text
-apps/factory/
+apps/hq/
 ├── drizzle.config.ts
 ├── package.json
 ├── tsconfig.json
@@ -170,14 +170,14 @@ Shared style rules (`coding-no-barrel-export`, `coding-export-order`, `coding-mi
 2. **`immediateTx(db, fn)` for all mutating state transitions**:
    - Every claim (`/cells/claims`), job transition (`/jobs/{id}/transitions`), queue import/action (`/queue/import`, `/queue/actions`), order/plan transition, and incident resolution MUST execute inside a serialized `BEGIN IMMEDIATE` transaction (`db.transaction(..., { behavior: 'immediate' })`).
 3. **Database-enforced single-Cell exclusivity**:
-   - Migrations MUST create the three partial unique indexes from [`factory.md`](./factory.md) §7:
+   - Migrations MUST create the three partial unique indexes from [`hq.md`](./hq.md) §7:
      - `idx_jobs_one_active_per_order ON jobs(order_id) WHERE order_id IS NOT NULL AND status IN ('claimed', 'running')`
      - `idx_jobs_one_active_per_cell ON jobs(cell_id) WHERE cell_id IS NOT NULL AND status IN ('claimed', 'running')`
      - `idx_work_orders_one_active_per_cell ON work_orders(active_cell_id) WHERE active_cell_id IS NOT NULL`
 4. **Monotonic `epoch` fencing & state-based idempotency**:
    - Every Cell mutation (`start`, `complete`, `fail`, `block`, `line_unavailable`, `worktree_missing`, `heartbeats`) verifies `job.cell_id === principal.cellId` and `job.epoch === body.epoch`. Mismatch throws `StaleLeaseEpoch` (`409`, `type: 'stale-lease-epoch'`).
    - The server stores no command ids and no replay results. A transition is applied only if the job is live, owned by the caller and at the current `epoch`.
-   - If the job already reflects the command's outcome at the same `epoch`, the server answers `200 already_applied` and changes nothing ([`factory.md`](./factory.md) §11.4).
+   - If the job already reflects the command's outcome at the same `epoch`, the server answers `200 already_applied` and changes nothing ([`hq.md`](./hq.md) §11.4).
    - `state_transitions` is history only, written for the SSE stream. It is never read to answer a retry.
 5. **Post-commit side effects (`claimWaiters` & `transitionBus`)**:
    - Only after `immediateTx` commits successfully may a procedure call `ctx.claimWaiters.wakeAll()` (when work becomes `queued`/`ready`) or `ctx.transitionBus.publish(transitions)`.

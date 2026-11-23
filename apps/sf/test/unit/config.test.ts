@@ -124,7 +124,7 @@ describe('compiled runtime detection', () => {
 
   it('treats a source checkout as not compiled', () => {
     // Arrange
-    const url = 'file:///home/u/repo/apps/factory/src/config.ts';
+    const url = 'file:///home/u/repo/apps/hq/src/config.ts';
 
     // Act
     const matches = COMPILED_URL_PATTERN.test(url);
@@ -150,9 +150,7 @@ describe('server spawn args', () => {
     const args = serverArgsOf(false);
 
     // Assert
-    expect(args).toEqual([
-      expect.stringMatching(/factory[\\/]src[\\/]index\.ts$/),
-    ]);
+    expect(args).toEqual([expect.stringMatching(/hq[\\/]src[\\/]index\.ts$/)]);
   });
 });
 

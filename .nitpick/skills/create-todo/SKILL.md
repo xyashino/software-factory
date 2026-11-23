@@ -13,7 +13,7 @@ Explicit only. Run when the user asks for `todos/<slug>.md` specs or names this 
 
 One work order. The factory imports `todos/<slug>.md` (`sf todos import`, `POST /api/v1/queue/import`). Everything after the heading becomes the description sent to an LLM builder on a Line. So: the file must stand alone. No "as discussed", no reference to the chat.
 
-## Format (matches `apps/factory/src/domain/queue/todo-markdown.ts`)
+## Format (matches `apps/hq/src/domain/queue/todo-markdown.ts`)
 
 Frontmatter, then heading `# <slug>: <title>`, then body.
 

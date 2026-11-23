@@ -6,7 +6,7 @@ export const dispatchInternal = async (
   const [marker, ...rest] = args;
   if (marker === SERVER_MARKER) {
     process.argv = [...process.argv.slice(0, 2), ...rest];
-    await import('../../../factory/src/index');
+    await import('../../../hq/src/index');
     return true;
   }
   if (marker === FACTORY_DAEMON_MARKER) {

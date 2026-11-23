@@ -7,7 +7,7 @@ Terms: [glossary](./README.md#glossary).
 | Path                         | Role                                                              |
 | :--------------------------- | :---------------------------------------------------------------- |
 | `apps/sf`                    | `sf` CLI: Supervisor commands, Cell daemon, Factory daemon, `sf operator` client |
-| `apps/factory`               | Factory HTTP server and SQLite storage                            |
+| `apps/hq`                    | HQ HTTP server and SQLite storage                                 |
 | `apps/web-demo`              | Web UI served by `sf web start`                                   |
 | `packages/nitpick`           | Rules and skills engine; generates `.agents/` from `.nitpick/`    |
 | `packages/prompt`            | Prompt building blocks                                            |
@@ -24,7 +24,7 @@ Terms: [glossary](./README.md#glossary).
 
 ```mermaid
 flowchart LR
-  S[Supervisor] -->|sf CLI| H[apps/factory: HQ]
+  S[Supervisor] -->|sf CLI| H[apps/hq: HQ]
   S -->|sf web| W[apps/web-demo]
   W -->|/api/v1| H
   C[sf cell daemon] -->|claims, transitions| H

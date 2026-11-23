@@ -5,5 +5,5 @@
     "rootDir": "..",
     "types": ["node", "bun"]
   },
-  "include": ["src", "../factory/src/sql.d.ts"]
+  "include": ["src", "../hq/src/sql.d.ts"]
 }

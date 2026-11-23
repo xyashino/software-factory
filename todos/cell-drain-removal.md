@@ -16,7 +16,7 @@ This todo is one step of a redesign of how the software factory runs work. You d
 
 | Target name | Meaning | Name in code today |
 | --- | --- | --- |
-| HQ | External server: state, queue, projects, work orders, jobs, leases | "Factory": `apps/factory`, package `@repo/factory`, contracts `@repo/factory-contracts` |
+| HQ | External server: state, queue, projects, work orders, jobs, leases | "HQ": `apps/hq`, package `@repo/hq`, contracts `@repo/factory-contracts` |
 | Factory | Local daemon, one per PC. Only holder of the HQ credential. Spawns, supervises and kills Cells | Does not exist. Closest: cell-server `apps/cell` (`@repo/cell`, port 7071, own SQLite) and local slots (`slots.json`) |
 | Cell | Disposable worker: one process, one job at a time, runs inside a repo | Cell daemon: `sf cell start`, code in `apps/sf/src/application/procedures/cell/*` |
 | Line | Pipeline template `.factory/lines/<name>.yml` (stations in order) | same |
@@ -52,9 +52,9 @@ sf / web (operator) --> HQ <-- Factory (local PC) <-- Cells (loopback only)
 
 - Bun + turbo monorepo. Package manager is bun (the root `CLAUDE.md` still says pnpm; it is generated and stale). Verify with `bun run ci:verify`.
 - `apps/sf`: CLI and Cell daemon. Hexagonal: `application/procedures/*` use ports from `application/ports/*`; adapters in `adapters/{cli,fs,git,http,process,runners}`; domain in `domain/*`; tests in `test/{unit,blackbox}`.
-- `apps/factory` (HQ): Hono routes in `adapters/hono/routes`, procedures in `application/procedures`, drizzle schema in `db/schema`, migrations in `db/migrations`, SQLite via `@repo/bun-sqlite-kit` (`immediateTx` = `BEGIN IMMEDIATE`).
+- `apps/hq` (HQ): Hono routes in `adapters/hono/routes`, procedures in `application/procedures`, drizzle schema in `db/schema`, migrations in `db/migrations`, SQLite via `@repo/bun-sqlite-kit` (`immediateTx` = `BEGIN IMMEDIATE`).
 - Wire contracts (zod): `packages/factory-contracts`, `packages/cell-contracts`.
-- Constants: `apps/sf/src/config.ts` and `apps/factory/src/config.ts` (`CLAIM_WAIT_MS` 25 s, `HEARTBEAT_INTERVAL_MS` 10 s, `LEASE_TTL_MS` 60 s, `SELF_FENCE_MS` 45 s, `MAX_WORKTREE_RESETS` 2).
+- Constants: `apps/sf/src/config.ts` and `apps/hq/src/config.ts` (`CLAIM_WAIT_MS` 25 s, `HEARTBEAT_INTERVAL_MS` 10 s, `LEASE_TTL_MS` 60 s, `SELF_FENCE_MS` 45 s, `MAX_WORKTREE_RESETS` 2).
 - A Cell works in `<repo>/.worktrees/<orderSlug>` (one worktree per order, branch `factory/<slug>`, created with `git worktree add`). Per-step files live in `<worktree>/.cell/` and are git-excluded: `.cell/worktree.json`, `.cell/task.md`, `.cell/<stationId>/state.json`, `prompt`, feedback, logs.
 
 ### Repo rules you must follow
@@ -72,10 +72,10 @@ Stop means gone. Remove the drain and force signals, the draining and left state
 
 ## Current state (verified)
 
-- HQ: `apps/factory/src/application/procedures/cells/drain.procedure.ts`, `leave.procedure.ts`; routes `POST /api/v1/cells/leave` and `POST /api/v1/cells/:id/drain` (`adapters/hono/routes/cells.route.ts`); drain-related code in `claim-job.procedure.ts`, `heartbeat-cell.procedure.ts` (`drainSignals`), `hello-cell.procedure.ts` (revives status `left`), `reap-expired-leases.ts` (`draining` in the silent statuses), `transition-job.procedure.ts`; schema column `cells.drain_force` and statuses `draining`, `left`; migration `db/migrations/0001_cell_drain_leave.sql`.
+- HQ: `apps/hq/src/application/procedures/cells/drain.procedure.ts`, `leave.procedure.ts`; routes `POST /api/v1/cells/leave` and `POST /api/v1/cells/:id/drain` (`adapters/hono/routes/cells.route.ts`); drain-related code in `claim-job.procedure.ts`, `heartbeat-cell.procedure.ts` (`drainSignals`), `hello-cell.procedure.ts` (revives status `left`), `reap-expired-leases.ts` (`draining` in the silent statuses), `transition-job.procedure.ts`; schema column `cells.drain_force` and statuses `draining`, `left`; migration `db/migrations/0001_cell_drain_leave.sql`.
 - Contracts (`packages/factory-contracts/src/cells.contract.ts`): `drainCellContract`, `leaveCellContract`, claim reply `signals: ['drain']`, heartbeat reply `signals: ['abort','drain','force']`.
 - sf: `apps/sf/src/cell/drain-signal.ts`, `apps/sf/src/domain/cell/drain-policy.ts`, `application/procedures/cell/leave.procedure.ts` (hands a job over with `workspaceMode: 'reuse'`, `:132` on the HQ side), `stop.procedure.ts`, `claim-loop.procedure.ts` (`observeDrain`, `leaveCell`), `cell-runtime.ts` (`drain` state), `run-job.procedure.ts`, `start.procedure.ts`, `adapters/cli/cell.command.ts` (`--force`).
-- Tests that cover it: `apps/factory/test/blackbox/cells-drain-leave.test.ts`, `route-index.test.ts`; `apps/sf/test/blackbox/cell-lifecycle.test.ts`, `cell-stop.test.ts`; `apps/sf/test/unit/cell/drain-signal.test.ts`, `unit/domain/drain-policy.test.ts`, `unit/contracts/cells.contract.test.ts`, `unit/application/run-job-log.test.ts`, `run-mechanic-job.test.ts`.
+- Tests that cover it: `apps/hq/test/blackbox/cells-drain-leave.test.ts`, `route-index.test.ts`; `apps/sf/test/blackbox/cell-lifecycle.test.ts`, `cell-stop.test.ts`; `apps/sf/test/unit/cell/drain-signal.test.ts`, `unit/domain/drain-policy.test.ts`, `unit/contracts/cells.contract.test.ts`, `unit/application/run-job-log.test.ts`, `run-mechanic-job.test.ts`.
 - Docs: `docs/cell.md`, `docs/sf.md`, `docs/cell-runner-plan.md`, `docs/plans/contracts-plan.md`.
 - History: drain and force were added and fixed on 2026-11-20 and 2026-11-21 (ADRs `20261120-*`, `20261121-175500-factory-fix-cell-drain-force-offline.md`). Removing them is intentional and reverses those ADRs.
 - After the earlier todos, stopping a Cell is: kill the process, confirm exit, report gone (`cell-scale-command`, `cell-gone-transaction`).
@@ -90,7 +90,7 @@ Stop means gone. Remove the drain and force signals, the draining and left state
 
 ## Scope
 
-- **Target**: `apps/factory`, `apps/sf`, `packages/factory-contracts`, docs
+- **Target**: `apps/hq`, `apps/sf`, `packages/factory-contracts`, docs
 - **Classification**: `Cleanup`
 - **Out of scope**: new behavior; the kill and gone paths (already built).
 

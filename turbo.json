@@ -37,8 +37,8 @@
         "todos/**",
         ".factory/lines/**",
         "scripts/**",
-        "apps/factory/src/domain/queue/**",
-        "apps/factory/src/domain/orders/order-state.ts"
+        "apps/hq/src/domain/queue/**",
+        "apps/hq/src/domain/orders/order-state.ts"
       ]
     },
     "//#test:scripts": {
@@ -46,15 +46,15 @@
         "todos/**",
         ".factory/lines/**",
         "scripts/**",
-        "apps/factory/src/domain/queue/**",
-        "apps/factory/src/domain/orders/order-state.ts"
+        "apps/hq/src/domain/queue/**",
+        "apps/hq/src/domain/orders/order-state.ts"
       ]
     },
     "//#check-types:scripts": {
       "inputs": [
         "scripts/**",
-        "apps/factory/src/domain/queue/**",
-        "apps/factory/src/domain/orders/order-state.ts",
+        "apps/hq/src/domain/queue/**",
+        "apps/hq/src/domain/orders/order-state.ts",
         "packages/typescript-config/*.json"
       ]
     },

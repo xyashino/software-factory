@@ -1,6 +1,6 @@
 # `@repo/web-demo` — plan
 
-A small Astro SSR web server that shows HQ and lets the Supervisor resume or cancel Work orders. It is a client of the HQ server ([`factory.md`](./factory.md)) and holds no state of its own.
+A small Astro SSR web server that shows HQ and lets the Supervisor resume or cancel Work orders. It is a client of the HQ server ([`hq.md`](./hq.md)) and holds no state of its own.
 
 It is a demo UI: one process, read pages, two write actions, no client JavaScript, no database.
 
@@ -21,7 +21,7 @@ It is a demo UI: one process, read pages, two write actions, no client JavaScrip
 
 ## 2. Auto-registration on localhost
 
-Goal: when the demo runs on the same machine as HQ (`apps/factory`), it registers itself without the Supervisor copying a token by hand, the way a Cell enrolls.
+Goal: when the demo runs on the same machine as HQ (`apps/hq`), it registers itself without the Supervisor copying a token by hand, the way a Cell enrolls.
 
 Rules:
 
@@ -33,7 +33,7 @@ Rules:
 
 Open decision: whether the join secret is multi-use for 24 h (simple) or single-use and re-minted on each start (stricter). Recommended: single-use, re-minted by the server on each `sf hq start`.
 
-Note: the join contract in `apps/factory/src/contracts/tokens.contract.ts` takes a `joinSecret` but has no web client kind yet.
+Note: the join contract in `apps/hq/src/contracts/tokens.contract.ts` takes a `joinSecret` but has no web client kind yet.
 
 ## 3. Security
 
