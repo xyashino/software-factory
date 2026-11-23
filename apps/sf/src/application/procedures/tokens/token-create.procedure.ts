@@ -26,7 +26,7 @@ export const createToken = define({ kind: 'supervisor' })(
 )<TokenCreateResult>(async (input, ctx) => {
   const secret = await readSecret(ctx);
   const reply = issueTokenContract.out[201].parse(
-    await ctx.server.call(TOKENS_ROUTE, { ...input, expiresAt: null }, secret),
+    await ctx.hq.call(TOKENS_ROUTE, { ...input, expiresAt: null }, secret),
   );
   return {
     tokenId: reply.tokenId,

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { startServer } from '../../../src/application/procedures/server/start.procedure';
-import { stopServer } from '../../../src/application/procedures/server/stop.procedure';
+import { startHq } from '../../../src/application/procedures/hq/start.procedure';
+import { stopHq } from '../../../src/application/procedures/hq/stop.procedure';
 import { createFakePorts, runProcedure } from '../../support/fake-ports';
 
 const URL = 'http://127.0.0.1:7070';
@@ -31,7 +31,7 @@ describe('factory server start', () => {
     const fake = createFakePorts();
 
     // Act
-    const started = runProcedure(startServer, startInput, fake);
+    const started = runProcedure(startHq, startInput, fake);
 
     // Assert
     await expect(started).rejects.toThrow(
@@ -46,7 +46,7 @@ describe('factory server start', () => {
     const fake = createFakePorts({ pidFile: DEAD_PID });
 
     // Act
-    const started = runProcedure(startServer, startInput, fake);
+    const started = runProcedure(startHq, startInput, fake);
 
     // Assert
     await expect(started).rejects.toThrow('not started by sf');
@@ -62,7 +62,7 @@ describe('factory server start', () => {
     });
 
     // Act
-    const started = runProcedure(startServer, startInput, fake);
+    const started = runProcedure(startHq, startInput, fake);
 
     // Assert
     await expect(started).rejects.toThrow('server already running');
@@ -75,7 +75,7 @@ describe('factory server start', () => {
     stubMinting(fake);
 
     // Act
-    const result = await runProcedure(startServer, startInput, fake);
+    const result = await runProcedure(startHq, startInput, fake);
 
     // Assert
     expect(result).toEqual({ pid: SPAWNED_PID });
@@ -97,7 +97,7 @@ describe('factory server start', () => {
     };
 
     // Act
-    const started = runProcedure(startServer, startInput, fake);
+    const started = runProcedure(startHq, startInput, fake);
 
     // Assert
     await expect(started).rejects.toThrow(
@@ -109,10 +109,10 @@ describe('factory server start', () => {
   it('fails and stops the child when it stays alive but never answers', async () => {
     // Arrange
     const fake = createFakePorts({ listening: 'after-spawn' });
-    fake.ports.server.probe = async () => false;
+    fake.ports.hq.probe = async () => false;
 
     // Act
-    const started = runProcedure(startServer, startInput, fake);
+    const started = runProcedure(startHq, startInput, fake);
 
     // Assert
     await expect(started).rejects.toThrow(
@@ -129,7 +129,7 @@ describe('factory server stop', () => {
     const fake = createFakePorts({ pidFile: DEAD_PID, alivePids: [DEAD_PID] });
 
     // Act
-    const result = await runProcedure(stopServer, { dataDir: DATA_DIR }, fake);
+    const result = await runProcedure(stopHq, { dataDir: DATA_DIR }, fake);
 
     // Assert
     expect(result).toEqual({ outcome: 'stopped' });
@@ -142,7 +142,7 @@ describe('factory server stop', () => {
     const fake = createFakePorts({ listening: 'after-spawn' });
 
     // Act
-    const result = await runProcedure(stopServer, { dataDir: DATA_DIR }, fake);
+    const result = await runProcedure(stopHq, { dataDir: DATA_DIR }, fake);
 
     // Assert
     expect(result).toEqual({ outcome: 'not-running' });
@@ -153,7 +153,7 @@ describe('factory server stop', () => {
     const fake = createFakePorts();
 
     // Act
-    const result = await runProcedure(stopServer, { dataDir: DATA_DIR }, fake);
+    const result = await runProcedure(stopHq, { dataDir: DATA_DIR }, fake);
 
     // Assert
     expect(result).toEqual({
@@ -167,7 +167,7 @@ describe('factory server stop', () => {
     const fake = createFakePorts({ pidFile: DEAD_PID });
 
     // Act
-    const result = await runProcedure(stopServer, { dataDir: DATA_DIR }, fake);
+    const result = await runProcedure(stopHq, { dataDir: DATA_DIR }, fake);
 
     // Assert
     expect(result).toEqual({

@@ -15,8 +15,8 @@ Terms: [glossary](./README.md#glossary). Protocol and timing: [hq.md §3](./hq.m
 | Piece | Code | Runs as | Talks to |
 | :--- | :--- | :--- | :--- |
 | Cell daemon | `apps/sf/src/application/procedures/cell/*`, helpers `apps/sf/src/cell/*`, CLI `apps/sf/src/adapters/cli/cell.command.ts` | `sf cell start`, one per Cell, cwd = repo root, started by the Factory daemon | Factory daemon `/relay/api/v1/*`; loopback operator endpoint |
-| Factory daemon | `apps/sf/src/daemon/*`, CLI `apps/sf/src/adapters/cli/factory.command.ts` | detached `sf factory start`, `127.0.0.1:7072` | HQ `/api/v1/factories/*`, `/api/v1/cells/*` (Factory credential); spawns and kills Cell daemons |
-| Factory daemon client | `apps/sf/src/application/procedures/cell/factory-cells.ts`, `apps/sf/src/adapters/http/factory-daemon.adapter.ts` | inside `sf cell scale|list` | Factory daemon loopback API |
+| Factory daemon | `apps/sf/src/factory/*`, CLI `apps/sf/src/adapters/cli/factory.command.ts` | detached `sf factory start`, `127.0.0.1:7072` | HQ `/api/v1/factories/*`, `/api/v1/cells/*` (Factory credential); spawns and kills Cell daemons |
+| Factory daemon client | `apps/sf/src/application/procedures/cell/factory-cells.ts`, `apps/sf/src/adapters/http/factory.adapter.ts` | inside `sf cell scale|list` | Factory daemon loopback API |
 
 ## Factory daemon
 
@@ -38,12 +38,12 @@ Start, stop, status (`apps/sf/src/application/procedures/factory/*`):
 
 Errors: `{ code, type, message }`. `400` argument, `409` refused (name taken, project not registered), `503` Factory unreachable.
 
-Cell supervision (`apps/sf/src/daemon/supervisor.ts`):
+Cell supervision (`apps/sf/src/factory/supervisor.ts`):
 
 - Cell id = `cell-` + 8 random hex, memory only, one per run, never reused. Names: `hostname`, `hostname-2`, … against live Cells.
 - Scale up: daemon checks `.factory/config.json` in the repo, takes the project from it, spawns `sf cell start --name <name>` with cwd = repo root and env `HQ_URL` (relay), `HQ_TOKEN` (local bearer for this Cell), `FACTORY_CELL_ID`, `CELL_LINES` (if set), `SF_FACTORY_PID` = daemon pid.
 - Kill: SIGTERM, wait 10 s, SIGKILL, wait until the pid is gone. Resolves only after exit. Then `DELETE` stops, and the daemon calls HQ `POST /api/v1/factories/cells/:id/gone` (failure ignored: HQ requeues the Job when its lease expires).
-- Relay (`apps/sf/src/daemon/relay.ts`): accepts only `claims`, `heartbeats`, `jobs/:id/transitions`, `incidents/:id/resolve`. Forwards with the Factory credential and `x-cell-id`. A local bearer unknown or dead → `401`. HQ answers `401` → the daemon stops that Cell and returns `401`.
+- Relay (`apps/sf/src/factory/relay.ts`): accepts only `claims`, `heartbeats`, `jobs/:id/transitions`, `incidents/:id/resolve`. Forwards with the Factory credential and `x-cell-id`. A local bearer unknown or dead → `401`. HQ answers `401` → the daemon stops that Cell and returns `401`.
 - Heartbeat to HQ every 10 s carries `projects: [{ projectId, desired, running }]` (display only).
 - Parent watch: each Cell checks once per second that its parent is still the daemon (`SF_FACTORY_PID`). If not, it aborts, and exits after a 1 s grace if a claim is still waiting. A `kill -9` of the daemon therefore takes its Cells down within about 2 s.
 - Self-fence: 45 s without an HQ answer → the daemon kills all Cells. HQ reaps a silent Factory after 60 s.

@@ -57,7 +57,7 @@ export const listIncidents = define({ kind: 'supervisor' })(
     input.project ?? (await readProjectId(ctx, input.configPath));
   const secret = await readSecret(ctx);
   const reply = IncidentsReplySchema.parse(
-    await ctx.server.get(
+    await ctx.hq.get(
       INCIDENTS_ROUTE,
       queryOf({
         projectId,

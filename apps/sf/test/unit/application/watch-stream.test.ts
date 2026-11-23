@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Unreachable } from '../../../src/application/core/errors';
-import type { SseFrame } from '../../../src/application/ports/server.port';
+import type { SseFrame } from '../../../src/application/ports/hq.port';
 import { streamTransitions } from '../../../src/application/procedures/watch/stream.procedure';
 import { createFakePorts } from '../../support/fake-ports';
 
@@ -43,7 +43,7 @@ describe('watch stream', () => {
       },
     ];
     const fake = createFakePorts();
-    fake.ports.server.stream = (_route, query) => {
+    fake.ports.hq.stream = (_route, query) => {
       queries.push(query.afterSeq ?? '');
       const next = script.shift();
       if (next === undefined) {
@@ -77,7 +77,7 @@ describe('watch stream', () => {
     const controller = new AbortController();
     const delays: number[] = [];
     const fake = createFakePorts();
-    fake.ports.server.stream = () => {
+    fake.ports.hq.stream = () => {
       throw new Unreachable('server down');
     };
     fake.ports.clock.sleep = async (ms) => {

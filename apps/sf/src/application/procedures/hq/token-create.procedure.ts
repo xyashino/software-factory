@@ -20,7 +20,7 @@ export interface TokenCreateResult {
   token: string | null;
 }
 
-export const createServerToken = define({ kind: 'supervisor' })(
+export const createHqToken = define({ kind: 'supervisor' })(
   TokenCreateSchema,
 )<TokenCreateResult>(async (input, ctx) => {
   const token = await mintSupervisorToken(ctx, input);

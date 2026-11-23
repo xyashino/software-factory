@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { Ports } from '../../../src/application/core/procedure';
 import { Refused } from '../../../src/application/core/errors';
-import { createScaler } from '../../../src/daemon/scaler';
-import { createSupervisor } from '../../../src/daemon/supervisor';
+import { createScaler } from '../../../src/factory/scaler';
+import { createSupervisor } from '../../../src/factory/supervisor';
 
 const REPO = '/repos/alpha';
 const OTHER_REPO = '/repos/beta';

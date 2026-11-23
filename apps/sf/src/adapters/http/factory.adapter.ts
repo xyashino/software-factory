@@ -1,21 +1,21 @@
 import { Unreachable } from '../../application/core/errors';
-import type { FactoryDaemonPort } from '../../application/ports/factory-daemon.port';
+import type { FactoryPort } from '../../application/ports/factory.port';
 import { mapReply } from './map-reply';
 
 const REQUEST_TIMEOUT_MS = 10_000;
 const NOT_RUNNING = 'factory not running: run "sf factory start"';
 
-export interface FactoryDaemonClientOptions {
+export interface FactoryClientOptions {
   baseUrl: string;
   fetchImpl?: typeof fetch;
 }
 
 const JSON_HEADERS = { 'content-type': 'application/json' };
 
-export const createFactoryDaemonAdapter = ({
+export const createFactoryAdapter = ({
   baseUrl,
   fetchImpl = fetch,
-}: FactoryDaemonClientOptions): FactoryDaemonPort => {
+}: FactoryClientOptions): FactoryPort => {
   const send = async (route: string, init: RequestInit): Promise<unknown> => {
     let response: Response;
     try {

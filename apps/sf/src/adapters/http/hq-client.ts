@@ -1,88 +1,128 @@
-import { z } from 'zod';
-import type {
-  HqClientPort,
-  HqReply,
-} from '../../application/ports/hq-client.port';
+import { Unreachable } from '../../application/core/errors';
+import type { HqPort } from '../../application/ports/hq.port';
+import { mapReply } from './map-reply';
+import { readSseFrames } from './sse-client';
 
-const REQUEST_TIMEOUT_MS = 5_000;
-const UNAUTHORIZED = 401;
-const ENROLL_ROUTE = '/api/v1/factories/enroll';
-const HEARTBEAT_ROUTE = '/api/v1/factories/heartbeat';
+const REQUEST_TIMEOUT_MS = 10_000;
+const PROBE_TIMEOUT_MS = 1_000;
 
-const EnrollReplySchema = z.object({
-  factoryId: z.string().min(1),
-  sessionToken: z.string().min(1),
-  expiresAt: z.number().int(),
-});
-
-const HeartbeatReplySchema = z.object({ factoryId: z.string().min(1) });
-const GoneReplySchema = z.object({ cellId: z.string().min(1) });
-
-interface Parser<T> {
-  parse(raw: unknown): T;
+export interface HqClientOptions {
+  baseUrl: string;
+  fetchImpl?: typeof fetch;
 }
 
-const goneRouteOf = (cellId: string): string =>
-  `/api/v1/factories/cells/${encodeURIComponent(cellId)}/gone`;
-
-const send = async (
-  fetchImpl: typeof fetch,
-  url: string,
-  token: string,
-  body: unknown,
-): Promise<Response | null> => {
+const readBody = async (response: Response): Promise<string> => {
   try {
-    return await fetchImpl(url, {
-      method: 'POST',
-      headers: {
-        authorization: `Bearer ${token}`,
-        'content-type': 'application/json',
-      },
-      body: body === undefined ? undefined : JSON.stringify(body),
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-    });
+    return await response.text();
   } catch {
-    return null;
+    throw new Unreachable('server reply could not be read');
   }
 };
 
-const replyOf = async <T>(
-  response: Response | null,
-  schema: Parser<T>,
-): Promise<HqReply<T>> => {
-  if (response === null) return { kind: 'unreachable' };
-  if (response.status === UNAUTHORIZED) return { kind: 'rejected' };
-  if (!response.ok) return { kind: 'unreachable' };
-  try {
-    return { kind: 'ok', value: schema.parse(await response.json()) };
-  } catch {
-    return { kind: 'unreachable' };
-  }
+const searchOf = (query: Record<string, string>): string => {
+  const search = new URLSearchParams(query).toString();
+  return search.length > 0 ? `?${search}` : '';
 };
 
-export const createHqClient = (
-  fetchImpl: typeof fetch = fetch,
-): HqClientPort => ({
-  enroll: async ({ url, joinToken, name }) =>
-    replyOf(
-      await send(fetchImpl, `${url}${ENROLL_ROUTE}`, joinToken, { name }),
-      EnrollReplySchema,
-    ),
-  heartbeat: async ({ url, sessionToken, projects }) =>
-    replyOf(
-      await send(fetchImpl, `${url}${HEARTBEAT_ROUTE}`, sessionToken, {
-        projects,
-      }),
-      HeartbeatReplySchema,
-    ),
-  goneCell: async ({ url, sessionToken, cellId }) =>
-    replyOf(
-      await send(
-        fetchImpl,
-        `${url}${goneRouteOf(cellId)}`,
-        sessionToken,
-        undefined,
-      ),
-      GoneReplySchema,
-    ),
-});
+const waitMsOf = (body: unknown): number => {
+  const waitMs = (body as { waitMs?: unknown } | null)?.waitMs;
+  return typeof waitMs === 'number' && waitMs > 0 ? waitMs : 0;
+};
+
+export const createHqClient = ({
+  baseUrl,
+  fetchImpl = fetch,
+}: HqClientOptions): HqPort => {
+  const send = async (
+    url: string,
+    init: RequestInit,
+    timeoutMs: number = REQUEST_TIMEOUT_MS,
+  ): Promise<Response> => {
+    try {
+      return await fetchImpl(url, {
+        ...init,
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+    } catch {
+      throw new Unreachable(`cannot reach factory server at ${baseUrl}`);
+    }
+  };
+
+  return {
+    call: async (route, body, token) => {
+      // A claim long-polls for `waitMs` before the server answers, so its timeout must cover that wait.
+      const waitMs = waitMsOf(body);
+      const response = await send(
+        `${baseUrl}${route}`,
+        {
+          method: 'POST',
+          headers: {
+            authorization: `Bearer ${token}`,
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify(body),
+        },
+        REQUEST_TIMEOUT_MS + waitMs,
+      );
+      return mapReply(response.status, await readBody(response));
+    },
+    get: async (route, query, token) => {
+      const response = await send(`${baseUrl}${route}${searchOf(query)}`, {
+        method: 'GET',
+        headers: { authorization: `Bearer ${token}` },
+      });
+      return mapReply(response.status, await readBody(response));
+    },
+    remove: async (route, token) => {
+      const response = await send(`${baseUrl}${route}`, {
+        method: 'DELETE',
+        headers: { authorization: `Bearer ${token}` },
+      });
+      return mapReply(response.status, await readBody(response));
+    },
+    stream: async function* (route, query, token, signal) {
+      let response: Response;
+      try {
+        response = await fetchImpl(`${baseUrl}${route}${searchOf(query)}`, {
+          method: 'GET',
+          headers: {
+            authorization: `Bearer ${token}`,
+            accept: 'text/event-stream',
+          },
+          signal,
+        });
+      } catch {
+        if (signal.aborted) {
+          return;
+        }
+        throw new Unreachable(`cannot reach factory server at ${baseUrl}`);
+      }
+      if (!response.ok) {
+        mapReply(response.status, await readBody(response));
+      }
+      if (response.body === null) {
+        throw new Unreachable('server stream has no body');
+      }
+      try {
+        yield* readSseFrames(response.body);
+      } catch {
+        if (signal.aborted) {
+          return;
+        }
+        throw new Unreachable(`stream from ${baseUrl} dropped`);
+      }
+    },
+    probe: async () => {
+      try {
+        const response = await fetchImpl(baseUrl, {
+          method: 'GET',
+          signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
+        });
+        await response.body?.cancel();
+        return true;
+      } catch {
+        return false;
+      }
+    },
+  };
+};

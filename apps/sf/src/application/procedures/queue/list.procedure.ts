@@ -61,7 +61,7 @@ export const listQueue = define({ kind: 'supervisor' })(
   const projectId = await readProjectId(ctx, input.configPath);
   const secret = await readSecret(ctx);
   const plans = OrderPlansReplySchema.parse(
-    await ctx.server.get(ORDER_PLANS_ROUTE, { projectId }, secret),
+    await ctx.hq.get(ORDER_PLANS_ROUTE, { projectId }, secret),
   ).items;
   const planIdOf = input.plan
     ? plans.find((plan) => plan.slug === input.plan)?.planId
@@ -70,7 +70,7 @@ export const listQueue = define({ kind: 'supervisor' })(
     throw new ArgumentError(`no plan with slug ${input.plan}`);
   }
   const orders = WorkOrdersReplySchema.parse(
-    await ctx.server.get(
+    await ctx.hq.get(
       WORK_ORDERS_ROUTE,
       queryOf({
         projectId,

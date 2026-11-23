@@ -9,7 +9,7 @@ import {
 import { join } from 'node:path';
 import type { PidFilePort } from '../../application/ports/pid-file.port';
 import type { ProcessPort } from '../../application/ports/process.port';
-import { createProcessAdapter } from '../process/spawn-server';
+import { createProcessAdapter } from '../process/spawn';
 
 const PID_FILE_NAME = 'server.pid';
 const PID_MODE = 0o600;

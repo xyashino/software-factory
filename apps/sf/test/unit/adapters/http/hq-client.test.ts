@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Refused, Unreachable } from '../../../../src/application/core/errors';
-import { createServerClient } from '../../../../src/adapters/http/server-client';
+import { createHqClient } from '../../../../src/adapters/http/hq-client';
 
 const BASE_URL = 'http://factory.test';
 const TOKEN = 'secret-token-value';
@@ -18,13 +18,13 @@ const countingFetch = (impl: () => Promise<Response>) => {
   return { calls, fetchImpl };
 };
 
-describe('server client', () => {
+describe('hq client', () => {
   it('sends the bearer token and returns the parsed reply', async () => {
     // Arrange
     const { calls, fetchImpl } = countingFetch(async () =>
       Response.json({ done: true }),
     );
-    const client = createServerClient({ baseUrl: BASE_URL, fetchImpl });
+    const client = createHqClient({ baseUrl: BASE_URL, fetchImpl });
 
     // Act
     const value = await client.call('/api/v1/cells', {}, TOKEN);
@@ -42,7 +42,7 @@ describe('server client', () => {
     const { calls, fetchImpl } = countingFetch(async () => {
       throw new TypeError('fetch failed');
     });
-    const client = createServerClient({ baseUrl: BASE_URL, fetchImpl });
+    const client = createHqClient({ baseUrl: BASE_URL, fetchImpl });
 
     // Act
     const attempt = client.call('/api/v1/cells', {}, TOKEN);
@@ -60,7 +60,7 @@ describe('server client', () => {
         { status: 401 },
       ),
     );
-    const client = createServerClient({ baseUrl: BASE_URL, fetchImpl });
+    const client = createHqClient({ baseUrl: BASE_URL, fetchImpl });
 
     // Act
     const attempt = client.call('/api/v1/cells', {}, TOKEN);
@@ -75,7 +75,7 @@ describe('server client', () => {
     const { fetchImpl } = countingFetch(
       async () => new Response('not found', { status: 404 }),
     );
-    const client = createServerClient({ baseUrl: BASE_URL, fetchImpl });
+    const client = createHqClient({ baseUrl: BASE_URL, fetchImpl });
 
     // Act
     const answering = await client.probe();
@@ -89,7 +89,7 @@ describe('server client', () => {
     const { fetchImpl } = countingFetch(async () => {
       throw new TypeError('fetch failed');
     });
-    const client = createServerClient({ baseUrl: BASE_URL, fetchImpl });
+    const client = createHqClient({ baseUrl: BASE_URL, fetchImpl });
 
     // Act
     const answering = await client.probe();

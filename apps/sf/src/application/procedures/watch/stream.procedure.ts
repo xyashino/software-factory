@@ -49,7 +49,7 @@ export const streamTransitions = define({ kind: 'supervisor' })(
   while (!input.signal.aborted) {
     const seqBefore = lastSeq;
     try {
-      for await (const frame of ctx.server.stream(
+      for await (const frame of ctx.hq.stream(
         STREAM_ROUTE,
         { projectId, afterSeq: String(lastSeq) },
         secret,

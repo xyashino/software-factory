@@ -45,7 +45,7 @@ export const showWorkOrder = define({ kind: 'supervisor' })(
 )<WorkOrderDetail>(async (input, ctx) => {
   const secret = await readSecret(ctx);
   return ShowReplySchema.parse(
-    await ctx.server.get(
+    await ctx.hq.get(
       `${WORK_ORDERS_ROUTE}/${encodeURIComponent(input.orderId)}`,
       {},
       secret,

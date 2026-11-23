@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createServerToken } from '../../../src/application/procedures/server/token-create.procedure';
+import { createHqToken } from '../../../src/application/procedures/hq/token-create.procedure';
 import type { Access } from '../../../src/domain/access';
 import { createFakePorts, type FakeOptions } from '../../support/fake-ports';
 
@@ -35,7 +35,7 @@ const createWith = (
       },
     },
   };
-  const result = createServerToken.execute(request, {
+  const result = createHqToken.execute(request, {
     ...ports,
     token: SUPERVISOR,
     principal: SUPERVISOR,

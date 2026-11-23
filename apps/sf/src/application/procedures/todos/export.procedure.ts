@@ -31,7 +31,7 @@ export const exportTodos = define({ kind: 'supervisor' })(
   const projectId = await readProjectId(ctx, input.configPath);
   const secret = await readSecret(ctx);
   const reply = ExportReplySchema.parse(
-    await ctx.server.get(EXPORT_ROUTE, { projectId }, secret),
+    await ctx.hq.get(EXPORT_ROUTE, { projectId }, secret),
   );
   if (reply.projectId !== projectId) {
     throw new ArgumentError(

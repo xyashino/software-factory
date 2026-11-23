@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { startServer } from '../../../src/application/procedures/server/start.procedure';
+import { startHq } from '../../../src/application/procedures/hq/start.procedure';
 import { createFakePorts } from '../../support/fake-ports';
 
 const SUPERVISOR = { kind: 'supervisor' } as const;
@@ -15,7 +15,7 @@ const spawnedEnvFor = async (
       run: async () => ({ exitCode: 0, stdout: 'minted\n', stderr: '' }),
     },
   };
-  await startServer.execute(
+  await startHq.execute(
     {
       bin: '/usr/bin/bun',
       serverArgs: ['/repo/server.ts'],

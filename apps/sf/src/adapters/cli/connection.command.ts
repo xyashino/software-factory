@@ -4,7 +4,7 @@ import { buildContext } from '../../bootstrap/context';
 import { runWithoutToken } from '../../bootstrap/run';
 import { ArgumentError } from '../../application/core/errors';
 import { connectTarget } from '../../application/procedures/connection/connect.procedure';
-import { createServerClient } from '../http/server-client';
+import { createHqClient } from '../http/hq-client';
 import { printLine, reportFailure } from './output';
 
 const STDIN_FD = 0;
@@ -75,7 +75,7 @@ const runConnect = async (input: {
   const { url } = connectTarget.parse(input);
   const result = await runWithoutToken(connectTarget, input, () => ({
     ...buildContext(),
-    server: createServerClient({ baseUrl: url }),
+    hq: createHqClient({ baseUrl: url }),
   }));
   if (result.kind === 'ok') {
     const active = result.value.active ? ' (active)' : '';

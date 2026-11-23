@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { EXIT } from '../../src/domain/exit-codes';
-import { freePort, runFactoryCommand } from '../support/factory-daemon';
+import { freePort, runFactoryCommand } from '../support/factory-cli';
 
 const CLI_PATH = fileURLToPath(new URL('../../src/cli.ts', import.meta.url));
 const COMMAND_TIMEOUT_MS = 30_000;

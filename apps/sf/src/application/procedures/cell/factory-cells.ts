@@ -38,8 +38,7 @@ export const listFactoryProjects = define({ kind: 'supervisor' })(EmptySchema)<
   FactoryProject[]
 >(
   async (_input, ctx) =>
-    ProjectsReplySchema.parse(await ctx.factoryDaemon.get(SCALE_ROUTE))
-      .projects,
+    ProjectsReplySchema.parse(await ctx.factory.get(SCALE_ROUTE)).projects,
 );
 
 export const scaleFactoryCells = define({ kind: 'supervisor' })(ScaleSchema)<{
@@ -47,5 +46,5 @@ export const scaleFactoryCells = define({ kind: 'supervisor' })(ScaleSchema)<{
 }>(async (input, ctx) =>
   z
     .object({ projectId: z.string().min(1) })
-    .parse(await ctx.factoryDaemon.put(SCALE_ROUTE, input)),
+    .parse(await ctx.factory.put(SCALE_ROUTE, input)),
 );

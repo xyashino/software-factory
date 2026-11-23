@@ -5,7 +5,7 @@ import { renderTodo } from '../../../domain/todo/render-todo';
 import { Refused } from '../../core/errors';
 import { define } from '../../core/procedure';
 import { readProjectId, readSecret } from '../../core/repo-access';
-import type { ServerPort } from '../../ports/server.port';
+import type { HqPort } from '../../ports/hq.port';
 
 const IMPORT_ROUTE = '/api/v1/queue/import';
 const PAUSED = 'paused';
@@ -83,14 +83,12 @@ const sentMarkdown = (text: string, todo: Todo, paused: boolean): string =>
     : text;
 
 const sendBatch = async (
-  server: ServerPort,
+  hq: HqPort,
   body: unknown,
   secret: string,
 ): Promise<Batch> => {
   try {
-    return ImportReplySchema.parse(
-      await server.call(IMPORT_ROUTE, body, secret),
-    );
+    return ImportReplySchema.parse(await hq.call(IMPORT_ROUTE, body, secret));
   } catch (error) {
     if (error instanceof Refused) {
       const rejected = RejectedSchema.safeParse(error.details);
@@ -150,7 +148,7 @@ export const importTodos = define({ kind: 'supervisor' })(
   }
   const secret = await readSecret(ctx);
   const batch = await sendBatch(
-    ctx.server,
+    ctx.hq,
     {
       commandId: crypto.randomUUID(),
       projectId,
