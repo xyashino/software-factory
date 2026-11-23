@@ -1,7 +1,7 @@
 ---
 id: builder
 label: Builder
-rules: [rich-commit, decision-log, testing]
+rules: [coding, general, git, security, testing, typescript]
 skills: [evidence, caveman]
 artifacts:
   report: report.md
