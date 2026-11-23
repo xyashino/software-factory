@@ -2,7 +2,7 @@
 id: doctor
 label: Doctor
 verdict: true
-rules: [rich-commit, decision-log]
+rules: [coding, general, git, security, testing, typescript]
 skills: [evidence]
 artifacts:
   feedback: feedback.md

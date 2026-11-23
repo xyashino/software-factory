@@ -1,4 +1,3 @@
-# yaml-language-server: $schema=../schemas/line.schema.json
 name: fast
 description: Fast direct builder build with quality gate and direct delivery (for chores, docs, style)
 
