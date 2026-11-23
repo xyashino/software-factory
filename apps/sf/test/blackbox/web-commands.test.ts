@@ -178,7 +178,7 @@ describe('sf web start, status and stop', () => {
     await expect(fetch(webUrlOf(sandbox))).rejects.toThrow();
   });
 
-  it('exits unreachable and names sf server start when the server is down', async () => {
+  it('exits unreachable and names sf hq start when the server is down', async () => {
     // Arrange
     const serverDown = await createSandbox();
 
@@ -192,7 +192,7 @@ describe('sf web start, status and stop', () => {
 
     // Assert
     expect(result.status).toBe(3);
-    expect(result.stderr).toContain('sf server start');
+    expect(result.stderr).toContain('sf hq start');
     expect(existsSync(webPidFileOf(serverDown))).toBe(false);
   });
 });

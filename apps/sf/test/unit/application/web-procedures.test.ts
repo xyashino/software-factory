@@ -89,7 +89,7 @@ describe('web start', () => {
 
     // Assert
     await expect(start).rejects.toBeInstanceOf(Unreachable);
-    await expect(start).rejects.toThrow('sf server start');
+    await expect(start).rejects.toThrow('sf hq start');
   });
 
   it('passes the factory URL, project and data dir to the web process', async () => {

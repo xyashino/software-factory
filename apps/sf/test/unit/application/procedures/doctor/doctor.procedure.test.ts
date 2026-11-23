@@ -206,7 +206,7 @@ describe('sf doctor', () => {
     // Assert
     expect(findCheck(result, 'server')).toMatchObject({
       status: 'missing',
-      fix: 'start it with sf server start',
+      fix: 'start it with sf hq start',
     });
     expect(result.ok).toBe(false);
   });
@@ -232,7 +232,7 @@ describe('sf doctor', () => {
     // Assert
     expect(findCheck(result, 'token')).toMatchObject({
       status: 'missing',
-      fix: 'sf server token create --save --global',
+      fix: 'sf hq token admin create --save --global',
     });
     expect(result.ok).toBe(false);
   });

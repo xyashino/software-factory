@@ -168,12 +168,12 @@ export const defaultTargetNameOf = (url: string): string => {
 
 export const recoveryCommandOf = (url: string): string =>
   isLoopbackUrl(url)
-    ? 'sf server token create --save --global'
+    ? 'sf hq token admin create --save --global'
     : `sf connect ${url}`;
 
 export const tokenFixOf = (connection: Connection): string => {
   if (connection.tokenSource === SUPERVISOR_TOKEN_LABEL) {
-    return `rm ${SUPERVISOR_TOKEN_PATH} && sf server token create --save`;
+    return `rm ${SUPERVISOR_TOKEN_PATH} && sf hq token admin create --save`;
   }
   if (connection.tokenSource?.startsWith('env:')) {
     const name = connection.tokenSource.slice('env:'.length);

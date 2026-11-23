@@ -175,7 +175,7 @@ describe('recovery hints', () => {
     const command = recoveryCommandOf(url);
 
     // Assert
-    expect(command).toBe('sf server token create --save --global');
+    expect(command).toBe('sf hq token admin create --save --global');
   });
 
   it('suggests connecting again for a remote factory', () => {

@@ -180,7 +180,7 @@ const accessChecks = async (
         'server',
         'missing',
         `no factory server answers at ${url}`,
-        'start it with sf server start',
+        'start it with sf hq start',
       ),
       check('token', 'warn', 'token not checked, server unreachable'),
       check('project', 'warn', 'project not checked, server unreachable'),
