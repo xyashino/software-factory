@@ -56,8 +56,11 @@ describe('init', () => {
       '.factory/config.json',
       '.factory/lines/standard.yml',
       '.factory/lines/fast.yml',
+      '.factory/lines/feature.yml',
       '.factory/operators/builder.md',
       '.factory/operators/doctor.md',
+      '.factory/operators/planner.md',
+      '.factory/operators/mechanic.md',
       '.factory/templates/pr/body.md',
     ]);
     expect(JSON.parse(files[CONFIG])).toEqual({ project: 'widgets' });
