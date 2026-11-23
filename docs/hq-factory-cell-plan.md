@@ -122,7 +122,7 @@ Kill is immediate. Cleanup as above. No capacity cap. HQ shows count per Factory
 
 ## Code to remove
 
-`drain` and `force` signals, `leaveCell`, draining state, handover path, per-Cell token, `revoked` status and `sf cell revoke`, `pinned_cell_id`. Drain was fixed 2026-11-21 (ADR `20261121-175500`); this reverses it.
+Removed in `cell-drain-removal`: `drain` and `force` signals, `leaveCell`, draining state, handover path, per-Cell token, `revoked` status and `sf cell revoke`, `pinned_cell_id`. Drain was fixed 2026-11-21 (ADR `20261121-175500`); this reverses it.
 
 ## DB change
 

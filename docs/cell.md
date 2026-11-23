@@ -43,7 +43,7 @@ Cell supervision (`apps/sf/src/daemon/supervisor.ts`):
 - Cell id = `cell-` + 8 random hex, memory only, one per run, never reused. Names: `hostname`, `hostname-2`, … against live Cells.
 - Create: daemon checks `.factory/config.json` in the repo, takes the project from it, spawns `sf cell start --name <name>` with cwd = repo root and env `FACTORY_URL` (relay), `FACTORY_TOKEN` (local bearer for this Cell), `FACTORY_CELL_ID`, `CELL_LINES` (if set), `SF_FACTORY_PID` = daemon pid.
 - Kill: SIGTERM, wait 10 s, SIGKILL, wait until the pid is gone. Resolves only after exit. Then `DELETE` stops, and the daemon calls HQ `POST /api/v1/factories/cells/:id/gone` (failure ignored: HQ requeues the Job when its lease expires).
-- Relay (`apps/sf/src/daemon/relay.ts`): accepts only `claims`, `heartbeats`, `leave`, `jobs/:id/transitions`, `incidents/:id/resolve`. Forwards with the Factory credential and `x-cell-id`. A local bearer unknown or dead → `401`. HQ answers `401` → the daemon stops that Cell and returns `401`.
+- Relay (`apps/sf/src/daemon/relay.ts`): accepts only `claims`, `heartbeats`, `jobs/:id/transitions`, `incidents/:id/resolve`. Forwards with the Factory credential and `x-cell-id`. A local bearer unknown or dead → `401`. HQ answers `401` → the daemon stops that Cell and returns `401`.
 - Heartbeat to HQ every 10 s carries `projects: [{ projectId, desired, running }]` (display only).
 - Parent watch: each Cell checks once per second that its parent is still the daemon (`SF_FACTORY_PID`). If not, it aborts, and exits after a 1 s grace if a claim is still waiting. A `kill -9` of the daemon therefore takes its Cells down within about 2 s.
 - Self-fence: 45 s without an HQ answer → the daemon kills all Cells. HQ reaps a silent Factory after 60 s.
@@ -69,7 +69,6 @@ Cell supervision (`apps/sf/src/daemon/supervisor.ts`):
 5. Run Job station by station. Reply `nextJob` continues without re-claim. Details: [factory.md §3](./factory.md).
 6. Heartbeat every 10 s (`POST /relay/api/v1/cells/heartbeats`). Reply `signals` drive the loop:
    - `abort`, or 4 failed beats in a row → abort runner.
-   - `force` → stop now.
 7. With `SF_FACTORY_PID` set (started by the Factory daemon): exit when the parent changes.
 
 Timing constants live in `apps/sf/src/config.ts` (`HEARTBEAT_INTERVAL_MS`, `LEASE_TTL_MS`, `SELF_FENCE_MS`).
@@ -105,4 +104,3 @@ Timing constants live in `apps/sf/src/config.ts` (`HEARTBEAT_INTERVAL_MS`, `LEAS
 - Cell daemon started by hand has no Factory daemon to relay through. It refuses to start.
 - `sf setup --cell` and `sf cell create` need a running Factory daemon.
 - The Factory daemon does not start on boot. `sf service` does not manage it yet.
-- Drain (`drain` signal, `leave` route) is dead code. Removal is the next todo (`cell-drain-removal`).

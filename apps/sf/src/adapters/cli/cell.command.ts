@@ -33,8 +33,6 @@ import {
 import { promptSelect } from './prompt-select';
 
 const FACTORY_HEADERS = ['id', 'name', 'pid', 'repo'];
-const SUPERSEDED_LINE =
-  'cell left: the server had already moved its job, nothing handed over';
 const FORCED_STOP_LINE =
   'cell stopped by a second signal: exiting now, a runner may still be alive';
 const FORCED_STOP_EXIT = 130;
@@ -143,9 +141,6 @@ const runStart = async (
         signal: controller.signal,
       }),
     );
-    if (result.kind === 'ok' && result.value === 'superseded') {
-      printLine(SUPERSEDED_LINE);
-    }
     return reportFailure(result);
   } finally {
     clearInterval(watch);

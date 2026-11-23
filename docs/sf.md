@@ -100,7 +100,7 @@ apps/sf/
 │   │   │                           # process.port, operator-endpoint.port, token-store.port
 │   │   └── procedures/
 │   │       ├── server/             # start, stop, token-create
-│   │       ├── cell/               # start, claim-loop, run-job, leave, factory-cells
+│   │       ├── cell/               # start, claim-loop, run-job, factory-cells
 │   │       ├── todos/              # import, export
 │   │       ├── queue/              # list, actions
 │   │       ├── incidents/          # list, resolve
@@ -169,7 +169,7 @@ The Cell is the only process that talks to the server. Agents never do.
 
 - `sf cell stop <id>` kills the Cell process (SIGTERM, then SIGKILL) and only then tells HQ the
   Cell is gone. HQ requeues its Job at once, or when the lease expires if HQ is unreachable.
-- There is no drain and no revoke. A stopped Cell leaves no row in HQ.
+- There is no revoke. A stopped Cell leaves no row in HQ.
 
 ## 4. Operator endpoint
 
@@ -186,8 +186,7 @@ The Cell is the only process that talks to the server. Agents never do.
 
 - `sf server start` runs the server embedded in the `sf` binary, and writes a pid file. The discovery
   address comes from `FACTORY_URL` (default `http://127.0.0.1:7070`).
-- `sf server stop` signals only the server process, through its pid file. It does not stop, drain
-  or revoke Cells. See §8, decision 4.
+- `sf server stop` signals only the server process, through its pid file. It does not stop or revoke Cells. See §8, decision 4.
 - The supervisor token (`sf_sup_`) comes from `FACTORY_TOKEN`, `.factory-local/supervisor.token` (written by
   `sf server token create --save`) or `~/.config/factory/token`. It is never printed.
 - Every command maps to one endpoint from §1. No command reads the database directly.
@@ -230,9 +229,7 @@ Decided:
 
 Open:
 
-1. **Drain removal.** `leave` and the drain signal are dead code (HQ no longer has them). Removal is
-   the `cell-drain-removal` todo.
-2. **Operator verbs.** The verbs in [`operator.md`](./operator.md) §3 are the target. `answer`, `context`
+1. **Operator verbs.** The verbs in [`operator.md`](./operator.md) §3 are the target. `answer`, `context`
    and `tell` stay open, as in [`factory.md` §11.6](./factory.md).
 
 ## 9. Not in this plan

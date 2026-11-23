@@ -65,7 +65,6 @@ type ClaimBody = {
     targetBranch: string;
     payload: Record<string, unknown>;
   };
-  signals?: string[];
 };
 
 const claim = async (
@@ -195,7 +194,7 @@ describe('cell claims', () => {
     });
 
     expect(status).toBe(200);
-    expect(body).toEqual({ code: 200, job: null, signals: [] });
+    expect(body).toEqual({ code: 200, job: null });
   });
 
   it('does not hand a cell work from another project', async () => {
@@ -245,7 +244,7 @@ describe('cell claims', () => {
 
     const { body } = await claim(app, CELL_A);
 
-    expect(body).toEqual({ code: 200, job: null, signals: [] });
+    expect(body).toEqual({ code: 200, job: null });
   });
 
   it('refuses a claim that names no cell', async () => {
@@ -291,7 +290,7 @@ describe('cell claims', () => {
     });
 
     expect(status).toBe(200);
-    expect(body).toEqual({ code: 200, job: null, signals: [] });
+    expect(body).toEqual({ code: 200, job: null });
   });
 
   it('wakes a parked idle claim as soon as a queue import adds work', async () => {
@@ -330,7 +329,7 @@ describe('cell claims', () => {
     await Promise.all(parked);
 
     expect(Date.now() - started).toBeLessThan(PROMPT_MS);
-    expect(overflow.body).toEqual({ code: 200, job: null, signals: [] });
+    expect(overflow.body).toEqual({ code: 200, job: null });
   });
 
   it('re-queues the order of a silent factory once its lease expires', async () => {
