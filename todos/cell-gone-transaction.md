@@ -16,7 +16,7 @@ This todo is one step of a redesign of how the software factory runs work. You d
 
 | Target name | Meaning | Name in code today |
 | --- | --- | --- |
-| HQ | External server: state, queue, projects, work orders, jobs, leases | "Factory": `apps/factory`, package `@repo/factory`, contracts `@repo/factory-contracts` |
+| HQ | External server: state, queue, projects, work orders, jobs, leases | "HQ": `apps/hq`, package `@repo/hq`, contracts `@repo/factory-contracts` |
 | Factory | Local daemon, one per PC. Only holder of the HQ credential. Spawns, supervises and kills Cells | Does not exist. Closest: cell-server `apps/cell` (`@repo/cell`, port 7071, own SQLite) and local slots (`slots.json`) |
 | Cell | Disposable worker: one process, one job at a time, runs inside a repo | Cell daemon: `sf cell start`, code in `apps/sf/src/application/procedures/cell/*` |
 | Line | Pipeline template `.factory/lines/<name>.yml` (stations in order) | same |
@@ -52,9 +52,9 @@ sf / web (operator) --> HQ <-- Factory (local PC) <-- Cells (loopback only)
 
 - Bun + turbo monorepo. Package manager is bun (the root `CLAUDE.md` still says pnpm; it is generated and stale). Verify with `bun run ci:verify`.
 - `apps/sf`: CLI and Cell daemon. Hexagonal: `application/procedures/*` use ports from `application/ports/*`; adapters in `adapters/{cli,fs,git,http,process,runners}`; domain in `domain/*`; tests in `test/{unit,blackbox}`.
-- `apps/factory` (HQ): Hono routes in `adapters/hono/routes`, procedures in `application/procedures`, drizzle schema in `db/schema`, migrations in `db/migrations`, SQLite via `@repo/bun-sqlite-kit` (`immediateTx` = `BEGIN IMMEDIATE`).
+- `apps/hq` (HQ): Hono routes in `adapters/hono/routes`, procedures in `application/procedures`, drizzle schema in `db/schema`, migrations in `db/migrations`, SQLite via `@repo/bun-sqlite-kit` (`immediateTx` = `BEGIN IMMEDIATE`).
 - Wire contracts (zod): `packages/factory-contracts`, `packages/cell-contracts`.
-- Constants: `apps/sf/src/config.ts` and `apps/factory/src/config.ts` (`CLAIM_WAIT_MS` 25 s, `HEARTBEAT_INTERVAL_MS` 10 s, `LEASE_TTL_MS` 60 s, `SELF_FENCE_MS` 45 s, `MAX_WORKTREE_RESETS` 2).
+- Constants: `apps/sf/src/config.ts` and `apps/hq/src/config.ts` (`CLAIM_WAIT_MS` 25 s, `HEARTBEAT_INTERVAL_MS` 10 s, `LEASE_TTL_MS` 60 s, `SELF_FENCE_MS` 45 s, `MAX_WORKTREE_RESETS` 2).
 - A Cell works in `<repo>/.worktrees/<orderSlug>` (one worktree per order, branch `factory/<slug>`, created with `git worktree add`). Per-step files live in `<worktree>/.cell/` and are git-excluded: `.cell/worktree.json`, `.cell/task.md`, `.cell/<stationId>/state.json`, `prompt`, feedback, logs.
 
 ### Repo rules you must follow
@@ -72,9 +72,9 @@ When a Cell is gone (stopped, crashed, or its Factory lost HQ) HQ deletes it and
 
 ## Current state (verified)
 
-- `reapExpiredLeases` (`apps/factory/src/application/procedures/cells/reap-expired-leases.ts`) runs in claim and heartbeat transactions. It sends every job in status `claimed` or `running` whose `leaseExpiresAt <= now` through `loseJob`, then marks silent Cells `offline` (`lastHeartbeatAt + LEASE_TTL_MS <= now`, status in online, busy, draining). Nothing is deleted.
-- `loseJob` (`apps/factory/src/application/orders/job-loss.ts`): sets the job `lost` with `finishedAt`; if `order.activeJobId === job.jobId` sets the order `queued`, clears `activeJobId` and `activeCellId` and does `epoch + 1`, and logs the transition; re-queues a plan branch job; releases the Cell (`activeJobId` null, status `busy` to `online`). It does NOT clear `work_orders.pinned_cell_id`.
-- Claim treats an order pinned to another Cell as not claimable unless that Cell is unreachable (`pinnedCellUnavailable` from `isUnreachable(status)`, `claim-job.procedure.ts:159-162`; rule in `apps/factory/src/domain/cells`). Pin is set at claim time (`:317`).
+- `reapExpiredLeases` (`apps/hq/src/application/procedures/cells/reap-expired-leases.ts`) runs in claim and heartbeat transactions. It sends every job in status `claimed` or `running` whose `leaseExpiresAt <= now` through `loseJob`, then marks silent Cells `offline` (`lastHeartbeatAt + LEASE_TTL_MS <= now`, status in online, busy, draining). Nothing is deleted.
+- `loseJob` (`apps/hq/src/application/orders/job-loss.ts`): sets the job `lost` with `finishedAt`; if `order.activeJobId === job.jobId` sets the order `queued`, clears `activeJobId` and `activeCellId` and does `epoch + 1`, and logs the transition; re-queues a plan branch job; releases the Cell (`activeJobId` null, status `busy` to `online`). It does NOT clear `work_orders.pinned_cell_id`.
+- Claim treats an order pinned to another Cell as not claimable unless that Cell is unreachable (`pinnedCellUnavailable` from `isUnreachable(status)`, `claim-job.procedure.ts:159-162`; rule in `apps/hq/src/domain/cells`). Pin is set at claim time (`:317`).
 - Foreign keys to `cells.cell_id`: `jobs.cell_id` (`db/schema/jobs.ts:83`), `work_orders.pinned_cell_id` (`db/schema/orders.ts:78`), `tokens.cell_id` (`db/schema/tokens.ts:26`). `work_orders.active_cell_id` has no FK.
 - `lastHeartbeatAt` is set only by `hello` and `heartbeat` (`hello-cell.procedure.ts:98`, `heartbeat-cell.procedure.ts:86`). An idle Cell in the claim long-poll is not refreshed, so deleting "silent" Cells by this field would delete idle Cells.
 - The Factory daemon (`factory-daemon-sf`) can kill a Cell and confirm exit; it knows its Cells (`factory-relay`). HQ knows each Cell's owning Factory (`cells.factory_id`) and each Factory's `lastSeenAt` (`factory-hq-link`).
@@ -101,7 +101,7 @@ A Cell deletion never increments `worktreeResets`.
 
 ## Scope
 
-- **Target**: `apps/factory` (procedure, route, reaper, migration), `packages/factory-contracts`, `apps/sf` (daemon calls `gone` after kill)
+- **Target**: `apps/hq` (procedure, route, reaper, migration), `packages/factory-contracts`, `apps/sf` (daemon calls `gone` after kill)
 - **Classification**: `Domain logic`
 - **Out of scope**: dropping the `cells` table and random ids (`cell-identity-slim`), removing drain/leave (`cell-drain-removal`), scale command.
 
@@ -121,7 +121,7 @@ A Cell deletion never increments `worktreeResets`.
 1. Migration for the FK changes.
 2. `goneCell`, the route, reaper changes, claim refreshes activity.
 3. Daemon: after confirmed kill, call `gone`; on HQ failure rely on the reaper.
-4. Tests (`apps/factory/test/blackbox`, `apps/sf/test/blackbox`): gone Cell mid-job leaves the order `queued`, claimable by another Cell, `epoch` bumped, Cell row and tokens gone, job history keeps the Cell id; calling `gone` twice is safe; a result from the old `epoch` is rejected; silent Factory deletes all its Cells at the lease expiry; an idle Cell in a long-poll is not deleted; `worktreeResets` unchanged.
+4. Tests (`apps/hq/test/blackbox`, `apps/sf/test/blackbox`): gone Cell mid-job leaves the order `queued`, claimable by another Cell, `epoch` bumped, Cell row and tokens gone, job history keeps the Cell id; calling `gone` twice is safe; a result from the old `epoch` is rejected; silent Factory deletes all its Cells at the lease expiry; an idle Cell in a long-poll is not deleted; `worktreeResets` unchanged.
 
 ## Acceptance criteria
 

@@ -1,6 +1,6 @@
 # software-factory
 
-Monorepo hosting **SoftwareFactory** ([docs](docs/README.md): [architecture](docs/architecture.md), [sf](docs/sf.md), [factory](docs/factory.md)), an autonomous AI harness that turns
+Monorepo hosting **SoftwareFactory** ([docs](docs/README.md): [architecture](docs/architecture.md), [sf](docs/sf.md), [hq](docs/hq.md)), an autonomous AI harness that turns
 `todos/*.md` work orders into verified Pull Requests via declarative production lines.
 
 ## Main idea
@@ -16,7 +16,7 @@ The system is modeled as an automated software factory:
 | Package                      | Purpose                                                         |
 | ---------------------------- | --------------------------------------------------------------- |
 | `apps/sf`                    | `sf`: the single CLI binary (server, Cell, Supervisor commands, local Factory daemon) |
-| `apps/factory`               | Factory HTTP server and storage                                 |
+| `apps/hq`                    | HQ HTTP server and storage                                      |
 | `apps/web-demo`              | Web UI served by `sf web start`                                 |
 | `packages/nitpick`           | Rules/skills engine; generates `.agents/` from `.nitpick/`      |
 | `packages/prompt`            | Prompt building blocks                                          |

@@ -16,7 +16,7 @@ This todo is one step of a redesign of how the software factory runs work. You d
 
 | Target name | Meaning | Name in code today |
 | --- | --- | --- |
-| HQ | External server: state, queue, projects, work orders, jobs, leases | "Factory": `apps/factory`, package `@repo/factory`, contracts `@repo/factory-contracts` |
+| HQ | External server: state, queue, projects, work orders, jobs, leases | "HQ": `apps/hq`, package `@repo/hq`, contracts `@repo/factory-contracts` |
 | Factory | Local daemon, one per PC. Only holder of the HQ credential. Spawns, supervises and kills Cells | Does not exist. Closest: cell-server `apps/cell` (`@repo/cell`, port 7071, own SQLite) and local slots (`slots.json`) |
 | Cell | Disposable worker: one process, one job at a time, runs inside a repo | Cell daemon: `sf cell start`, code in `apps/sf/src/application/procedures/cell/*` |
 | Line | Pipeline template `.factory/lines/<name>.yml` (stations in order) | same |
@@ -52,9 +52,9 @@ sf / web (operator) --> HQ <-- Factory (local PC) <-- Cells (loopback only)
 
 - Bun + turbo monorepo. Package manager is bun (the root `CLAUDE.md` still says pnpm; it is generated and stale). Verify with `bun run ci:verify`.
 - `apps/sf`: CLI and Cell daemon. Hexagonal: `application/procedures/*` use ports from `application/ports/*`; adapters in `adapters/{cli,fs,git,http,process,runners}`; domain in `domain/*`; tests in `test/{unit,blackbox}`.
-- `apps/factory` (HQ): Hono routes in `adapters/hono/routes`, procedures in `application/procedures`, drizzle schema in `db/schema`, migrations in `db/migrations`, SQLite via `@repo/bun-sqlite-kit` (`immediateTx` = `BEGIN IMMEDIATE`).
+- `apps/hq` (HQ): Hono routes in `adapters/hono/routes`, procedures in `application/procedures`, drizzle schema in `db/schema`, migrations in `db/migrations`, SQLite via `@repo/bun-sqlite-kit` (`immediateTx` = `BEGIN IMMEDIATE`).
 - Wire contracts (zod): `packages/factory-contracts`, `packages/cell-contracts`.
-- Constants: `apps/sf/src/config.ts` and `apps/factory/src/config.ts` (`CLAIM_WAIT_MS` 25 s, `HEARTBEAT_INTERVAL_MS` 10 s, `LEASE_TTL_MS` 60 s, `SELF_FENCE_MS` 45 s, `MAX_WORKTREE_RESETS` 2).
+- Constants: `apps/sf/src/config.ts` and `apps/hq/src/config.ts` (`CLAIM_WAIT_MS` 25 s, `HEARTBEAT_INTERVAL_MS` 10 s, `LEASE_TTL_MS` 60 s, `SELF_FENCE_MS` 45 s, `MAX_WORKTREE_RESETS` 2).
 - A Cell works in `<repo>/.worktrees/<orderSlug>` (one worktree per order, branch `factory/<slug>`, created with `git worktree add`). Per-step files live in `<worktree>/.cell/` and are git-excluded: `.cell/worktree.json`, `.cell/task.md`, `.cell/<stationId>/state.json`, `prompt`, feedback, logs.
 
 ### Repo rules you must follow
@@ -72,12 +72,12 @@ HQ stops storing Cells. A Cell is identified by a random id the Factory picks pe
 
 ## Current state (verified)
 
-- Table `cells` (`apps/factory/src/db/schema/cells.ts`): `cellId` (PK, `projectId` + name via `scopedId`), `name`, `projectId` (FK), `allowedLinesJson`, `status` (`online|busy|draining|left|offline|revoked`), `runnersJson`, `localWorktreesJson`, `activeJobId`, `drainForce`, `lastHeartbeatAt`, `createdAt`, `revokedAt`.
-- Files that read or write it (`apps/factory/src`): `application/orders/job-loss.ts`, `application/orders/order-writes.ts`, `application/procedures/cells/{claim-job,drain,enroll-cell,heartbeat-cell,hello-cell,leave,list-cells,reap-expired-leases,revoke-cell}.procedure.ts`, `application/procedures/jobs/transition-job.procedure.ts`, `db/client.ts`, schema files `jobs.ts`, `orders.ts`, `tokens.ts`.
+- Table `cells` (`apps/hq/src/db/schema/cells.ts`): `cellId` (PK, `projectId` + name via `scopedId`), `name`, `projectId` (FK), `allowedLinesJson`, `status` (`online|busy|draining|left|offline|revoked`), `runnersJson`, `localWorktreesJson`, `activeJobId`, `drainForce`, `lastHeartbeatAt`, `createdAt`, `revokedAt`.
+- Files that read or write it (`apps/hq/src`): `application/orders/job-loss.ts`, `application/orders/order-writes.ts`, `application/procedures/cells/{claim-job,drain,enroll-cell,heartbeat-cell,hello-cell,leave,list-cells,reap-expired-leases,revoke-cell}.procedure.ts`, `application/procedures/jobs/transition-job.procedure.ts`, `db/client.ts`, schema files `jobs.ts`, `orders.ts`, `tokens.ts`.
 - Foreign keys to `cells.cell_id`: `jobs.cell_id`, `work_orders.pinned_cell_id`, `tokens.cell_id`. After `cell-gone-transaction`, `jobs.cell_id` is plain text and `pinned_cell_id` is cleared on delete.
-- Claim (`claim-job.procedure.ts`) loads the Cell row for `projectId`, `allowedLines`, `localWorktrees` and builds `ClaimCell`; `selectClaimable` (in `apps/factory/src/domain/cells/`) rejects an order pinned to another Cell that is still reachable (`pinnedCellId`, `pinnedCellUnavailable`) and prefers warm orders (`localWorktrees`). The pin is written at claim time (`:317`). The Cell always sends `localWorktrees: []` in hello today, so the warm preference is effectively unused.
+- Claim (`claim-job.procedure.ts`) loads the Cell row for `projectId`, `allowedLines`, `localWorktrees` and builds `ClaimCell`; `selectClaimable` (in `apps/hq/src/domain/cells/`) rejects an order pinned to another Cell that is still reachable (`pinnedCellId`, `pinnedCellUnavailable`) and prefers warm orders (`localWorktrees`). The pin is written at claim time (`:317`). The Cell always sends `localWorktrees: []` in hello today, so the warm preference is effectively unused.
 - Auth: token kinds `cell_join` and `cell_session` with scopes `cell:enroll` and `cell:worker`; `ctx.principal.cellId` is the Cell identity in claim, heartbeat, hello, transitions.
-- HQ routes: `apps/factory/src/adapters/hono/routes/cells.route.ts`: `/enroll`, `/hello`, `/claims`, `/heartbeats`, `/leave`, `/:id/drain`, `GET /`. `hello` returns `resumedJob` for a re-connecting Cell (`resumeActiveJob`).
+- HQ routes: `apps/hq/src/adapters/hono/routes/cells.route.ts`: `/enroll`, `/hello`, `/claims`, `/heartbeats`, `/leave`, `/:id/drain`, `GET /`. `hello` returns `resumedJob` for a re-connecting Cell (`resumeActiveJob`).
 - `sf cell revoke` removes a Cell on HQ (`application/procedures/cell/revoke.procedure.ts`); `sf cell list` merges HQ Cells with local pids.
 - After the earlier todos: the daemon relays all Cell traffic, enrolls Cells itself and tells HQ when a Cell is gone; HQ knows Factories (`factories`, `lastSeenAt`, token kind `factory_session`).
 
@@ -98,7 +98,7 @@ sf:
 
 ## Scope
 
-- **Target**: `apps/factory` (schema, migration, claim, routes, reaper, tokens), `packages/factory-contracts`, `apps/sf` (relay, Cell start, list)
+- **Target**: `apps/hq` (schema, migration, claim, routes, reaper, tokens), `packages/factory-contracts`, `apps/sf` (relay, Cell start, list)
 - **Classification**: `Data model`
 - **Out of scope**: drain/leave removal (next todo; this todo may leave dead drain code only if the table is already gone, otherwise coordinate), web UI redesign (fix only what breaks).
 
@@ -118,7 +118,7 @@ sf:
 1. Add `factories.projects_json`, `jobs.claimed_by_cell_id`, `jobs.claimed_by_factory_id`, `work_orders.pinned_factory_id`; accept `factory:worker` plus `x-cell-id` on Cell routes next to the old auth; claim takes attributes from the body.
 2. Switch the relay and the Cell to the new contract; stop using enroll, hello and session files.
 3. Switch the pin rule to Factories; port `selectClaimable` tests.
-4. Remove `cells` table, token kinds, scopes, routes, `sf cell revoke`, and fix docs (`docs/factory.md`, `docs/cell.md`, `docs/sf.md`).
+4. Remove `cells` table, token kinds, scopes, routes, `sf cell revoke`, and fix docs (`docs/hq.md`, `docs/cell.md`, `docs/sf.md`).
 5. Tests (black box): two Cells of one Factory both claim; an order pinned to a live Factory is not claimable by another Factory; a silent Factory unpins its orders and requeues its jobs; old job history keeps `claimed_by_cell_id`; no route accepts a Cell token; no `cells` table.
 
 ## Acceptance criteria

@@ -34,7 +34,7 @@ sf todos import && sf queue
 sf web stop && sf hq stop
 ```
 
-Source of truth for server behaviour: [`factory.md`](./factory.md),
+Source of truth for server behaviour: [`hq.md`](./hq.md),
 especially §3 (Cell lifecycle) and §11 (agent reporting). Operator CLI spec:
 [`operator.md`](./operator.md).
 
@@ -67,7 +67,7 @@ especially §3 (Cell lifecycle) and §11 (agent reporting). Operator CLI spec:
 | operator | `sf operator read \| incident` | Agent in a Mechanic job | `incidents/{id}/resolve` through its Cell |
 
 Open verbs (`answer`, `context` for the Operator, `tell`) follow the decisions in
-[`factory.md` §11.6](./factory.md).
+[`hq.md` §11.6](./hq.md).
 
 ### Deprecated names
 
@@ -145,7 +145,7 @@ apps/sf/
 │   │   ├── git/                    # worktree, checkpoint commit, push
 │   │   ├── process/                # spawn factory server, spawn runner
 │   │   ├── runners/                # claude, codex, cursor, antigravity, opencode, copilot (one file each)
-│   │   ├── operator-endpoint/      # loopback listener per job (Hono, like `apps/factory`)
+│   │   ├── operator-endpoint/      # loopback listener per job (Hono, like `apps/hq`)
 │   │   └── memory/                 # clock, in-memory waiters for tests
 │   └── bootstrap/
 │       ├── context.ts              # builds the port set for supervisor, cell, or operator mode
@@ -157,7 +157,7 @@ apps/sf/
     └── unit/                       # domain and contracts only
 ```
 
-Rules carried over from `apps/factory`:
+Rules carried over from `apps/hq`:
 
 - `domain/` imports nothing from `application/`, `adapters/` or `bootstrap/`.
 - `application/procedures/` imports ports, never adapters. An adapter is picked in `bootstrap/`.
@@ -206,7 +206,7 @@ The Cell is the only process that talks to HQ. Agents never do.
 ## 4. Operator endpoint
 
 - The Cell opens `127.0.0.1` on an OS-assigned port when a Job starts, and closes it when the Job
-  ends ([`factory.md`](./factory.md) §11.2).
+  ends ([`hq.md`](./hq.md) §11.2).
 - The token is random, per Job, held only in Cell memory.
 - The Cell maps the token to `{ jobId, role, incidentId?, epoch }`, and refuses verbs the role
   cannot use.
@@ -251,7 +251,7 @@ Decided:
    cut-over. The new one is cleaner, so nothing is migrated from the old code.
 4. **`hq stop` does not stop Cells.** It stops only the HQ server process. Cells keep running and
    retry their requests with the same `commandId`. If HQ stays down past the self-fence window
-   (45 s), a Cell aborts its runner, and its Job is lost once the lease ends ([`factory.md`](./factory.md) §3.7).
+   (45 s), a Cell aborts its runner, and its Job is lost once the lease ends ([`hq.md`](./hq.md) §3.7).
    `sf hq start` brings HQ back, and Cells resume.
 5. **Cell token storage.** Not important for now. Keep the simplest option that works.
 6. **Runners in v2.0.** All six ship: `claude`, `codex`, `cursor`, `antigravity`, `opencode`, `copilot`. They match
@@ -260,7 +260,7 @@ Decided:
 Open:
 
 1. **Operator verbs.** The verbs in [`operator.md`](./operator.md) §3 are the target. `answer`, `context`
-   and `tell` stay open, as in [`factory.md` §11.6](./factory.md).
+   and `tell` stay open, as in [`hq.md` §11.6](./hq.md).
 
 ## 9. Not in this plan
 

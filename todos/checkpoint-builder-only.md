@@ -16,7 +16,7 @@ This todo is one step of a redesign of how the software factory runs work. You d
 
 | Target name | Meaning | Name in code today |
 | --- | --- | --- |
-| HQ | External server: state, queue, projects, work orders, jobs, leases | "Factory": `apps/factory`, package `@repo/factory`, contracts `@repo/factory-contracts` |
+| HQ | External server: state, queue, projects, work orders, jobs, leases | "HQ": `apps/hq`, package `@repo/hq`, contracts `@repo/factory-contracts` |
 | Factory | Local daemon, one per PC. Only holder of the HQ credential. Spawns, supervises and kills Cells | Does not exist. Closest: cell-server `apps/cell` (`@repo/cell`, port 7071, own SQLite) and local slots (`slots.json`) |
 | Cell | Disposable worker: one process, one job at a time, runs inside a repo | Cell daemon: `sf cell start`, code in `apps/sf/src/application/procedures/cell/*` |
 | Line | Pipeline template `.factory/lines/<name>.yml` (stations in order) | same |
@@ -52,9 +52,9 @@ sf / web (operator) --> HQ <-- Factory (local PC) <-- Cells (loopback only)
 
 - Bun + turbo monorepo. Package manager is bun (the root `CLAUDE.md` still says pnpm; it is generated and stale). Verify with `bun run ci:verify`.
 - `apps/sf`: CLI and Cell daemon. Hexagonal: `application/procedures/*` use ports from `application/ports/*`; adapters in `adapters/{cli,fs,git,http,process,runners}`; domain in `domain/*`; tests in `test/{unit,blackbox}`.
-- `apps/factory` (HQ): Hono routes in `adapters/hono/routes`, procedures in `application/procedures`, drizzle schema in `db/schema`, migrations in `db/migrations`, SQLite via `@repo/bun-sqlite-kit` (`immediateTx` = `BEGIN IMMEDIATE`).
+- `apps/hq` (HQ): Hono routes in `adapters/hono/routes`, procedures in `application/procedures`, drizzle schema in `db/schema`, migrations in `db/migrations`, SQLite via `@repo/bun-sqlite-kit` (`immediateTx` = `BEGIN IMMEDIATE`).
 - Wire contracts (zod): `packages/factory-contracts`, `packages/cell-contracts`.
-- Constants: `apps/sf/src/config.ts` and `apps/factory/src/config.ts` (`CLAIM_WAIT_MS` 25 s, `HEARTBEAT_INTERVAL_MS` 10 s, `LEASE_TTL_MS` 60 s, `SELF_FENCE_MS` 45 s, `MAX_WORKTREE_RESETS` 2).
+- Constants: `apps/sf/src/config.ts` and `apps/hq/src/config.ts` (`CLAIM_WAIT_MS` 25 s, `HEARTBEAT_INTERVAL_MS` 10 s, `LEASE_TTL_MS` 60 s, `SELF_FENCE_MS` 45 s, `MAX_WORKTREE_RESETS` 2).
 - A Cell works in `<repo>/.worktrees/<orderSlug>` (one worktree per order, branch `factory/<slug>`, created with `git worktree add`). Per-step files live in `<worktree>/.cell/` and are git-excluded: `.cell/worktree.json`, `.cell/task.md`, `.cell/<stationId>/state.json`, `prompt`, feedback, logs.
 
 ### Repo rules you must follow
@@ -73,7 +73,7 @@ Enforce the hard rule: only the builder edits code and commits, once per build a
 ## Current state (verified)
 
 - `checkpointStation` (`apps/sf/src/application/procedures/cell/checkpoint.procedure.ts:45-70`) runs after a station completes (call site `run-job.procedure.ts:517-525`). Logic: `reported = checkpointPaths(producedFiles)` (`domain/git/checkpoint-policy.ts`; it strips `.cell/` paths). If `reported` is empty and `git status` is clean it returns `undefined`. Otherwise it commits `reported` (or the whole worktree `.` when nothing was reported) with the message from `.cell/<stationId>/commit.txt` or `chore(factory): checkpoint <slug>`, fails if changes are left over, pushes to branch `factory/<slug>`, returns `headSha`.
-- The caller uses `checkpoint result ?? git.headSha(worktree)`: HQ requires a `commitSha` on every `complete` (`requireCommitSha`, `apps/factory/src/application/procedures/jobs/transition-job.procedure.ts:196`). HQ stores it as step `resultCommitSha`, job `lastCommitSha` and order `headCommitSha` (`:272`, `:301`, `:612`).
+- The caller uses `checkpoint result ?? git.headSha(worktree)`: HQ requires a `commitSha` on every `complete` (`requireCommitSha`, `apps/hq/src/application/procedures/jobs/transition-job.procedure.ts:196`). HQ stores it as step `resultCommitSha`, job `lastCommitSha` and order `headCommitSha` (`:272`, `:301`, `:612`).
 - So today any station that leaves a dirty tree (a read-only operator that wrote a stray file, or an inspection such as `quality-gate` running `ci:verify` that touches files) gets committed and pushed as a checkpoint. A clean read-only station already commits nothing.
 - Line files (`.factory/lines/*.yml`): stations have `kind` (operator, inspection, deliver), operators have `permission: read|write` (default write; the planner in `feature.yml` is also `write`), and a `deliver:` block `commit: build.commit`, `report: build.report`, `to: new-pr`. In `apps/sf/src/domain/line/parse-line.ts` the `deliver` block is `z.looseObject({ requireAdr })`, so `commit` is not validated today.
 - `GitPort` (`application/ports/git.port.ts`) has `worktreeAdd`, `worktreeRemove`, `commit`, `push`, `headSha`, `status`, `isClean`, `excludeLocally`, `clone`, `originUrl`, `currentBranch`. No `reset`, no `clean`.

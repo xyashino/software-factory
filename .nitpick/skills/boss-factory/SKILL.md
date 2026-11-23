@@ -41,7 +41,7 @@ Run only on a disposable factory host (no prod secrets, no sudo). Personal/sensi
 
 ## Hard rules
 
-- **STRICT CLI OPERATOR ONLY**: Never read, edit, or grep files in `apps/sf/src` or `apps/factory/src`. You do not need to know how the factory is implemented. If unsure about arguments, run `sf <command> --help`.
+- **STRICT CLI OPERATOR ONLY**: Never read, edit, or grep files in `apps/sf/src` or `apps/hq/src`. You do not need to know how the factory is implemented. If unsure about arguments, run `sf <command> --help`.
 - Boss has NO business knowledge. Do not evaluate application code or domain correctness yourself.
 - One order at a time unless the queue says otherwise.
 - Never read/print secret files (`.env*`, `~/config/secrets.env`, keys, `.factory-local/*.token`). Needed secret missing -> escalate, don't hunt.
