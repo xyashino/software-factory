@@ -1,5 +1,8 @@
 import { Refused } from '../application/core/errors';
 import type { ClockPort } from '../application/ports/clock.port';
+import { HEARTBEAT_INTERVAL_MS } from '../config';
+import { joinPath } from '../domain/common/path';
+import { worktreeRelOf } from '../domain/git/worktree-path';
 import type { CellRecord } from './supervisor';
 
 const BACKOFF_BASE_MS = 1_000;
@@ -52,6 +55,8 @@ export interface ScaleDeps {
   gate: () => string | null;
   spawn: (spec: CellSpec) => Promise<CellRecord>;
   stop: (cellId: string) => Promise<void>;
+  exists: (path: string) => Promise<boolean>;
+  lose: (cellId: string, worktree: string) => Promise<void>;
 }
 
 export interface Scale {
@@ -90,6 +95,9 @@ export const createScale = (deps: ScaleDeps): Scale => {
   const owned = new Map<string, Owned>();
   const activity = new Map<string, Activity>();
   const stopping = new Set<string>();
+  // The order whose worktree a Cell was seen with; a worktree missing before its first sighting is not a loss.
+  const confirmed = new Map<string, string>();
+  let lastCheckAt: number | null = null;
 
   const cellsOf = (projectId: string): string[] =>
     [...owned]
@@ -120,6 +128,7 @@ export const createScale = (deps: ScaleDeps): Scale => {
       }
       owned.delete(cellId);
       activity.delete(cellId);
+      confirmed.delete(cellId);
       recordExit(cell.projectId);
     }
   };
@@ -136,14 +145,47 @@ export const createScale = (deps: ScaleDeps): Scale => {
     owned.set(record.cellId, { projectId, record });
   };
 
-  const stopOne = async (cellId: string): Promise<void> => {
+  const retire = async (
+    cellId: string,
+    end: () => Promise<void>,
+  ): Promise<void> => {
     stopping.add(cellId);
     try {
-      await deps.stop(cellId);
+      await end();
       owned.delete(cellId);
       activity.delete(cellId);
+      confirmed.delete(cellId);
     } finally {
       stopping.delete(cellId);
+    }
+  };
+
+  const stopOne = (cellId: string): Promise<void> =>
+    retire(cellId, () => deps.stop(cellId));
+
+  const checkWorktrees = async (): Promise<void> => {
+    for (const [cellId, cell] of [...owned]) {
+      const current = activity.get(cellId);
+      if (
+        stopping.has(cellId) ||
+        current?.state !== 'running' ||
+        current.orderId === undefined
+      ) {
+        continue;
+      }
+      const worktree = worktreeRelOf(current.orderId);
+      if (await deps.exists(joinPath(cell.record.repoRoot, worktree))) {
+        confirmed.set(cellId, current.orderId);
+        continue;
+      }
+      if (confirmed.get(cellId) !== current.orderId) {
+        continue;
+      }
+      try {
+        await retire(cellId, () => deps.lose(cellId, worktree));
+      } catch {
+        // The Cell stays owned when its kill fails; the next check retries it.
+      }
     }
   };
 
@@ -232,10 +274,14 @@ export const createScale = (deps: ScaleDeps): Scale => {
 
   const tick = async (): Promise<void> => {
     reap();
+    const now = deps.clock.now();
+    if (lastCheckAt === null || now - lastCheckAt >= HEARTBEAT_INTERVAL_MS) {
+      lastCheckAt = now;
+      await checkWorktrees();
+    }
     if (deps.gate() !== null) {
       return;
     }
-    const now = deps.clock.now();
     for (const [projectId, project] of [...projects]) {
       if (project.crashLoop || now < project.nextSpawnAt) {
         continue;
