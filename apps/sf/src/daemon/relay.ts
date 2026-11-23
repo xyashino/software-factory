@@ -27,6 +27,7 @@ type EnrollBody = z.infer<typeof EnrollBodySchema>;
 type EnrollReply = z.infer<typeof EnrollReplySchema>;
 
 interface HqSession {
+  cellId: string;
   sessionToken: string;
   enroll: EnrollBody;
 }
@@ -53,6 +54,7 @@ export interface RelayDeps {
 
 export interface Relay {
   issue(cellId: string): string;
+  hqCellIdOf(cellId: string): string | null;
   handle(request: Request): Promise<Response>;
 }
 
@@ -172,7 +174,11 @@ export const createRelay = (deps: RelayDeps): Relay => {
     if (!parsed.success) {
       return { kind: 'failed', response: unavailable() };
     }
-    live.grant.hq = { sessionToken: parsed.data.sessionToken, enroll };
+    live.grant.hq = {
+      cellId: parsed.data.cellId,
+      sessionToken: parsed.data.sessionToken,
+      enroll,
+    };
     return { kind: 'ok', reply: parsed.data };
   };
 
@@ -261,6 +267,9 @@ export const createRelay = (deps: RelayDeps): Relay => {
       grants.set(token, { cellId, name: randomName(), hq: null });
       return token;
     },
+    hqCellIdOf: (cellId) =>
+      [...grants.values()].find((grant) => grant.cellId === cellId)?.hq
+        ?.cellId ?? null,
     handle: async (request) => {
       const url = new URL(request.url);
       const path = url.pathname.slice(RELAY_PATH.length);

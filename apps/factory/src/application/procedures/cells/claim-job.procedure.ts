@@ -372,6 +372,10 @@ const attemptClaim = (ctx: AuthenticatedContext, cellId: CellId) => {
   const leaseExpiresAt = addMs(now, LEASE_TTL_MS);
   const outcome = immediateTx(ctx.db, (tx) => {
     const log: TransitionLog = [];
+    tx.update(cells)
+      .set({ lastHeartbeatAt: now })
+      .where(eq(cells.cellId, cellId))
+      .run();
     reapExpiredLeases(tx, now, log);
     const cell = findCell(tx, cellId);
     if (cell === undefined) throw new NotFound(`Cell ${cellId} not found`);

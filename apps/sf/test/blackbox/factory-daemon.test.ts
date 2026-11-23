@@ -33,6 +33,7 @@ const HELLO_ROUTE = '/api/v1/cells/hello';
 const CLAIMS_ROUTE = '/api/v1/cells/claims';
 const TOKENS_ROUTE = '/api/v1/tokens';
 const HEARTBEAT_ROUTE = '/api/v1/factories/heartbeat';
+const GONE_ROUTE = /^\/api\/v1\/factories\/cells\/([^/]+)\/gone$/;
 const FACTORY_ID = 'factory-stub';
 const FACTORY_SESSION = 'sf_factory_session_stub';
 const START_WAIT_MS = 20_000;
@@ -43,13 +44,20 @@ const sandboxes: Sandbox[] = [];
 let factory: Server;
 let factoryUrl: string;
 let sessionCount = 0;
+let goneFailing = false;
 const hqCalls: HqCall[] = [];
+const goneCalls: GoneCall[] = [];
 const helloRejections = new Map<string, number>();
 
 interface HqCall {
   route: 'enroll' | 'hello';
   projectId: string;
   name: string | undefined;
+  bearer: string;
+}
+
+interface GoneCall {
+  cellId: string;
   bearer: string;
 }
 
@@ -263,6 +271,24 @@ const answerHello = async (
   replyJson(200, { code: 200, cellId: body.projectId }, response);
 };
 
+const answerGone = (
+  request: IncomingMessage,
+  response: ServerResponse,
+): void => {
+  const cellId = decodeURIComponent(
+    GONE_ROUTE.exec(request.url ?? '')?.[1] ?? '',
+  );
+  goneCalls.push({ cellId, bearer: bearerOf(request) });
+  if (goneFailing) {
+    replyJson(503, { code: 503, message: 'HQ down' }, response);
+    return;
+  }
+  replyJson(200, { code: 200, cellId }, response);
+};
+
+const goneCallsOf = (projectId: string): GoneCall[] =>
+  goneCalls.filter((call) => call.cellId.startsWith(`${projectId}:`));
+
 const projectOf = (projectId: string) => ({
   projectId,
   repoUrl: `https://example.test/${projectId}.git`,
@@ -348,6 +374,10 @@ beforeAll(async () => {
       setTimeout(() => {
         replyJson(200, { code: 200, job: null, signals: [] }, response);
       }, 1_000);
+      return;
+    }
+    if (request.method === 'POST' && GONE_ROUTE.test(request.url ?? '')) {
+      answerGone(request, response);
       return;
     }
     replyJson(404, { code: 404, message: 'not stubbed' }, response);
@@ -620,6 +650,74 @@ describe('factory daemon lifecycle', () => {
     expect(result.status).toBe(EXIT.argument);
     expect(result.stderr).toContain('name is only allowed with count 1');
   });
+});
+
+describe('factory gone calls', () => {
+  it(
+    'stop calls HQ gone for the cell after its process is dead',
+    async () => {
+      // Arrange
+      const { env, repo, project } = await sandbox();
+      await startDaemon(env);
+      const created = await runSf(env, [
+        'cell',
+        'create',
+        '--repo',
+        repo,
+        '--json',
+      ]);
+      const [cell] = JSON.parse(created.stdout) as CreatedCell[];
+      await waitFor(() => hqCallsOf(project, 'enroll').length >= 1);
+      const hqName = hqCallsOf(project, 'enroll')[0]?.name ?? '';
+
+      // Act
+      const stopped = await runSf(env, ['cell', 'stop', cell?.cellId ?? '']);
+
+      // Assert
+      expect(stopped.stdout.trim()).toBe(`cell ${cell?.cellId} stopped`);
+      expect(await waitFor(() => !isAlive(cell?.pid ?? 0))).toBe(true);
+      expect(goneCallsOf(project)).toEqual([
+        { cellId: `${project}:${hqName}`, bearer: FACTORY_SESSION },
+      ]);
+      await stopDaemon(env);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    'stop still ends the cell when HQ refuses the gone call',
+    async () => {
+      // Arrange
+      const { env, repo, project } = await sandbox();
+      await startDaemon(env);
+      const created = await runSf(env, [
+        'cell',
+        'create',
+        '--repo',
+        repo,
+        '--json',
+      ]);
+      const [cell] = JSON.parse(created.stdout) as CreatedCell[];
+      await waitFor(() => hqCallsOf(project, 'enroll').length >= 1);
+
+      // Act
+      goneFailing = true;
+      let stopped: CliResult;
+      try {
+        stopped = await runSf(env, ['cell', 'stop', cell?.cellId ?? '']);
+      } finally {
+        goneFailing = false;
+      }
+
+      // Assert
+      expect(stopped.status).toBe(EXIT.ok);
+      expect(stopped.stdout.trim()).toBe(`cell ${cell?.cellId} stopped`);
+      expect(await waitFor(() => !isAlive(cell?.pid ?? 0))).toBe(true);
+      expect(goneCallsOf(project)).toHaveLength(1);
+      await stopDaemon(env);
+    },
+    TEST_TIMEOUT_MS,
+  );
 });
 
 describe('factory relay', () => {

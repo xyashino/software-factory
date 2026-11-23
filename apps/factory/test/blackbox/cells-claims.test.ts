@@ -357,7 +357,7 @@ describe('cell claims', () => {
     expect(overflow.body).toEqual({ code: 200, job: null, signals: [] });
   });
 
-  it('takes a silent cell offline and re-queues its order when the lease expires', async () => {
+  it('deletes a silent cell and re-queues its order when the lease expires', async () => {
     const { app, clock, db } = setup();
     const lostToken = await enrollCell(app, 'cell-a');
     await helloCell(app, lostToken);
@@ -369,7 +369,7 @@ describe('cell claims', () => {
 
     expect(lost.body.job?.epoch).toBe(1);
     expect(jobRow(db, lost.body.job?.jobId ?? '')?.status).toBe('lost');
-    expect(cellRow(db, 'proj-1:cell-a')?.status).toBe('offline');
+    expect(cellRow(db, 'proj-1:cell-a')).toBeUndefined();
     expect(body.job).toMatchObject({ orderId: 'order-1', epoch: 3 });
     expect(orderState(db, 'order-1')).toMatchObject({
       state: 'running',

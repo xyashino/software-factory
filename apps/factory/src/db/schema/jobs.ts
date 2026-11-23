@@ -15,7 +15,6 @@ import type {
   StepId,
 } from '../../domain/common/brand';
 import { jsonColumn } from '@repo/bun-sqlite-kit/columns';
-import { cells } from './cells';
 import { incidents } from './incidents';
 import { orderPlans } from './plans';
 import { orderSteps, workOrders } from './orders';
@@ -80,9 +79,7 @@ export const jobs = sqliteTable(
       }[]
     >('expected_prior_steps_json').notNull(),
     payloadJson: jsonColumn<Record<string, unknown>>('payload_json').notNull(),
-    cellId: text('cell_id')
-      .$type<CellId>()
-      .references(() => cells.cellId),
+    cellId: text('cell_id').$type<CellId>(),
     epoch: integer('epoch').notNull().default(0),
     leaseExpiresAt: integer('lease_expires_at'),
     resultCommitSha: text('result_commit_sha'),
