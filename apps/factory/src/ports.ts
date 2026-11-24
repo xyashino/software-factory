@@ -47,6 +47,7 @@ export interface PidFilePort {
 
 export interface RepoConfigPort {
   projectIdOf(repoRoot: string): Promise<string>;
+  repoUrlOf(repoRoot: string): Promise<string>;
 }
 
 export interface FactoryPorts {

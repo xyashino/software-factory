@@ -565,18 +565,17 @@ describe('factory daemon lifecycle', () => {
   );
 
   it(
-    'cell scale up is refused while the factory is not connected',
+    'cell scale up runs locally while the factory is not connected',
     async () => {
       // Arrange
       const { env, repo } = await sandbox({ connected: false });
       await startDaemon(env);
 
       // Act
-      const result = await runSf(env, ['cell', 'scale', '1', '--repo', repo]);
+      const cells = await scaleTo(env, repo, 1);
 
       // Assert
-      expect(result.status).toBe(EXIT.refused);
-      expect(result.stderr).toContain('factory not connected');
+      expect(cells).toHaveLength(1);
     },
     TEST_TIMEOUT_MS,
   );

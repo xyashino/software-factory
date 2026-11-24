@@ -7,6 +7,7 @@ import type { DaemonStatus } from '@repo/factory-contracts/status.contract';
 import { RELAY_PATH, type Relay } from './relay';
 import { ArgumentError, Refused, Unreachable } from './errors';
 import type { HqLink } from './hq-link';
+import type { LocalEngine } from './local-engine';
 import type { RepoConfigPort } from './ports';
 import type { Scaler } from './scaler';
 import type { Supervisor } from './supervisor';
@@ -18,6 +19,10 @@ const CONFLICT = 409;
 const UNREACHABLE = 503;
 const INTERNAL = 500;
 const ACTIVITY_ROUTE = /^\/cells\/([^/]+)\/activity$/;
+const API_PREFIX = '/api/v1/';
+const CONNECTED_REFUSAL =
+  'factory is connected to HQ; disconnect or omit --local';
+const LOCAL_BASE_BRANCH = 'main';
 
 export interface RouteDeps {
   repoConfig: RepoConfigPort;
@@ -25,6 +30,8 @@ export interface RouteDeps {
   scaler: Scaler;
   hq: HqLink;
   relay: Relay;
+  local: Pick<LocalEngine, 'fetch' | 'ensureProject'>;
+  connected: () => boolean;
   identity: { url: string; factoryId: string } | null;
 }
 
@@ -73,6 +80,13 @@ const scaleOf = async (
 ): Promise<Response> => {
   const input = parseOr(ScaleRequestBodySchema, await readJson(request));
   const projectId = await deps.repoConfig.projectIdOf(input.repoRoot);
+  if (!deps.connected()) {
+    await deps.local.ensureProject({
+      projectId,
+      repoUrl: await deps.repoConfig.repoUrlOf(input.repoRoot),
+      defaultBaseBranch: LOCAL_BASE_BRANCH,
+    });
+  }
   await deps.scaler.set({
     repoRoot: input.repoRoot,
     projectId,
@@ -94,11 +108,21 @@ const activityOf = async (
   return reply(OK, { cellId });
 };
 
+const apiOf = (deps: RouteDeps, request: Request): Promise<Response> => {
+  if (deps.connected()) {
+    return Promise.resolve(failure(CONFLICT, 'refused', CONNECTED_REFUSAL));
+  }
+  return deps.local.fetch(request);
+};
+
 const handle = async (deps: RouteDeps, request: Request): Promise<Response> => {
   const { pathname } = new URL(request.url);
   const activityId = ACTIVITY_ROUTE.exec(pathname)?.[1];
   if (pathname === RELAY_PATH || pathname.startsWith(`${RELAY_PATH}/`)) {
     return deps.relay.handle(request);
+  }
+  if (pathname.startsWith(API_PREFIX)) {
+    return apiOf(deps, request);
   }
   if (request.method === 'GET' && pathname === '/health') {
     return reply(OK, { pid: process.pid });
