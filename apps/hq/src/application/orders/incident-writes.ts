@@ -1,7 +1,3 @@
-import type { DbTx } from '../../db/client';
-import { incidents } from '../../db/schema/incidents';
-import { jobs } from '../../db/schema/jobs';
-import { orderSteps } from '../../db/schema/orders';
 import {
   asIncidentId,
   asJobId,
@@ -13,27 +9,29 @@ import {
   type StepId,
 } from '../../domain/common/brand';
 import type {
+  IncidentReason,
   IncidentSnapshot,
   WorkOrderSnapshot,
 } from '../../domain/incidents/incident-rules';
 import type { OrderStep } from '../../domain/orders/job-transitions';
-import type { WorkOrderRow } from './order-views';
-
-type IncidentInsert = typeof incidents.$inferInsert;
-type IncidentRow = typeof incidents.$inferSelect;
-type StepRow = typeof orderSteps.$inferSelect;
+import type {
+  IncidentRow,
+  OrderStepRow,
+  StorageWriteTx,
+  WorkOrderRow,
+} from '../ports/storage.port';
 
 export type OpenIncident = {
   projectId: ProjectId;
   orderId: OrderId;
   failedStepId: StepId | null;
   failedJobId: JobId | null;
-  reason: IncidentInsert['reason'];
+  reason: IncidentReason;
   detail: string;
   triage: Pick<IncidentSnapshot, 'status' | 'triageOwner'>;
 };
 
-export const toOrderSteps = (rows: readonly StepRow[]): OrderStep[] =>
+export const toOrderSteps = (rows: readonly OrderStepRow[]): OrderStep[] =>
   rows.map((row) => ({
     stepIndex: row.stepIndex,
     stationId: row.stationId,
@@ -46,7 +44,7 @@ export const toOrderSteps = (rows: readonly StepRow[]): OrderStep[] =>
 
 export const toWorkOrderSnapshot = (
   order: WorkOrderRow,
-  steps: readonly StepRow[],
+  steps: readonly OrderStepRow[],
 ): WorkOrderSnapshot => ({
   state: order.state,
   currentStepIndex: order.currentStepIndex,
@@ -60,7 +58,7 @@ export const toWorkOrderSnapshot = (
 
 export const toIncidentSnapshot = (
   incident: IncidentRow,
-  steps: readonly StepRow[],
+  steps: readonly OrderStepRow[],
 ): IncidentSnapshot => ({
   status: incident.status,
   triageOwner: incident.triageOwner,
@@ -71,26 +69,24 @@ export const toIncidentSnapshot = (
 });
 
 export const openIncident = (
-  tx: DbTx,
+  tx: StorageWriteTx,
   input: OpenIncident,
   now: number,
 ): IncidentId => {
   const { triage, ...row } = input;
   const incidentId = asIncidentId(`inc-${crypto.randomUUID()}`);
-  tx.insert(incidents)
-    .values({
-      ...row,
-      incidentId,
-      status: triage.status,
-      triageOwner: triage.triageOwner,
-      createdAt: now,
-    })
-    .run();
+  tx.incidents.insert({
+    ...row,
+    incidentId,
+    status: triage.status,
+    triageOwner: triage.triageOwner,
+    createdAt: now,
+  });
   return incidentId;
 };
 
 export const insertMechanicJob = (
-  tx: DbTx,
+  tx: StorageWriteTx,
   order: WorkOrderRow,
   input: {
     incidentId: IncidentId;
@@ -101,27 +97,25 @@ export const insertMechanicJob = (
   },
   now: number,
 ): void => {
-  tx.insert(jobs)
-    .values({
-      jobId: asJobId(`job-${crypto.randomUUID()}`),
-      projectId: order.projectId,
-      orderId: order.orderId,
-      incidentId: input.incidentId,
-      kind: 'mechanic',
-      workspaceMode: 'reuse',
-      status: 'ready',
-      repoUrl: input.repoUrl,
-      baseBranch: order.baseBranch,
-      baseCommitSha: order.baseCommitSha,
-      targetBranch: order.branch,
-      expectedPriorStepsJson: [],
-      payloadJson: {
-        lineName: order.lineName,
-        incident: { reason: input.reason, detail: input.detail },
-      },
-      claimedByFactoryId: input.factoryId,
-      epoch: 0,
-      createdAt: now,
-    })
-    .run();
+  tx.jobs.insert({
+    jobId: asJobId(`job-${crypto.randomUUID()}`),
+    projectId: order.projectId,
+    orderId: order.orderId,
+    incidentId: input.incidentId,
+    kind: 'mechanic',
+    workspaceMode: 'reuse',
+    status: 'ready',
+    repoUrl: input.repoUrl,
+    baseBranch: order.baseBranch,
+    baseCommitSha: order.baseCommitSha,
+    targetBranch: order.branch,
+    expectedPriorStepsJson: [],
+    payloadJson: {
+      lineName: order.lineName,
+      incident: { reason: input.reason, detail: input.detail },
+    },
+    claimedByFactoryId: input.factoryId,
+    epoch: 0,
+    createdAt: now,
+  });
 };

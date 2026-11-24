@@ -1,6 +1,4 @@
-import type { incidents } from '../../db/schema/incidents';
-
-type IncidentRow = typeof incidents.$inferSelect;
+import type { IncidentRow } from '../ports/storage.port';
 
 export const toIncidentDto = (row: IncidentRow) => ({
   incidentId: row.incidentId,

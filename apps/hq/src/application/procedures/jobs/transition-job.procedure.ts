@@ -1,11 +1,5 @@
-import { and, asc, eq, isNull, type SQL } from 'drizzle-orm';
 import type { z } from 'zod';
 import { LEASE_TTL_MS } from '../../../config';
-import { immediateTx, type DbTx } from '../../../db/client';
-import { jobs } from '../../../db/schema/jobs';
-import { orderSteps, workOrders } from '../../../db/schema/orders';
-import { orderPlans } from '../../../db/schema/plans';
-import { stateTransitions } from '../../../db/schema/transitions';
 import { transitionJobContract } from '@repo/hq-contracts/jobs.contract';
 import {
   asCommandId,
@@ -37,6 +31,15 @@ import {
   StaleLeaseEpoch,
 } from '../../core/error-handling';
 import { scopedProcedure } from '../../core/procedure';
+import type {
+  JobRow,
+  OrderFilter,
+  OrderStepInsert,
+  OrderStepRow,
+  StorageWriteTx,
+  WorkOrderInsert,
+  WorkOrderRow,
+} from '../../ports/storage.port';
 import {
   flushTransitions,
   orderTransition,
@@ -48,7 +51,6 @@ import {
   updateWorkOrder,
   type Actor,
   type TransitionLog,
-  type WorkOrderInsert,
 } from '../../orders/order-writes';
 import {
   insertMechanicJob,
@@ -58,7 +60,6 @@ import {
   type OpenIncident,
 } from '../../orders/incident-writes';
 import { toClaimedJob } from '../cells/claim-job.procedure';
-import { factories } from '../../../db/schema/factories';
 import {
   cellIdOf,
   factoryIdOf,
@@ -72,10 +73,6 @@ const JOB_KIND_BY_STEP_KIND = {
   deliver: 'deliver',
 } as const;
 
-type JobRow = typeof jobs.$inferSelect;
-type StepRow = typeof orderSteps.$inferSelect;
-type StepInsert = typeof orderSteps.$inferInsert;
-type WorkOrderRow = typeof workOrders.$inferSelect;
 type TransitionBody = z.infer<typeof transitionJobContract.in.body>;
 type TransitionResponse = z.infer<(typeof transitionJobContract.out)[200]>;
 type ClaimedJob = ReturnType<typeof toClaimedJob>;
@@ -155,26 +152,18 @@ const lineUnavailableResponse = (
   nextJob,
 });
 
-const requireJob = (tx: DbTx, jobId: string): JobRow => {
-  const row = tx
-    .select()
-    .from(jobs)
-    .where(eq(jobs.jobId, asJobId(jobId)))
-    .get();
+const requireJob = (tx: StorageWriteTx, jobId: string): JobRow => {
+  const row = tx.jobs.find(asJobId(jobId));
   if (row === undefined) throw new NotFound(`Job ${jobId} not found`);
   return row;
 };
 
 const findReplay = (
-  tx: DbTx,
+  tx: StorageWriteTx,
   commandId: CommandId,
   jobId: string,
 ): TransitionResponse | undefined => {
-  const prior = tx
-    .select()
-    .from(stateTransitions)
-    .where(eq(stateTransitions.commandId, commandId))
-    .get();
+  const prior = tx.transitions.findByCommand(commandId);
   if (prior === undefined) return undefined;
   if (prior.entityId !== jobId)
     throw new Conflict(`commandId ${commandId} belongs to another transition`);
@@ -208,76 +197,61 @@ const orderIdOf = (job: JobRow): OrderId => {
   return job.orderId;
 };
 
-const stepsOf = (tx: DbTx, orderId: OrderId): StepRow[] =>
-  tx
-    .select()
-    .from(orderSteps)
-    .where(eq(orderSteps.orderId, orderId))
-    .orderBy(asc(orderSteps.stepIndex))
-    .all();
-
-const stepAt = (steps: readonly StepRow[], stepIndex: number): StepRow => {
+const stepAt = (
+  steps: readonly OrderStepRow[],
+  stepIndex: number,
+): OrderStepRow => {
   const step = steps.find((candidate) => candidate.stepIndex === stepIndex);
   if (step === undefined)
     throw new UnprocessableTransition(`no step at index ${stepIndex}`);
   return step;
 };
 
-const boundStep = (tx: DbTx, job: JobRow): StepRow => {
+const boundStep = (tx: StorageWriteTx, job: JobRow): OrderStepRow => {
   if (job.stepId === null)
     throw new Conflict(`Job ${job.jobId} has no bound step`);
-  const row = tx
-    .select()
-    .from(orderSteps)
-    .where(eq(orderSteps.stepId, job.stepId))
-    .get();
+  const row = tx.steps.find(job.stepId);
   if (row === undefined) throw new NotFound(`Step ${job.stepId} not found`);
   return row;
 };
 
 const insertSteps = (
-  tx: DbTx,
+  tx: StorageWriteTx,
   orderId: OrderId,
   steps: readonly OrderStep[],
   now: number,
 ): void => {
-  tx.insert(orderSteps)
-    .values(
-      steps.map((step): StepInsert => ({
-        stepId: asStepId(`step-${crypto.randomUUID()}`),
-        orderId,
-        stepIndex: step.stepIndex,
-        stationId: step.stationId,
-        kind: step.kind,
-        runner: null,
-        configJson: {},
-        requiredFilesJson: step.requiredFiles,
-        producedFilesJson: [],
-        state: 'pending',
-        attemptsUsed: 0,
-        maxAttempts: step.maxAttempts,
-        onFailRetryStationId: step.onFailRetryStationId,
-        updatedAt: now,
-      })),
-    )
-    .run();
+  tx.steps.insertMany(
+    steps.map((step): OrderStepInsert => ({
+      stepId: asStepId(`step-${crypto.randomUUID()}`),
+      orderId,
+      stepIndex: step.stepIndex,
+      stationId: step.stationId,
+      kind: step.kind,
+      configJson: {},
+      requiredFilesJson: step.requiredFiles,
+      producedFilesJson: [],
+      state: 'pending',
+      attemptsUsed: 0,
+      maxAttempts: step.maxAttempts,
+      onFailRetryStationId: step.onFailRetryStationId,
+      updatedAt: now,
+    })),
+  );
 };
 
 const finishJob = (
-  tx: DbTx,
+  tx: StorageWriteTx,
   job: JobRow,
   completion: Completion,
   log: TransitionLog,
 ): void => {
-  tx.update(jobs)
-    .set({
-      status: 'passed',
-      resultCommitSha: completion.commitSha,
-      resultJson: completion.output,
-      finishedAt: completion.now,
-    })
-    .where(eq(jobs.jobId, job.jobId))
-    .run();
+  tx.jobs.update(job.jobId, {
+    status: 'passed',
+    resultCommitSha: completion.commitSha,
+    resultJson: completion.output,
+    finishedAt: completion.now,
+  });
   log.push(
     orderTransition({
       projectId: completion.projectId,
@@ -292,21 +266,18 @@ const finishJob = (
 };
 
 const finishStep = (
-  tx: DbTx,
-  step: StepRow,
+  tx: StorageWriteTx,
+  step: OrderStepRow,
   completion: Completion,
   log: TransitionLog,
 ): void => {
-  tx.update(orderSteps)
-    .set({
-      state: 'passed',
-      producedFilesJson: completion.producedFiles,
-      lastCommitSha: completion.commitSha,
-      lastOutputJson: completion.output,
-      updatedAt: completion.now,
-    })
-    .where(eq(orderSteps.stepId, step.stepId))
-    .run();
+  tx.steps.update(step.stepId, {
+    state: 'passed',
+    producedFilesJson: completion.producedFiles,
+    lastCommitSha: completion.commitSha,
+    lastOutputJson: completion.output,
+    updatedAt: completion.now,
+  });
   log.push(
     orderTransition({
       projectId: completion.projectId,
@@ -321,17 +292,13 @@ const finishStep = (
 };
 
 const unlockWaitingOrders = (
-  tx: DbTx,
-  condition: SQL | undefined,
+  tx: StorageWriteTx,
+  filter: OrderFilter,
   patch: Partial<WorkOrderInsert>,
   completion: Completion,
   log: TransitionLog,
 ): void => {
-  const rows = tx
-    .select()
-    .from(workOrders)
-    .where(and(condition, eq(workOrders.state, 'waiting_parent')))
-    .all();
+  const rows = tx.orders.list({ ...filter, state: 'waiting_parent' });
   for (const row of rows) {
     updateWorkOrder(tx, row, { ...patch, state: 'queued' }, completion.now);
     log.push(
@@ -349,7 +316,7 @@ const unlockWaitingOrders = (
 };
 
 const startJob = (
-  tx: DbTx,
+  tx: StorageWriteTx,
   job: JobRow,
   cellId: CellId,
   body: StartInput,
@@ -359,10 +326,7 @@ const startJob = (
   requireStatus(job, 'claimed');
   const actor = cellActor(cellId);
   if (job.kind === 'plan_branch' || job.kind === 'mechanic') {
-    tx.update(jobs)
-      .set({ status: 'running' })
-      .where(eq(jobs.jobId, job.jobId))
-      .run();
+    tx.jobs.update(job.jobId, { status: 'running' });
     log.push(
       orderTransition({
         projectId: job.projectId,
@@ -378,7 +342,7 @@ const startJob = (
   }
 
   const order = requireOrder(tx, orderIdOf(job));
-  let steps = stepsOf(tx, order.orderId);
+  let steps = tx.steps.listByOrder(order.orderId);
   if (steps.length === 0 && order.currentStepIndex === 0) {
     insertSteps(
       tx,
@@ -386,14 +350,11 @@ const startJob = (
       materializeLineSnapshot(body.lineSnapshot),
       now,
     );
-    steps = stepsOf(tx, order.orderId);
+    steps = tx.steps.listByOrder(order.orderId);
   }
   const step = stepAt(steps, order.currentStepIndex);
 
-  tx.update(jobs)
-    .set({ status: 'running', stepId: step.stepId })
-    .where(eq(jobs.jobId, job.jobId))
-    .run();
+  tx.jobs.update(job.jobId, { status: 'running', stepId: step.stepId });
   log.push(
     orderTransition({
       projectId: job.projectId,
@@ -405,10 +366,7 @@ const startJob = (
       at: now,
     }),
   );
-  tx.update(orderSteps)
-    .set({ state: 'running', updatedAt: now })
-    .where(eq(orderSteps.stepId, step.stepId))
-    .run();
+  tx.steps.update(step.stepId, { state: 'running', updatedAt: now });
   log.push(
     orderTransition({
       projectId: job.projectId,
@@ -424,7 +382,7 @@ const startJob = (
 };
 
 const completePlanBranch = (
-  tx: DbTx,
+  tx: StorageWriteTx,
   job: JobRow,
   completion: Completion,
   log: TransitionLog,
@@ -433,15 +391,12 @@ const completePlanBranch = (
     throw new Conflict(`Job ${job.jobId} has no order plan`);
   const plan = requirePlan(tx, job.planId);
   finishJob(tx, job, completion, log);
-  tx.update(orderPlans)
-    .set({
-      state: 'active',
-      branchCommitSha: completion.commitSha,
-      version: plan.version + 1,
-      updatedAt: completion.now,
-    })
-    .where(eq(orderPlans.planId, plan.planId))
-    .run();
+  tx.plans.update(plan.planId, {
+    state: 'active',
+    branchCommitSha: completion.commitSha,
+    version: plan.version + 1,
+    updatedAt: completion.now,
+  });
   log.push(
     orderTransition({
       projectId: plan.projectId,
@@ -455,7 +410,7 @@ const completePlanBranch = (
   );
   unlockWaitingOrders(
     tx,
-    and(eq(workOrders.planId, plan.planId), isNull(workOrders.parentOrderId)),
+    { planId: plan.planId, parentOrderId: null },
     {},
     completion,
     log,
@@ -464,7 +419,7 @@ const completePlanBranch = (
 };
 
 const deliverOrder = (
-  tx: DbTx,
+  tx: StorageWriteTx,
   order: WorkOrderRow,
   completion: Completion,
   log: TransitionLog,
@@ -494,7 +449,7 @@ const deliverOrder = (
   );
   unlockWaitingOrders(
     tx,
-    eq(workOrders.parentOrderId, order.orderId),
+    { parentOrderId: order.orderId },
     { baseCommitSha: completion.commitSha },
     completion,
     log,
@@ -503,21 +458,18 @@ const deliverOrder = (
 };
 
 const issueJob = (
-  tx: DbTx,
+  tx: StorageWriteTx,
   job: JobRow,
   order: WorkOrderRow,
-  steps: readonly StepRow[],
-  next: StepRow,
+  steps: readonly OrderStepRow[],
+  next: OrderStepRow,
   input: IssueInput,
 ): ClaimedJob => {
   const { cellId, now, log } = input;
   const epoch = order.epoch + 1;
   const leaseExpiresAt = addMs(now, LEASE_TTL_MS);
 
-  tx.update(orderSteps)
-    .set({ state: 'claimed', updatedAt: now })
-    .where(eq(orderSteps.stepId, next.stepId))
-    .run();
+  tx.steps.update(next.stepId, { state: 'claimed', updatedAt: now });
   log.push(
     orderTransition({
       projectId: job.projectId,
@@ -529,39 +481,35 @@ const issueJob = (
       at: now,
     }),
   );
-  const nextJob = tx
-    .insert(jobs)
-    .values({
-      jobId: asJobId(`job-${crypto.randomUUID()}`),
-      projectId: job.projectId,
-      orderId: order.orderId,
-      stepId: next.stepId,
-      lineName: order.lineName,
-      kind: JOB_KIND_BY_STEP_KIND[next.kind],
-      workspaceMode: input.workspaceMode,
-      status: 'claimed',
-      repoUrl: job.repoUrl,
-      baseBranch: job.baseBranch,
-      baseCommitSha: job.baseCommitSha,
-      targetBranch: job.targetBranch,
-      expectedPriorStepsJson: steps
-        .filter((prior) => prior.stepIndex < next.stepIndex)
-        .map((prior) => ({
-          stepId: prior.stepId,
-          stationId: prior.stationId,
-          stepIndex: prior.stepIndex,
-          requiredFiles: prior.requiredFilesJson,
-        })),
-      payloadJson: stepJobPayload(order, next.stepIndex),
-      claimedByCellId: cellId,
-      claimedByFactoryId: job.claimedByFactoryId,
-      epoch,
-      leaseExpiresAt,
-      createdAt: now,
-      startedAt: now,
-    })
-    .returning()
-    .get();
+  const nextJob = tx.jobs.insert({
+    jobId: asJobId(`job-${crypto.randomUUID()}`),
+    projectId: job.projectId,
+    orderId: order.orderId,
+    stepId: next.stepId,
+    lineName: order.lineName,
+    kind: JOB_KIND_BY_STEP_KIND[next.kind],
+    workspaceMode: input.workspaceMode,
+    status: 'claimed',
+    repoUrl: job.repoUrl,
+    baseBranch: job.baseBranch,
+    baseCommitSha: job.baseCommitSha,
+    targetBranch: job.targetBranch,
+    expectedPriorStepsJson: steps
+      .filter((prior) => prior.stepIndex < next.stepIndex)
+      .map((prior) => ({
+        stepId: prior.stepId,
+        stationId: prior.stationId,
+        stepIndex: prior.stepIndex,
+        requiredFiles: prior.requiredFilesJson,
+      })),
+    payloadJson: stepJobPayload(order, next.stepIndex),
+    claimedByCellId: cellId,
+    claimedByFactoryId: job.claimedByFactoryId,
+    epoch,
+    leaseExpiresAt,
+    createdAt: now,
+    startedAt: now,
+  });
   log.push(
     orderTransition({
       projectId: job.projectId,
@@ -595,14 +543,14 @@ const issueJob = (
 };
 
 const advanceOrder = (
-  tx: DbTx,
+  tx: StorageWriteTx,
   job: JobRow,
   order: WorkOrderRow,
-  step: StepRow,
+  step: OrderStepRow,
   completion: Completion,
   log: TransitionLog,
 ): TransitionResponse => {
-  const steps = stepsOf(tx, order.orderId);
+  const steps = tx.steps.listByOrder(order.orderId);
   const next = steps.find(
     (candidate) => candidate.stepIndex === step.stepIndex + 1,
   );
@@ -619,10 +567,10 @@ const advanceOrder = (
 };
 
 const completeStep = (
-  tx: DbTx,
+  tx: StorageWriteTx,
   job: JobRow,
   order: WorkOrderRow,
-  step: StepRow,
+  step: OrderStepRow,
   completion: Completion,
   log: TransitionLog,
 ): TransitionResponse => {
@@ -634,7 +582,7 @@ const completeStep = (
 };
 
 const completeJob = (
-  tx: DbTx,
+  tx: StorageWriteTx,
   job: JobRow,
   cellId: CellId,
   input: CompleteInput,
@@ -656,7 +604,10 @@ const completeJob = (
   return completeStep(tx, job, order, boundStep(tx, job), completion, log);
 };
 
-const stepWithId = (steps: readonly StepRow[], stepId: string): StepRow => {
+const stepWithId = (
+  steps: readonly OrderStepRow[],
+  stepId: string,
+): OrderStepRow => {
   const step = steps.find((candidate) => candidate.stepId === stepId);
   if (step === undefined)
     throw new UnprocessableTransition(`no step with id ${stepId}`);
@@ -664,7 +615,7 @@ const stepWithId = (steps: readonly StepRow[], stepId: string): StepRow => {
 };
 
 const endJob = (
-  tx: DbTx,
+  tx: StorageWriteTx,
   job: JobRow,
   status: 'failed' | 'blocked' | 'line_unavailable',
   cellId: CellId,
@@ -672,10 +623,7 @@ const endJob = (
   now: number,
   log: TransitionLog,
 ): void => {
-  tx.update(jobs)
-    .set({ status, resultJson, finishedAt: now })
-    .where(eq(jobs.jobId, job.jobId))
-    .run();
+  tx.jobs.update(job.jobId, { status, resultJson, finishedAt: now });
   log.push(
     orderTransition({
       projectId: job.projectId,
@@ -690,19 +638,16 @@ const endJob = (
 };
 
 const setStepState = (
-  tx: DbTx,
+  tx: StorageWriteTx,
   job: JobRow,
-  step: StepRow,
-  state: StepRow['state'],
+  step: OrderStepRow,
+  state: OrderStepRow['state'],
   cellId: CellId,
   now: number,
   log: TransitionLog,
-  patch: Partial<StepInsert> = {},
+  patch: Partial<OrderStepInsert> = {},
 ): void => {
-  tx.update(orderSteps)
-    .set({ ...patch, state, updatedAt: now })
-    .where(eq(orderSteps.stepId, step.stepId))
-    .run();
+  tx.steps.update(step.stepId, { ...patch, state, updatedAt: now });
   if (step.state === state) return;
   log.push(
     orderTransition({
@@ -718,7 +663,7 @@ const setStepState = (
 };
 
 const blockOrder = (
-  tx: DbTx,
+  tx: StorageWriteTx,
   job: JobRow,
   order: WorkOrderRow,
   cellId: CellId,
@@ -732,7 +677,7 @@ const blockOrder = (
 ): TransitionResponse => {
   const triage = triageIncident(
     incident.reason,
-    toWorkOrderSnapshot(order, stepsOf(tx, order.orderId)),
+    toWorkOrderSnapshot(order, tx.steps.listByOrder(order.orderId)),
   );
   updateWorkOrder(
     tx,
@@ -787,7 +732,7 @@ const blockOrder = (
 };
 
 const rewindTo = (
-  tx: DbTx,
+  tx: StorageWriteTx,
   job: JobRow,
   cellId: CellId,
   order: WorkOrderRow,
@@ -796,11 +741,11 @@ const rewindTo = (
   now: number,
   log: TransitionLog,
 ): ClaimedJob => {
-  for (const step of stepsOf(tx, order.orderId)) {
+  for (const step of tx.steps.listByOrder(order.orderId)) {
     if (step.stepIndex > target && step.stepIndex <= current)
       setStepState(tx, job, step, 'pending', cellId, now, log);
   }
-  const steps = stepsOf(tx, order.orderId);
+  const steps = tx.steps.listByOrder(order.orderId);
   return issueJob(tx, job, order, steps, stepAt(steps, target), {
     cellId,
     workspaceMode: 'reuse',
@@ -811,7 +756,7 @@ const rewindTo = (
 };
 
 const failJob = (
-  tx: DbTx,
+  tx: StorageWriteTx,
   job: JobRow,
   cellId: CellId,
   input: FailInput,
@@ -822,7 +767,7 @@ const failJob = (
   const order = requireOrder(tx, orderIdOf(job));
   const step = boundStep(tx, job);
   const failure = planStepFailure(
-    toOrderSteps(stepsOf(tx, order.orderId)),
+    toOrderSteps(tx.steps.listByOrder(order.orderId)),
     step.stepIndex,
   );
   endJob(
@@ -868,7 +813,7 @@ const failJob = (
 };
 
 const blockJob = (
-  tx: DbTx,
+  tx: StorageWriteTx,
   job: JobRow,
   cellId: CellId,
   input: BlockInput,
@@ -908,7 +853,7 @@ const blockJob = (
 };
 
 const resetWorktree = (
-  tx: DbTx,
+  tx: StorageWriteTx,
   job: JobRow,
   cellId: CellId,
   input: WorktreeMissingInput,
@@ -917,7 +862,10 @@ const resetWorktree = (
 ): TransitionResponse => {
   requireStatus(job, 'claimed', 'running');
   const order = requireOrder(tx, orderIdOf(job));
-  const missing = stepWithId(stepsOf(tx, order.orderId), input.missingStepId);
+  const missing = stepWithId(
+    tx.steps.listByOrder(order.orderId),
+    input.missingStepId,
+  );
   const reset = planWorktreeMissing(order.worktreeResets);
   endJob(
     tx,
@@ -946,11 +894,11 @@ const resetWorktree = (
       { worktreeResets: reset.worktreeResets },
     );
 
-  for (const step of stepsOf(tx, order.orderId))
+  for (const step of tx.steps.listByOrder(order.orderId))
     setStepState(tx, job, step, 'pending', cellId, now, log, {
       attemptsUsed: 0,
     });
-  const steps = stepsOf(tx, order.orderId);
+  const steps = tx.steps.listByOrder(order.orderId);
   const nextJob = issueJob(tx, job, order, steps, stepAt(steps, 0), {
     cellId,
     workspaceMode: 'fresh',
@@ -962,19 +910,17 @@ const resetWorktree = (
 };
 
 const hasServingFactory = (
-  tx: DbTx,
+  tx: StorageWriteTx,
   order: WorkOrderRow,
   excludedFactoryIds: readonly FactoryId[],
   now: number,
 ): boolean =>
-  tx
-    .select()
-    .from(factories)
-    .all()
+  tx.factories
+    .list()
     .some(
       (factory) =>
         !isSilent(factory.lastSeenAt, now) &&
-        !excludedFactoryIds.includes(asFactoryId(factory.factoryId)) &&
+        !excludedFactoryIds.includes(factory.factoryId) &&
         factory.projectsJson.some(
           (project) =>
             project.projectId === order.projectId && project.desired > 0,
@@ -988,7 +934,7 @@ const factoryOf = (job: JobRow): FactoryId => {
 };
 
 const lineUnavailable = (
-  tx: DbTx,
+  tx: StorageWriteTx,
   job: JobRow,
   cellId: CellId,
   input: LineUnavailableInput,
@@ -1051,7 +997,7 @@ const lineUnavailable = (
         detail: input.detail,
         triage: triageIncident(
           'line_unavailable',
-          toWorkOrderSnapshot(order, stepsOf(tx, order.orderId)),
+          toWorkOrderSnapshot(order, tx.steps.listByOrder(order.orderId)),
         ).incident,
       },
       now,
@@ -1060,7 +1006,7 @@ const lineUnavailable = (
 };
 
 const dispatch = (
-  tx: DbTx,
+  tx: StorageWriteTx,
   job: JobRow,
   cellId: CellId,
   body: TransitionBody,
@@ -1085,14 +1031,14 @@ const dispatch = (
 
 export const transitionJobProcedure = scopedProcedure(['factory:worker'])(
   transitionJobContract,
-)((input, ctx) => {
+)(async (input, ctx) => {
   const cellId = cellIdOf(ctx);
   const factoryId = factoryIdOf(ctx);
   const now = ctx.clock.now();
   const commandId = asCommandId(input.body.commandId);
 
-  const outcome = settle(() =>
-    immediateTx(ctx.db, (tx) => {
+  const outcome = await settle(() =>
+    ctx.storage.write((tx) => {
       touchFactory(tx, factoryId, now);
       const job = requireJob(tx, input.params.id);
       const replay = findReplay(tx, commandId, job.jobId);

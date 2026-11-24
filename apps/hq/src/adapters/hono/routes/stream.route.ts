@@ -1,21 +1,18 @@
-import { and, asc, eq, gt } from 'drizzle-orm';
 import { Hono, type Context } from 'hono';
 import { type SSEStreamingApi, streamSSE } from 'hono/streaming';
 import { streamQuery } from '@repo/hq-contracts/stream.contract';
-import { stateTransitions } from '../../../db/schema/transitions';
 import { asCommandId, asProjectId } from '../../../domain/common/brand';
 import type { StateTransitionRecord } from '../../../domain/common/events';
 import { BadRequest } from '../../../application/core/error-handling';
 import { authorize } from '../../../application/core/procedure';
+import type { StateTransitionRow } from '../../../application/ports/storage.port';
 import type { AppEnv } from '../types';
 
 const KEEPALIVE_MS = 15_000;
 
-type TransitionRow = typeof stateTransitions.$inferSelect;
-
-const toRecord = (row: TransitionRow): StateTransitionRecord => ({
+const toRecord = (row: StateTransitionRow): StateTransitionRecord => ({
   seq: row.seq,
-  projectId: asProjectId(row.projectId),
+  projectId: row.projectId,
   entityType: row.entityType,
   entityId: row.entityId,
   fromState: row.fromState,
@@ -80,19 +77,12 @@ const streamTransitions = async (c: Context<AppEnv>): Promise<Response> => {
     }, KEEPALIVE_MS);
 
     try {
-      const backlog = ctx.db
-        .select()
-        .from(stateTransitions)
-        .where(
-          and(
-            gt(stateTransitions.seq, afterSeq),
-            projectId === undefined
-              ? undefined
-              : eq(stateTransitions.projectId, asProjectId(projectId)),
-          ),
-        )
-        .orderBy(asc(stateTransitions.seq))
-        .all();
+      const backlog = await ctx.storage.read((tx) =>
+        tx.transitions.listAfter(
+          afterSeq,
+          projectId === undefined ? undefined : asProjectId(projectId),
+        ),
+      );
       for (const row of backlog) {
         const record = toRecord(row);
         lastSeq = record.seq;

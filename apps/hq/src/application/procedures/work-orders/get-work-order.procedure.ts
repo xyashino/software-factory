@@ -1,32 +1,25 @@
-import { asc, eq } from 'drizzle-orm';
 import { getWorkOrderContract } from '@repo/hq-contracts/work-orders.contract';
-import { incidents } from '../../../db/schema/incidents';
-import { jobs } from '../../../db/schema/jobs';
-import { orderSteps } from '../../../db/schema/orders';
 import { scopedProcedure } from '../../core/procedure';
 import { requireOrder } from '../../orders/order-writes';
 import { toWorkOrderDto } from '../../orders/order-views';
 
 export const getWorkOrderProcedure = scopedProcedure(['supervisor:read'])(
   getWorkOrderContract,
-)((input, ctx) => {
-  const order = requireOrder(ctx.db, input.params.id);
-  const steps = ctx.db
-    .select()
-    .from(orderSteps)
-    .where(eq(orderSteps.orderId, order.orderId))
-    .orderBy(asc(orderSteps.stepIndex))
-    .all();
-  const orderJobs = ctx.db
-    .select()
-    .from(jobs)
-    .where(eq(jobs.orderId, order.orderId))
-    .all();
-  const orderIncidents = ctx.db
-    .select()
-    .from(incidents)
-    .where(eq(incidents.orderId, order.orderId))
-    .all();
+)(async (input, ctx) => {
+  const { order, steps, orderJobs, orderIncidents } = await ctx.storage.read(
+    (tx) => {
+      const order = requireOrder(tx, input.params.id);
+      return {
+        order,
+        steps: tx.steps.listByOrder(order.orderId),
+        orderJobs: tx.jobs.listByOrder(order.orderId),
+        orderIncidents: tx.incidents.list({
+          projectId: order.projectId,
+          orderId: order.orderId,
+        }),
+      };
+    },
+  );
   return {
     code: 200 as const,
     order: toWorkOrderDto(order),

@@ -1,6 +1,3 @@
-import { eq } from 'drizzle-orm';
-import { immediateTx } from '../../../db/client';
-import { projects } from '../../../db/schema/projects';
 import { upsertProjectContract } from '@repo/hq-contracts/projects.contract';
 import { asProjectId } from '../../../domain/common/brand';
 import { scopedProcedure } from '../../core/procedure';
@@ -12,28 +9,24 @@ export const upsertProjectProcedure = scopedProcedure(['supervisor:write'])(
   const { projectId, repoUrl, defaultBaseBranch, maxRunning } = input.body;
   const now = ctx.clock.now();
 
-  return immediateTx(ctx.db, (tx) => {
+  return ctx.storage.write((tx) => {
     if (findProject(tx, projectId) === undefined) {
-      const project = tx
-        .insert(projects)
-        .values({
-          projectId: asProjectId(projectId),
-          repoUrl,
-          defaultBaseBranch,
-          maxRunning,
-          createdAt: now,
-          updatedAt: now,
-        })
-        .returning()
-        .get();
+      const project = tx.projects.insert({
+        projectId: asProjectId(projectId),
+        repoUrl,
+        defaultBaseBranch,
+        maxRunning,
+        createdAt: now,
+        updatedAt: now,
+      });
       return { code: 201 as const, project };
     }
-    const project = tx
-      .update(projects)
-      .set({ repoUrl, defaultBaseBranch, maxRunning, updatedAt: now })
-      .where(eq(projects.projectId, asProjectId(projectId)))
-      .returning()
-      .get();
+    const project = tx.projects.update(asProjectId(projectId), {
+      repoUrl,
+      defaultBaseBranch,
+      maxRunning,
+      updatedAt: now,
+    });
     return { code: 200 as const, project };
   });
 });

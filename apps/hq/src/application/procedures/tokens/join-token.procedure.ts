@@ -1,9 +1,6 @@
 import { timingSafeEqual } from 'node:crypto';
-import { and, eq, isNull } from 'drizzle-orm';
 import { WEB_SESSION_TTL_MS } from '../../../config';
 import { joinTokenContract } from '@repo/hq-contracts/tokens.contract';
-import { immediateTx } from '../../../db/client';
-import { safeTokens } from '../../../db/schema/tokens';
 import { WEB_SESSION_SCOPES } from '../../../domain/tokens/web-session';
 import { Forbidden, Unauthorized } from '../../core/error-handling';
 import { publicProcedure } from '../../core/procedure';
@@ -18,28 +15,21 @@ const isLoopback = (address: string | null): boolean =>
 const matchesJoinSecret = (storedHash: string, secret: string): boolean =>
   timingSafeEqual(Buffer.from(storedHash), Buffer.from(hashToken(secret)));
 
-export const joinTokenProcedure = publicProcedure(joinTokenContract)((
+export const joinTokenProcedure = publicProcedure(joinTokenContract)(async (
   input,
   ctx,
 ) => {
   if (!isLoopback(ctx.remoteAddress))
     throw new Forbidden('Join is only allowed from loopback');
   const now = ctx.clock.now();
-  const issued = immediateTx(ctx.db, (tx) => {
-    const join = tx
-      .select()
-      .from(safeTokens)
-      .where(and(eq(safeTokens.kind, 'web_join'), isNull(safeTokens.revokedAt)))
-      .get();
+  const issued = await ctx.storage.write((tx) => {
+    const join = tx.tokens.findActiveJoin();
     if (
       join === undefined ||
       !matchesJoinSecret(join.tokenHash, input.body.joinSecret)
     )
       throw new Unauthorized('Invalid join secret');
-    tx.update(safeTokens)
-      .set({ revokedAt: now })
-      .where(eq(safeTokens.tokenId, join.tokenId))
-      .run();
+    tx.tokens.update(join.tokenId, { revokedAt: now });
     const expiresAt = now + WEB_SESSION_TTL_MS;
     const session = insertSafeToken(tx, {
       kind: 'web_session',

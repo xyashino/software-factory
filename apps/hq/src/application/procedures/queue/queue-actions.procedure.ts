@@ -1,10 +1,10 @@
-import { immediateTx, type DbTx } from '../../../db/client';
 import { queueActionsContract } from '@repo/hq-contracts/queue.contract';
 import type { WorkOrderAction } from '../../../domain/orders/order-state';
 import { nextWorkOrderState } from '../../../domain/orders/order-state';
 import { Conflict } from '../../core/error-handling';
 import type { ContractInput } from '@repo/zod-contract-kit/types';
 import { scopedProcedure } from '../../core/procedure';
+import type { StorageWriteTx, WorkOrderRow } from '../../ports/storage.port';
 import {
   flushTransitions,
   moveOrder,
@@ -16,12 +16,11 @@ import {
   type Actor,
   type TransitionLog,
 } from '../../orders/order-writes';
-import type { WorkOrderRow } from '../../orders/order-views';
 
 type QueueActionBody = ContractInput<typeof queueActionsContract>['body'];
 
 const moveBy = (
-  tx: DbTx,
+  tx: StorageWriteTx,
   row: WorkOrderRow,
   action: Extract<
     WorkOrderAction,
@@ -44,7 +43,7 @@ const moveBy = (
 };
 
 const applyAction = (
-  tx: DbTx,
+  tx: StorageWriteTx,
   row: WorkOrderRow,
   body: QueueActionBody,
   actor: Actor,
@@ -86,13 +85,13 @@ const applyAction = (
 
 export const queueActionsProcedure = scopedProcedure(['supervisor:write'])(
   queueActionsContract,
-)((input, ctx) => {
+)(async (input, ctx) => {
   const body = input.body;
   const now = ctx.clock.now();
   const actor: Actor = { kind: 'supervisor', id: ctx.principal.tokenId };
   const orderIds = [...new Set(body.orderIds)];
 
-  const { orders, records } = immediateTx(ctx.db, (tx) => {
+  const { orders, records } = await ctx.storage.write((tx) => {
     const log: TransitionLog = [];
     const updated = orderIds.map((orderId) =>
       applyAction(tx, requireOrder(tx, orderId), body, actor, now, log),

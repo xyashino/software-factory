@@ -1,7 +1,3 @@
-import { eq } from 'drizzle-orm';
-import { immediateTx, type DbTx } from '../../../db/client';
-import { jobs } from '../../../db/schema/jobs';
-import { workOrders } from '../../../db/schema/orders';
 import { LEASE_TTL_MS } from '../../../config';
 import { heartbeatCellContract } from '@repo/hq-contracts/cells.contract';
 import { asJobId, type CellId } from '../../../domain/common/brand';
@@ -9,6 +5,7 @@ import { addMs } from '../../../domain/common/time';
 import { StaleLeaseEpoch } from '../../core/error-handling';
 import { cellIdOf, factoryIdOf, touchFactory } from '../../core/identity';
 import { scopedProcedure } from '../../core/procedure';
+import type { JobRow, StorageWriteTx } from '../../ports/storage.port';
 import {
   flushTransitions,
   publishCommitted,
@@ -21,20 +18,15 @@ const EXTENDABLE_JOB_STATUSES = ['claimed', 'running'] as const;
 const ABORTING_ORDER_STATES = ['paused', 'cancelled'] as const;
 
 type CellSignal = 'abort';
-type JobRow = typeof jobs.$inferSelect;
 type Heartbeat = {
   leaseExpiresAt: number | null;
   signals: CellSignal[];
 };
 
-const abortSignals = (tx: DbTx, job: JobRow): CellSignal[] => {
+const abortSignals = (tx: StorageWriteTx, job: JobRow): CellSignal[] => {
   if (job.status === 'cancelled') return ['abort'];
   if (job.orderId === null) return [];
-  const order = tx
-    .select()
-    .from(workOrders)
-    .where(eq(workOrders.orderId, job.orderId))
-    .get();
+  const order = tx.orders.find(job.orderId);
   return order !== undefined &&
     ABORTING_ORDER_STATES.some((state) => state === order.state)
     ? ['abort']
@@ -42,16 +34,12 @@ const abortSignals = (tx: DbTx, job: JobRow): CellSignal[] => {
 };
 
 const recordHeartbeat = (
-  tx: DbTx,
+  tx: StorageWriteTx,
   cellId: CellId,
   body: { jobId: string; epoch: number },
   now: number,
 ): Heartbeat | undefined => {
-  const job = tx
-    .select()
-    .from(jobs)
-    .where(eq(jobs.jobId, asJobId(body.jobId)))
-    .get();
+  const job = tx.jobs.find(asJobId(body.jobId));
   const fenced =
     job !== undefined &&
     job.claimedByCellId === cellId &&
@@ -69,22 +57,19 @@ const recordHeartbeat = (
     };
 
   const leaseExpiresAt = addMs(now, LEASE_TTL_MS);
-  tx.update(jobs)
-    .set({ leaseExpiresAt })
-    .where(eq(jobs.jobId, job.jobId))
-    .run();
+  tx.jobs.update(job.jobId, { leaseExpiresAt });
   return { leaseExpiresAt, signals: abortSignals(tx, job) };
 };
 
 export const heartbeatCellProcedure = scopedProcedure(['factory:worker'])(
   heartbeatCellContract,
-)((input, ctx) => {
+)(async (input, ctx) => {
   const cellId = cellIdOf(ctx);
   const factoryId = factoryIdOf(ctx);
   const now = ctx.clock.now();
   const log: TransitionLog = [];
 
-  const outcome = immediateTx(ctx.db, (tx) => {
+  const outcome = await ctx.storage.write((tx) => {
     touchFactory(tx, factoryId, now);
     reapExpiredLeases(tx, now, log);
     const heartbeat = recordHeartbeat(tx, cellId, input.body, now);

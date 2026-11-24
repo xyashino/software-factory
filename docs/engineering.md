@@ -37,19 +37,20 @@ apps/hq/
 │   │   ├── client.ts                         # createDb on @repo/bun-sqlite-kit
 │   │   ├── migrations/                       # Drizzle SQL migrations + partial unique indexes
 │   │   └── schema/                           # factories, projects, tokens, plans, orders, jobs, incidents, transitions
-│   ├── application/                          # Use-case orchestration (domain, db, contracts, ports)
+│   ├── application/                          # Use-case orchestration (domain, contracts, ports); no drizzle, no db/
 │   │   ├── core/                             # error-handling.ts, procedure.ts (scopedProcedure), identity.ts (factory id, x-cell-id), schema/zod.ts
-│   │   ├── ports/                            # auth, clock, claim-waiters, transition-bus
+│   │   ├── ports/                            # auth, clock, claim-waiters, transition-bus, storage (StoragePort + row types)
 │   │   ├── orders/, tokens/                  # Shared writes used by several procedures (job loss, cell release, token writes)
 │   │   └── procedures/                       # cells, factories, jobs, incidents, order-plans, projects, queue, tokens, work-orders
 │   ├── adapters/
 │   │   ├── auth/safe-token-auth.adapter.ts   # SHA-256 + timingSafeEqual + grace window + scope check
+│   │   ├── storage/sqlite-storage.adapter.ts # StoragePort on bun:sqlite: drizzle queries, read/write tx, dry-run
 │   │   ├── memory/                           # system clock, claim waiters (max 5), transition bus (SSE)
 │   │   └── hono/                             # adapter, error handlers, middlewares, types, routes/ (one file per resource)
 │   └── bootstrap/                            # transport.ts, admin.ts (admin token), web-join.ts (web-demo join secret)
 └── test/
     ├── support/                              # test app, test db, test transport
-    ├── db/                                   # Partial unique index & immediateTx concurrency tests
+    ├── db/                                   # Partial unique index, immediateTx concurrency & storage port tests
     └── blackbox/                             # HTTP black-box route tests via app.request()
 ```
 
@@ -60,8 +61,8 @@ Wire contracts live in `packages/hq-contracts/src` (one file per resource, `enum
 - `domain/` -> imports nothing outside `domain/`. Pure functions and types only. No `Date.now()`, no `crypto`, no `bun:sqlite`, no `hono`.
 - `@repo/hq-contracts` -> imports `zod` only. Never imports `apps/hq`.
 - `db/` -> imports `drizzle-orm`, `bun:sqlite`, and `domain/` branded types. Never calls domain state machines or procedures.
-- `application/` -> imports `domain/`, contracts, `db/`, and `application/ports/`. Never imports `hono` or `adapters/`.
-- `adapters/` -> imports `application/`, contracts, `domain/`, `db/`, and `hono`.
+- `application/` -> imports `domain/`, contracts, and `application/ports/`. Never imports `db/`, `drizzle-orm`, `hono`, or `adapters/`. Storage goes through `StoragePort`.
+- `adapters/` -> imports `application/`, contracts, `domain/`, `db/`, and `hono`. `adapters/storage/` is the only place drizzle queries for application data live.
 - `bootstrap/` & `app.ts` -> wires `adapters/` into `application/` ports.
 
 ---
@@ -85,14 +86,15 @@ Shared style rules (`coding-no-barrel-export`, `coding-export-order`, `coding-mi
    - `parseOutput` validates handler output against `contract.out[output.code]`; undeclared codes or schema mismatches throw `InternalServer(500)`.
 3. **Procedures (`src/application/procedures/<domain>/<action>.procedure.ts`)**:
    - Built via `publicProcedure`, `authenticatedProcedure`, or `scopedProcedure(['supervisor:write'])`.
-   - Handlers receive `(input, ctx)` where `ctx` is `TransportContext` (`db`, `clock`, `auth`, `claimWaiters`, `transitionBus`, `signal`, plus `principal` on authenticated procedures).
+   - Handlers receive `(input, ctx)` where `ctx` is `TransportContext` (`storage`, `clock`, `auth`, `claimWaiters`, `transitionBus`, `signal`, plus `principal` on authenticated procedures).
+   - Data access only through `ctx.storage.read(tx => ...)` and `ctx.storage.write(tx => ...)`. Handlers that touch storage are `async`.
    - Procedures never touch Hono `Context`, HTTP headers, or status helpers—they return `{ code: 200 as const, ... }` or throw `BaseError` subclasses.
 4. **Thin Hono routes (`src/adapters/hono/routes/<domain>.route.ts`)**:
    - Routes only mount `honoAdapter(procedure)`: e.g. `.post('/claims', honoAdapter(claimJobProcedure))`.
    - Zero `try/catch` in route files or procedures. Centralized `errorHandler` (`.onError`) and `notFoundHandler` (`.notFound`) format all `BaseError` and `HTTPException` instances into `{ code, type, message }`.
    - Only `GET /api/v1/stream` (SSE) uses Hono's `streamSSE` directly in `stream.route.ts` after verifying `supervisor:read` via `ctx.auth`.
 5. **No module-level mutable state**:
-   - `createTransport` is called per request (or holds per-app injected instances of `db`, `clock`, `claimWaiters`, `transitionBus`).
+   - `createTransport` is called per request (or holds per-app injected instances of `storage`, `clock`, `claimWaiters`, `transitionBus`).
    - Never cache DB connections, timers, or waiter sets in module-global variables so parallel `createTestApp()` instances remain 100% isolated.
 
 ---
@@ -104,8 +106,12 @@ Shared style rules (`coding-no-barrel-export`, `coding-export-order`, `coding-mi
    - `PRAGMA synchronous = NORMAL;`
    - `PRAGMA foreign_keys = ON;`
    - `PRAGMA busy_timeout = 5000;`
-2. **`immediateTx(db, fn)` for all mutating state transitions**:
-   - Every claim (`/cells/claims`), job transition (`/jobs/{id}/transitions`), queue import/action (`/queue/import`, `/queue/actions`), order/plan transition, and incident resolution MUST execute inside a serialized `BEGIN IMMEDIATE` transaction (`db.transaction(..., { behavior: 'immediate' })`).
+2. **`storage.write(fn)` for all mutating state transitions**:
+   - Every claim (`/cells/claims`), job transition (`/jobs/{id}/transitions`), queue import/action (`/queue/import`, `/queue/actions`), order/plan transition, and incident resolution MUST run inside `storage.write`. The SQLite adapter runs it inside `immediateTx` (`BEGIN IMMEDIATE`, `db.transaction(..., { behavior: 'immediate' })`).
+   - `fn` is synchronous (`(tx) => T`, no `await` inside). `bun:sqlite` has one connection; an `await` inside `BEGIN IMMEDIATE` lets other requests interleave on it and breaks single-Cell exclusivity. `write` returns `Promise<T>` to callers.
+   - `write(fn, { dryRun: true })` runs `fn`, rolls back every change, and returns `fn`'s result (queue import dry run).
+   - `storage.read(fn)` for queries outside a write.
+   - Only `adapters/storage/` may build drizzle queries for application data. `application/` calls `tx.<aggregate>.<op>()` on the port.
 3. **Database-enforced single-Cell exclusivity**:
    - Migrations MUST create the three partial unique indexes from [`hq.md`](./hq.md) §7:
      - `idx_jobs_one_active_per_order ON jobs(order_id) WHERE order_id IS NOT NULL AND status IN ('claimed', 'running')`

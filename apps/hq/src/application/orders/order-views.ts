@@ -1,10 +1,4 @@
-import type { orderPlans } from '../../db/schema/plans';
-import type { projects } from '../../db/schema/projects';
-import type { workOrders } from '../../db/schema/orders';
-
-export type WorkOrderRow = typeof workOrders.$inferSelect;
-export type OrderPlanRow = typeof orderPlans.$inferSelect;
-export type ProjectRow = typeof projects.$inferSelect;
+import type { OrderPlanRow, WorkOrderRow } from '../ports/storage.port';
 
 export const toWorkOrderDto = (row: WorkOrderRow) => ({
   orderId: row.orderId,

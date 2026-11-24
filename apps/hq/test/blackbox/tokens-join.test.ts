@@ -20,11 +20,11 @@ const PROJECT = {
 const LOOPBACK = '127.0.0.1';
 const bearer = (token: string) => ({ authorization: `Bearer ${token}` });
 
-const setup = () => {
+const setup = async () => {
   const context = createTestApp({ safeTokenAuth: true });
-  const admin = mintAdminToken(context.db, context.clock);
+  const admin = await mintAdminToken(context.storage, context.clock);
   const dataDir = mkdtempSync(join(tmpdir(), 'web-join-'));
-  writeWebJoinFile(context.db, context.clock, dataDir);
+  await writeWebJoinFile(context.storage, context.clock, dataDir);
   const joinSecret = readFileSync(join(dataDir, 'web-demo.join'), 'utf8');
   return { ...context, admin, dataDir, joinSecret };
 };
@@ -53,7 +53,7 @@ const joinSession = async (app: TestApp, joinSecret: string) => {
 
 describe('web demo join', () => {
   it('gives a session that reads and writes work orders but cannot mint tokens', async () => {
-    const { app, admin, joinSecret } = setup();
+    const { app, admin, joinSecret } = await setup();
     await postJson(app, '/api/v1/projects', PROJECT, bearer(admin));
     const session = await joinSession(app, joinSecret);
 
@@ -88,7 +88,7 @@ describe('web demo join', () => {
   });
 
   it('refuses a join secret that was already used', async () => {
-    const { app, joinSecret } = setup();
+    const { app, joinSecret } = await setup();
     await joinSession(app, joinSecret);
 
     const again = await joinFrom(app, joinSecret);
@@ -97,7 +97,7 @@ describe('web demo join', () => {
   });
 
   it('refuses a join from a non-loopback address', async () => {
-    const { app, joinSecret } = setup();
+    const { app, joinSecret } = await setup();
 
     const response = await joinFrom(app, joinSecret, '10.0.0.5');
 
@@ -105,15 +105,15 @@ describe('web demo join', () => {
   });
 
   it('refuses a wrong join secret', async () => {
-    const { app } = setup();
+    const { app } = await setup();
 
     const response = await joinFrom(app, 'sf_join_not-the-secret');
 
     expect(response.status).toBe(401);
   });
 
-  it('writes the join file readable only by its owner', () => {
-    const { dataDir } = setup();
+  it('writes the join file readable only by its owner', async () => {
+    const { dataDir } = await setup();
 
     const mode = statSync(join(dataDir, 'web-demo.join')).mode & 0o777;
 

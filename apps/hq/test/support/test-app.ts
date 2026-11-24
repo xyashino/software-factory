@@ -2,11 +2,13 @@ import { createApp } from '../../src/app';
 import { createSafeTokenAuth } from '../../src/adapters/auth/safe-token-auth.adapter';
 import { createClaimWaiters } from '../../src/adapters/memory/claim-waiters.adapter';
 import { createTransitionBus } from '../../src/adapters/memory/transition-bus.adapter';
+import { createSqliteStorageAdapter } from '../../src/adapters/storage/sqlite-storage.adapter';
 import type {
   AuthPort,
   TokenScope,
 } from '../../src/application/ports/auth.port';
 import type { TransitionBusPort } from '../../src/application/ports/transition-bus.port';
+import type { StoragePort } from '../../src/application/ports/storage.port';
 import { createTransport } from '../../src/bootstrap/transport';
 import { asTokenId } from '../../src/domain/common/brand';
 import { createTestDb } from './test-db';
@@ -41,24 +43,26 @@ export const createTestApp = (
   app: TestApp;
   clock: FakeClock;
   db: ReturnType<typeof createTestDb>;
+  storage: StoragePort;
   transitionBus: TransitionBusPort;
 } => {
   const db = createTestDb();
+  const storage = createSqliteStorageAdapter(db);
   const clock = createFakeClock();
   const auth = options.safeTokenAuth
-    ? createSafeTokenAuth(db, clock)
+    ? createSafeTokenAuth(storage, clock)
     : (options.auth ?? rejectAllAuth);
   const transitionBus = options.transitionBus ?? createTransitionBus();
   const app = createApp(
     createTransport({
-      db,
+      storage,
       clock,
       auth,
       claimWaiters: createClaimWaiters(),
       transitionBus,
     }),
   );
-  return { app, clock, db, transitionBus };
+  return { app, clock, db, storage, transitionBus };
 };
 
 export const postJson = (

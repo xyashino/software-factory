@@ -1,6 +1,4 @@
-import { and, eq } from 'drizzle-orm';
 import { listWorkOrdersContract } from '@repo/hq-contracts/work-orders.contract';
-import { workOrders } from '../../../db/schema/orders';
 import {
   asFactoryId,
   asPlanId,
@@ -11,28 +9,19 @@ import { toWorkOrderDto } from '../../orders/order-views';
 
 export const listWorkOrdersProcedure = scopedProcedure(['supervisor:read'])(
   listWorkOrdersContract,
-)((input, ctx) => {
+)(async (input, ctx) => {
   const query = input.query;
-  const rows = ctx.db
-    .select()
-    .from(workOrders)
-    .where(
-      and(
-        eq(workOrders.projectId, asProjectId(query.projectId)),
-        query.planId === undefined
-          ? undefined
-          : eq(workOrders.planId, asPlanId(query.planId)),
-        query.lineName === undefined
-          ? undefined
-          : eq(workOrders.lineName, query.lineName),
-        query.state === undefined
-          ? undefined
-          : eq(workOrders.state, query.state),
+  const rows = await ctx.storage.read((tx) =>
+    tx.orders.list({
+      projectId: asProjectId(query.projectId),
+      planId: query.planId === undefined ? undefined : asPlanId(query.planId),
+      lineName: query.lineName,
+      state: query.state,
+      pinnedFactoryId:
         query.pinnedFactoryId === undefined
           ? undefined
-          : eq(workOrders.pinnedFactoryId, asFactoryId(query.pinnedFactoryId)),
-      ),
-    )
-    .all();
+          : asFactoryId(query.pinnedFactoryId),
+    }),
+  );
   return { code: 200 as const, items: rows.map(toWorkOrderDto) };
 });

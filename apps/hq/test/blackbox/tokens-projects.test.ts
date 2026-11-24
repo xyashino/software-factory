@@ -20,9 +20,9 @@ const PROJECT = {
 
 const bearer = (token: string) => ({ authorization: `Bearer ${token}` });
 
-const setup = () => {
+const setup = async () => {
   const context = createTestApp({ safeTokenAuth: true });
-  const admin = mintAdminToken(context.db, context.clock);
+  const admin = await mintAdminToken(context.storage, context.clock);
   return { ...context, admin };
 };
 
@@ -59,7 +59,7 @@ const advancePastGrace = (clock: FakeClock): void => {
 
 describe('token issuance', () => {
   it('issues a token once and lets it authenticate', async () => {
-    const { app, admin } = setup();
+    const { app, admin } = await setup();
 
     const issued = await issueToken(app, admin, 'supervisor');
     const response = await getJson(
@@ -76,7 +76,7 @@ describe('token issuance', () => {
   });
 
   it('answers 403 when the caller lacks admin:tokens', async () => {
-    const { app, admin } = setup();
+    const { app, admin } = await setup();
     const joinToken = await issueToken(app, admin, 'factory_join');
 
     const response = await postJson(
@@ -92,7 +92,7 @@ describe('token issuance', () => {
 
 describe('token rotation', () => {
   it('keeps the old token valid during the grace window only', async () => {
-    const { app, admin, clock } = setup();
+    const { app, admin, clock } = await setup();
     const supervisor = await issueToken(app, admin, 'supervisor');
 
     const rotated = await expectRotation(app, supervisor.token);
@@ -115,7 +115,7 @@ describe('token rotation', () => {
   });
 
   it('answers 409 when the same token is rotated twice', async () => {
-    const { app, admin } = setup();
+    const { app, admin } = await setup();
     const supervisor = await issueToken(app, admin, 'supervisor');
     await expectRotation(app, supervisor.token);
 
@@ -132,7 +132,7 @@ describe('token rotation', () => {
 
 describe('token revocation', () => {
   it('revokes a token immediately', async () => {
-    const { app, admin } = setup();
+    const { app, admin } = await setup();
     const supervisor = await issueToken(app, admin, 'supervisor');
 
     const revoked = await deleteJson(
@@ -151,7 +151,7 @@ describe('token revocation', () => {
   });
 
   it('answers 404 when revoking an unknown token', async () => {
-    const { app, admin } = setup();
+    const { app, admin } = await setup();
 
     const response = await deleteJson(
       app,
@@ -165,7 +165,7 @@ describe('token revocation', () => {
 
 describe('project registration', () => {
   it('creates a project then updates it on the same projectId', async () => {
-    const { app, admin } = setup();
+    const { app, admin } = await setup();
 
     const created = await postJson(
       app,
@@ -193,7 +193,7 @@ describe('project registration', () => {
   });
 
   it('lists registered projects in projectId order', async () => {
-    const { app, admin } = setup();
+    const { app, admin } = await setup();
     await postJson(
       app,
       '/api/v1/projects',
@@ -216,7 +216,7 @@ describe('project registration', () => {
   });
 
   it('answers 401 when registering without a bearer token', async () => {
-    const { app } = setup();
+    const { app } = await setup();
 
     const response = await postJson(app, '/api/v1/projects', PROJECT);
 

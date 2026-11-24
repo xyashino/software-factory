@@ -1,10 +1,8 @@
-import { eq } from 'drizzle-orm';
-import type { Db, DbTx } from '../../db/client';
-import type { TOKEN_KINDS } from '../../db/schema/tokens';
-import { safeTokens } from '../../db/schema/tokens';
 import type { FactoryId, TokenId } from '../../domain/common/brand';
 import { asTokenId } from '../../domain/common/brand';
+import type { TokenKind } from '../../domain/common/vocabulary';
 import type { TokenScope } from '../ports/auth.port';
+import type { StorageWriteTx } from '../ports/storage.port';
 import {
   hashToken,
   mintToken,
@@ -28,11 +26,6 @@ const PREFIX_BY_KIND: Record<TokenKind, TokenPrefix> = {
   factory_session: TOKEN_PREFIXES.factory,
 };
 
-type TokenKind = (typeof TOKEN_KINDS)[number];
-type Queryable = Db | DbTx;
-
-export type SafeTokenRow = typeof safeTokens.$inferSelect;
-
 export type NewSafeToken = {
   kind: TokenKind;
   name: string;
@@ -45,31 +38,23 @@ export type NewSafeToken = {
 
 export type IssuedSafeToken = { tokenId: TokenId; token: string };
 
-export const findSafeToken = (
-  db: Queryable,
-  tokenId: TokenId,
-): SafeTokenRow | undefined =>
-  db.select().from(safeTokens).where(eq(safeTokens.tokenId, tokenId)).get();
-
 export const insertSafeToken = (
-  tx: DbTx,
+  tx: StorageWriteTx,
   input: NewSafeToken,
 ): IssuedSafeToken => {
   const token = mintToken(PREFIX_BY_KIND[input.kind]);
   const tokenId = asTokenId(crypto.randomUUID());
-  tx.insert(safeTokens)
-    .values({
-      tokenId,
-      tokenHash: hashToken(token),
-      prefix: PREFIX_BY_KIND[input.kind],
-      kind: input.kind,
-      name: input.name,
-      scopesJson: [...input.scopes],
-      factoryId: input.factoryId ?? null,
-      rotatedFromId: input.rotatedFromId,
-      expiresAt: input.expiresAt,
-      createdAt: input.now,
-    })
-    .run();
+  tx.tokens.insert({
+    tokenId,
+    tokenHash: hashToken(token),
+    prefix: PREFIX_BY_KIND[input.kind],
+    kind: input.kind,
+    name: input.name,
+    scopesJson: [...input.scopes],
+    factoryId: input.factoryId ?? null,
+    rotatedFromId: input.rotatedFromId,
+    expiresAt: input.expiresAt,
+    createdAt: input.now,
+  });
   return { tokenId, token };
 };

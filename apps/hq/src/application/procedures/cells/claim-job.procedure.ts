@@ -1,10 +1,4 @@
-import { and, asc, eq, inArray } from 'drizzle-orm';
 import { CLAIM_WAIT_MS, LEASE_TTL_MS } from '../../../config';
-import { immediateTx, type DbTx } from '../../../db/client';
-import { factories } from '../../../db/schema/factories';
-import { jobs } from '../../../db/schema/jobs';
-import { orderSteps, workOrders } from '../../../db/schema/orders';
-import { projects } from '../../../db/schema/projects';
 import { claimJobContract } from '@repo/hq-contracts/cells.contract';
 import {
   selectClaimable,
@@ -15,7 +9,6 @@ import {
   asFactoryId,
   asJobId,
   asProjectId,
-  type CellId,
   type FactoryId,
 } from '../../../domain/common/brand';
 import { addMs } from '../../../domain/common/time';
@@ -30,6 +23,12 @@ import {
   scopedProcedure,
   type AuthenticatedContext,
 } from '../../core/procedure';
+import type {
+  JobRow,
+  ProjectRow,
+  StorageWriteTx,
+  WorkOrderRow,
+} from '../../ports/storage.port';
 import {
   findPlan,
   flushTransitions,
@@ -41,35 +40,15 @@ import {
 } from '../../orders/order-writes';
 import { reapExpiredLeases } from './reap-expired-leases';
 
-const ACTIVE_JOB_STATUSES = ['claimed', 'running'] as const;
-
-type JobRow = typeof jobs.$inferSelect;
-type WorkOrderRow = typeof workOrders.$inferSelect;
-type ProjectRow = typeof projects.$inferSelect;
-
-const holdsActiveJob = (tx: DbTx, cellId: CellId): boolean =>
-  tx
-    .select({ jobId: jobs.jobId })
-    .from(jobs)
-    .where(
-      and(
-        eq(jobs.claimedByCellId, cellId),
-        inArray(jobs.status, ACTIVE_JOB_STATUSES),
-      ),
-    )
-    .get() !== undefined;
-
-const unreachableFactoryIds = (tx: DbTx, now: number): Set<FactoryId> =>
+const unreachableFactoryIds = (
+  tx: StorageWriteTx,
+  now: number,
+): Set<FactoryId> =>
   new Set(
-    tx
-      .select({
-        factoryId: factories.factoryId,
-        lastSeenAt: factories.lastSeenAt,
-      })
-      .from(factories)
-      .all()
+    tx.factories
+      .list()
       .filter((row) => isSilent(row.lastSeenAt, now))
-      .map((row) => asFactoryId(row.factoryId)),
+      .map((row) => row.factoryId),
   );
 
 const bindJob = (
@@ -87,61 +66,34 @@ const bindJob = (
 });
 
 const claimPlanBranch = (
-  tx: DbTx,
+  tx: StorageWriteTx,
   cell: ClaimCell,
   leaseExpiresAt: number,
   now: number,
 ): JobRow | undefined => {
-  const readyJobs = tx
-    .select()
-    .from(jobs)
-    .where(
-      and(
-        eq(jobs.projectId, cell.projectId),
-        eq(jobs.kind, 'plan_branch'),
-        eq(jobs.status, 'ready'),
-      ),
-    )
-    .orderBy(asc(jobs.createdAt), asc(jobs.jobId))
-    .all();
-  for (const job of readyJobs) {
+  for (const job of tx.jobs.listReadyPlanBranches(cell.projectId)) {
     const plan = job.planId === null ? undefined : findPlan(tx, job.planId);
     if (plan?.state !== 'branching') continue;
-    return tx
-      .update(jobs)
-      .set(bindJob(cell, job.epoch + 1, leaseExpiresAt, now))
-      .where(eq(jobs.jobId, job.jobId))
-      .returning()
-      .get();
+    return tx.jobs.update(
+      job.jobId,
+      bindJob(cell, job.epoch + 1, leaseExpiresAt, now),
+    );
   }
   return undefined;
 };
 
 const claimMechanicJob = (
-  tx: DbTx,
+  tx: StorageWriteTx,
   cell: ClaimCell,
   leaseExpiresAt: number,
   now: number,
 ): JobRow | undefined => {
-  const job = tx
-    .select()
-    .from(jobs)
-    .where(
-      and(
-        eq(jobs.kind, 'mechanic'),
-        eq(jobs.status, 'ready'),
-        eq(jobs.claimedByFactoryId, cell.factoryId),
-      ),
-    )
-    .orderBy(asc(jobs.createdAt), asc(jobs.jobId))
-    .get();
+  const job = tx.jobs.findReadyMechanic(cell.factoryId);
   if (job === undefined) return undefined;
-  return tx
-    .update(jobs)
-    .set(bindJob(cell, job.epoch + 1, leaseExpiresAt, now))
-    .where(eq(jobs.jobId, job.jobId))
-    .returning()
-    .get();
+  return tx.jobs.update(
+    job.jobId,
+    bindJob(cell, job.epoch + 1, leaseExpiresAt, now),
+  );
 };
 
 const toClaimCandidate = (
@@ -165,63 +117,35 @@ const toClaimCandidate = (
 });
 
 const resumeReadyJob = (
-  tx: DbTx,
+  tx: StorageWriteTx,
   row: WorkOrderRow,
   stepId: string | null,
   cell: ClaimCell,
   leaseExpiresAt: number,
   now: number,
 ): JobRow | undefined => {
-  const job = tx
-    .select()
-    .from(jobs)
-    .where(
-      and(
-        eq(jobs.orderId, row.orderId),
-        eq(jobs.kind, 'run_operator'),
-        eq(jobs.status, 'ready'),
-      ),
-    )
-    .get();
+  const job = tx.jobs.findReadyRunOperator(row.orderId);
   if (job === undefined || job.stepId !== stepId) return undefined;
-  return tx
-    .update(jobs)
-    .set(bindJob(cell, job.epoch + 1, leaseExpiresAt, now))
-    .where(eq(jobs.jobId, job.jobId))
-    .returning()
-    .get();
+  return tx.jobs.update(
+    job.jobId,
+    bindJob(cell, job.epoch + 1, leaseExpiresAt, now),
+  );
 };
 
 const claimWorkOrder = (
-  tx: DbTx,
+  tx: StorageWriteTx,
   cell: ClaimCell,
   project: ProjectRow,
   leaseExpiresAt: number,
   now: number,
   log: TransitionLog,
 ): JobRow | undefined => {
-  const rows = tx
-    .select()
-    .from(workOrders)
-    .where(
-      and(
-        eq(workOrders.projectId, cell.projectId),
-        eq(workOrders.state, 'queued'),
-      ),
-    )
-    .orderBy(asc(workOrders.createdAt), asc(workOrders.orderId))
-    .all();
+  const rows = tx.orders.listQueued(cell.projectId);
   const unreachable = unreachableFactoryIds(tx, now);
-  const runningCount = tx
-    .select()
-    .from(workOrders)
-    .where(
-      and(
-        eq(workOrders.projectId, cell.projectId),
-        eq(workOrders.state, 'running'),
-      ),
-    )
-    .all().length;
+  const runningCount = tx.orders.list({
+    projectId: cell.projectId,
+    state: 'running',
+  }).length;
   const [picked] = selectClaimable(
     rows.map((row) => toClaimCandidate(row, unreachable)),
     cell,
@@ -231,12 +155,7 @@ const claimWorkOrder = (
   const row = rows.find((candidate) => candidate.orderId === picked.orderId);
   if (row === undefined) return undefined;
 
-  const steps = tx
-    .select()
-    .from(orderSteps)
-    .where(eq(orderSteps.orderId, row.orderId))
-    .orderBy(asc(orderSteps.stepIndex))
-    .all();
+  const steps = tx.steps.listByOrder(row.orderId);
   const currentStep = steps.find(
     (step) => step.stepIndex === row.currentStepIndex,
   );
@@ -250,42 +169,38 @@ const claimWorkOrder = (
       leaseExpiresAt,
       now,
     ) ??
-    tx
-      .insert(jobs)
-      .values({
-        jobId: asJobId(`job-${crypto.randomUUID()}`),
-        projectId: row.projectId,
-        orderId: row.orderId,
-        stepId: currentStep?.stepId ?? null,
-        lineName: row.lineName,
-        kind: 'run_operator',
-        workspaceMode:
-          row.currentStepIndex === 0 && row.worktreeResets === 0
-            ? 'fresh'
-            : 'reuse',
-        status: 'claimed',
-        repoUrl: project.repoUrl,
-        baseBranch: row.baseBranch,
-        baseCommitSha: row.baseCommitSha,
-        targetBranch: row.branch,
-        expectedPriorStepsJson: steps
-          .filter((step) => step.stepIndex < row.currentStepIndex)
-          .map((step) => ({
-            stepId: step.stepId,
-            stationId: step.stationId,
-            stepIndex: step.stepIndex,
-            requiredFiles: step.requiredFilesJson,
-          })),
-        payloadJson: stepJobPayload(row, row.currentStepIndex),
-        claimedByCellId: cell.cellId,
-        claimedByFactoryId: cell.factoryId,
-        epoch,
-        leaseExpiresAt,
-        createdAt: now,
-        startedAt: now,
-      })
-      .returning()
-      .get();
+    tx.jobs.insert({
+      jobId: asJobId(`job-${crypto.randomUUID()}`),
+      projectId: row.projectId,
+      orderId: row.orderId,
+      stepId: currentStep?.stepId ?? null,
+      lineName: row.lineName,
+      kind: 'run_operator',
+      workspaceMode:
+        row.currentStepIndex === 0 && row.worktreeResets === 0
+          ? 'fresh'
+          : 'reuse',
+      status: 'claimed',
+      repoUrl: project.repoUrl,
+      baseBranch: row.baseBranch,
+      baseCommitSha: row.baseCommitSha,
+      targetBranch: row.branch,
+      expectedPriorStepsJson: steps
+        .filter((step) => step.stepIndex < row.currentStepIndex)
+        .map((step) => ({
+          stepId: step.stepId,
+          stationId: step.stationId,
+          stepIndex: step.stepIndex,
+          requiredFiles: step.requiredFilesJson,
+        })),
+      payloadJson: stepJobPayload(row, row.currentStepIndex),
+      claimedByCellId: cell.cellId,
+      claimedByFactoryId: cell.factoryId,
+      epoch,
+      leaseExpiresAt,
+      createdAt: now,
+      startedAt: now,
+    });
   updateWorkOrder(
     tx,
     row,
@@ -313,7 +228,7 @@ const claimWorkOrder = (
 };
 
 const claimNext = (
-  tx: DbTx,
+  tx: StorageWriteTx,
   cell: ClaimCell,
   leaseExpiresAt: number,
   now: number,
@@ -327,13 +242,12 @@ const claimNext = (
   return claimWorkOrder(tx, cell, project, leaseExpiresAt, now, log);
 };
 
-export const headCommitOfJob = (tx: DbTx, job: JobRow): string | null => {
+export const headCommitOfJob = (
+  tx: StorageWriteTx,
+  job: JobRow,
+): string | null => {
   if (job.orderId === null) return null;
-  const order = tx
-    .select()
-    .from(workOrders)
-    .where(eq(workOrders.orderId, job.orderId))
-    .get();
+  const order = tx.orders.find(job.orderId);
   return order?.headCommitSha ?? order?.baseCommitSha ?? null;
 };
 
@@ -360,16 +274,17 @@ export const toClaimedJob = (
   payload: row.payloadJson,
 });
 
-const attemptClaim = (ctx: AuthenticatedContext, cell: ClaimCell) => {
+const attemptClaim = async (ctx: AuthenticatedContext, cell: ClaimCell) => {
   const now = ctx.clock.now();
   const leaseExpiresAt = addMs(now, LEASE_TTL_MS);
-  const outcome = immediateTx(ctx.db, (tx) => {
+  const outcome = await ctx.storage.write((tx) => {
     const log: TransitionLog = [];
     touchFactory(tx, cell.factoryId, now);
     reapExpiredLeases(tx, now, log);
-    const claimed = holdsActiveJob(tx, cell.cellId)
-      ? undefined
-      : claimNext(tx, cell, leaseExpiresAt, now, log);
+    const claimed =
+      tx.jobs.findActiveByCell(cell.cellId) !== undefined
+        ? undefined
+        : claimNext(tx, cell, leaseExpiresAt, now, log);
     return {
       job:
         claimed === undefined
@@ -392,10 +307,10 @@ export const claimJobProcedure = scopedProcedure(['factory:worker'])(
     allowedLines: input.body.allowedLines,
   };
   const waitMs = Math.min(input.body.waitMs, CLAIM_WAIT_MS);
-  const first = attemptClaim(ctx, cell);
+  const first = await attemptClaim(ctx, cell);
   if (first.job !== null || waitMs === 0)
     return { code: 200 as const, job: first.job };
   await ctx.claimWaiters.waitForWake(waitMs, ctx.signal);
-  const second = attemptClaim(ctx, cell);
+  const second = await attemptClaim(ctx, cell);
   return { code: 200 as const, job: second.job };
 });

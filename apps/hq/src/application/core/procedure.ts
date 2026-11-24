@@ -1,8 +1,8 @@
-import type { Db } from '../../db/client';
 import type { CellId } from '../../domain/common/brand';
 import type { AuthPort, Principal, TokenScope } from '../ports/auth.port';
 import type { ClaimWaitersPort } from '../ports/claim-waiters.port';
 import type { ClockPort } from '../ports/clock.port';
+import type { StoragePort } from '../ports/storage.port';
 import type { TransitionBusPort } from '../ports/transition-bus.port';
 import { Forbidden, Unauthorized } from './error-handling';
 import type {
@@ -14,7 +14,7 @@ import type {
 import { withZodSchema } from './schema/zod';
 
 export type TransportContext = {
-  db: Db;
+  storage: StoragePort;
   clock: ClockPort;
   auth: AuthPort;
   claimWaiters: ClaimWaitersPort;

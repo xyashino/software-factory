@@ -1,17 +1,11 @@
-import { and, asc, eq, inArray } from 'drizzle-orm';
 import type { z } from 'zod';
 import { resolveIncidentContract } from '@repo/hq-contracts/incidents.contract';
-import { immediateTx, type DbTx } from '../../../db/client';
-import { incidents } from '../../../db/schema/incidents';
-import { jobs } from '../../../db/schema/jobs';
-import { orderSteps } from '../../../db/schema/orders';
 import {
   asFactoryId,
   asIncidentId,
   type CellId,
   type FactoryId,
   type IncidentId,
-  type OrderId,
 } from '../../../domain/common/brand';
 import {
   resolveIncident,
@@ -30,6 +24,12 @@ import {
   anyScopedProcedure,
   type AuthenticatedContext,
 } from '../../core/procedure';
+import type {
+  IncidentRow,
+  OrderStepRow,
+  StorageWriteTx,
+  WorkOrderRow,
+} from '../../ports/storage.port';
 import { toIncidentDto } from '../../orders/incident-views';
 import {
   toIncidentSnapshot,
@@ -45,15 +45,9 @@ import {
   type Actor,
   type TransitionLog,
 } from '../../orders/order-writes';
-import { toWorkOrderDto, type WorkOrderRow } from '../../orders/order-views';
-
-const ACTIVE_JOB_STATUSES = ['claimed', 'running'] as const;
-const OPEN_JOB_STATUSES = ['ready', 'claimed', 'running'] as const;
+import { toWorkOrderDto } from '../../orders/order-views';
 
 type ResolveBody = z.infer<typeof resolveIncidentContract.in.body>;
-type IncidentRow = typeof incidents.$inferSelect;
-type JobRow = typeof jobs.$inferSelect;
-type StepRow = typeof orderSteps.$inferSelect;
 type MechanicResolver = {
   kind: 'mechanic';
   cellId: CellId;
@@ -94,40 +88,21 @@ const toResolution = (body: ResolveBody): Resolution => {
   }
 };
 
-const requireIncident = (tx: DbTx, incidentId: string): IncidentRow => {
-  const row = tx
-    .select()
-    .from(incidents)
-    .where(eq(incidents.incidentId, asIncidentId(incidentId)))
-    .get();
+const requireIncident = (
+  tx: StorageWriteTx,
+  incidentId: string,
+): IncidentRow => {
+  const row = tx.incidents.find(asIncidentId(incidentId));
   if (row === undefined) throw new NotFound(`Incident ${incidentId} not found`);
   return row;
 };
 
-const stepsOf = (tx: DbTx, orderId: OrderId): StepRow[] =>
-  tx
-    .select()
-    .from(orderSteps)
-    .where(eq(orderSteps.orderId, orderId))
-    .orderBy(asc(orderSteps.stepIndex))
-    .all();
-
 const requireMechanicLease = (
-  tx: DbTx,
+  tx: StorageWriteTx,
   incidentId: IncidentId,
   resolver: MechanicResolver,
 ): void => {
-  const job: JobRow | undefined = tx
-    .select()
-    .from(jobs)
-    .where(
-      and(
-        eq(jobs.incidentId, incidentId),
-        eq(jobs.kind, 'mechanic'),
-        inArray(jobs.status, ACTIVE_JOB_STATUSES),
-      ),
-    )
-    .get();
+  const job = tx.jobs.findActiveMechanic(incidentId);
   if (job === undefined || job.claimedByCellId !== resolver.cellId)
     throw new Forbidden(
       `Cell ${resolver.cellId} holds no mechanic lease for incident ${incidentId}`,
@@ -139,29 +114,15 @@ const requireMechanicLease = (
 };
 
 const closeMechanicJobs = (
-  tx: DbTx,
+  tx: StorageWriteTx,
   incidentId: IncidentId,
   status: 'passed' | 'cancelled',
   actor: Actor,
   now: number,
   log: TransitionLog,
 ): void => {
-  const open = tx
-    .select()
-    .from(jobs)
-    .where(
-      and(
-        eq(jobs.incidentId, incidentId),
-        eq(jobs.kind, 'mechanic'),
-        inArray(jobs.status, OPEN_JOB_STATUSES),
-      ),
-    )
-    .all();
-  for (const job of open) {
-    tx.update(jobs)
-      .set({ status, finishedAt: now })
-      .where(eq(jobs.jobId, job.jobId))
-      .run();
+  for (const job of tx.jobs.listOpenMechanic(incidentId)) {
+    tx.jobs.update(job.jobId, { status, finishedAt: now });
     log.push(
       orderTransition({
         projectId: job.projectId,
@@ -177,7 +138,7 @@ const closeMechanicJobs = (
 };
 
 const persistOrder = (
-  tx: DbTx,
+  tx: StorageWriteTx,
   order: WorkOrderRow,
   next: WorkOrderSnapshot,
   actor: Actor,
@@ -216,8 +177,8 @@ const persistOrder = (
 };
 
 const persistSteps = (
-  tx: DbTx,
-  steps: readonly StepRow[],
+  tx: StorageWriteTx,
+  steps: readonly OrderStepRow[],
   next: WorkOrderSnapshot,
   now: number,
 ): void => {
@@ -228,20 +189,17 @@ const persistSteps = (
     if (step === undefined) continue;
     const rerun =
       next.state === 'queued' && row.stepIndex >= next.currentStepIndex;
-    tx.update(orderSteps)
-      .set({
-        state: rerun ? 'pending' : row.state,
-        attemptsUsed: step.attemptsUsed,
-        maxAttempts: step.maxAttempts,
-        updatedAt: now,
-      })
-      .where(eq(orderSteps.stepId, row.stepId))
-      .run();
+    tx.steps.update(row.stepId, {
+      state: rerun ? 'pending' : row.state,
+      attemptsUsed: step.attemptsUsed,
+      maxAttempts: step.maxAttempts,
+      updatedAt: now,
+    });
   }
 };
 
 const persistIncident = (
-  tx: DbTx,
+  tx: StorageWriteTx,
   incident: IncidentRow,
   next: IncidentSnapshot,
   actor: Actor,
@@ -249,18 +207,13 @@ const persistIncident = (
   log: TransitionLog,
 ): IncidentRow => {
   const closed = next.status === 'resolved' || next.status === 'cancelled';
-  const updated = tx
-    .update(incidents)
-    .set({
-      status: next.status,
-      triageOwner: next.triageOwner,
-      resolutionAction: next.resolutionAction,
-      resolvedBy: closed ? actor.id : null,
-      resolvedAt: closed ? now : null,
-    })
-    .where(eq(incidents.incidentId, incident.incidentId))
-    .returning()
-    .get();
+  const updated = tx.incidents.update(incident.incidentId, {
+    status: next.status,
+    triageOwner: next.triageOwner,
+    resolutionAction: next.resolutionAction,
+    resolvedBy: closed ? actor.id : null,
+    resolvedAt: closed ? now : null,
+  });
   log.push(
     orderTransition({
       projectId: incident.projectId,
@@ -278,17 +231,17 @@ const persistIncident = (
 export const resolveIncidentProcedure = anyScopedProcedure([
   'supervisor:write',
   'factory:worker',
-])(resolveIncidentContract)((input, ctx) => {
+])(resolveIncidentContract)(async (input, ctx) => {
   const now = ctx.clock.now();
   const resolver = resolverOf(ctx, input.body);
   const actor = actorOf(resolver);
-  const outcome = settle(() =>
-    immediateTx(ctx.db, (tx) => {
+  const outcome = await settle(() =>
+    ctx.storage.write((tx) => {
       if (resolver.kind === 'mechanic')
         touchFactory(tx, resolver.factoryId, now);
       const incident = requireIncident(tx, input.params.id);
       const order = requireOrder(tx, incident.orderId);
-      const steps = stepsOf(tx, order.orderId);
+      const steps = tx.steps.listByOrder(order.orderId);
       if (resolver.kind === 'mechanic')
         requireMechanicLease(tx, incident.incidentId, resolver);
       const result = resolveIncident(

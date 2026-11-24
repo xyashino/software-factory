@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { MAX_WORKTREE_RESETS } from '../../config';
 
-const STATION_KINDS = ['operator', 'inspection', 'deliver'] as const;
+export const STATION_KINDS = ['operator', 'inspection', 'deliver'] as const;
 
 const stationSchema = z.object({
   id: z.string().min(1),
