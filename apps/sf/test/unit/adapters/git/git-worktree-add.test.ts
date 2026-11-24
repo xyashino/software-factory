@@ -100,4 +100,24 @@ describe('git worktree add', () => {
       'worktree add /wt -b feat/x origin/main',
     );
   });
+
+  it('starts the root worktree from the origin plan branch when it has no local ref', async () => {
+    // Arrange
+    const { port, calls } = recordingProcess({
+      'rev-parse --verify --quiet refs/heads/feat/plan': {
+        exitCode: 1,
+        stdout: '',
+        stderr: '',
+      },
+    });
+    const git = createGitAdapter(port);
+
+    // Act
+    await git.worktreeAdd('/repo', '/wt', 'factory/cli-11', 'feat/plan');
+
+    // Assert
+    expect(calls.map((call) => call.args)).toContain(
+      'worktree add /wt -b factory/cli-11 origin/feat/plan',
+    );
+  });
 });
