@@ -1,24 +1,21 @@
 import { describe, expect, it } from 'vitest';
-import type { Ports } from '../../../src/application/core/procedure';
-import { createSupervisor } from '../../../src/factory/supervisor';
+import { createSupervisor } from '../../src/supervisor';
+import type { FactoryPorts } from '../../src/ports';
 
 const LOG_DIR = '/data/sf/cells';
 const BASE_NAME = 'dev-box';
+const PROJECT_ID = 'alpha';
 const SHORT_EXIT_MS = 0;
 const SLOW_EXIT_MS = 500;
 const SIGTERM_IGNORED_MS = 10_000;
 
 interface Host {
-  ports: Pick<Ports, 'process' | 'clock'>;
+  ports: Pick<FactoryPorts, 'process' | 'clock'>;
   isRunning: (pid: number) => boolean;
   crash: (pid: number) => void;
   now: () => number;
   pids: () => number[];
 }
-
-const unused = (): never => {
-  throw new Error('port not used by this test');
-};
 
 const hostOf = (options: {
   exitAfterMs: number;
@@ -34,17 +31,14 @@ const hostOf = (options: {
     const at = exitAt.get(pid);
     return at === null || at === undefined || time < at;
   };
-  const ports: Pick<Ports, 'process' | 'clock'> = {
+  const ports: Pick<FactoryPorts, 'process' | 'clock'> = {
     process: {
-      run: unused,
-      probeUrl: unused,
       spawnDetached: async () => {
         nextPid += 1;
         exitAt.set(nextPid, null);
         return nextPid;
       },
       isAlive: isRunning,
-      parentPid: () => 1,
       terminate: (pid) => {
         if (options.ignoresTerm !== true && exitAt.get(pid) === null) {
           exitAt.set(pid, time + options.exitAfterMs);
@@ -80,6 +74,7 @@ const spawnCell = (
 ) =>
   supervisor.spawn({
     repoRoot: '/repo',
+    projectId: PROJECT_ID,
     name,
     baseName: BASE_NAME,
     start: startOf,

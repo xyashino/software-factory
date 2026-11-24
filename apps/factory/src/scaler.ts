@@ -1,4 +1,4 @@
-import { Refused } from '../application/core/errors';
+import { Refused } from './errors';
 import type { CellRecord, CellStart, Supervisor } from './supervisor';
 
 const RESPAWN_BASE_MS = 1_000;

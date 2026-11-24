@@ -1,9 +1,9 @@
 import { randomBytes } from 'node:crypto';
 import { join } from 'node:path';
 import type { Activity } from '@repo/factory-contracts/scale.contract';
-import { Refused } from '../application/core/errors';
-import type { Ports } from '../application/core/procedure';
-import { cellNameOf } from '../domain/cell/cell-name';
+import { cellNameOf } from './cell-name';
+import { Refused } from './errors';
+import type { ClockPort, ProcessPort } from './ports';
 
 const STOP_WAIT_MS = 10_000;
 const KILL_WAIT_MS = 5_000;
@@ -60,6 +60,11 @@ interface Entry {
 
 type RunningEntry = Entry & { pid: number };
 
+interface SupervisorPorts {
+  clock: ClockPort;
+  process: ProcessPort;
+}
+
 const newCellIdOf = (taken: ReadonlyMap<string, Entry>): string => {
   for (;;) {
     const cellId = `cell-${randomBytes(CELL_ID_BYTES).toString('hex')}`;
@@ -79,7 +84,7 @@ const allocateName = (base: string, taken: readonly string[]): string => {
 };
 
 const exitedWithin = async (
-  ports: Pick<Ports, 'process' | 'clock'>,
+  ports: SupervisorPorts,
   pid: number,
   timeoutMs: number,
 ): Promise<boolean> => {
@@ -94,7 +99,7 @@ const exitedWithin = async (
 };
 
 const stopProcess = async (
-  ports: Pick<Ports, 'process' | 'clock'>,
+  ports: SupervisorPorts,
   pid: number,
 ): Promise<void> => {
   ports.process.terminate(pid);
@@ -108,7 +113,7 @@ const stopProcess = async (
 };
 
 export const createSupervisor = (
-  ports: Pick<Ports, 'process' | 'clock'>,
+  ports: SupervisorPorts,
   logDir: string,
 ): Supervisor => {
   const entries = new Map<string, Entry>();

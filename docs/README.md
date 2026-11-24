@@ -33,4 +33,4 @@ Defined once here. Other docs link to this section.
 | **Work order** | One `todos/*.md` item travelling down a Line                                                     |
 | **Supervisor** | The human who runs HQ and resolves Incidents                                                     |
 
-Code paths: `apps/hq` is HQ, `apps/sf` holds the Cell and Factory daemons. Docs use the terms above. Old command and env names are listed in [sf.md](./sf.md#deprecated-names).
+Code paths: `apps/hq` is HQ, `apps/factory` is the Factory daemon, `apps/sf` holds the CLI and Cell daemon. Docs use the terms above. Old command and env names are listed in [sf.md](./sf.md#deprecated-names).

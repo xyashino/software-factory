@@ -36,7 +36,7 @@ export const COMPILED_URL_PATTERN = /\/(\$bunfs|~BUN)\//;
 export const IS_COMPILED = COMPILED_URL_PATTERN.test(import.meta.url);
 export const CLI_ENTRY = fileURLToPath(new URL('./cli.ts', import.meta.url));
 export const FACTORY_DAEMON_ENTRY = fileURLToPath(
-  new URL('./factory/index.ts', import.meta.url),
+  new URL('../../factory/src/index.ts', import.meta.url),
 );
 export const HQ_MARKER = '__server';
 export const WEB_MARKER = '__web';

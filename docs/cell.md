@@ -15,7 +15,7 @@ Terms: [glossary](./README.md#glossary). Protocol and timing: [hq.md §3](./hq.m
 | Piece | Code | Runs as | Talks to |
 | :--- | :--- | :--- | :--- |
 | Cell daemon | `apps/sf/src/application/procedures/cell/*`, helpers `apps/sf/src/cell/*`, CLI `apps/sf/src/adapters/cli/cell.command.ts` | `sf cell start`, one per Cell, cwd = repo root, started by the Factory daemon | Factory daemon `/relay/api/v1/*`; loopback operator endpoint |
-| Factory daemon | `apps/sf/src/factory/*`, CLI `apps/sf/src/adapters/cli/factory.command.ts` | detached `sf factory start`, `127.0.0.1:7072` | HQ `/api/v1/factories/*`, `/api/v1/cells/*` (Factory credential); spawns and kills Cell daemons |
+| Factory daemon | `apps/factory/src/*`, CLI `apps/sf/src/adapters/cli/factory.command.ts` | detached `sf factory start`, `127.0.0.1:7072` | HQ `/api/v1/factories/*`, `/api/v1/cells/*` (Factory credential); spawns and kills Cell daemons |
 | Factory daemon client | `apps/sf/src/application/procedures/cell/factory-cells.ts`, `apps/sf/src/adapters/http/factory.adapter.ts` | inside `sf cell scale|list` | Factory daemon loopback API |
 
 ## Factory daemon
@@ -39,7 +39,7 @@ Start, stop, status (`apps/sf/src/application/procedures/factory/*`):
 
 Errors: `{ code, type, message }`. `400` argument, `409` refused (no `.factory/config.json`, project scaled from another repo path, Factory not connected, HQ unreachable or rejected), `503` relay could not reach HQ.
 
-Cell supervision (`apps/sf/src/factory/supervisor.ts`):
+Cell supervision (`apps/factory/src/supervisor.ts`):
 
 - Cell id = `cell-` + 8 random hex, memory only, one per run, never reused. Names: `hostname`, `hostname-2`, … against live Cells.
 - Scale up: daemon checks `.factory/config.json` in the repo, takes the project from it, spawns `sf cell start --name <name>` with cwd = repo root and env `HQ_URL` (relay), `HQ_TOKEN` (local bearer for this Cell), `FACTORY_CELL_ID`, `CELL_LINES` (if set), `SF_FACTORY_PID` = daemon pid.

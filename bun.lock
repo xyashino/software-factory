@@ -15,6 +15,23 @@
         "typescript": "catalog:",
       },
     },
+    "apps/factory": {
+      "name": "@repo/factory",
+      "version": "0.0.0",
+      "dependencies": {
+        "@repo/factory-contracts": "workspace:*",
+        "zod": "catalog:",
+      },
+      "devDependencies": {
+        "@repo/eslint-config": "workspace:*",
+        "@repo/typescript-config": "workspace:*",
+        "@types/bun": "catalog:",
+        "@types/node": "catalog:",
+        "eslint": "catalog:",
+        "typescript": "catalog:",
+        "vitest": "catalog:",
+      },
+    },
     "apps/hq": {
       "name": "@repo/hq",
       "version": "0.0.0",
@@ -530,6 +547,8 @@
     "@repo/bun-sqlite-kit": ["@repo/bun-sqlite-kit@workspace:packages/bun-sqlite-kit"],
 
     "@repo/eslint-config": ["@repo/eslint-config@workspace:packages/eslint-config"],
+
+    "@repo/factory": ["@repo/factory@workspace:apps/factory"],
 
     "@repo/factory-contracts": ["@repo/factory-contracts@workspace:packages/factory-contracts"],
 
