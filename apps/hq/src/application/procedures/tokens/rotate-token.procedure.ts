@@ -9,13 +9,13 @@ export const rotateTokenProcedure = authenticatedProcedure(rotateTokenContract)(
     const current = ctx.principal.tokenId;
     const now = ctx.clock.now();
 
-    return ctx.storage.write((tx) => {
-      const row = tx.tokens.find(current);
+    return ctx.storage.write(async (tx) => {
+      const row = await tx.tokens.find(current);
       if (row === undefined) throw new Unauthorized('Token no longer exists');
-      if (tx.tokens.findSuccessor(current) !== undefined)
+      if ((await tx.tokens.findSuccessor(current)) !== undefined)
         throw new Conflict(`Token ${current} was already rotated`);
 
-      const issued = insertSafeToken(tx, {
+      const issued = await insertSafeToken(tx, {
         kind: row.kind,
         name: row.name,
         scopes: row.scopesJson,
@@ -25,7 +25,7 @@ export const rotateTokenProcedure = authenticatedProcedure(rotateTokenContract)(
         now,
       });
       const graceEnd = now + TOKEN_ROTATE_GRACE_MS;
-      tx.tokens.update(current, {
+      await tx.tokens.update(current, {
         expiresAt:
           row.expiresAt === null ? graceEnd : Math.min(row.expiresAt, graceEnd),
       });

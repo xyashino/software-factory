@@ -7,17 +7,17 @@ import {
   type TransitionLog,
 } from './order-writes';
 
-const requeueOrder = (
+const requeueOrder = async (
   tx: StorageWriteTx,
   job: JobRow,
   now: number,
   actor: Actor,
   log: TransitionLog,
-): void => {
+): Promise<void> => {
   if (job.orderId === null) return;
-  const order = tx.orders.find(job.orderId);
+  const order = await tx.orders.find(job.orderId);
   if (order === undefined || order.activeJobId !== job.jobId) return;
-  updateWorkOrder(
+  await updateWorkOrder(
     tx,
     order,
     {
@@ -41,25 +41,25 @@ const requeueOrder = (
   );
 };
 
-const requeuePlanBranch = (
+const requeuePlanBranch = async (
   tx: StorageWriteTx,
   job: JobRow,
   now: number,
-): void => {
+): Promise<void> => {
   if (job.planId === null) return;
-  const plan = tx.plans.find(job.planId);
+  const plan = await tx.plans.find(job.planId);
   if (plan === undefined || plan.state !== 'branching') return;
-  insertPlanBranchJob(tx, plan, job.repoUrl, now);
+  await insertPlanBranchJob(tx, plan, job.repoUrl, now);
 };
 
-export const loseJob = (
+export const loseJob = async (
   tx: StorageWriteTx,
   job: JobRow,
   now: number,
   actor: Actor,
   log: TransitionLog,
-): void => {
-  tx.jobs.update(job.jobId, { status: 'lost', finishedAt: now });
-  requeueOrder(tx, job, now, actor, log);
-  requeuePlanBranch(tx, job, now);
+): Promise<void> => {
+  await tx.jobs.update(job.jobId, { status: 'lost', finishedAt: now });
+  await requeueOrder(tx, job, now, actor, log);
+  await requeuePlanBranch(tx, job, now);
 };

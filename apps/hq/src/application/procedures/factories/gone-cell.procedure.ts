@@ -16,10 +16,10 @@ export const goneCellProcedure = scopedProcedure(['factory:worker'])(
   const cellId = asCellId(input.params.id);
   const now = ctx.clock.now();
 
-  const records = await ctx.storage.write((tx) => {
-    touchFactory(tx, factoryId, now);
+  const records = await ctx.storage.write(async (tx) => {
+    await touchFactory(tx, factoryId, now);
     const log: TransitionLog = [];
-    loseCellJob(
+    await loseCellJob(
       tx,
       cellId,
       factoryId,

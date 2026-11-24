@@ -6,11 +6,11 @@ import { toOrderPlanDto, toWorkOrderDto } from '../../orders/order-views';
 export const getOrderPlanProcedure = scopedProcedure(['supervisor:read'])(
   getOrderPlanContract,
 )(async (input, ctx) => {
-  const { plan, members } = await ctx.storage.read((tx) => {
-    const plan = requirePlan(tx, input.params.id);
+  const { plan, members } = await ctx.storage.read(async (tx) => {
+    const plan = await requirePlan(tx, input.params.id);
     return {
       plan,
-      members: tx.orders.list({ planId: plan.planId }),
+      members: await tx.orders.list({ planId: plan.planId }),
     };
   });
   return {

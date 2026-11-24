@@ -13,12 +13,12 @@ export const enrollFactoryProcedure = scopedProcedure(['factory:enroll'])(
   const factoryId = asFactoryId(crypto.randomUUID());
   const expiresAt = addMs(now, FACTORY_SESSION_TTL_MS);
 
-  const session = await ctx.storage.write((tx) => {
-    const join = tx.tokens.find(ctx.principal.tokenId);
+  const session = await ctx.storage.write(async (tx) => {
+    const join = await tx.tokens.find(ctx.principal.tokenId);
     if (join === undefined || join.revokedAt !== null)
       throw new Unauthorized('Join token already used');
-    tx.tokens.update(join.tokenId, { revokedAt: now });
-    tx.factories.insert({
+    await tx.tokens.update(join.tokenId, { revokedAt: now });
+    await tx.factories.insert({
       factoryId,
       name: input.body.name,
       lastSeenAt: now,

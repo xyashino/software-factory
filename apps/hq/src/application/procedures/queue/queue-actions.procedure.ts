@@ -19,7 +19,7 @@ import {
 
 type QueueActionBody = ContractInput<typeof queueActionsContract>['body'];
 
-const moveBy = (
+const moveBy = async (
   tx: StorageWriteTx,
   row: WorkOrderRow,
   action: Extract<
@@ -29,11 +29,11 @@ const moveBy = (
   actor: Actor,
   now: number,
   log: TransitionLog,
-): WorkOrderRow => {
+): Promise<WorkOrderRow> => {
   const next = nextWorkOrderState(
     row.state,
     action,
-    readinessOf(tx, row).isReady,
+    (await readinessOf(tx, row)).isReady,
   );
   if (next === null)
     throw new Conflict(
@@ -42,17 +42,17 @@ const moveBy = (
   return moveOrder(tx, row, next, action, actor, now, log);
 };
 
-const applyAction = (
+const applyAction = async (
   tx: StorageWriteTx,
   row: WorkOrderRow,
   body: QueueActionBody,
   actor: Actor,
   now: number,
   log: TransitionLog,
-): WorkOrderRow => {
+): Promise<WorkOrderRow> => {
   switch (body.action) {
     case 'reprioritise': {
-      const updated = updateWorkOrder(
+      const updated = await updateWorkOrder(
         tx,
         row,
         { priority: body.priority },
@@ -75,7 +75,7 @@ const applyAction = (
     case 'unpause':
     case 'reset_to_scratch':
     case 'cancel':
-      return moveBy(tx, row, body.action, actor, now, log);
+      return await moveBy(tx, row, body.action, actor, now, log);
     default: {
       const _exhaustive: never = body;
       return _exhaustive;
@@ -91,12 +91,21 @@ export const queueActionsProcedure = scopedProcedure(['supervisor:write'])(
   const actor: Actor = { kind: 'supervisor', id: ctx.principal.tokenId };
   const orderIds = [...new Set(body.orderIds)];
 
-  const { orders, records } = await ctx.storage.write((tx) => {
+  const { orders, records } = await ctx.storage.write(async (tx) => {
     const log: TransitionLog = [];
-    const updated = orderIds.map((orderId) =>
-      applyAction(tx, requireOrder(tx, orderId), body, actor, now, log),
-    );
-    return { orders: updated, records: flushTransitions(tx, log) };
+    const updated: WorkOrderRow[] = [];
+    for (const orderId of orderIds)
+      updated.push(
+        await applyAction(
+          tx,
+          await requireOrder(tx, orderId),
+          body,
+          actor,
+          now,
+          log,
+        ),
+      );
+    return { orders: updated, records: await flushTransitions(tx, log) };
   });
 
   publishCommitted(ctx, records);

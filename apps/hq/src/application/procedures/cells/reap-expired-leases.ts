@@ -7,21 +7,23 @@ import type { Actor, TransitionLog } from '../../orders/order-writes';
 
 const REAPER_ACTOR: Actor = { kind: 'system', id: null };
 
-const silentFactoryIds = (tx: StorageWriteTx, now: number): FactoryId[] =>
-  tx.factories
-    .list()
+const silentFactoryIds = async (
+  tx: StorageWriteTx,
+  now: number,
+): Promise<FactoryId[]> =>
+  (await tx.factories.list())
     .filter((row) => isSilent(row.lastSeenAt, now))
     .map((row) => row.factoryId);
 
-export const reapExpiredLeases = (
+export const reapExpiredLeases = async (
   tx: StorageWriteTx,
   now: number,
   log: TransitionLog,
-): void => {
-  for (const job of tx.jobs.listExpired(now))
-    loseJob(tx, job, now, REAPER_ACTOR, log);
-  for (const factoryId of silentFactoryIds(tx, now)) {
-    loseFactoryJobs(tx, factoryId, now, REAPER_ACTOR, log);
-    unpinOrders(tx, factoryId, now);
+): Promise<void> => {
+  for (const job of await tx.jobs.listExpired(now))
+    await loseJob(tx, job, now, REAPER_ACTOR, log);
+  for (const factoryId of await silentFactoryIds(tx, now)) {
+    await loseFactoryJobs(tx, factoryId, now, REAPER_ACTOR, log);
+    await unpinOrders(tx, factoryId, now);
   }
 };

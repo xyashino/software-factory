@@ -19,10 +19,10 @@ export const cellIdOf = (ctx: AuthenticatedContext): CellId => {
   return ctx.cellId;
 };
 
-export const touchFactory = (
+export const touchFactory = async (
   tx: StorageWriteTx,
   factoryId: FactoryId,
   now: number,
-): void => {
-  tx.factories.update(factoryId, { lastSeenAt: now });
+): Promise<void> => {
+  await tx.factories.update(factoryId, { lastSeenAt: now });
 };

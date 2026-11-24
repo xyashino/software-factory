@@ -63,52 +63,52 @@ const parentRefOf = (row: WorkOrderRow): ParentRef => ({
   headCommitSha: row.headCommitSha,
 });
 
-const insertTransition = (
+const insertTransition = async (
   tx: StorageWriteTx,
   input: StateTransitionInput,
-): StateTransitionRecord => ({
+): Promise<StateTransitionRecord> => ({
   ...input,
-  seq: tx.transitions.append(input),
+  seq: await tx.transitions.append(input),
 });
 
 export const findProject = (
   tx: StorageReadTx,
   projectId: string,
-): ProjectRow | undefined => tx.projects.find(asProjectId(projectId));
+): Promise<ProjectRow | undefined> => tx.projects.find(asProjectId(projectId));
 
 export const findPlan = (
   tx: StorageReadTx,
   planId: string,
-): OrderPlanRow | undefined => tx.plans.find(asPlanId(planId));
+): Promise<OrderPlanRow | undefined> => tx.plans.find(asPlanId(planId));
 
 export const findOrder = (
   tx: StorageReadTx,
   orderId: string,
-): WorkOrderRow | undefined => tx.orders.find(asOrderId(orderId));
+): Promise<WorkOrderRow | undefined> => tx.orders.find(asOrderId(orderId));
 
-export const requireProject = (
+export const requireProject = async (
   tx: StorageReadTx,
   projectId: string,
-): ProjectRow => {
-  const row = findProject(tx, projectId);
+): Promise<ProjectRow> => {
+  const row = await findProject(tx, projectId);
   if (row === undefined) throw new NotFound(`Project ${projectId} not found`);
   return row;
 };
 
-export const requirePlan = (
+export const requirePlan = async (
   tx: StorageReadTx,
   planId: string,
-): OrderPlanRow => {
-  const row = findPlan(tx, planId);
+): Promise<OrderPlanRow> => {
+  const row = await findPlan(tx, planId);
   if (row === undefined) throw new NotFound(`Order plan ${planId} not found`);
   return row;
 };
 
-export const requireOrder = (
+export const requireOrder = async (
   tx: StorageReadTx,
   orderId: string,
-): WorkOrderRow => {
-  const row = findOrder(tx, orderId);
+): Promise<WorkOrderRow> => {
+  const row = await findOrder(tx, orderId);
   if (row === undefined) throw new NotFound(`Work order ${orderId} not found`);
   return row;
 };
@@ -125,16 +125,16 @@ export const resolveFor = (
     parent: parent === null ? null : parentRefOf(parent),
   });
 
-export const readinessOf = (
+export const readinessOf = async (
   tx: StorageReadTx,
   row: WorkOrderRow,
-): ResolvedBaseBranch =>
+): Promise<ResolvedBaseBranch> =>
   resolveFor(
     { baseBranch: row.baseBranch, branch: row.branch },
-    row.planId === null ? null : (findPlan(tx, row.planId) ?? null),
+    row.planId === null ? null : ((await findPlan(tx, row.planId)) ?? null),
     row.parentOrderId === null
       ? null
-      : (findOrder(tx, row.parentOrderId) ?? null),
+      : ((await findOrder(tx, row.parentOrderId)) ?? null),
   );
 
 export const orderTransition = (
@@ -155,19 +155,19 @@ export const orderTransition = (
 export const insertOrderPlan = (
   tx: StorageWriteTx,
   values: OrderPlanInsert,
-): OrderPlanRow => tx.plans.insert(values);
+): Promise<OrderPlanRow> => tx.plans.insert(values);
 
 export const insertWorkOrder = (
   tx: StorageWriteTx,
   values: WorkOrderInsert,
-): WorkOrderRow => tx.orders.insert(values);
+): Promise<WorkOrderRow> => tx.orders.insert(values);
 
 export const updateWorkOrder = (
   tx: StorageWriteTx,
   row: WorkOrderRow,
   patch: Partial<WorkOrderInsert>,
   now: number,
-): WorkOrderRow =>
+): Promise<WorkOrderRow> =>
   tx.orders.update(row.orderId, {
     ...patch,
     version: row.version + 1,
@@ -179,20 +179,20 @@ export const updateOrderPlan = (
   row: OrderPlanRow,
   state: PlanState,
   now: number,
-): OrderPlanRow =>
+): Promise<OrderPlanRow> =>
   tx.plans.update(row.planId, {
     state,
     version: row.version + 1,
     updatedAt: now,
   });
 
-export const insertPlanBranchJob = (
+export const insertPlanBranchJob = async (
   tx: StorageWriteTx,
   plan: OrderPlanRow,
   repoUrl: string,
   now: number,
-): void => {
-  tx.jobs.insert({
+): Promise<void> => {
+  await tx.jobs.insert({
     jobId: asJobId(`job-${crypto.randomUUID()}`),
     projectId: plan.projectId,
     planId: plan.planId,
@@ -209,32 +209,32 @@ export const insertPlanBranchJob = (
   });
 };
 
-const releaseLease = (
+const releaseLease = async (
   tx: StorageWriteTx,
   row: WorkOrderRow,
   now: number,
-): void => {
+): Promise<void> => {
   if (row.activeJobId !== null)
-    tx.jobs.update(asJobId(row.activeJobId), {
+    await tx.jobs.update(asJobId(row.activeJobId), {
       status: 'cancelled',
       finishedAt: now,
     });
 };
 
-const unlockChildren = (
+const unlockChildren = async (
   tx: StorageWriteTx,
   parent: WorkOrderRow,
   actor: Actor,
   now: number,
   log: TransitionLog,
-): void => {
-  const children = tx.orders.list({
+): Promise<void> => {
+  const children = await tx.orders.list({
     parentOrderId: parent.orderId,
     state: 'waiting_parent',
   });
   for (const child of children) {
-    if (!readinessOf(tx, child).isReady) continue;
-    updateWorkOrder(tx, child, { state: 'queued' }, now);
+    if (!(await readinessOf(tx, child)).isReady) continue;
+    await updateWorkOrder(tx, child, { state: 'queued' }, now);
     log.push(
       orderTransition({
         projectId: child.projectId,
@@ -249,7 +249,7 @@ const unlockChildren = (
   }
 };
 
-export const moveOrder = (
+export const moveOrder = async (
   tx: StorageWriteTx,
   row: WorkOrderRow,
   next: WorkOrderState,
@@ -257,10 +257,10 @@ export const moveOrder = (
   actor: Actor,
   now: number,
   log: TransitionLog,
-): WorkOrderRow => {
+): Promise<WorkOrderRow> => {
   const patch: Partial<WorkOrderInsert> = { state: next };
   if (action === 'cancel') {
-    releaseLease(tx, row, now);
+    await releaseLease(tx, row, now);
     patch.activeJobId = null;
     patch.activeCellId = null;
     patch.pinnedFactoryId = null;
@@ -269,7 +269,7 @@ export const moveOrder = (
     patch.currentStepIndex = 0;
     patch.unavailableLineFactoriesJson = [];
   }
-  const updated = updateWorkOrder(tx, row, patch, now);
+  const updated = await updateWorkOrder(tx, row, patch, now);
   log.push(
     orderTransition({
       projectId: row.projectId,
@@ -281,23 +281,28 @@ export const moveOrder = (
       at: now,
     }),
   );
-  if (next === 'completed') unlockChildren(tx, updated, actor, now, log);
+  if (next === 'completed') await unlockChildren(tx, updated, actor, now, log);
   return updated;
 };
 
-export const flushTransitions = (
+export const flushTransitions = async (
   tx: StorageWriteTx,
   log: TransitionLog,
   command?: { commandId: CommandId; meta: Record<string, unknown> },
-): StateTransitionRecord[] =>
-  log.map((input, index) => {
+): Promise<StateTransitionRecord[]> => {
+  const records: StateTransitionRecord[] = [];
+  for (const [index, input] of log.entries()) {
     const owner = index === 0 ? command : undefined;
-    return insertTransition(tx, {
-      ...input,
-      commandId: owner?.commandId ?? null,
-      meta: owner?.meta ?? input.meta,
-    });
-  });
+    records.push(
+      await insertTransition(tx, {
+        ...input,
+        commandId: owner?.commandId ?? null,
+        meta: owner?.meta ?? input.meta,
+      }),
+    );
+  }
+  return records;
+};
 
 export const publishCommitted = (
   ctx: TransportContext,

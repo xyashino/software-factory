@@ -5,6 +5,7 @@ import { createSafeTokenAuth } from './adapters/auth/safe-token-auth.adapter';
 import { createClaimWaiters } from './adapters/memory/claim-waiters.adapter';
 import { createSystemClock } from './adapters/memory/system-clock.adapter';
 import { createTransitionBus } from './adapters/memory/transition-bus.adapter';
+import { createPostgresStorageAdapter } from './adapters/storage/postgres-storage.adapter';
 import { createSqliteStorageAdapter } from './adapters/storage/sqlite-storage.adapter';
 import { mintAdminToken } from './bootstrap/admin';
 import { hqSettingOf } from './bootstrap/env';
@@ -24,7 +25,12 @@ const dbPath =
   hqSettingOf(process.env, 'DB_PATH') ?? defaultDbPathOf(DEFAULT_DATA_DIR);
 const dataDir = hqSettingOf(process.env, 'DATA_DIR') ?? dirname(dbPath);
 mkdirSync(dataDir, { recursive: true });
-const storage = createSqliteStorageAdapter(createDb(dbPath));
+const databaseUrl = hqSettingOf(process.env, 'DATABASE_URL');
+const storage =
+  databaseUrl === undefined
+    ? createSqliteStorageAdapter(createDb(dbPath))
+    : await createPostgresStorageAdapter(databaseUrl);
+const dbLabel = databaseUrl === undefined ? dbPath : 'postgres';
 const clock = createSystemClock();
 
 if (process.argv.slice(2).join(' ') === ADMIN_TOKEN_CREATE) {
@@ -59,6 +65,6 @@ if (process.argv.slice(2).join(' ') === ADMIN_TOKEN_CREATE) {
       }),
   });
   process.stdout.write(
-    `factory-server listening on http://${hostname}:${port} (db ${dbPath})\n`,
+    `factory-server listening on http://${hostname}:${port} (db ${dbLabel})\n`,
   );
 }

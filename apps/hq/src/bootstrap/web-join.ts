@@ -12,16 +12,17 @@ export const writeWebJoinFile = async (
   clock: ClockPort,
   dataDir: string,
 ): Promise<void> => {
-  const secret = await storage.write((tx) => {
-    tx.tokens.revokeActiveOfKind('web_join', clock.now());
-    return insertSafeToken(tx, {
+  const secret = await storage.write(async (tx) => {
+    await tx.tokens.revokeActiveOfKind('web_join', clock.now());
+    const issued = await insertSafeToken(tx, {
       kind: 'web_join',
       name: 'web-demo join',
       scopes: [],
       rotatedFromId: null,
       expiresAt: null,
       now: clock.now(),
-    }).token;
+    });
+    return issued.token;
   });
   const path = join(dataDir, WEB_JOIN_FILE);
   writeFileSync(path, secret, { mode: JOIN_FILE_MODE });

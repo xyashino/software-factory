@@ -1,5 +1,15 @@
-import { and, asc, eq, gt, inArray, isNull, lte, type SQL } from 'drizzle-orm';
-import { type Db, type DbTx, immediateTx } from '../../db/client';
+import {
+  and,
+  asc,
+  eq,
+  gt,
+  inArray,
+  isNull,
+  lte,
+  type SQL,
+  sql,
+} from 'drizzle-orm';
+import { type Db } from '../../db/client';
 import { factories } from '../../db/schema/factories';
 import { incidents } from '../../db/schema/incidents';
 import { jobs } from '../../db/schema/jobs';
@@ -36,12 +46,8 @@ import type {
   TransitionWrites,
 } from '../../application/ports/storage.port';
 
-type Queryable = Db | DbTx;
-
 const ACTIVE_JOB_STATUSES = ['claimed', 'running'] as const;
 const OPEN_JOB_STATUSES = ['ready', 'claimed', 'running'] as const;
-
-class DryRunRollback extends Error {}
 
 const when = <T>(
   value: T | undefined,
@@ -62,16 +68,26 @@ const orderConditions = (filter: OrderFilter): SQL | undefined =>
     when(filter.pinnedFactoryId, (id) => eq(workOrders.pinnedFactoryId, id)),
   );
 
-const projectReads = (q: Queryable): ProjectReads => ({
-  find: (projectId) =>
+const serialized = () => {
+  let tail: Promise<unknown> = Promise.resolve();
+  return <T>(task: () => Promise<T>): Promise<T> => {
+    const run = tail.then(task);
+    tail = run.catch(() => undefined);
+    return run;
+  };
+};
+
+const projectReads = (q: Db): ProjectReads => ({
+  find: async (projectId) =>
     q.select().from(projects).where(eq(projects.projectId, projectId)).get(),
-  list: () => q.select().from(projects).orderBy(asc(projects.projectId)).all(),
+  list: async () =>
+    q.select().from(projects).orderBy(asc(projects.projectId)).all(),
 });
 
-const projectWrites = (tx: DbTx): ProjectWrites => ({
+const projectWrites = (tx: Db): ProjectWrites => ({
   ...projectReads(tx),
-  insert: (row) => tx.insert(projects).values(row).returning().get(),
-  update: (projectId, patch) =>
+  insert: async (row) => tx.insert(projects).values(row).returning().get(),
+  update: async (projectId, patch) =>
     tx
       .update(projects)
       .set(patch)
@@ -80,22 +96,22 @@ const projectWrites = (tx: DbTx): ProjectWrites => ({
       .get(),
 });
 
-const tokenReads = (q: Queryable): TokenReads => ({
-  find: (tokenId) =>
+const tokenReads = (q: Db): TokenReads => ({
+  find: async (tokenId) =>
     q.select().from(safeTokens).where(eq(safeTokens.tokenId, tokenId)).get(),
-  findByHash: (tokenHash) =>
+  findByHash: async (tokenHash) =>
     q
       .select()
       .from(safeTokens)
       .where(eq(safeTokens.tokenHash, tokenHash))
       .get(),
-  findActiveJoin: () =>
+  findActiveJoin: async () =>
     q
       .select()
       .from(safeTokens)
       .where(and(eq(safeTokens.kind, 'web_join'), isNull(safeTokens.revokedAt)))
       .get(),
-  findSuccessor: (rotatedFromId) =>
+  findSuccessor: async (rotatedFromId) =>
     q
       .select()
       .from(safeTokens)
@@ -103,17 +119,17 @@ const tokenReads = (q: Queryable): TokenReads => ({
       .get(),
 });
 
-const tokenWrites = (tx: DbTx): TokenWrites => ({
+const tokenWrites = (tx: Db): TokenWrites => ({
   ...tokenReads(tx),
-  insert: (row) => tx.insert(safeTokens).values(row).returning().get(),
-  update: (tokenId, patch) =>
+  insert: async (row) => tx.insert(safeTokens).values(row).returning().get(),
+  update: async (tokenId, patch) =>
     tx
       .update(safeTokens)
       .set(patch)
       .where(eq(safeTokens.tokenId, tokenId))
       .returning()
       .get(),
-  revokeActiveOfKind: (kind, revokedAt) => {
+  revokeActiveOfKind: async (kind, revokedAt) => {
     tx.update(safeTokens)
       .set({ revokedAt })
       .where(and(eq(safeTokens.kind, kind), isNull(safeTokens.revokedAt)))
@@ -121,14 +137,14 @@ const tokenWrites = (tx: DbTx): TokenWrites => ({
   },
 });
 
-const factoryReads = (q: Queryable): FactoryReads => ({
-  list: () => q.select().from(factories).all(),
+const factoryReads = (q: Db): FactoryReads => ({
+  list: async () => q.select().from(factories).all(),
 });
 
-const factoryWrites = (tx: DbTx): FactoryWrites => ({
+const factoryWrites = (tx: Db): FactoryWrites => ({
   ...factoryReads(tx),
-  insert: (row) => tx.insert(factories).values(row).returning().get(),
-  update: (factoryId, patch) =>
+  insert: async (row) => tx.insert(factories).values(row).returning().get(),
+  update: async (factoryId, patch) =>
     tx
       .update(factories)
       .set(patch)
@@ -137,10 +153,10 @@ const factoryWrites = (tx: DbTx): FactoryWrites => ({
       .get(),
 });
 
-const planReads = (q: Queryable): PlanReads => ({
-  find: (planId) =>
+const planReads = (q: Db): PlanReads => ({
+  find: async (planId) =>
     q.select().from(orderPlans).where(eq(orderPlans.planId, planId)).get(),
-  list: (filter: PlanFilter) =>
+  list: async (filter: PlanFilter) =>
     q
       .select()
       .from(orderPlans)
@@ -153,10 +169,10 @@ const planReads = (q: Queryable): PlanReads => ({
       .all(),
 });
 
-const planWrites = (tx: DbTx): PlanWrites => ({
+const planWrites = (tx: Db): PlanWrites => ({
   ...planReads(tx),
-  insert: (row) => tx.insert(orderPlans).values(row).returning().get(),
-  update: (planId, patch) =>
+  insert: async (row) => tx.insert(orderPlans).values(row).returning().get(),
+  update: async (planId, patch) =>
     tx
       .update(orderPlans)
       .set(patch)
@@ -165,12 +181,12 @@ const planWrites = (tx: DbTx): PlanWrites => ({
       .get(),
 });
 
-const orderReads = (q: Queryable): OrderReads => ({
-  find: (orderId) =>
+const orderReads = (q: Db): OrderReads => ({
+  find: async (orderId) =>
     q.select().from(workOrders).where(eq(workOrders.orderId, orderId)).get(),
-  list: (filter) =>
+  list: async (filter) =>
     q.select().from(workOrders).where(orderConditions(filter)).all(),
-  listQueued: (projectId) =>
+  listQueued: async (projectId) =>
     q
       .select()
       .from(workOrders)
@@ -184,10 +200,10 @@ const orderReads = (q: Queryable): OrderReads => ({
       .all(),
 });
 
-const orderWrites = (tx: DbTx): OrderWrites => ({
+const orderWrites = (tx: Db): OrderWrites => ({
   ...orderReads(tx),
-  insert: (row) => tx.insert(workOrders).values(row).returning().get(),
-  update: (orderId, patch) =>
+  insert: async (row) => tx.insert(workOrders).values(row).returning().get(),
+  update: async (orderId, patch) =>
     tx
       .update(workOrders)
       .set(patch)
@@ -196,10 +212,10 @@ const orderWrites = (tx: DbTx): OrderWrites => ({
       .get(),
 });
 
-const stepReads = (q: Queryable): StepReads => ({
-  find: (stepId) =>
+const stepReads = (q: Db): StepReads => ({
+  find: async (stepId) =>
     q.select().from(orderSteps).where(eq(orderSteps.stepId, stepId)).get(),
-  listByOrder: (orderId) =>
+  listByOrder: async (orderId) =>
     q
       .select()
       .from(orderSteps)
@@ -208,12 +224,12 @@ const stepReads = (q: Queryable): StepReads => ({
       .all(),
 });
 
-const stepWrites = (tx: DbTx): StepWrites => ({
+const stepWrites = (tx: Db): StepWrites => ({
   ...stepReads(tx),
-  insertMany: (rows) => {
+  insertMany: async (rows) => {
     tx.insert(orderSteps).values(rows).run();
   },
-  update: (stepId, patch) =>
+  update: async (stepId, patch) =>
     tx
       .update(orderSteps)
       .set(patch)
@@ -222,9 +238,10 @@ const stepWrites = (tx: DbTx): StepWrites => ({
       .get(),
 });
 
-const jobReads = (q: Queryable): JobReads => ({
-  find: (jobId) => q.select().from(jobs).where(eq(jobs.jobId, jobId)).get(),
-  findActiveByCell: (cellId) =>
+const jobReads = (q: Db): JobReads => ({
+  find: async (jobId) =>
+    q.select().from(jobs).where(eq(jobs.jobId, jobId)).get(),
+  findActiveByCell: async (cellId) =>
     q
       .select()
       .from(jobs)
@@ -235,7 +252,7 @@ const jobReads = (q: Queryable): JobReads => ({
         ),
       )
       .get(),
-  findActiveByCellInFactory: (cellId, factoryId) =>
+  findActiveByCellInFactory: async (cellId, factoryId) =>
     q
       .select()
       .from(jobs)
@@ -247,7 +264,7 @@ const jobReads = (q: Queryable): JobReads => ({
         ),
       )
       .get(),
-  listActiveByFactory: (factoryId) =>
+  listActiveByFactory: async (factoryId) =>
     q
       .select()
       .from(jobs)
@@ -258,7 +275,7 @@ const jobReads = (q: Queryable): JobReads => ({
         ),
       )
       .all(),
-  listExpired: (now) =>
+  listExpired: async (now) =>
     q
       .select()
       .from(jobs)
@@ -269,7 +286,7 @@ const jobReads = (q: Queryable): JobReads => ({
         ),
       )
       .all(),
-  listReadyPlanBranches: (projectId) =>
+  listReadyPlanBranches: async (projectId) =>
     q
       .select()
       .from(jobs)
@@ -282,7 +299,7 @@ const jobReads = (q: Queryable): JobReads => ({
       )
       .orderBy(asc(jobs.createdAt), asc(jobs.jobId))
       .all(),
-  findReadyMechanic: (factoryId) =>
+  findReadyMechanic: async (factoryId) =>
     q
       .select()
       .from(jobs)
@@ -295,7 +312,7 @@ const jobReads = (q: Queryable): JobReads => ({
       )
       .orderBy(asc(jobs.createdAt), asc(jobs.jobId))
       .get(),
-  findReadyRunOperator: (orderId) =>
+  findReadyRunOperator: async (orderId) =>
     q
       .select()
       .from(jobs)
@@ -307,7 +324,7 @@ const jobReads = (q: Queryable): JobReads => ({
         ),
       )
       .get(),
-  findActiveMechanic: (incidentId) =>
+  findActiveMechanic: async (incidentId) =>
     q
       .select()
       .from(jobs)
@@ -319,7 +336,7 @@ const jobReads = (q: Queryable): JobReads => ({
         ),
       )
       .get(),
-  listOpenMechanic: (incidentId) =>
+  listOpenMechanic: async (incidentId) =>
     q
       .select()
       .from(jobs)
@@ -331,25 +348,25 @@ const jobReads = (q: Queryable): JobReads => ({
         ),
       )
       .all(),
-  listByOrder: (orderId) =>
+  listByOrder: async (orderId) =>
     q.select().from(jobs).where(eq(jobs.orderId, orderId)).all(),
 });
 
-const jobWrites = (tx: DbTx): JobWrites => ({
+const jobWrites = (tx: Db): JobWrites => ({
   ...jobReads(tx),
-  insert: (row) => tx.insert(jobs).values(row).returning().get(),
-  update: (jobId, patch) =>
+  insert: async (row) => tx.insert(jobs).values(row).returning().get(),
+  update: async (jobId, patch) =>
     tx.update(jobs).set(patch).where(eq(jobs.jobId, jobId)).returning().get(),
 });
 
-const incidentReads = (q: Queryable): IncidentReads => ({
-  find: (incidentId) =>
+const incidentReads = (q: Db): IncidentReads => ({
+  find: async (incidentId) =>
     q
       .select()
       .from(incidents)
       .where(eq(incidents.incidentId, incidentId))
       .get(),
-  list: (filter: IncidentFilter) =>
+  list: async (filter: IncidentFilter) =>
     q
       .select()
       .from(incidents)
@@ -364,12 +381,12 @@ const incidentReads = (q: Queryable): IncidentReads => ({
       .all(),
 });
 
-const incidentWrites = (tx: DbTx): IncidentWrites => ({
+const incidentWrites = (tx: Db): IncidentWrites => ({
   ...incidentReads(tx),
-  insert: (row) => {
+  insert: async (row) => {
     tx.insert(incidents).values(row).run();
   },
-  update: (incidentId, patch) =>
+  update: async (incidentId, patch) =>
     tx
       .update(incidents)
       .set(patch)
@@ -378,14 +395,14 @@ const incidentWrites = (tx: DbTx): IncidentWrites => ({
       .get(),
 });
 
-const transitionReads = (q: Queryable): TransitionReads => ({
-  findByCommand: (commandId) =>
+const transitionReads = (q: Db): TransitionReads => ({
+  findByCommand: async (commandId) =>
     q
       .select()
       .from(stateTransitions)
       .where(eq(stateTransitions.commandId, commandId))
       .get(),
-  listAfter: (afterSeq, projectId) =>
+  listAfter: async (afterSeq, projectId) =>
     q
       .select()
       .from(stateTransitions)
@@ -399,9 +416,9 @@ const transitionReads = (q: Queryable): TransitionReads => ({
       .all(),
 });
 
-const transitionWrites = (tx: DbTx): TransitionWrites => ({
+const transitionWrites = (tx: Db): TransitionWrites => ({
   ...transitionReads(tx),
-  append: (input) =>
+  append: async (input) =>
     tx
       .insert(stateTransitions)
       .values({
@@ -420,7 +437,7 @@ const transitionWrites = (tx: DbTx): TransitionWrites => ({
       .get().seq,
 });
 
-const readRepos = (q: Queryable): StorageReadTx => ({
+const readRepos = (q: Db): StorageReadTx => ({
   projects: projectReads(q),
   tokens: tokenReads(q),
   factories: factoryReads(q),
@@ -432,7 +449,7 @@ const readRepos = (q: Queryable): StorageReadTx => ({
   transitions: transitionReads(q),
 });
 
-const writeRepos = (tx: DbTx): StorageWriteTx => ({
+const writeRepos = (tx: Db): StorageWriteTx => ({
   projects: projectWrites(tx),
   tokens: tokenWrites(tx),
   factories: factoryWrites(tx),
@@ -444,28 +461,27 @@ const writeRepos = (tx: DbTx): StorageWriteTx => ({
   transitions: transitionWrites(tx),
 });
 
-const runDryRun = <T>(db: Db, fn: (tx: StorageWriteTx) => T): T => {
-  const outcome: { value?: { result: T } } = {};
+const runWrite = async <T>(
+  db: Db,
+  fn: (tx: StorageWriteTx) => T | Promise<T>,
+  options: StorageWriteOptions,
+): Promise<T> => {
+  db.run(sql`BEGIN IMMEDIATE`);
+  let result: T;
   try {
-    immediateTx(db, (tx) => {
-      outcome.value = { result: fn(writeRepos(tx)) };
-      throw new DryRunRollback();
-    });
+    result = await fn(writeRepos(db));
   } catch (error) {
-    if (!(error instanceof DryRunRollback)) throw error;
+    db.run(sql`ROLLBACK`);
+    throw error;
   }
-  if (outcome.value === undefined)
-    throw new Error('dry run produced no result');
-  return outcome.value.result;
+  db.run(options.dryRun === true ? sql`ROLLBACK` : sql`COMMIT`);
+  return result;
 };
 
-export const createSqliteStorageAdapter = (db: Db): StoragePort => ({
-  read: async (fn) => fn(readRepos(db)),
-  write: async <T>(
-    fn: (tx: StorageWriteTx) => T,
-    options: StorageWriteOptions = {},
-  ) =>
-    options.dryRun === true
-      ? runDryRun(db, fn)
-      : immediateTx(db, (tx) => fn(writeRepos(tx))),
-});
+export const createSqliteStorageAdapter = (db: Db): StoragePort => {
+  const exclusive = serialized();
+  return {
+    read: (fn) => exclusive(async () => fn(readRepos(db))),
+    write: (fn, options = {}) => exclusive(() => runWrite(db, fn, options)),
+  };
+};

@@ -9,9 +9,9 @@ export const upsertProjectProcedure = scopedProcedure(['supervisor:write'])(
   const { projectId, repoUrl, defaultBaseBranch, maxRunning } = input.body;
   const now = ctx.clock.now();
 
-  return ctx.storage.write((tx) => {
-    if (findProject(tx, projectId) === undefined) {
-      const project = tx.projects.insert({
+  return ctx.storage.write(async (tx) => {
+    if ((await findProject(tx, projectId)) === undefined) {
+      const project = await tx.projects.insert({
         projectId: asProjectId(projectId),
         repoUrl,
         defaultBaseBranch,
@@ -21,7 +21,7 @@ export const upsertProjectProcedure = scopedProcedure(['supervisor:write'])(
       });
       return { code: 201 as const, project };
     }
-    const project = tx.projects.update(asProjectId(projectId), {
+    const project = await tx.projects.update(asProjectId(projectId), {
       repoUrl,
       defaultBaseBranch,
       maxRunning,

@@ -6,7 +6,7 @@ Source of truth for code shape, layering, transactions, and testing in `apps/hq`
 
 ## 1. Runtime & Stack
 
-1. **Stack**: Bun (`Bun.serve`, `bun:sqlite` WAL) + Hono (`^4.13`) + Drizzle ORM (`drizzle-orm/bun-sqlite`) + Zod (`^4.6`).
+1. **Stack**: Bun (`Bun.serve`, `bun:sqlite` WAL, Bun SQL for Postgres) + Hono (`^4.13`) + Drizzle ORM (`drizzle-orm/bun-sqlite`, `drizzle-orm/bun-sql`) + Zod (`^4.6`).
 2. **Standalone Backend Isolation**:
    - `apps/hq` owns its domain, SQLite schema, procedures, and Hono adapters inside `apps/hq/src/`.
    - Workspace deps only: `@repo/hq-contracts` (wire contracts, shared with `sf` and web), `@repo/zod-contract-kit`, `@repo/bun-sqlite-kit` (db plumbing).
@@ -22,7 +22,7 @@ Source of truth for code shape, layering, transactions, and testing in `apps/hq`
 apps/hq/
 ├── drizzle.config.ts
 ├── src/
-│   ├── index.ts                              # Bun.serve entrypoint, env (HQ_PORT, HQ_HOST, HQ_DB_PATH, HQ_DATA_DIR)
+│   ├── index.ts                              # Bun.serve entrypoint, env (HQ_PORT, HQ_HOST, HQ_DB_PATH, HQ_DATA_DIR, HQ_DATABASE_URL)
 │   ├── app.ts                                # createApp(createTransport)
 │   ├── config.ts                             # Timing constants and limits
 │   ├── domain/                               # Pure domain logic (zero I/O, zero DB, zero Hono)
@@ -34,9 +34,10 @@ apps/hq/
 │   │   ├── incidents/                        # Incident triggers, triage owner & resolution state machine
 │   │   └── queue/                            # todos/<slug>.md parser/serializer & DAG validation
 │   ├── db/
-│   │   ├── client.ts                         # createDb on @repo/bun-sqlite-kit
-│   │   ├── migrations/                       # Drizzle SQL migrations + partial unique indexes
-│   │   └── schema/                           # factories, projects, tokens, plans, orders, jobs, incidents, transitions
+│   │   ├── client.ts                         # createDb on @repo/bun-sqlite-kit (SQLite default)
+│   │   ├── migrations/                       # SQLite Drizzle migrations + partial unique indexes
+│   │   ├── schema/                           # SQLite tables: factories, projects, tokens, plans, orders, jobs, incidents, transitions
+│   │   └── pg/                               # Postgres: client.ts (bun-sql + embedded migrations), schema/, migrations/ (drizzle-kit postgresql)
 │   ├── application/                          # Use-case orchestration (domain, contracts, ports); no drizzle, no db/
 │   │   ├── core/                             # error-handling.ts, procedure.ts (scopedProcedure), identity.ts (factory id, x-cell-id), schema/zod.ts
 │   │   ├── ports/                            # auth, clock, claim-waiters, transition-bus, storage (StoragePort + row types)
@@ -45,6 +46,7 @@ apps/hq/
 │   ├── adapters/
 │   │   ├── auth/safe-token-auth.adapter.ts   # SHA-256 + timingSafeEqual + grace window + scope check
 │   │   ├── storage/sqlite-storage.adapter.ts # StoragePort on bun:sqlite: drizzle queries, read/write tx, dry-run
+│   │   ├── storage/postgres-storage.adapter.ts # StoragePort on Postgres (HQ_DATABASE_URL): drizzle bun-sql, FOR UPDATE claims
 │   │   ├── memory/                           # system clock, claim waiters (max 5), transition bus (SSE)
 │   │   └── hono/                             # adapter, error handlers, middlewares, types, routes/ (one file per resource)
 │   └── bootstrap/                            # transport.ts, admin.ts (admin token), web-join.ts (web-demo join secret)
@@ -107,8 +109,10 @@ Shared style rules (`coding-no-barrel-export`, `coding-export-order`, `coding-mi
    - `PRAGMA foreign_keys = ON;`
    - `PRAGMA busy_timeout = 5000;`
 2. **`storage.write(fn)` for all mutating state transitions**:
-   - Every claim (`/cells/claims`), job transition (`/jobs/{id}/transitions`), queue import/action (`/queue/import`, `/queue/actions`), order/plan transition, and incident resolution MUST run inside `storage.write`. The SQLite adapter runs it inside `immediateTx` (`BEGIN IMMEDIATE`, `db.transaction(..., { behavior: 'immediate' })`).
-   - `fn` is synchronous (`(tx) => T`, no `await` inside). `bun:sqlite` has one connection; an `await` inside `BEGIN IMMEDIATE` lets other requests interleave on it and breaks single-Cell exclusivity. `write` returns `Promise<T>` to callers.
+   - Every claim (`/cells/claims`), job transition (`/jobs/{id}/transitions`), queue import/action (`/queue/import`, `/queue/actions`), order/plan transition, and incident resolution MUST run inside `storage.write`. The SQLite adapter runs `BEGIN IMMEDIATE`, awaits `fn`, then `COMMIT` or `ROLLBACK`; a per-adapter queue serializes reads and writes on its one connection. The Postgres adapter runs `db.transaction`.
+   - `fn` is `(tx) => T | Promise<T>`. Every repo call returns a Promise and MUST be awaited inside `fn`; an un-awaited write can commit before it runs. Helpers that touch `tx` are `async` and awaited by their callers.
+   - Postgres claim and transition paths lock rows with `SELECT ... FOR UPDATE` inside writes: by-id finds on jobs, orders and tokens, and the claim selects (`listQueued`, `listReadyPlanBranches`, `findReady*`). Concurrent claims of one job serialize on that lock.
+   - Do not call `ctx.storage.read` or `ctx.storage.write` from inside a `write` callback; the SQLite queue would deadlock.
    - `write(fn, { dryRun: true })` runs `fn`, rolls back every change, and returns `fn`'s result (queue import dry run).
    - `storage.read(fn)` for queries outside a write.
    - Only `adapters/storage/` may build drizzle queries for application data. `application/` calls `tx.<aggregate>.<op>()` on the port.
@@ -143,7 +147,7 @@ Shared style rules (`coding-no-barrel-export`, `coding-export-order`, `coding-mi
 
 1. **3-Tier Test Strategy**:
    - **Domain Unit Tests (`src/domain/**/__tests__/*.test.ts`)**: Pure, zero I/O, zero SQLite. Test state machines, `resolveBaseBranch`, markdown import/export parsing, DAG cycle detection, token hash/scope logic, and incident transitions.
-   - **DB & Concurrency Tests (`test/db/*.test.ts`)**: Real `bun:sqlite` DB (`:memory:` or temp file with WAL). Test partial unique indexes (`idx_jobs_one_active_per_order`, `idx_jobs_one_active_per_cell`, `idx_work_orders_one_active_per_cell`), `immediateTx` contention, and schema constraints.
+   - **DB & Concurrency Tests (`test/db/*.test.ts`)**: Real `bun:sqlite` DB (`:memory:` or temp file with WAL). Test partial unique indexes (`idx_jobs_one_active_per_order`, `idx_jobs_one_active_per_cell`, `idx_work_orders_one_active_per_cell`), concurrent claims, and schema constraints. `storage-port.contract.ts` runs the same `StoragePort` behaviour suite against SQLite always and against Postgres when `TEST_POSTGRES_URL` is set.
    - **Black-Box HTTP Tests (`test/blackbox/*.test.ts`)**: Through `app.request()` using `createTestApp()` (fresh SQLite DB + controllable fake clock + in-memory waiters/bus per test). Arrange-Act-Assert, story-like test names, zero internal mocks.
 2. **Single Verification Gate**:
    - Every vertical slice must pass `bun run ci:verify` (typecheck, lint, format, tests) with zero warnings and zero errors.

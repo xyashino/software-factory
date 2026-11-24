@@ -40,13 +40,12 @@ import {
 } from '../../orders/order-writes';
 import { reapExpiredLeases } from './reap-expired-leases';
 
-const unreachableFactoryIds = (
+const unreachableFactoryIds = async (
   tx: StorageWriteTx,
   now: number,
-): Set<FactoryId> =>
+): Promise<Set<FactoryId>> =>
   new Set(
-    tx.factories
-      .list()
+    (await tx.factories.list())
       .filter((row) => isSilent(row.lastSeenAt, now))
       .map((row) => row.factoryId),
   );
@@ -65,14 +64,15 @@ const bindJob = (
   startedAt: now,
 });
 
-const claimPlanBranch = (
+const claimPlanBranch = async (
   tx: StorageWriteTx,
   cell: ClaimCell,
   leaseExpiresAt: number,
   now: number,
-): JobRow | undefined => {
-  for (const job of tx.jobs.listReadyPlanBranches(cell.projectId)) {
-    const plan = job.planId === null ? undefined : findPlan(tx, job.planId);
+): Promise<JobRow | undefined> => {
+  for (const job of await tx.jobs.listReadyPlanBranches(cell.projectId)) {
+    const plan =
+      job.planId === null ? undefined : await findPlan(tx, job.planId);
     if (plan?.state !== 'branching') continue;
     return tx.jobs.update(
       job.jobId,
@@ -82,13 +82,13 @@ const claimPlanBranch = (
   return undefined;
 };
 
-const claimMechanicJob = (
+const claimMechanicJob = async (
   tx: StorageWriteTx,
   cell: ClaimCell,
   leaseExpiresAt: number,
   now: number,
-): JobRow | undefined => {
-  const job = tx.jobs.findReadyMechanic(cell.factoryId);
+): Promise<JobRow | undefined> => {
+  const job = await tx.jobs.findReadyMechanic(cell.factoryId);
   if (job === undefined) return undefined;
   return tx.jobs.update(
     job.jobId,
@@ -116,15 +116,15 @@ const toClaimCandidate = (
   ),
 });
 
-const resumeReadyJob = (
+const resumeReadyJob = async (
   tx: StorageWriteTx,
   row: WorkOrderRow,
   stepId: string | null,
   cell: ClaimCell,
   leaseExpiresAt: number,
   now: number,
-): JobRow | undefined => {
-  const job = tx.jobs.findReadyRunOperator(row.orderId);
+): Promise<JobRow | undefined> => {
+  const job = await tx.jobs.findReadyRunOperator(row.orderId);
   if (job === undefined || job.stepId !== stepId) return undefined;
   return tx.jobs.update(
     job.jobId,
@@ -132,20 +132,22 @@ const resumeReadyJob = (
   );
 };
 
-const claimWorkOrder = (
+const claimWorkOrder = async (
   tx: StorageWriteTx,
   cell: ClaimCell,
   project: ProjectRow,
   leaseExpiresAt: number,
   now: number,
   log: TransitionLog,
-): JobRow | undefined => {
-  const rows = tx.orders.listQueued(cell.projectId);
-  const unreachable = unreachableFactoryIds(tx, now);
-  const runningCount = tx.orders.list({
-    projectId: cell.projectId,
-    state: 'running',
-  }).length;
+): Promise<JobRow | undefined> => {
+  const rows = await tx.orders.listQueued(cell.projectId);
+  const unreachable = await unreachableFactoryIds(tx, now);
+  const runningCount = (
+    await tx.orders.list({
+      projectId: cell.projectId,
+      state: 'running',
+    })
+  ).length;
   const [picked] = selectClaimable(
     rows.map((row) => toClaimCandidate(row, unreachable)),
     cell,
@@ -155,21 +157,21 @@ const claimWorkOrder = (
   const row = rows.find((candidate) => candidate.orderId === picked.orderId);
   if (row === undefined) return undefined;
 
-  const steps = tx.steps.listByOrder(row.orderId);
+  const steps = await tx.steps.listByOrder(row.orderId);
   const currentStep = steps.find(
     (step) => step.stepIndex === row.currentStepIndex,
   );
   const epoch = row.epoch + 1;
   const job =
-    resumeReadyJob(
+    (await resumeReadyJob(
       tx,
       row,
       currentStep?.stepId ?? null,
       cell,
       leaseExpiresAt,
       now,
-    ) ??
-    tx.jobs.insert({
+    )) ??
+    (await tx.jobs.insert({
       jobId: asJobId(`job-${crypto.randomUUID()}`),
       projectId: row.projectId,
       orderId: row.orderId,
@@ -200,8 +202,8 @@ const claimWorkOrder = (
       leaseExpiresAt,
       createdAt: now,
       startedAt: now,
-    });
-  updateWorkOrder(
+    }));
+  await updateWorkOrder(
     tx,
     row,
     {
@@ -227,27 +229,27 @@ const claimWorkOrder = (
   return job;
 };
 
-const claimNext = (
+const claimNext = async (
   tx: StorageWriteTx,
   cell: ClaimCell,
   leaseExpiresAt: number,
   now: number,
   log: TransitionLog,
-): JobRow | undefined => {
-  const plan = claimPlanBranch(tx, cell, leaseExpiresAt, now);
+): Promise<JobRow | undefined> => {
+  const plan = await claimPlanBranch(tx, cell, leaseExpiresAt, now);
   if (plan !== undefined) return plan;
-  const mechanic = claimMechanicJob(tx, cell, leaseExpiresAt, now);
+  const mechanic = await claimMechanicJob(tx, cell, leaseExpiresAt, now);
   if (mechanic !== undefined) return mechanic;
-  const project = requireProject(tx, cell.projectId);
+  const project = await requireProject(tx, cell.projectId);
   return claimWorkOrder(tx, cell, project, leaseExpiresAt, now, log);
 };
 
-export const headCommitOfJob = (
+export const headCommitOfJob = async (
   tx: StorageWriteTx,
   job: JobRow,
-): string | null => {
+): Promise<string | null> => {
   if (job.orderId === null) return null;
-  const order = tx.orders.find(job.orderId);
+  const order = await tx.orders.find(job.orderId);
   return order?.headCommitSha ?? order?.baseCommitSha ?? null;
 };
 
@@ -277,20 +279,24 @@ export const toClaimedJob = (
 const attemptClaim = async (ctx: AuthenticatedContext, cell: ClaimCell) => {
   const now = ctx.clock.now();
   const leaseExpiresAt = addMs(now, LEASE_TTL_MS);
-  const outcome = await ctx.storage.write((tx) => {
+  const outcome = await ctx.storage.write(async (tx) => {
     const log: TransitionLog = [];
-    touchFactory(tx, cell.factoryId, now);
-    reapExpiredLeases(tx, now, log);
+    await touchFactory(tx, cell.factoryId, now);
+    await reapExpiredLeases(tx, now, log);
     const claimed =
-      tx.jobs.findActiveByCell(cell.cellId) !== undefined
+      (await tx.jobs.findActiveByCell(cell.cellId)) !== undefined
         ? undefined
-        : claimNext(tx, cell, leaseExpiresAt, now, log);
+        : await claimNext(tx, cell, leaseExpiresAt, now, log);
     return {
       job:
         claimed === undefined
           ? null
-          : toClaimedJob(claimed, leaseExpiresAt, headCommitOfJob(tx, claimed)),
-      records: flushTransitions(tx, log),
+          : toClaimedJob(
+              claimed,
+              leaseExpiresAt,
+              await headCommitOfJob(tx, claimed),
+            ),
+      records: await flushTransitions(tx, log),
     };
   });
   publishCommitted(ctx, outcome.records);

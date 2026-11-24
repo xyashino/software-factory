@@ -292,107 +292,131 @@ export type IncidentFilter = {
 };
 
 export type ProjectReads = {
-  find(projectId: ProjectId): ProjectRow | undefined;
-  list(): ProjectRow[];
+  find(projectId: ProjectId): Promise<ProjectRow | undefined>;
+  list(): Promise<ProjectRow[]>;
 };
 
 export type ProjectWrites = ProjectReads & {
-  insert(row: ProjectInsert): ProjectRow;
-  update(projectId: ProjectId, patch: Partial<ProjectInsert>): ProjectRow;
+  insert(row: ProjectInsert): Promise<ProjectRow>;
+  update(
+    projectId: ProjectId,
+    patch: Partial<ProjectInsert>,
+  ): Promise<ProjectRow>;
 };
 
 export type TokenReads = {
-  find(tokenId: TokenId): SafeTokenRow | undefined;
-  findByHash(tokenHash: string): SafeTokenRow | undefined;
-  findActiveJoin(): SafeTokenRow | undefined;
-  findSuccessor(rotatedFromId: TokenId): SafeTokenRow | undefined;
+  find(tokenId: TokenId): Promise<SafeTokenRow | undefined>;
+  findByHash(tokenHash: string): Promise<SafeTokenRow | undefined>;
+  findActiveJoin(): Promise<SafeTokenRow | undefined>;
+  findSuccessor(rotatedFromId: TokenId): Promise<SafeTokenRow | undefined>;
 };
 
 export type TokenWrites = TokenReads & {
-  insert(row: SafeTokenInsert): SafeTokenRow;
-  update(tokenId: TokenId, patch: Partial<SafeTokenInsert>): SafeTokenRow;
-  revokeActiveOfKind(kind: TokenKind, revokedAt: number): void;
+  insert(row: SafeTokenInsert): Promise<SafeTokenRow>;
+  update(
+    tokenId: TokenId,
+    patch: Partial<SafeTokenInsert>,
+  ): Promise<SafeTokenRow>;
+  revokeActiveOfKind(kind: TokenKind, revokedAt: number): Promise<void>;
 };
 
 export type FactoryReads = {
-  list(): FactoryRow[];
+  list(): Promise<FactoryRow[]>;
 };
 
 export type FactoryWrites = FactoryReads & {
-  insert(row: FactoryInsert): FactoryRow;
-  update(factoryId: FactoryId, patch: Partial<FactoryInsert>): FactoryRow;
+  insert(row: FactoryInsert): Promise<FactoryRow>;
+  update(
+    factoryId: FactoryId,
+    patch: Partial<FactoryInsert>,
+  ): Promise<FactoryRow>;
 };
 
 export type PlanReads = {
-  find(planId: PlanId): OrderPlanRow | undefined;
-  list(filter: PlanFilter): OrderPlanRow[];
+  find(planId: PlanId): Promise<OrderPlanRow | undefined>;
+  list(filter: PlanFilter): Promise<OrderPlanRow[]>;
 };
 
 export type PlanWrites = PlanReads & {
-  insert(row: OrderPlanInsert): OrderPlanRow;
-  update(planId: PlanId, patch: Partial<OrderPlanInsert>): OrderPlanRow;
+  insert(row: OrderPlanInsert): Promise<OrderPlanRow>;
+  update(
+    planId: PlanId,
+    patch: Partial<OrderPlanInsert>,
+  ): Promise<OrderPlanRow>;
 };
 
 export type OrderReads = {
-  find(orderId: OrderId): WorkOrderRow | undefined;
-  list(filter: OrderFilter): WorkOrderRow[];
-  listQueued(projectId: ProjectId): WorkOrderRow[];
+  find(orderId: OrderId): Promise<WorkOrderRow | undefined>;
+  list(filter: OrderFilter): Promise<WorkOrderRow[]>;
+  listQueued(projectId: ProjectId): Promise<WorkOrderRow[]>;
 };
 
 export type OrderWrites = OrderReads & {
-  insert(row: WorkOrderInsert): WorkOrderRow;
-  update(orderId: OrderId, patch: Partial<WorkOrderInsert>): WorkOrderRow;
+  insert(row: WorkOrderInsert): Promise<WorkOrderRow>;
+  update(
+    orderId: OrderId,
+    patch: Partial<WorkOrderInsert>,
+  ): Promise<WorkOrderRow>;
 };
 
 export type StepReads = {
-  find(stepId: StepId): OrderStepRow | undefined;
-  listByOrder(orderId: OrderId): OrderStepRow[];
+  find(stepId: StepId): Promise<OrderStepRow | undefined>;
+  listByOrder(orderId: OrderId): Promise<OrderStepRow[]>;
 };
 
 export type StepWrites = StepReads & {
-  insertMany(rows: OrderStepInsert[]): void;
-  update(stepId: StepId, patch: Partial<OrderStepInsert>): OrderStepRow;
+  insertMany(rows: OrderStepInsert[]): Promise<void>;
+  update(
+    stepId: StepId,
+    patch: Partial<OrderStepInsert>,
+  ): Promise<OrderStepRow>;
 };
 
 export type JobReads = {
-  find(jobId: JobId): JobRow | undefined;
-  findActiveByCell(cellId: CellId): JobRow | undefined;
+  find(jobId: JobId): Promise<JobRow | undefined>;
+  findActiveByCell(cellId: CellId): Promise<JobRow | undefined>;
   findActiveByCellInFactory(
     cellId: CellId,
     factoryId: FactoryId,
-  ): JobRow | undefined;
-  listActiveByFactory(factoryId: FactoryId): JobRow[];
-  listExpired(now: number): JobRow[];
-  listReadyPlanBranches(projectId: ProjectId): JobRow[];
-  findReadyMechanic(factoryId: FactoryId): JobRow | undefined;
-  findReadyRunOperator(orderId: OrderId): JobRow | undefined;
-  findActiveMechanic(incidentId: IncidentId): JobRow | undefined;
-  listOpenMechanic(incidentId: IncidentId): JobRow[];
-  listByOrder(orderId: OrderId): JobRow[];
+  ): Promise<JobRow | undefined>;
+  listActiveByFactory(factoryId: FactoryId): Promise<JobRow[]>;
+  listExpired(now: number): Promise<JobRow[]>;
+  listReadyPlanBranches(projectId: ProjectId): Promise<JobRow[]>;
+  findReadyMechanic(factoryId: FactoryId): Promise<JobRow | undefined>;
+  findReadyRunOperator(orderId: OrderId): Promise<JobRow | undefined>;
+  findActiveMechanic(incidentId: IncidentId): Promise<JobRow | undefined>;
+  listOpenMechanic(incidentId: IncidentId): Promise<JobRow[]>;
+  listByOrder(orderId: OrderId): Promise<JobRow[]>;
 };
 
 export type JobWrites = JobReads & {
-  insert(row: JobInsert): JobRow;
-  update(jobId: JobId, patch: Partial<JobInsert>): JobRow;
+  insert(row: JobInsert): Promise<JobRow>;
+  update(jobId: JobId, patch: Partial<JobInsert>): Promise<JobRow>;
 };
 
 export type IncidentReads = {
-  find(incidentId: IncidentId): IncidentRow | undefined;
-  list(filter: IncidentFilter): IncidentRow[];
+  find(incidentId: IncidentId): Promise<IncidentRow | undefined>;
+  list(filter: IncidentFilter): Promise<IncidentRow[]>;
 };
 
 export type IncidentWrites = IncidentReads & {
-  insert(row: IncidentInsert): void;
-  update(incidentId: IncidentId, patch: Partial<IncidentInsert>): IncidentRow;
+  insert(row: IncidentInsert): Promise<void>;
+  update(
+    incidentId: IncidentId,
+    patch: Partial<IncidentInsert>,
+  ): Promise<IncidentRow>;
 };
 
 export type TransitionReads = {
-  findByCommand(commandId: CommandId): StateTransitionRow | undefined;
-  listAfter(afterSeq: number, projectId?: ProjectId): StateTransitionRow[];
+  findByCommand(commandId: CommandId): Promise<StateTransitionRow | undefined>;
+  listAfter(
+    afterSeq: number,
+    projectId?: ProjectId,
+  ): Promise<StateTransitionRow[]>;
 };
 
 export type TransitionWrites = TransitionReads & {
-  append(input: StateTransitionInput): number;
+  append(input: StateTransitionInput): Promise<number>;
 };
 
 export type StorageReadTx = {
@@ -423,12 +447,12 @@ export type StorageWriteOptions = {
   dryRun?: boolean;
 };
 
-// Transaction callbacks are synchronous: the adapter's single connection
-// must not interleave other requests inside BEGIN IMMEDIATE.
+// Every repo call returns a Promise: await it inside the callback, or the
+// write may commit before the query runs.
 export type StoragePort = {
-  read<T>(fn: (tx: StorageReadTx) => T): Promise<T>;
+  read<T>(fn: (tx: StorageReadTx) => T | Promise<T>): Promise<T>;
   write<T>(
-    fn: (tx: StorageWriteTx) => T,
+    fn: (tx: StorageWriteTx) => T | Promise<T>,
     options?: StorageWriteOptions,
   ): Promise<T>;
 };

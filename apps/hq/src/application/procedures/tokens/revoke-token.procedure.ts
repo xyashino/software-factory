@@ -9,11 +9,11 @@ export const revokeTokenProcedure = scopedProcedure(['admin:tokens'])(
   const tokenId = asTokenId(input.params.id);
   const now = ctx.clock.now();
 
-  await ctx.storage.write((tx) => {
-    const row = tx.tokens.find(tokenId);
+  await ctx.storage.write(async (tx) => {
+    const row = await tx.tokens.find(tokenId);
     if (row === undefined) throw new NotFound(`Token ${tokenId} not found`);
     if (row.revokedAt !== null) return;
-    tx.tokens.update(tokenId, { revokedAt: now });
+    await tx.tokens.update(tokenId, { revokedAt: now });
   });
 
   return { code: 200 as const };

@@ -23,23 +23,26 @@ type Heartbeat = {
   signals: CellSignal[];
 };
 
-const abortSignals = (tx: StorageWriteTx, job: JobRow): CellSignal[] => {
+const abortSignals = async (
+  tx: StorageWriteTx,
+  job: JobRow,
+): Promise<CellSignal[]> => {
   if (job.status === 'cancelled') return ['abort'];
   if (job.orderId === null) return [];
-  const order = tx.orders.find(job.orderId);
+  const order = await tx.orders.find(job.orderId);
   return order !== undefined &&
     ABORTING_ORDER_STATES.some((state) => state === order.state)
     ? ['abort']
     : [];
 };
 
-const recordHeartbeat = (
+const recordHeartbeat = async (
   tx: StorageWriteTx,
   cellId: CellId,
   body: { jobId: string; epoch: number },
   now: number,
-): Heartbeat | undefined => {
-  const job = tx.jobs.find(asJobId(body.jobId));
+): Promise<Heartbeat | undefined> => {
+  const job = await tx.jobs.find(asJobId(body.jobId));
   const fenced =
     job !== undefined &&
     job.claimedByCellId === cellId &&
@@ -53,12 +56,12 @@ const recordHeartbeat = (
   if (!extendable)
     return {
       leaseExpiresAt: job.leaseExpiresAt,
-      signals: abortSignals(tx, job),
+      signals: await abortSignals(tx, job),
     };
 
   const leaseExpiresAt = addMs(now, LEASE_TTL_MS);
-  tx.jobs.update(job.jobId, { leaseExpiresAt });
-  return { leaseExpiresAt, signals: abortSignals(tx, job) };
+  await tx.jobs.update(job.jobId, { leaseExpiresAt });
+  return { leaseExpiresAt, signals: await abortSignals(tx, job) };
 };
 
 export const heartbeatCellProcedure = scopedProcedure(['factory:worker'])(
@@ -69,11 +72,11 @@ export const heartbeatCellProcedure = scopedProcedure(['factory:worker'])(
   const now = ctx.clock.now();
   const log: TransitionLog = [];
 
-  const outcome = await ctx.storage.write((tx) => {
-    touchFactory(tx, factoryId, now);
-    reapExpiredLeases(tx, now, log);
-    const heartbeat = recordHeartbeat(tx, cellId, input.body, now);
-    return { heartbeat, records: flushTransitions(tx, log) };
+  const outcome = await ctx.storage.write(async (tx) => {
+    await touchFactory(tx, factoryId, now);
+    await reapExpiredLeases(tx, now, log);
+    const heartbeat = await recordHeartbeat(tx, cellId, input.body, now);
+    return { heartbeat, records: await flushTransitions(tx, log) };
   });
   publishCommitted(ctx, outcome.records);
 

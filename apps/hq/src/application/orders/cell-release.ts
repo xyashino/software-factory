@@ -7,34 +7,34 @@ import {
   type TransitionLog,
 } from './order-writes';
 
-export const unpinOrders = (
+export const unpinOrders = async (
   tx: StorageWriteTx,
   factoryId: FactoryId,
   now: number,
-): void => {
-  for (const row of tx.orders.list({ pinnedFactoryId: factoryId }))
-    updateWorkOrder(tx, row, { pinnedFactoryId: null }, now);
+): Promise<void> => {
+  for (const row of await tx.orders.list({ pinnedFactoryId: factoryId }))
+    await updateWorkOrder(tx, row, { pinnedFactoryId: null }, now);
 };
 
-export const loseFactoryJobs = (
+export const loseFactoryJobs = async (
   tx: StorageWriteTx,
   factoryId: FactoryId,
   now: number,
   actor: Actor,
   log: TransitionLog,
-): void => {
-  for (const job of tx.jobs.listActiveByFactory(factoryId))
-    loseJob(tx, job, now, actor, log);
+): Promise<void> => {
+  for (const job of await tx.jobs.listActiveByFactory(factoryId))
+    await loseJob(tx, job, now, actor, log);
 };
 
-export const loseCellJob = (
+export const loseCellJob = async (
   tx: StorageWriteTx,
   cellId: CellId,
   factoryId: FactoryId,
   now: number,
   actor: Actor,
   log: TransitionLog,
-): void => {
-  const job = tx.jobs.findActiveByCellInFactory(cellId, factoryId);
-  if (job !== undefined) loseJob(tx, job, now, actor, log);
+): Promise<void> => {
+  const job = await tx.jobs.findActiveByCellInFactory(cellId, factoryId);
+  if (job !== undefined) await loseJob(tx, job, now, actor, log);
 };

@@ -18,12 +18,12 @@ export const exportQueueProcedure = scopedProcedure(['supervisor:read'])(
   exportQueueContract,
 )(async (input, ctx) => {
   const { projectId, planSlug, states } = input.query;
-  const { project, rows, plans } = await ctx.storage.read((tx) => {
-    const project = requireProject(tx, projectId);
+  const { project, rows, plans } = await ctx.storage.read(async (tx) => {
+    const project = await requireProject(tx, projectId);
     return {
       project,
-      rows: tx.orders.list({ projectId: project.projectId }),
-      plans: tx.plans.list({ projectId: project.projectId }),
+      rows: await tx.orders.list({ projectId: project.projectId }),
+      plans: await tx.plans.list({ projectId: project.projectId }),
     };
   });
   const planSlugById = new Map(plans.map((plan) => [plan.planId, plan.slug]));
