@@ -1,9 +1,5 @@
-import { TransactionRollbackError, eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { importQueueContract } from '@repo/hq-contracts/queue.contract';
-import { immediateTx, type DbTx } from '../../../db/client';
-import { workOrders } from '../../../db/schema/orders';
-import { stateTransitions } from '../../../db/schema/transitions';
 import { asCommandId, asOrderId, asPlanId } from '../../../domain/common/brand';
 import { scopedId } from '../../../domain/common/scoped-id';
 import {
@@ -23,6 +19,12 @@ import {
 } from '../../../domain/topology/branch-names';
 import { InternalServer } from '../../core/error-handling';
 import { scopedProcedure } from '../../core/procedure';
+import type {
+  ProjectRow,
+  StorageWriteTx,
+  WorkOrderInsert,
+  WorkOrderRow,
+} from '../../ports/storage.port';
 import {
   findPlan,
   flushTransitions,
@@ -37,9 +39,7 @@ import {
   updateWorkOrder,
   type Actor,
   type TransitionLog,
-  type WorkOrderInsert,
 } from '../../orders/order-writes';
-import type { ProjectRow, WorkOrderRow } from '../../orders/order-views';
 
 const importCountsSchema = z.object({
   created: z.number().int(),
@@ -174,7 +174,7 @@ const storedCounts = (meta: Record<string, unknown> | null): ImportCounts => {
 };
 
 const ensurePlans = (
-  tx: DbTx,
+  tx: StorageWriteTx,
   project: ProjectRow,
   todos: readonly ParsedFile[],
   actor: Actor,
@@ -216,7 +216,7 @@ const ensurePlans = (
 };
 
 const applyFile = (
-  tx: DbTx,
+  tx: StorageWriteTx,
   project: ProjectRow,
   item: ParsedFile,
   orders: Map<string, WorkOrderRow>,
@@ -342,16 +342,12 @@ const applyFile = (
   return 'updated';
 };
 
-const importInTx = (tx: DbTx, args: ImportArgs): ImportResult => {
+const importInTx = (tx: StorageWriteTx, args: ImportArgs): ImportResult => {
   const project = requireProject(tx, args.projectId);
   const commandId =
     args.commandId === undefined ? undefined : asCommandId(args.commandId);
   if (commandId !== undefined && !args.dryRun) {
-    const prior = tx
-      .select()
-      .from(stateTransitions)
-      .where(eq(stateTransitions.commandId, commandId))
-      .get();
+    const prior = tx.transitions.findByCommand(commandId);
     if (prior !== undefined)
       return {
         kind: 'applied',
@@ -360,11 +356,7 @@ const importInTx = (tx: DbTx, args: ImportArgs): ImportResult => {
       };
   }
 
-  const rows = tx
-    .select()
-    .from(workOrders)
-    .where(eq(workOrders.projectId, project.projectId))
-    .all();
+  const rows = tx.orders.list({ projectId: project.projectId });
   const orders = new Map(rows.map((row) => [row.slug, row]));
   const slugById = new Map(rows.map((row) => [row.orderId, row.slug]));
   const existingParents = new Map(
@@ -401,7 +393,7 @@ const importInTx = (tx: DbTx, args: ImportArgs): ImportResult => {
 
 export const importQueueProcedure = scopedProcedure(['supervisor:write'])(
   importQueueContract,
-)((input, ctx) => {
+)(async (input, ctx) => {
   const { projectId, mode, files, commandId } = input.body;
   const now = ctx.clock.now();
   const actor: Actor = { kind: 'supervisor', id: ctx.principal.tokenId };
@@ -417,26 +409,19 @@ export const importQueueProcedure = scopedProcedure(['supervisor:write'])(
       errors: preErrors,
     };
 
-  const holder: { result?: ImportResult } = {};
-  try {
-    immediateTx(ctx.db, (tx) => {
-      holder.result = importInTx(tx, {
+  const result = await ctx.storage.write(
+    (tx) =>
+      importInTx(tx, {
         projectId,
         commandId,
         dryRun,
         todos: parsed.todos,
         actor,
         now,
-      });
-      if (dryRun) tx.rollback();
-    });
-  } catch (error) {
-    if (!(error instanceof TransactionRollbackError)) throw error;
-  }
+      }),
+    { dryRun },
+  );
 
-  const result = holder.result;
-  if (result === undefined)
-    throw new InternalServer('Queue import produced no result');
   if (result.kind === 'rejected')
     return {
       code: 422 as const,

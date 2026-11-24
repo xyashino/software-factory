@@ -1,8 +1,4 @@
-import { eq } from 'drizzle-orm';
-import type { DbTx } from '../../db/client';
-import { jobs } from '../../db/schema/jobs';
-import { workOrders } from '../../db/schema/orders';
-import { orderPlans } from '../../db/schema/plans';
+import type { JobRow, StorageWriteTx } from '../ports/storage.port';
 import {
   insertPlanBranchJob,
   orderTransition,
@@ -11,22 +7,15 @@ import {
   type TransitionLog,
 } from './order-writes';
 
-type JobRow = typeof jobs.$inferSelect;
-type WorkOrderRow = typeof workOrders.$inferSelect;
-
 const requeueOrder = (
-  tx: DbTx,
+  tx: StorageWriteTx,
   job: JobRow,
   now: number,
   actor: Actor,
   log: TransitionLog,
 ): void => {
   if (job.orderId === null) return;
-  const order: WorkOrderRow | undefined = tx
-    .select()
-    .from(workOrders)
-    .where(eq(workOrders.orderId, job.orderId))
-    .get();
+  const order = tx.orders.find(job.orderId);
   if (order === undefined || order.activeJobId !== job.jobId) return;
   updateWorkOrder(
     tx,
@@ -52,28 +41,25 @@ const requeueOrder = (
   );
 };
 
-const requeuePlanBranch = (tx: DbTx, job: JobRow, now: number): void => {
+const requeuePlanBranch = (
+  tx: StorageWriteTx,
+  job: JobRow,
+  now: number,
+): void => {
   if (job.planId === null) return;
-  const plan = tx
-    .select()
-    .from(orderPlans)
-    .where(eq(orderPlans.planId, job.planId))
-    .get();
+  const plan = tx.plans.find(job.planId);
   if (plan === undefined || plan.state !== 'branching') return;
   insertPlanBranchJob(tx, plan, job.repoUrl, now);
 };
 
 export const loseJob = (
-  tx: DbTx,
+  tx: StorageWriteTx,
   job: JobRow,
   now: number,
   actor: Actor,
   log: TransitionLog,
 ): void => {
-  tx.update(jobs)
-    .set({ status: 'lost', finishedAt: now })
-    .where(eq(jobs.jobId, job.jobId))
-    .run();
+  tx.jobs.update(job.jobId, { status: 'lost', finishedAt: now });
   requeueOrder(tx, job, now, actor, log);
   requeuePlanBranch(tx, job, now);
 };

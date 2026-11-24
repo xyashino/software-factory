@@ -1,4 +1,3 @@
-import { immediateTx } from '../../../db/client';
 import { createWorkOrderContract } from '@repo/hq-contracts/work-orders.contract';
 import { asOrderId } from '../../../domain/common/brand';
 import { scopedId } from '../../../domain/common/scoped-id';
@@ -22,12 +21,12 @@ import { toWorkOrderDto } from '../../orders/order-views';
 
 export const createWorkOrderProcedure = scopedProcedure(['supervisor:write'])(
   createWorkOrderContract,
-)((input, ctx) => {
+)(async (input, ctx) => {
   const body = input.body;
   const now = ctx.clock.now();
   const actor: Actor = { kind: 'supervisor', id: ctx.principal.tokenId };
 
-  const { row, records } = immediateTx(ctx.db, (tx) => {
+  const { row, records } = await ctx.storage.write((tx) => {
     const project = requireProject(tx, body.projectId);
     const orderId = asOrderId(scopedId(project.projectId, body.slug));
     if (findOrder(tx, orderId) !== undefined)

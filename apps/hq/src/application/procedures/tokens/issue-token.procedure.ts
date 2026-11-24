@@ -1,14 +1,13 @@
-import { immediateTx } from '../../../db/client';
 import { issueTokenContract } from '@repo/hq-contracts/tokens.contract';
 import { scopedProcedure } from '../../core/procedure';
 import { DEFAULT_SCOPES, insertSafeToken } from '../../tokens/token-writes';
 
 export const issueTokenProcedure = scopedProcedure(['admin:tokens'])(
   issueTokenContract,
-)((input, ctx) => {
+)(async (input, ctx) => {
   const { kind, name, expiresAt } = input.body;
   const scopes = DEFAULT_SCOPES[kind];
-  const issued = immediateTx(ctx.db, (tx) =>
+  const issued = await ctx.storage.write((tx) =>
     insertSafeToken(tx, {
       kind,
       name,

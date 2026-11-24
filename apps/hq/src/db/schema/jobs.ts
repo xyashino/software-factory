@@ -22,18 +22,7 @@ import { orderPlans } from './plans';
 import { orderSteps, workOrders } from './orders';
 import { projects } from './projects';
 import { factories } from './factories';
-
-export const JOB_STATUSES = [
-  'ready',
-  'claimed',
-  'running',
-  'passed',
-  'failed',
-  'blocked',
-  'line_unavailable',
-  'lost',
-  'cancelled',
-] as const;
+import { JOB_STATUSES, WORKSPACE_MODES } from '../../domain/common/vocabulary';
 
 export const jobs = sqliteTable(
   'jobs',
@@ -58,7 +47,7 @@ export const jobs = sqliteTable(
     lineName: text('line_name'),
     kind: text('kind', { enum: JOB_KINDS }).notNull(),
     workspaceMode: text('workspace_mode', {
-      enum: ['fresh', 'reuse'],
+      enum: WORKSPACE_MODES,
     }).notNull(),
     status: text('status', { enum: JOB_STATUSES }).notNull(),
     repoUrl: text('repo_url').notNull(),

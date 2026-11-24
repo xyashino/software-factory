@@ -1,4 +1,3 @@
-import { immediateTx } from '../../../db/client';
 import { transitionWorkOrderContract } from '@repo/hq-contracts/work-orders.contract';
 import { nextWorkOrderState } from '../../../domain/orders/order-state';
 import { Conflict } from '../../core/error-handling';
@@ -16,12 +15,12 @@ import { toWorkOrderDto } from '../../orders/order-views';
 
 export const transitionWorkOrderProcedure = scopedProcedure([
   'supervisor:write',
-])(transitionWorkOrderContract)((input, ctx) => {
+])(transitionWorkOrderContract)(async (input, ctx) => {
   const { action } = input.body;
   const now = ctx.clock.now();
   const actor: Actor = { kind: 'supervisor', id: ctx.principal.tokenId };
 
-  const { row, records } = immediateTx(ctx.db, (tx) => {
+  const { row, records } = await ctx.storage.write((tx) => {
     const order = requireOrder(tx, input.params.id);
     const next = nextWorkOrderState(
       order.state,

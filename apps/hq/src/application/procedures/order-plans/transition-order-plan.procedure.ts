@@ -1,4 +1,3 @@
-import { immediateTx } from '../../../db/client';
 import { transitionOrderPlanContract } from '@repo/hq-contracts/order-plans.contract';
 import { nextPlanState } from '../../../domain/orders/order-state';
 import { Conflict } from '../../core/error-handling';
@@ -18,12 +17,12 @@ import { toOrderPlanDto } from '../../orders/order-views';
 
 export const transitionOrderPlanProcedure = scopedProcedure([
   'supervisor:write',
-])(transitionOrderPlanContract)((input, ctx) => {
+])(transitionOrderPlanContract)(async (input, ctx) => {
   const { action } = input.body;
   const now = ctx.clock.now();
   const actor: Actor = { kind: 'supervisor', id: ctx.principal.tokenId };
 
-  const { row, records } = immediateTx(ctx.db, (tx) => {
+  const { row, records } = await ctx.storage.write((tx) => {
     const plan = requirePlan(tx, input.params.id);
     const next = nextPlanState(plan.state, action);
     if (next === null)

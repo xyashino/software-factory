@@ -7,14 +7,7 @@ import {
 import type { FactoryId, TokenId } from '../../domain/common/brand';
 import { jsonColumn } from '@repo/bun-sqlite-kit/columns';
 import { factories } from './factories';
-
-export const TOKEN_KINDS = [
-  'supervisor',
-  'web_join',
-  'web_session',
-  'factory_join',
-  'factory_session',
-] as const;
+import { TOKEN_KINDS } from '../../domain/common/vocabulary';
 
 export const safeTokens = sqliteTable('safe_tokens', {
   tokenId: text('token_id').$type<TokenId>().primaryKey(),

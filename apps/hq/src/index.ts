@@ -5,6 +5,7 @@ import { createSafeTokenAuth } from './adapters/auth/safe-token-auth.adapter';
 import { createClaimWaiters } from './adapters/memory/claim-waiters.adapter';
 import { createSystemClock } from './adapters/memory/system-clock.adapter';
 import { createTransitionBus } from './adapters/memory/transition-bus.adapter';
+import { createSqliteStorageAdapter } from './adapters/storage/sqlite-storage.adapter';
 import { mintAdminToken } from './bootstrap/admin';
 import { hqSettingOf } from './bootstrap/env';
 import { createTransport } from './bootstrap/transport';
@@ -23,25 +24,25 @@ const dbPath =
   hqSettingOf(process.env, 'DB_PATH') ?? defaultDbPathOf(DEFAULT_DATA_DIR);
 const dataDir = hqSettingOf(process.env, 'DATA_DIR') ?? dirname(dbPath);
 mkdirSync(dataDir, { recursive: true });
-const db = createDb(dbPath);
+const storage = createSqliteStorageAdapter(createDb(dbPath));
 const clock = createSystemClock();
 
 if (process.argv.slice(2).join(' ') === ADMIN_TOKEN_CREATE) {
-  process.stdout.write(`${mintAdminToken(db, clock)}\n`);
+  process.stdout.write(`${await mintAdminToken(storage, clock)}\n`);
 } else {
   const port = Number(hqSettingOf(process.env, 'PORT') ?? DEFAULT_PORT);
   const hostname = hqSettingOf(process.env, 'HOST') ?? DEFAULT_HOST;
   const app = createApp(
     createTransport({
-      db,
+      storage,
       clock,
-      auth: createSafeTokenAuth(db, clock),
+      auth: createSafeTokenAuth(storage, clock),
       claimWaiters: createClaimWaiters(),
       transitionBus: createTransitionBus(),
     }),
   );
   try {
-    writeWebJoinFile(db, clock, dataDir);
+    await writeWebJoinFile(storage, clock, dataDir);
   } catch (error) {
     const reason = error instanceof Error ? error.message : 'unknown error';
     process.stderr.write(

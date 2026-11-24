@@ -1,6 +1,6 @@
 import type { z } from 'zod';
 import type { stepJobPayloadDto } from '@repo/hq-contracts/cells.contract';
-import type { WorkOrderRow } from './order-views';
+import type { WorkOrderRow } from '../ports/storage.port';
 
 export const stepJobPayload = (
   order: WorkOrderRow,

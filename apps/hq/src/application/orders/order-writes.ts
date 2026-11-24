@@ -1,10 +1,3 @@
-import { and, eq } from 'drizzle-orm';
-import type { Db, DbTx } from '../../db/client';
-import { jobs } from '../../db/schema/jobs';
-import { workOrders } from '../../db/schema/orders';
-import { orderPlans } from '../../db/schema/plans';
-import { projects } from '../../db/schema/projects';
-import { stateTransitions } from '../../db/schema/transitions';
 import {
   asJobId,
   asOrderId,
@@ -33,16 +26,19 @@ import {
 } from '../../domain/topology/resolve-base-branch';
 import { NotFound, UnprocessableEntity } from '../core/error-handling';
 import type { TransportContext } from '../core/procedure';
-import type { OrderPlanRow, ProjectRow, WorkOrderRow } from './order-views';
+import type {
+  OrderPlanInsert,
+  OrderPlanRow,
+  ProjectRow,
+  StorageReadTx,
+  StorageWriteTx,
+  WorkOrderInsert,
+  WorkOrderRow,
+} from '../ports/storage.port';
 
 export type Actor = { kind: ActorKind; id: string | null };
 
 export type TransitionLog = StateTransitionInput[];
-
-export type WorkOrderInsert = typeof workOrders.$inferInsert;
-export type OrderPlanInsert = typeof orderPlans.$inferInsert;
-
-type Queryable = Db | DbTx;
 
 type TransitionArgs = {
   projectId: ProjectId;
@@ -68,75 +64,51 @@ const parentRefOf = (row: WorkOrderRow): ParentRef => ({
 });
 
 const insertTransition = (
-  tx: DbTx,
+  tx: StorageWriteTx,
   input: StateTransitionInput,
-): StateTransitionRecord => {
-  const row = tx
-    .insert(stateTransitions)
-    .values({
-      projectId: input.projectId,
-      entityType: input.entityType,
-      entityId: input.entityId,
-      fromState: input.fromState,
-      toState: input.toState,
-      actorKind: input.actorKind,
-      actorId: input.actorId,
-      commandId: input.commandId,
-      metaJson: input.meta,
-      at: input.at,
-    })
-    .returning({ seq: stateTransitions.seq })
-    .get();
-  return { ...input, seq: row.seq };
-};
+): StateTransitionRecord => ({
+  ...input,
+  seq: tx.transitions.append(input),
+});
 
 export const findProject = (
-  db: Queryable,
+  tx: StorageReadTx,
   projectId: string,
-): ProjectRow | undefined =>
-  db
-    .select()
-    .from(projects)
-    .where(eq(projects.projectId, asProjectId(projectId)))
-    .get();
+): ProjectRow | undefined => tx.projects.find(asProjectId(projectId));
 
 export const findPlan = (
-  db: Queryable,
+  tx: StorageReadTx,
   planId: string,
-): OrderPlanRow | undefined =>
-  db
-    .select()
-    .from(orderPlans)
-    .where(eq(orderPlans.planId, asPlanId(planId)))
-    .get();
+): OrderPlanRow | undefined => tx.plans.find(asPlanId(planId));
 
 export const findOrder = (
-  db: Queryable,
+  tx: StorageReadTx,
   orderId: string,
-): WorkOrderRow | undefined =>
-  db
-    .select()
-    .from(workOrders)
-    .where(eq(workOrders.orderId, asOrderId(orderId)))
-    .get();
+): WorkOrderRow | undefined => tx.orders.find(asOrderId(orderId));
 
 export const requireProject = (
-  db: Queryable,
+  tx: StorageReadTx,
   projectId: string,
 ): ProjectRow => {
-  const row = findProject(db, projectId);
+  const row = findProject(tx, projectId);
   if (row === undefined) throw new NotFound(`Project ${projectId} not found`);
   return row;
 };
 
-export const requirePlan = (db: Queryable, planId: string): OrderPlanRow => {
-  const row = findPlan(db, planId);
+export const requirePlan = (
+  tx: StorageReadTx,
+  planId: string,
+): OrderPlanRow => {
+  const row = findPlan(tx, planId);
   if (row === undefined) throw new NotFound(`Order plan ${planId} not found`);
   return row;
 };
 
-export const requireOrder = (db: Queryable, orderId: string): WorkOrderRow => {
-  const row = findOrder(db, orderId);
+export const requireOrder = (
+  tx: StorageReadTx,
+  orderId: string,
+): WorkOrderRow => {
+  const row = findOrder(tx, orderId);
   if (row === undefined) throw new NotFound(`Work order ${orderId} not found`);
   return row;
 };
@@ -154,15 +126,15 @@ export const resolveFor = (
   });
 
 export const readinessOf = (
-  db: Queryable,
+  tx: StorageReadTx,
   row: WorkOrderRow,
 ): ResolvedBaseBranch =>
   resolveFor(
     { baseBranch: row.baseBranch, branch: row.branch },
-    row.planId === null ? null : (findPlan(db, row.planId) ?? null),
+    row.planId === null ? null : (findPlan(tx, row.planId) ?? null),
     row.parentOrderId === null
       ? null
-      : (findOrder(db, row.parentOrderId) ?? null),
+      : (findOrder(tx, row.parentOrderId) ?? null),
   );
 
 export const orderTransition = (
@@ -181,91 +153,85 @@ export const orderTransition = (
 });
 
 export const insertOrderPlan = (
-  tx: DbTx,
+  tx: StorageWriteTx,
   values: OrderPlanInsert,
-): OrderPlanRow => tx.insert(orderPlans).values(values).returning().get();
+): OrderPlanRow => tx.plans.insert(values);
 
 export const insertWorkOrder = (
-  tx: DbTx,
+  tx: StorageWriteTx,
   values: WorkOrderInsert,
-): WorkOrderRow => tx.insert(workOrders).values(values).returning().get();
+): WorkOrderRow => tx.orders.insert(values);
 
 export const updateWorkOrder = (
-  tx: DbTx,
+  tx: StorageWriteTx,
   row: WorkOrderRow,
   patch: Partial<WorkOrderInsert>,
   now: number,
 ): WorkOrderRow =>
-  tx
-    .update(workOrders)
-    .set({ ...patch, version: row.version + 1, updatedAt: now })
-    .where(eq(workOrders.orderId, row.orderId))
-    .returning()
-    .get();
+  tx.orders.update(row.orderId, {
+    ...patch,
+    version: row.version + 1,
+    updatedAt: now,
+  });
 
 export const updateOrderPlan = (
-  tx: DbTx,
+  tx: StorageWriteTx,
   row: OrderPlanRow,
   state: PlanState,
   now: number,
 ): OrderPlanRow =>
-  tx
-    .update(orderPlans)
-    .set({ state, version: row.version + 1, updatedAt: now })
-    .where(eq(orderPlans.planId, row.planId))
-    .returning()
-    .get();
+  tx.plans.update(row.planId, {
+    state,
+    version: row.version + 1,
+    updatedAt: now,
+  });
 
 export const insertPlanBranchJob = (
-  tx: DbTx,
+  tx: StorageWriteTx,
   plan: OrderPlanRow,
   repoUrl: string,
   now: number,
 ): void => {
-  tx.insert(jobs)
-    .values({
-      jobId: asJobId(`job-${crypto.randomUUID()}`),
-      projectId: plan.projectId,
-      planId: plan.planId,
-      kind: 'plan_branch',
-      workspaceMode: 'fresh',
-      status: 'ready',
-      repoUrl,
-      baseBranch: plan.baseBranch,
-      targetBranch: plan.branch,
-      expectedPriorStepsJson: [],
-      payloadJson: { planId: plan.planId },
-      epoch: 0,
-      createdAt: now,
-    })
-    .run();
+  tx.jobs.insert({
+    jobId: asJobId(`job-${crypto.randomUUID()}`),
+    projectId: plan.projectId,
+    planId: plan.planId,
+    kind: 'plan_branch',
+    workspaceMode: 'fresh',
+    status: 'ready',
+    repoUrl,
+    baseBranch: plan.baseBranch,
+    targetBranch: plan.branch,
+    expectedPriorStepsJson: [],
+    payloadJson: { planId: plan.planId },
+    epoch: 0,
+    createdAt: now,
+  });
 };
 
-const releaseLease = (tx: DbTx, row: WorkOrderRow, now: number): void => {
+const releaseLease = (
+  tx: StorageWriteTx,
+  row: WorkOrderRow,
+  now: number,
+): void => {
   if (row.activeJobId !== null)
-    tx.update(jobs)
-      .set({ status: 'cancelled', finishedAt: now })
-      .where(eq(jobs.jobId, asJobId(row.activeJobId)))
-      .run();
+    tx.jobs.update(asJobId(row.activeJobId), {
+      status: 'cancelled',
+      finishedAt: now,
+    });
 };
 
 const unlockChildren = (
-  tx: DbTx,
+  tx: StorageWriteTx,
   parent: WorkOrderRow,
   actor: Actor,
   now: number,
   log: TransitionLog,
 ): void => {
-  const children = tx
-    .select()
-    .from(workOrders)
-    .where(
-      and(
-        eq(workOrders.parentOrderId, parent.orderId),
-        eq(workOrders.state, 'waiting_parent'),
-      ),
-    )
-    .all();
+  const children = tx.orders.list({
+    parentOrderId: parent.orderId,
+    state: 'waiting_parent',
+  });
   for (const child of children) {
     if (!readinessOf(tx, child).isReady) continue;
     updateWorkOrder(tx, child, { state: 'queued' }, now);
@@ -284,7 +250,7 @@ const unlockChildren = (
 };
 
 export const moveOrder = (
-  tx: DbTx,
+  tx: StorageWriteTx,
   row: WorkOrderRow,
   next: WorkOrderState,
   action: WorkOrderAction,
@@ -320,7 +286,7 @@ export const moveOrder = (
 };
 
 export const flushTransitions = (
-  tx: DbTx,
+  tx: StorageWriteTx,
   log: TransitionLog,
   command?: { commandId: CommandId; meta: Record<string, unknown> },
 ): StateTransitionRecord[] =>
@@ -347,9 +313,9 @@ export const publishCommitted = (
     ctx.claimWaiters.wakeAll();
 };
 
-export const settle = <T>(run: () => T): T => {
+export const settle = async <T>(run: () => Promise<T>): Promise<T> => {
   try {
-    return run();
+    return await run();
   } catch (error) {
     if (error instanceof UnprocessableTransition)
       throw new UnprocessableEntity(error.message);

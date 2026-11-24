@@ -19,17 +19,8 @@ import { jsonColumn, timestamps } from '@repo/bun-sqlite-kit/columns';
 import { factories } from './factories';
 import { orderPlans } from './plans';
 import { projects } from './projects';
-
-export const ORDER_STEP_STATES = [
-  'pending',
-  'ready',
-  'claimed',
-  'running',
-  'passed',
-  'failed',
-  'blocked',
-  'cancelled',
-] as const;
+import { STATION_KINDS } from '../../domain/orders/job-transitions';
+import { ORDER_STEP_STATES } from '../../domain/common/vocabulary';
 
 export const workOrders = sqliteTable(
   'work_orders',
@@ -90,7 +81,7 @@ export const orderSteps = sqliteTable('order_steps', {
     .references(() => workOrders.orderId),
   stepIndex: integer('step_index').notNull(),
   stationId: text('station_id').notNull(),
-  kind: text('kind', { enum: ['operator', 'inspection', 'deliver'] }).notNull(),
+  kind: text('kind', { enum: STATION_KINDS }).notNull(),
   runner: text('runner'),
   configJson: jsonColumn<Record<string, unknown>>('config_json').notNull(),
   requiredFilesJson: jsonColumn<string[]>('required_files_json').notNull(),

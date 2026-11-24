@@ -1,5 +1,4 @@
 import { goneCellContract } from '@repo/hq-contracts/factories.contract';
-import { immediateTx } from '../../../db/client';
 import { asCellId } from '../../../domain/common/brand';
 import { factoryIdOf, touchFactory } from '../../core/identity';
 import { scopedProcedure } from '../../core/procedure';
@@ -12,12 +11,12 @@ import {
 
 export const goneCellProcedure = scopedProcedure(['factory:worker'])(
   goneCellContract,
-)((input, ctx) => {
+)(async (input, ctx) => {
   const factoryId = factoryIdOf(ctx);
   const cellId = asCellId(input.params.id);
   const now = ctx.clock.now();
 
-  const records = immediateTx(ctx.db, (tx) => {
+  const records = await ctx.storage.write((tx) => {
     touchFactory(tx, factoryId, now);
     const log: TransitionLog = [];
     loseCellJob(

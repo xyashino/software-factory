@@ -1,8 +1,6 @@
-import { eq } from 'drizzle-orm';
 import { LEASE_TTL_MS } from '../../config';
-import type { DbTx } from '../../db/client';
-import { factories } from '../../db/schema/factories';
 import type { CellId, FactoryId } from '../../domain/common/brand';
+import type { StorageWriteTx } from '../ports/storage.port';
 import { Forbidden } from './error-handling';
 import type { AuthenticatedContext } from './procedure';
 
@@ -22,12 +20,9 @@ export const cellIdOf = (ctx: AuthenticatedContext): CellId => {
 };
 
 export const touchFactory = (
-  tx: DbTx,
+  tx: StorageWriteTx,
   factoryId: FactoryId,
   now: number,
 ): void => {
-  tx.update(factories)
-    .set({ lastSeenAt: now })
-    .where(eq(factories.factoryId, factoryId))
-    .run();
+  tx.factories.update(factoryId, { lastSeenAt: now });
 };

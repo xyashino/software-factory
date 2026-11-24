@@ -1,4 +1,3 @@
-import { immediateTx } from '../../../db/client';
 import { createOrderPlanContract } from '@repo/hq-contracts/order-plans.contract';
 import { asPlanId } from '../../../domain/common/brand';
 import { scopedId } from '../../../domain/common/scoped-id';
@@ -21,13 +20,13 @@ import { toOrderPlanDto } from '../../orders/order-views';
 
 export const createOrderPlanProcedure = scopedProcedure(['supervisor:write'])(
   createOrderPlanContract,
-)((input, ctx) => {
+)(async (input, ctx) => {
   const { projectId, slug, title, baseBranch, activate } = input.body;
   const now = ctx.clock.now();
   const actor: Actor = { kind: 'supervisor', id: ctx.principal.tokenId };
   const planId = asPlanId(scopedId(projectId, slug));
 
-  const { row, records } = immediateTx(ctx.db, (tx) => {
+  const { row, records } = await ctx.storage.write((tx) => {
     const project = requireProject(tx, projectId);
     if (findPlan(tx, planId) !== undefined)
       throw new Conflict(`Order plan ${slug} already exists`);
