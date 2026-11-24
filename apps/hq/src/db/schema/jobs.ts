@@ -16,19 +16,12 @@ import type {
   StepId,
 } from '../../domain/common/brand';
 import { jsonColumn } from '@repo/bun-sqlite-kit/columns';
+import { JOB_KINDS } from '@repo/hq-contracts/enums/jobs';
 import { incidents } from './incidents';
 import { orderPlans } from './plans';
 import { orderSteps, workOrders } from './orders';
 import { projects } from './projects';
 import { factories } from './factories';
-
-export const JOB_KINDS = [
-  'plan_branch',
-  'run_operator',
-  'run_inspection',
-  'deliver',
-  'mechanic',
-] as const;
 
 export const JOB_STATUSES = [
   'ready',

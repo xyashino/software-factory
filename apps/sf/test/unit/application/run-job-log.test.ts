@@ -97,7 +97,7 @@ const PANE: RunHandle = {
 
 const jobOf = (patch: Partial<ClaimedJob>): ClaimedJob => ({
   jobId: 'job-1',
-  kind: 'step',
+  kind: 'run_operator',
   orderId: 'order-1',
   planId: null,
   stepId: null,
@@ -341,7 +341,9 @@ describe('cell log detail', () => {
     await job;
 
     const lines = h.lines();
-    expect(lines[0]).toMatch(/build claim job=job-1 kind=step epoch=1$/);
+    expect(lines[0]).toMatch(
+      /build claim job=job-1 kind=run_operator epoch=1$/,
+    );
     expect(lines).toContainEqual(
       expect.stringMatching(
         new RegExp(`build worktree create path=${WORKTREE} base=main$`),
@@ -370,7 +372,7 @@ describe('cell log detail', () => {
     expect(
       gate.map((line) => line.replace(/^\S+ \S+ quality-gate /, '')),
     ).toEqual([
-      'claim job=job-1 kind=step epoch=2',
+      'claim job=job-1 kind=run_operator epoch=2',
       `worktree reset to ${HEAD_SHA}`,
       'start (2/3) command="bun run ci:verify"',
       'complete (2/3) exit=0 duration=15s',
