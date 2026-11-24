@@ -1,9 +1,11 @@
 import { z } from 'zod';
+import { queueReplyOf } from '../queue-reply';
 import type { HqLinkPort, HqReply } from '../ports';
 
 const REQUEST_TIMEOUT_MS = 5_000;
 const UNAUTHORIZED = 401;
 const HEARTBEAT_ROUTE = '/api/v1/factories/heartbeat';
+const QUEUE_IMPORT_ROUTE = '/api/v1/queue/import';
 
 const HeartbeatReplySchema = z.object({ factoryId: z.string().min(1) });
 const GoneReplySchema = z.object({ cellId: z.string().min(1) });
@@ -70,4 +72,19 @@ export const createHqLinkClient = (
       ),
       GoneReplySchema,
     ),
+  importQueue: async ({ url, bearer, body }) => {
+    const response = await send(
+      fetchImpl,
+      `${url}${QUEUE_IMPORT_ROUTE}`,
+      bearer,
+      body,
+    );
+    if (response === null) return { kind: 'unreachable' };
+    if (response.status === UNAUTHORIZED) return { kind: 'unauthorized' };
+    try {
+      return await queueReplyOf(response);
+    } catch {
+      return { kind: 'unreachable' };
+    }
+  },
 });

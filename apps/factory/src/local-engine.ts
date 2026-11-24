@@ -13,6 +13,8 @@ import { createTransport } from '@repo/hq/src/bootstrap/transport';
 import { createDb } from '@repo/hq/src/db/client';
 import { factories } from '@repo/hq/src/db/schema/factories';
 import { asFactoryId, asTokenId } from '@repo/hq/src/domain/common/brand';
+import { queueReplyOf } from './queue-reply';
+import type { QueueImportBody, QueueImportReply } from './ports';
 
 const LOCAL_FACTORY_ID = 'fac_local';
 const LOCAL_FACTORY_NAME = 'local';
@@ -37,6 +39,7 @@ export interface LocalEngine {
   readonly localToken: string;
   fetch(request: Request): Promise<Response>;
   ensureProject(input: LocalProject): Promise<void>;
+  importQueue(body: QueueImportBody): Promise<QueueImportReply>;
   goneCell(cellId: string): Promise<void>;
 }
 
@@ -106,6 +109,8 @@ export const createLocalEngine = (options: { dbPath: string }): LocalEngine => {
         throw new Error(`local project upsert failed with ${reply.status}`);
       }
     },
+    importQueue: async (body) =>
+      queueReplyOf(await call('POST', '/api/v1/queue/import', body)),
     goneCell: async (cellId) => {
       await call(
         'POST',
