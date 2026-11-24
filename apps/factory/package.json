@@ -9,7 +9,9 @@
     "test": "bun --bun vitest run"
   },
   "dependencies": {
+    "@repo/bun-sqlite-kit": "workspace:*",
     "@repo/factory-contracts": "workspace:*",
+    "@repo/hq": "workspace:*",
     "zod": "catalog:"
   },
   "devDependencies": {

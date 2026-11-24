@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import type { FactoryCredential } from '@repo/factory-contracts/status.contract';
 import { z } from 'zod';
+import type { LocalEngine } from './local-engine';
 
 export const RELAY_PATH = '/relay';
 
@@ -8,6 +9,7 @@ const REQUEST_TIMEOUT_MS = 10_000;
 const UNAUTHORIZED = 401;
 const BEARER = 'Bearer ';
 const CELL_HEADER = 'x-cell-id';
+const LOCAL_ORIGIN = 'http://local';
 const JSON_HEADERS = { 'content-type': 'application/json' };
 const ALLOWED_ROUTES = [
   /^\/api\/v1\/cells\/(claims|heartbeats)$/,
@@ -29,6 +31,7 @@ export interface RelayDeps {
   credential: () => FactoryCredential | null;
   alive: (cellId: string) => boolean;
   kill: (cellId: string) => Promise<boolean>;
+  local: Pick<LocalEngine, 'localToken' | 'fetch'>;
 }
 
 export interface Relay {
@@ -66,6 +69,22 @@ const isAllowed = (request: Request, path: string): boolean =>
 
 const streamed = (reply: Response): Response =>
   new Response(reply.body, { status: reply.status, headers: JSON_HEADERS });
+
+const localRequestOf = (
+  localToken: string,
+  path: string,
+  cellId: string,
+  body: string,
+): Request =>
+  new Request(`${LOCAL_ORIGIN}${path}`, {
+    method: 'POST',
+    headers: {
+      authorization: `${BEARER}${localToken}`,
+      [CELL_HEADER]: cellId,
+      'content-type': 'application/json',
+    },
+    body,
+  });
 
 const send = async (
   credential: FactoryCredential,
@@ -139,15 +158,20 @@ export const createRelay = (deps: RelayDeps): Relay => {
           'unknown or expired cell token',
         );
       }
+      const text = await request.text();
       const credential = deps.credential();
       if (credential === null) {
-        return failure(
-          503,
-          'unreachable',
-          'factory not connected: run "sf factory connect"',
+        return streamed(
+          await deps.local.fetch(
+            localRequestOf(
+              deps.local.localToken,
+              path,
+              live.grant.cellId,
+              text,
+            ),
+          ),
         );
       }
-      const text = await request.text();
       const reply = await send(credential, path, text, live.grant.cellId);
       if (reply === null) {
         return unavailable();

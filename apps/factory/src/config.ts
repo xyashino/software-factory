@@ -16,6 +16,7 @@ const COMPILED_URL_PATTERN = /\/(\$bunfs|~BUN)\//;
 export const DEFAULT_DATA_DIR = join(XDG_DATA_HOME, 'sf');
 export const FACTORY_CREDENTIAL_PATH = join(DEFAULT_CONFIG_DIR, 'factory.json');
 export const FACTORY_PID_FILE = 'factory.pid';
+export const FACTORY_LOCAL_DB_PATH = join(DEFAULT_DATA_DIR, 'factory-local.db');
 export const FACTORY_PID_ENV = 'SF_FACTORY_PID';
 export const FACTORY_DAEMON_PORT = Number(
   process.env.SF_FACTORY_PORT ?? DEFAULT_FACTORY_PORT,
