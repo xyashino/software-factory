@@ -13,6 +13,10 @@ export const WEB_SESSION_TTL_MS = 24 * 60 * 60 * 1_000;
 export const FACTORY_SESSION_TTL_MS = CELL_SESSION_TTL_MS;
 export const MAX_CLAIM_WAITERS = 5;
 export const MAX_BODY_BYTES = 1_048_576;
+export const DEFAULT_RATE_LIMITS = {
+  tokenQuota: { limit: 300, windowMs: 60_000 },
+  authFailureBrake: { limit: 10, windowMs: 60_000 },
+};
 export const DEFAULT_PORT = 7070;
 export const DEFAULT_HOST = '127.0.0.1';
 const XDG_DATA_HOME =

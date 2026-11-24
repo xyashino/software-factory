@@ -3,6 +3,7 @@ import { dirname } from 'node:path';
 import { createApp } from './app';
 import { createSafeTokenAuth } from './adapters/auth/safe-token-auth.adapter';
 import { createClaimWaiters } from './adapters/memory/claim-waiters.adapter';
+import { createRateLimiter } from './adapters/memory/rate-limit.adapter';
 import { createSystemClock } from './adapters/memory/system-clock.adapter';
 import { createTransitionBus } from './adapters/memory/transition-bus.adapter';
 import { createPostgresStorageAdapter } from './adapters/storage/postgres-storage.adapter';
@@ -46,6 +47,7 @@ if (process.argv.slice(2).join(' ') === ADMIN_TOKEN_CREATE) {
       claimWaiters: createClaimWaiters(),
       transitionBus: createTransitionBus(),
     }),
+    createRateLimiter(clock),
   );
   try {
     await writeWebJoinFile(storage, clock, dataDir);
