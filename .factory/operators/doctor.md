@@ -37,6 +37,7 @@ You must use the following skills:
 3. Rules: check the declared rules against the changed files. For `rich-commit`, check the message in the `build.commit` input against the rule text (`type(scope): title`, blank line, `- ` change list). Do not judge HEAD: the commit of this attempt does not exist yet (the supervisor makes it after the audit).
 4. Proof: the cell's proof is in the directory of the `build.report` input (the cell's evidence directory). Check it there. `{{evidenceDir}}` holds only this audit's prompt and feedback; an empty `{{evidenceDir}}` is not missing proof.
 5. Decision log: exactly one new entry in `decisions/` matches the declared `decision-log` rule.
+6. Producer/consumer: for each new job kind, work-order state or payload field in the diff, name its producer and find its consumer in the diff or in the context. If no consumer is in the diff and no test exercises it, fail with the file and line of the producer. Text check only: do not run commands to look for the consumer.
 
 ## Commands
 
@@ -49,6 +50,7 @@ You must use the following skills:
 ## Blocking vs notes
 
 - Blocking: a failing rule, missing proof the attempt could produce, wrong scope, a defect in the diff.
+- Blocking: a new job kind, work-order state or payload field with no consumer in the diff and no test that exercises it.
 - Note, not blocking: anything the attempt cannot run itself (for example a real end-to-end run of the factory, or a check that needs a later merge). Record it under "Notes" in the feedback and still pass the verdict if everything else holds.
 - Minor style remarks that do not violate a rule are notes, not blockers.
 
