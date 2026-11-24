@@ -13,6 +13,7 @@ export interface StateTransitionInput {
   toState: string;
   actorKind: ActorKind;
   actorId: string | null;
+  actorLabel: string | null;
   commandId: CommandId | null;
   meta: Record<string, unknown> | null;
   at: number;

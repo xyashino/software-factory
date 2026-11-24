@@ -147,6 +147,7 @@ export const orderTransition = (
   toState: args.toState,
   actorKind: args.actor.kind,
   actorId: args.actor.id,
+  actorLabel: null,
   commandId: null,
   meta: null,
   at: args.at,
@@ -285,17 +286,24 @@ export const moveOrder = async (
   return updated;
 };
 
+type FlushOptions = {
+  // Name of the authenticated token that caused the log; system transitions stay unlabeled.
+  actorLabel: string | null;
+  command?: { commandId: CommandId; meta: Record<string, unknown> };
+};
+
 export const flushTransitions = async (
   tx: StorageWriteTx,
   log: TransitionLog,
-  command?: { commandId: CommandId; meta: Record<string, unknown> },
+  options: FlushOptions,
 ): Promise<StateTransitionRecord[]> => {
   const records: StateTransitionRecord[] = [];
   for (const [index, input] of log.entries()) {
-    const owner = index === 0 ? command : undefined;
+    const owner = index === 0 ? options.command : undefined;
     records.push(
       await insertTransition(tx, {
         ...input,
+        actorLabel: input.actorKind === 'system' ? null : options.actorLabel,
         commandId: owner?.commandId ?? null,
         meta: owner?.meta ?? input.meta,
       }),

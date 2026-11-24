@@ -31,7 +31,12 @@ export const transitionWorkOrderProcedure = scopedProcedure([
       throw new Conflict(`Work order cannot ${action} from ${order.state}`);
     const log: TransitionLog = [];
     const row = await moveOrder(tx, order, next, action, actor, now, log);
-    return { row, records: await flushTransitions(tx, log) };
+    return {
+      row,
+      records: await flushTransitions(tx, log, {
+        actorLabel: ctx.principal.name,
+      }),
+    };
   });
 
   publishCommitted(ctx, records);

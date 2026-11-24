@@ -3,6 +3,8 @@ import { transitionDto } from '@repo/hq-contracts/stream.contract';
 import { projects } from '../../src/db/schema/projects';
 import { stateTransitions } from '../../src/db/schema/transitions';
 import { createTransitionBus } from '../../src/adapters/memory/transition-bus.adapter';
+import { mintAdminToken } from '../../src/bootstrap/admin';
+import { hashToken } from '../../src/application/tokens/token-hash';
 import type { TransitionBusPort } from '../../src/application/ports/transition-bus.port';
 import { asProjectId, type ProjectId } from '../../src/domain/common/brand';
 import type { StateTransitionRecord } from '../../src/domain/common/events';
@@ -10,6 +12,7 @@ import type { Db } from '../../src/db/client';
 import {
   createTestApp,
   grantingAuth,
+  postJson,
   VALID_TOKEN,
   type TestApp,
 } from '../support/test-app';
@@ -41,6 +44,7 @@ const transitionFields = (
   toState,
   actorKind: 'system',
   actorId: null,
+  actorLabel: null,
   commandId: null,
   meta: null,
   at: SEED_AT,
@@ -63,6 +67,7 @@ const commitTransition = (
       toState: fields.toState,
       actorKind: fields.actorKind,
       actorId: fields.actorId,
+      actorLabel: fields.actorLabel,
       commandId: fields.commandId,
       metaJson: fields.meta,
       at: fields.at,
@@ -206,6 +211,44 @@ describe('GET /api/v1/stream', () => {
       toState: 'step-1',
       actorKind: 'system',
     });
+  });
+
+  it('labels a transition with the name of the token that caused it, never the secret', async () => {
+    const { app, db, storage, clock } = createTestApp({ safeTokenAuth: true });
+    seedBaseline(db);
+    const token = await mintAdminToken(storage, clock);
+    const headers = { authorization: `Bearer ${token}` };
+    const markdown = [
+      '---',
+      'line: feature',
+      '---',
+      '',
+      '# pay-schema: Add schema',
+      '',
+    ].join('\n');
+    const imported = await postJson(
+      app,
+      '/api/v1/queue/import',
+      {
+        commandId: 'import-1',
+        projectId: PROJECT_ID,
+        mode: 'apply',
+        files: [{ filename: 'pay-schema.md', markdown }],
+      },
+      headers,
+    );
+    expect(await imported.json()).toMatchObject({ code: 200 });
+
+    const { sse } = await openStream(app, '', headers);
+    const [event] = await sse.take(1);
+    const record = transitionDto.parse(JSON.parse(event?.data ?? 'null'));
+
+    expect(record).toMatchObject({
+      actorKind: 'supervisor',
+      actorLabel: 'admin',
+    });
+    expect(event?.data).not.toContain(token);
+    expect(event?.data).not.toContain(hashToken(token));
   });
 
   it('rejects a request without a bearer token before the stream opens', async () => {

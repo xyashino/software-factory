@@ -80,7 +80,12 @@ export const createWorkOrderProcedure = scopedProcedure(['supervisor:write'])(
         at: now,
       }),
     ];
-    return { row, records: await flushTransitions(tx, log) };
+    return {
+      row,
+      records: await flushTransitions(tx, log, {
+        actorLabel: ctx.principal.name,
+      }),
+    };
   });
 
   publishCommitted(ctx, records);

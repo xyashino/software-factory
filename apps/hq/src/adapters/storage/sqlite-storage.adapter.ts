@@ -429,6 +429,7 @@ const transitionWrites = (tx: Db): TransitionWrites => ({
         toState: input.toState,
         actorKind: input.actorKind,
         actorId: input.actorId,
+        actorLabel: input.actorLabel,
         commandId: input.commandId,
         metaJson: input.meta,
         at: input.at,

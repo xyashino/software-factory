@@ -12,6 +12,7 @@ export type TokenScope = (typeof TOKEN_SCOPES)[number];
 
 export type Principal = {
   tokenId: TokenId;
+  name: string;
   factoryId: FactoryId | null;
   scopes: readonly TokenScope[];
 };

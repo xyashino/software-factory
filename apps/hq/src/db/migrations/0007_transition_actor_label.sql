@@ -1,0 +1,1 @@
+ALTER TABLE `state_transitions` ADD `actor_label` text;

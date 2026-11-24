@@ -76,7 +76,12 @@ export const heartbeatCellProcedure = scopedProcedure(['factory:worker'])(
     await touchFactory(tx, factoryId, now);
     await reapExpiredLeases(tx, now, log);
     const heartbeat = await recordHeartbeat(tx, cellId, input.body, now);
-    return { heartbeat, records: await flushTransitions(tx, log) };
+    return {
+      heartbeat,
+      records: await flushTransitions(tx, log, {
+        actorLabel: ctx.principal.name,
+      }),
+    };
   });
   publishCommitted(ctx, outcome.records);
 

@@ -18,6 +18,7 @@ const frameFor = (seq: number): SseFrame => ({
     toState: 'running',
     actorKind: 'system',
     actorId: null,
+    actorLabel: null,
     commandId: null,
     meta: null,
     at: 1_700_000_000_000,
