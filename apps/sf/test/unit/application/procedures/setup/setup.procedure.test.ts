@@ -30,8 +30,10 @@ interface Machine {
     projectId: string;
     repoRoot: string;
     pid: number;
+    startedAt: number;
     state: 'idle' | 'running';
     writes: boolean;
+    since: number;
   }[];
   gitMissing: boolean;
   actions: string[];
@@ -172,8 +174,10 @@ const arrange = (overrides: Partial<Machine> = {}): Arrangement => {
             projectId: 'proj-1',
             repoRoot: REPO,
             pid: 1,
+            startedAt: 0,
             state: 'idle',
             writes: false,
+            since: 0,
           });
         }
         machine.actions.push('spawn:cell');

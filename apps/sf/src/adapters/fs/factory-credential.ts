@@ -7,12 +7,12 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { dirname } from 'node:path';
-import { Refused } from '../../application/core/errors';
-import type { FactoryCredentialPort } from '../../application/ports/factory-credential.port';
 import {
   FactoryCredentialSchema,
   type FactoryCredential,
-} from '../../domain/factory/factory-credential';
+} from '@repo/factory-contracts/status.contract';
+import { Refused } from '../../application/core/errors';
+import type { FactoryCredentialPort } from '../../application/ports/factory-credential.port';
 
 const CREDENTIAL_MODE = 0o600;
 const DIR_MODE = 0o700;

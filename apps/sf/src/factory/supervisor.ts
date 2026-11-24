@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { join } from 'node:path';
+import type { Activity } from '@repo/factory-contracts/scale.contract';
 import { Refused } from '../application/core/errors';
 import type { Ports } from '../application/core/procedure';
 import { cellNameOf } from '../domain/cell/cell-name';
@@ -8,12 +9,6 @@ const STOP_WAIT_MS = 10_000;
 const KILL_WAIT_MS = 5_000;
 const POLL_MS = 100;
 const CELL_ID_BYTES = 4;
-
-export interface Activity {
-  state: 'idle' | 'running';
-  writes: boolean;
-  since: number;
-}
 
 export interface CellRecord extends Activity {
   cellId: string;

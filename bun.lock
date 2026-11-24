@@ -45,6 +45,7 @@
         "sf": "./src/cli.ts",
       },
       "dependencies": {
+        "@repo/factory-contracts": "workspace:*",
         "@repo/hq-contracts": "workspace:*",
         "@repo/zod-contract-kit": "workspace:*",
         "citty": "catalog:",
@@ -112,6 +113,21 @@
         "globals": "catalog:",
         "typescript": "catalog:",
         "typescript-eslint": "catalog:",
+      },
+    },
+    "packages/factory-contracts": {
+      "name": "@repo/factory-contracts",
+      "version": "0.0.0",
+      "dependencies": {
+        "zod": "catalog:",
+      },
+      "devDependencies": {
+        "@repo/eslint-config": "workspace:*",
+        "@repo/typescript-config": "workspace:*",
+        "@types/node": "catalog:",
+        "eslint": "catalog:",
+        "typescript": "catalog:",
+        "vitest": "catalog:",
       },
     },
     "packages/hq-contracts": {
@@ -514,6 +530,8 @@
     "@repo/bun-sqlite-kit": ["@repo/bun-sqlite-kit@workspace:packages/bun-sqlite-kit"],
 
     "@repo/eslint-config": ["@repo/eslint-config@workspace:packages/eslint-config"],
+
+    "@repo/factory-contracts": ["@repo/factory-contracts@workspace:packages/factory-contracts"],
 
     "@repo/hq": ["@repo/hq@workspace:apps/hq"],
 

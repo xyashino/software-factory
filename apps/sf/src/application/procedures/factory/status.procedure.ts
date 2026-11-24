@@ -2,7 +2,7 @@ import { z } from 'zod';
 import {
   DaemonStatusSchema,
   type DaemonStatus,
-} from '../../../domain/factory/hq-state';
+} from '@repo/factory-contracts/status.contract';
 import { define, type Ports } from '../../core/procedure';
 import { healthPidOf } from './health';
 

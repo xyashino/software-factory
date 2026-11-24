@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
+import type { FactoryCredential } from '@repo/factory-contracts/status.contract';
 import { z } from 'zod';
-import type { FactoryCredential } from '../domain/factory/factory-credential';
 
 export const RELAY_PATH = '/relay';
 

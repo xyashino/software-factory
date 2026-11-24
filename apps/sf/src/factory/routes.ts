@@ -1,4 +1,9 @@
 import { z } from 'zod';
+import {
+  ActivitySchema,
+  ScaleRequestBodySchema,
+} from '@repo/factory-contracts/scale.contract';
+import type { DaemonStatus } from '@repo/factory-contracts/status.contract';
 import { RELAY_PATH, type Relay } from './relay';
 import {
   ArgumentError,
@@ -7,7 +12,6 @@ import {
 } from '../application/core/errors';
 import type { Ports } from '../application/core/procedure';
 import { resolveCellTarget } from '../application/procedures/cell/resolve-project-target';
-import type { DaemonStatus } from '../domain/factory/hq-state';
 import type { HqLink } from './hq-link';
 import type { Scaler } from './scaler';
 import type { Supervisor } from './supervisor';
@@ -19,22 +23,6 @@ const CONFLICT = 409;
 const UNREACHABLE = 503;
 const INTERNAL = 500;
 const ACTIVITY_ROUTE = /^\/cells\/([^/]+)\/activity$/;
-
-const ScaleSchema = z
-  .object({
-    repoRoot: z.string().min(1),
-    count: z.number().int().min(0),
-    lines: z.array(z.string().min(1)).min(1).optional(),
-  })
-  .strict();
-
-const ActivitySchema = z
-  .object({
-    state: z.enum(['idle', 'running']),
-    writes: z.boolean().default(false),
-    since: z.number(),
-  })
-  .strict();
 
 export interface RouteDeps {
   ports: Ports;
@@ -88,7 +76,7 @@ const scaleOf = async (
   deps: RouteDeps,
   request: Request,
 ): Promise<Response> => {
-  const input = parseOr(ScaleSchema, await readJson(request));
+  const input = parseOr(ScaleRequestBodySchema, await readJson(request));
   const target = await resolveCellTarget(deps.ports, input.repoRoot);
   await deps.scaler.set({
     repoRoot: target.repoRoot,

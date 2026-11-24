@@ -1,5 +1,6 @@
 import { hostname } from 'node:os';
 import { join } from 'node:path';
+import type { HqState } from '@repo/factory-contracts/status.contract';
 import { defineCommand } from 'citty';
 import { buildContext } from '../../bootstrap/context';
 import { runWithoutToken } from '../../bootstrap/run';
@@ -14,7 +15,6 @@ import { connectFactory } from '../../application/procedures/factory/connect.pro
 import { startFactory } from '../../application/procedures/factory/start.procedure';
 import { statusFactory } from '../../application/procedures/factory/status.procedure';
 import { stopFactory } from '../../application/procedures/factory/stop.procedure';
-import type { HqState } from '../../domain/factory/hq-state';
 import { EXIT } from '../../domain/exit-codes';
 import { printJson, printLine, reportFailure } from './output';
 

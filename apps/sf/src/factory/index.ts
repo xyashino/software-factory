@@ -1,4 +1,5 @@
 import { hostname } from 'node:os';
+import type { HqState } from '@repo/factory-contracts/status.contract';
 import { buildContext } from '../bootstrap/context';
 import {
   CELL_ID_ENV,
@@ -13,7 +14,6 @@ import {
   cellWorkerLauncherOf,
 } from '../config';
 import { cellNameOf } from '../domain/cell/cell-name';
-import type { HqState } from '../domain/factory/hq-state';
 import { HQ_TICK_MS, createHqLink } from './hq-link';
 import { RELAY_PATH, createRelay } from './relay';
 import { createFactoryRoutes } from './routes';

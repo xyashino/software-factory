@@ -1,7 +1,9 @@
+import type {
+  FactoryCredential,
+  HqState,
+} from '@repo/factory-contracts/status.contract';
 import type { ClockPort } from '../application/ports/clock.port';
 import type { HqLinkPort } from '../application/ports/hq-link.port';
-import type { FactoryCredential } from '../domain/factory/factory-credential';
-import type { HqState } from '../domain/factory/hq-state';
 import { HEARTBEAT_INTERVAL_MS, SELF_FENCE_MS } from '../config';
 import type { ProjectReport } from './supervisor';
 
