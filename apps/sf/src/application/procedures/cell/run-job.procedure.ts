@@ -70,6 +70,7 @@ const DECISIONS_DIR = 'decisions/';
 const MAX_DIFF_CHARS = 60_000;
 const MS_PER_MINUTE = 60_000;
 const MS_PER_SECOND = 1000;
+const REMOTE = 'origin';
 const MECHANIC_DIR = 'mechanic';
 const REPORT_FILE = 'report.md';
 const STEP_ACTIONS: readonly string[] = ['retry_step', 'restart_from_step'];
@@ -1585,10 +1586,67 @@ const runMechanic = async (
   );
 };
 
+const gitOrThrow = async (
+  runtime: CellRuntime,
+  args: readonly string[],
+): Promise<string> => {
+  const result = await runtime.ports.process.run('git', args, runtime.repoRoot);
+  if (result.exitCode !== 0) {
+    throw new Error(
+      `git ${args[0]} exited ${result.exitCode}: ${result.stderr.trim()}`,
+    );
+  }
+  return result.stdout.trim();
+};
+
+const createPlanBranch = async (
+  runtime: CellRuntime,
+  job: ClaimedJob,
+): Promise<string> => {
+  await gitOrThrow(runtime, ['fetch', REMOTE, job.baseBranch]);
+  const commitSha = await gitOrThrow(runtime, ['rev-parse', 'FETCH_HEAD']);
+  await gitOrThrow(runtime, [
+    'push',
+    REMOTE,
+    `${commitSha}:refs/heads/${job.targetBranch}`,
+  ]);
+  return commitSha;
+};
+
+const runPlanBranch = async (
+  runtime: CellRuntime,
+  job: ClaimedJob,
+): Promise<ClaimedJob | null> => {
+  await logLine(
+    runtime,
+    job,
+    'claim',
+    `job=${job.jobId} kind=${job.kind} epoch=${job.epoch}`,
+  );
+  await transition(runtime, job, { action: 'start' });
+  try {
+    const commitSha = await createPlanBranch(runtime, job);
+    return nextJobOf(
+      await transition(runtime, job, {
+        action: 'complete',
+        producedFiles: [],
+        commitSha,
+      }),
+    );
+  } catch (error) {
+    return finishWithFail(
+      runtime,
+      job,
+      `plan branch failed: ${errorText(error)}`,
+    );
+  }
+};
+
 export const runJob = async (
   runtime: CellRuntime,
   job: ClaimedJob,
 ): Promise<ClaimedJob | null> => {
+  if (job.kind === 'plan_branch') return runPlanBranch(runtime, job);
   const line = await loadLine(runtime, job);
   const claimDetail = `job=${job.jobId} kind=${job.kind} epoch=${job.epoch}`;
   if (line.kind === 'unavailable') {

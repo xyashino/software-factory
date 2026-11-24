@@ -30,6 +30,7 @@ const recordingProcess = (
 };
 
 const WORKTREE_ADD = 'worktree add /wt -b feat/x main';
+const LOCAL_BASE_CHECK = 'rev-parse --verify --quiet refs/heads/main';
 
 describe('git worktree add', () => {
   it('fetches origin before adding the worktree when origin exists', async () => {
@@ -44,6 +45,7 @@ describe('git worktree add', () => {
     expect(calls.map((call) => call.args)).toEqual([
       'remote get-url origin',
       'fetch origin',
+      LOCAL_BASE_CHECK,
       WORKTREE_ADD,
     ]);
   });
@@ -61,6 +63,7 @@ describe('git worktree add', () => {
     // Assert
     expect(calls.map((call) => call.args)).toEqual([
       'remote get-url origin',
+      LOCAL_BASE_CHECK,
       WORKTREE_ADD,
     ]);
   });
@@ -80,5 +83,21 @@ describe('git worktree add', () => {
       'git fetch origin failed: unreachable',
     );
     expect(calls.map((call) => call.args)).not.toContain(WORKTREE_ADD);
+  });
+
+  it('starts from the origin base when the base branch has no local ref', async () => {
+    // Arrange
+    const { port, calls } = recordingProcess({
+      [LOCAL_BASE_CHECK]: { exitCode: 1, stdout: '', stderr: '' },
+    });
+    const git = createGitAdapter(port);
+
+    // Act
+    await git.worktreeAdd('/repo', '/wt', 'feat/x', 'main');
+
+    // Assert
+    expect(calls.map((call) => call.args)).toContain(
+      'worktree add /wt -b feat/x origin/main',
+    );
   });
 });

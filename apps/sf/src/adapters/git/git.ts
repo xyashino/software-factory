@@ -23,6 +23,17 @@ export const createGitAdapter = (process: ProcessPort): GitPort => {
       throw new Error(`git fetch ${REMOTE} failed: ${result.stderr.trim()}`);
     }
   };
+  const startPointOf = async (
+    cwd: string,
+    baseBranch: string,
+  ): Promise<string> => {
+    const local = await process.run(
+      GIT,
+      ['rev-parse', '--verify', '--quiet', `refs/heads/${baseBranch}`],
+      cwd,
+    );
+    return local.exitCode === 0 ? baseBranch : `${REMOTE}/${baseBranch}`;
+  };
   return {
     currentBranch: async (cwd) =>
       (await git(['rev-parse', '--abbrev-ref', 'HEAD'], cwd)).trim(),
@@ -31,7 +42,8 @@ export const createGitAdapter = (process: ProcessPort): GitPort => {
       if (await hasOrigin(repoRoot)) {
         await fetchOrigin(repoRoot);
       }
-      await git(['worktree', 'add', path, '-b', branch, baseBranch], repoRoot);
+      const startPoint = await startPointOf(repoRoot, baseBranch);
+      await git(['worktree', 'add', path, '-b', branch, startPoint], repoRoot);
     },
     // Falls back to deleting the directory: a half-built or missing worktree still has to go.
     worktreeRemove: async (repoRoot, path) => {
