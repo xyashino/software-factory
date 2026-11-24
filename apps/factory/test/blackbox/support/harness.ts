@@ -5,6 +5,7 @@ import type { FactoryCredential } from '@repo/factory-contracts/status.contract'
 import { createFactoryApp, type FactoryApp } from '../../../src/app';
 import { createHqLinkClient } from '../../../src/adapters/hq-link-client';
 import { createRepoConfigAdapter } from '../../../src/adapters/repo-config';
+import { createTodoFilesAdapter } from '../../../src/adapters/todo-files';
 import { createLocalEngine, type LocalEngine } from '../../../src/local-engine';
 import type {
   DetachedSpec,
@@ -62,6 +63,7 @@ export const createHarness = (options: HarnessOptions = {}): Harness => {
     credentials: { read: () => options.credential ?? null },
     pidFile: { read: async () => null, remove: async () => undefined },
     repoConfig: createRepoConfigAdapter(),
+    todoFiles: createTodoFilesAdapter(),
   };
   const local = createLocalEngine({ dbPath: ':memory:' });
   const app = createFactoryApp({
@@ -114,6 +116,18 @@ export const callLocal = (
   harness.local.fetch(
     jsonRequest(method, path, body, bearer(harness.local.localToken)),
   );
+
+export const writeTodoFile = (
+  repoRoot: string,
+  filename: string,
+  text: string,
+): void => {
+  mkdirSync(join(repoRoot, 'todos'), { recursive: true });
+  writeFileSync(join(repoRoot, 'todos', filename), text);
+};
+
+export const repoWithoutConfig = (): string =>
+  mkdtempSync(join(tmpdir(), 'factory-bare-'));
 
 export const scaleTo = (harness: Harness, count: number): Promise<Response> =>
   callFactory(harness, 'PUT', '/scale', {

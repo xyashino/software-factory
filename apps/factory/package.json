@@ -12,6 +12,7 @@
     "@repo/bun-sqlite-kit": "workspace:*",
     "@repo/factory-contracts": "workspace:*",
     "@repo/hq": "workspace:*",
+    "yaml": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {

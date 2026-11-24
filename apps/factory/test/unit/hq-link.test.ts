@@ -33,6 +33,7 @@ const setup = (initial: Outcome = 'ok', connected = true) => {
         return Promise.resolve(replyOf(outcome));
       },
       goneCell: () => Promise.reject(new Error('not used by the link')),
+      importQueue: () => Promise.reject(new Error('not used by the link')),
     },
     clock: { now: () => now, sleep: () => Promise.resolve() },
     projects: () => [],

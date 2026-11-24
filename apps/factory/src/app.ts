@@ -10,6 +10,7 @@ import {
 } from './config';
 import { createHqLink } from './hq-link';
 import type { LocalEngine } from './local-engine';
+import { createQueueImport } from './queue-import';
 import { RELAY_PATH, createRelay } from './relay';
 import { createFactoryRoutes } from './routes';
 import { createScaler } from './scaler';
@@ -100,6 +101,14 @@ export const createFactoryApp = (deps: FactoryAppDeps): FactoryApp => {
     projects: () => supervisor.projects(),
     killAll: () => scaler.stopAll(),
   });
+  const importQueue = createQueueImport({
+    repoConfig: ports.repoConfig,
+    todoFiles: ports.todoFiles,
+    credentials: ports.credentials,
+    hqLink: ports.hqLink,
+    hq,
+    local,
+  });
   const fetch = createFactoryRoutes({
     repoConfig: ports.repoConfig,
     supervisor,
@@ -112,6 +121,7 @@ export const createFactoryApp = (deps: FactoryAppDeps): FactoryApp => {
       credential === null
         ? null
         : { url: credential.url, factoryId: credential.factoryId },
+    importQueue,
   });
   return {
     fetch,

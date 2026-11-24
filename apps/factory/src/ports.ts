@@ -23,7 +23,36 @@ export interface ProcessPort {
 export type HqReply<T> =
   { kind: 'ok'; value: T } | { kind: 'rejected' } | { kind: 'unreachable' };
 
+export interface QueueImportCounts {
+  created: number;
+  updated: number;
+  skipped: number;
+}
+
+export interface QueueImportError {
+  filename: string;
+  message: string;
+}
+
+export interface QueueImportBody {
+  commandId: string;
+  projectId: string;
+  mode: 'apply';
+  files: { filename: string; markdown: string }[];
+}
+
+export type QueueImportReply =
+  | { kind: 'ok'; value: QueueImportCounts }
+  | { kind: 'invalid'; errors: QueueImportError[] }
+  | { kind: 'unauthorized' }
+  | { kind: 'unreachable' };
+
 export interface HqLinkPort {
+  importQueue(input: {
+    url: string;
+    bearer: string;
+    body: QueueImportBody;
+  }): Promise<QueueImportReply>;
   heartbeat(input: {
     url: string;
     sessionToken: string;
@@ -50,6 +79,15 @@ export interface RepoConfigPort {
   repoUrlOf(repoRoot: string): Promise<string>;
 }
 
+export interface TodoFile {
+  filename: string;
+  text: string;
+}
+
+export interface TodoFilesPort {
+  list(dir: string): Promise<TodoFile[]>;
+}
+
 export interface FactoryPorts {
   clock: ClockPort;
   process: ProcessPort;
@@ -57,4 +95,5 @@ export interface FactoryPorts {
   credentials: CredentialStorePort;
   pidFile: PidFilePort;
   repoConfig: RepoConfigPort;
+  todoFiles: TodoFilesPort;
 }

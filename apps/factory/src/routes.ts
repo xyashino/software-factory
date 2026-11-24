@@ -3,9 +3,15 @@ import {
   ActivitySchema,
   ScaleRequestBodySchema,
 } from '@repo/factory-contracts/scale.contract';
+import {
+  FactoryImportRequestSchema,
+  type FactoryImportReply,
+  type FactoryImportRequest,
+} from '@repo/factory-contracts/queue.contract';
 import type { DaemonStatus } from '@repo/factory-contracts/status.contract';
+import { LOCAL_BASE_BRANCH } from './config';
 import { RELAY_PATH, type Relay } from './relay';
-import { ArgumentError, Refused, Unreachable } from './errors';
+import { ArgumentError, Refused, Unauthorized, Unreachable } from './errors';
 import type { HqLink } from './hq-link';
 import type { LocalEngine } from './local-engine';
 import type { RepoConfigPort } from './ports';
@@ -14,15 +20,17 @@ import type { Supervisor } from './supervisor';
 
 const OK = 200;
 const BAD_REQUEST = 400;
+const UNAUTHORIZED = 401;
 const NOT_FOUND = 404;
 const CONFLICT = 409;
 const UNREACHABLE = 503;
 const INTERNAL = 500;
 const ACTIVITY_ROUTE = /^\/cells\/([^/]+)\/activity$/;
 const API_PREFIX = '/api/v1/';
+const QUEUE_IMPORT_PATH = '/queue/import';
+const BEARER_PATTERN = /^Bearer (.+)$/;
 const CONNECTED_REFUSAL =
   'factory is connected to HQ; disconnect or omit --local';
-const LOCAL_BASE_BRANCH = 'main';
 
 export interface RouteDeps {
   repoConfig: RepoConfigPort;
@@ -33,6 +41,10 @@ export interface RouteDeps {
   local: Pick<LocalEngine, 'fetch' | 'ensureProject'>;
   connected: () => boolean;
   identity: { url: string; factoryId: string } | null;
+  importQueue: (
+    input: FactoryImportRequest,
+    bearer: string | null,
+  ) => Promise<FactoryImportReply>;
 }
 
 const reply = (status: number, body: unknown): Response =>
@@ -44,6 +56,9 @@ const failure = (status: number, type: string, message: string): Response =>
 const errorReply = (error: unknown): Response => {
   if (error instanceof ArgumentError) {
     return failure(BAD_REQUEST, 'argument', error.message);
+  }
+  if (error instanceof Unauthorized) {
+    return failure(UNAUTHORIZED, 'unauthorized', error.message);
   }
   if (error instanceof Refused) {
     return failure(CONFLICT, 'refused', error.message);
@@ -72,6 +87,17 @@ const parseOr = <T extends z.ZodTypeAny>(
     throw new ArgumentError(parsed.error.message);
   }
   return parsed.data;
+};
+
+const bearerOf = (request: Request): string | null =>
+  BEARER_PATTERN.exec(request.headers.get('authorization') ?? '')?.[1] ?? null;
+
+const queueImportOf = async (
+  deps: RouteDeps,
+  request: Request,
+): Promise<Response> => {
+  const input = parseOr(FactoryImportRequestSchema, await readJson(request));
+  return reply(OK, await deps.importQueue(input, bearerOf(request)));
 };
 
 const scaleOf = async (
@@ -120,6 +146,9 @@ const handle = async (deps: RouteDeps, request: Request): Promise<Response> => {
   const activityId = ACTIVITY_ROUTE.exec(pathname)?.[1];
   if (pathname === RELAY_PATH || pathname.startsWith(`${RELAY_PATH}/`)) {
     return deps.relay.handle(request);
+  }
+  if (request.method === 'POST' && pathname === QUEUE_IMPORT_PATH) {
+    return queueImportOf(deps, request);
   }
   if (pathname.startsWith(API_PREFIX)) {
     return apiOf(deps, request);
