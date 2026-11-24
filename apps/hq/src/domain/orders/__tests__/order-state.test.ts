@@ -21,6 +21,19 @@ describe('order plan transitions', () => {
     expect(nextPlanState('draft', 'complete')).toBeNull();
   });
 
+  it('resets an active, ready, completed or failed plan to branching', () => {
+    expect(nextPlanState('active', 'reset')).toBe('branching');
+    expect(nextPlanState('ready', 'reset')).toBe('branching');
+    expect(nextPlanState('completed', 'reset')).toBe('branching');
+    expect(nextPlanState('failed', 'reset')).toBe('branching');
+  });
+
+  it('refuses to reset a draft, branching or cancelled plan', () => {
+    expect(nextPlanState('draft', 'reset')).toBeNull();
+    expect(nextPlanState('branching', 'reset')).toBeNull();
+    expect(nextPlanState('cancelled', 'reset')).toBeNull();
+  });
+
   it('cancels any plan that has not finished', () => {
     expect(nextPlanState('branching', 'cancel')).toBe('cancelled');
     expect(nextPlanState('completed', 'cancel')).toBeNull();

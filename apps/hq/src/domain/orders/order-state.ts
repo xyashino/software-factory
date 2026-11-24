@@ -14,7 +14,7 @@ export type OrderType = (typeof ORDER_TYPES)[number];
 export type PlanAction = (typeof PLAN_ACTIONS)[number];
 export type WorkOrderAction = (typeof WORK_ORDER_ACTIONS)[number];
 
-const readyOrWaiting = (isReady: boolean): WorkOrderState =>
+export const readyOrWaiting = (isReady: boolean): WorkOrderState =>
   isReady ? 'queued' : 'waiting_parent';
 
 export const isStructurallyEditable = (state: WorkOrderState): boolean =>
@@ -32,6 +32,13 @@ export const nextPlanState = (
       return state === 'draft' ? 'branching' : null;
     case 'retry':
       return state === 'failed' ? 'branching' : null;
+    case 'reset':
+      return state === 'active' ||
+        state === 'ready' ||
+        state === 'completed' ||
+        state === 'failed'
+        ? 'branching'
+        : null;
     case 'complete':
       return state === 'active' || state === 'ready' ? 'completed' : null;
     case 'cancel':

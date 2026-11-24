@@ -9,8 +9,10 @@ import {
   publishCommitted,
   requirePlan,
   requireProject,
+  resetChildrenToScratch,
   updateOrderPlan,
   type Actor,
+  type PlanResetOutcome,
   type TransitionLog,
 } from '../../orders/order-writes';
 import { toOrderPlanDto } from '../../orders/order-views';
@@ -22,7 +24,7 @@ export const transitionOrderPlanProcedure = scopedProcedure([
   const now = ctx.clock.now();
   const actor: Actor = { kind: 'supervisor', id: ctx.principal.tokenId };
 
-  const { row, records } = await ctx.storage.write(async (tx) => {
+  const { row, outcome, records } = await ctx.storage.write(async (tx) => {
     const plan = await requirePlan(tx, input.params.id);
     const next = nextPlanState(plan.state, action);
     if (next === null)
@@ -39,16 +41,25 @@ export const transitionOrderPlanProcedure = scopedProcedure([
         at: now,
       }),
     ];
+    let outcome: PlanResetOutcome = { reset: [], skipped: [] };
+    if (action === 'reset')
+      outcome = await resetChildrenToScratch(tx, row, actor, now, log);
     if (next === 'branching')
       await insertPlanBranchJob(
         tx,
         row,
         (await requireProject(tx, plan.projectId)).repoUrl,
         now,
+        action === 'reset',
       );
-    return { row, records: await flushTransitions(tx, log) };
+    return { row, outcome, records: await flushTransitions(tx, log) };
   });
 
   publishCommitted(ctx, records);
-  return { code: 200 as const, plan: toOrderPlanDto(row) };
+  return {
+    code: 200 as const,
+    plan: toOrderPlanDto(row),
+    reset: outcome.reset,
+    skipped: outcome.skipped,
+  };
 });

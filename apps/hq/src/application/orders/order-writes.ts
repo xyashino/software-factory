@@ -13,10 +13,11 @@ import type {
   StateTransitionRecord,
 } from '../../domain/common/events';
 import { UnprocessableTransition } from '../../domain/orders/job-transitions';
-import type {
-  PlanState,
-  WorkOrderAction,
-  WorkOrderState,
+import {
+  readyOrWaiting,
+  type PlanState,
+  type WorkOrderAction,
+  type WorkOrderState,
 } from '../../domain/orders/order-state';
 import {
   resolveBaseBranch,
@@ -36,9 +37,22 @@ import type {
   WorkOrderRow,
 } from '../ports/storage.port';
 
+const PLAN_RESET_SKIPPED_STATES: readonly WorkOrderState[] = [
+  'delivered',
+  'completed',
+  'cancelled',
+];
+
 export type Actor = { kind: ActorKind; id: string | null };
 
 export type TransitionLog = StateTransitionInput[];
+
+export type ChildOutcome = { slug: string; state: WorkOrderState };
+
+export type PlanResetOutcome = {
+  reset: ChildOutcome[];
+  skipped: ChildOutcome[];
+};
 
 type TransitionArgs = {
   projectId: ProjectId;
@@ -191,6 +205,7 @@ export const insertPlanBranchJob = async (
   plan: OrderPlanRow,
   repoUrl: string,
   now: number,
+  fresh = false,
 ): Promise<void> => {
   await tx.jobs.insert({
     jobId: asJobId(`job-${crypto.randomUUID()}`),
@@ -203,7 +218,7 @@ export const insertPlanBranchJob = async (
     baseBranch: plan.baseBranch,
     targetBranch: plan.branch,
     expectedPriorStepsJson: [],
-    payloadJson: { planId: plan.planId },
+    payloadJson: { planId: plan.planId, fresh },
     epoch: 0,
     createdAt: now,
   });
@@ -219,6 +234,54 @@ const releaseLease = async (
       status: 'cancelled',
       finishedAt: now,
     });
+};
+
+export const resetChildrenToScratch = async (
+  tx: StorageWriteTx,
+  plan: OrderPlanRow,
+  actor: Actor,
+  now: number,
+  log: TransitionLog,
+): Promise<PlanResetOutcome> => {
+  const outcome: PlanResetOutcome = { reset: [], skipped: [] };
+  const children = await tx.orders.list({ planId: plan.planId });
+  for (const child of children) {
+    if (PLAN_RESET_SKIPPED_STATES.includes(child.state)) {
+      outcome.skipped.push({ slug: child.slug, state: child.state });
+      continue;
+    }
+    await releaseLease(tx, child, now);
+    const next =
+      child.state === 'paused'
+        ? 'paused'
+        : readyOrWaiting((await readinessOf(tx, child)).isReady);
+    await updateWorkOrder(
+      tx,
+      child,
+      {
+        state: next,
+        currentStepIndex: 0,
+        unavailableLineFactoriesJson: [],
+        activeJobId: null,
+        activeCellId: null,
+        pinnedFactoryId: null,
+      },
+      now,
+    );
+    log.push(
+      orderTransition({
+        projectId: child.projectId,
+        entityType: 'work_order',
+        entityId: child.orderId,
+        fromState: child.state,
+        toState: next,
+        actor,
+        at: now,
+      }),
+    );
+    outcome.reset.push({ slug: child.slug, state: next });
+  }
+  return outcome;
 };
 
 const unlockChildren = async (

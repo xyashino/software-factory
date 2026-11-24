@@ -5,7 +5,7 @@ import {
   titleSchema,
 } from '@repo/zod-contract-kit/fields';
 import { projectIdSchema } from './common';
-import { PLAN_ACTIONS, PLAN_STATES } from './enums/orders';
+import { PLAN_ACTIONS, PLAN_STATES, WORK_ORDER_STATES } from './enums/orders';
 import { workOrderDto } from './work-orders.contract';
 
 export const orderPlanDto = z.object({
@@ -61,12 +61,22 @@ export const getOrderPlanContract = {
   },
 };
 
+const childOutcomeDto = z.object({
+  slug: z.string(),
+  state: z.enum(WORK_ORDER_STATES),
+});
+
 export const transitionOrderPlanContract = {
   in: {
     params: idParams,
     body: z.object({ action: z.enum(PLAN_ACTIONS) }),
   },
   out: {
-    200: z.object({ code: z.literal(200), plan: orderPlanDto }),
+    200: z.object({
+      code: z.literal(200),
+      plan: orderPlanDto,
+      reset: z.array(childOutcomeDto),
+      skipped: z.array(childOutcomeDto),
+    }),
   },
 };

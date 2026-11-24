@@ -35,6 +35,7 @@ export const ORDER_TYPES = [
 export const PLAN_ACTIONS = [
   'activate',
   'retry',
+  'reset',
   'complete',
   'cancel',
 ] as const;

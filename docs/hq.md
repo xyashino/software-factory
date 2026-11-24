@@ -532,6 +532,15 @@ Every `Job` dispatched to a `Cell` includes an explicit, non-null `projectId`, `
    - When parent `WorkOrder A` delivers `head_commit_sha = sha1`, child `WorkOrder B` records `base_commit_sha = sha1`.
    - If `WorkOrder A` is later reopened/reset and delivers a new `head_commit_sha = sha2` (`sha2 !== sha1`), any child `WorkOrder B` that had already started or delivered on `sha1` is automatically marked `stale_base = 1` and transitioned to `blocked` with an Incident (`reason = 'parent_rebased'`).
 
+### 6.3 Plan Reset (`reset` action, `POST /api/v1/order-plans/{id}/transitions`)
+
+1. **Allowed from `active`, `ready`, `completed`, `failed`** → `OrderPlan` moves to `branching`. Other states (`draft`, `branching`, `cancelled`) answer `409`.
+2. **Same transaction, per child `WorkOrder` of the plan**:
+   - `delivered`, `completed`, `cancelled` children are skipped and returned in `skipped`. No auto-reopen.
+   - Every other child: its `running` / `delivering` job is cancelled (lease released), `current_step_index = 0`, unavailable-line list cleared, `active_*` and `pinned_factory_id` cleared. A `paused` child stays `paused`. Others go to `queued`, or `waiting_parent` while the plan is not `active`. Returned in `reset`.
+3. **One new `plan_branch` job** with `payload.fresh = true`. The Cell rebuilds `feat/<plan-slug>` from `baseBranch` and force-pushes it under `--force-with-lease` on the commit it read from the remote. Old commits stay in the remote reflog only.
+4. The response carries `plan`, `reset` and `skipped` (`{ slug, state }`).
+
 ---
 
 ## 7. Database Schema
