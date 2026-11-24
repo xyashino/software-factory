@@ -1,7 +1,7 @@
 ---
 status: queued
 priority: high
-line: standard
+line: feature
 type: refactor
 plan: standalone-factory
 depends_on: factory-contracts-package

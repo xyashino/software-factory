@@ -1,7 +1,7 @@
 ---
 status: queued
 priority: high
-line: standard
+line: feature
 type: feat
 plan: standalone-factory
 depends_on: factory-local-engine
@@ -40,7 +40,7 @@ Verified current behavior:
        dryRun: z.boolean().default(false),
        paused: z.boolean().default(false),
        local: z.boolean().default(false),
-     }).strict()
+     }).strict();
      ```
    - `FactoryImportReplySchema`: `{ mode: 'dry_run' | 'apply', projectId, sent: string[], skipped: { filename, reason }[], created, updated, unchanged, paused, errors: { filename, message }[] }`.
 2. **Mode Gate in `apps/factory` (`POST /queue/import`)**:

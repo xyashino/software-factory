@@ -1,7 +1,7 @@
 ---
 status: queued
 priority: high
-line: standard
+line: feature
 type: feat
 plan: standalone-factory
 depends_on: factory-app-extract
