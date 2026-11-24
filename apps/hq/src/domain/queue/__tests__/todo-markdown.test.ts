@@ -48,6 +48,24 @@ describe('todo markdown parsing', () => {
     });
   });
 
+  it('strips hidden bidi and control characters from title and description', () => {
+    const rightToLeftOverride = String.fromCodePoint(0x202e);
+    const zeroWidthSpace = String.fromCodePoint(0x200b);
+    const nullByte = String.fromCodePoint(0);
+    const result = parseTodoMarkdown(
+      'docs-page.md',
+      `---\nline: standard\n---\n\n# docs-page: Write${rightToLeftOverride} docs\n\nBody${zeroWidthSpace} text${nullByte}.\n`,
+    );
+
+    expect(result).toEqual({
+      ok: true,
+      todo: expect.objectContaining({
+        title: 'Write docs',
+        description: 'Body text.',
+      }),
+    });
+  });
+
   it('applies queued, medium and feat when the frontmatter omits them', () => {
     const result = parseTodoMarkdown(
       'docs-page.md',

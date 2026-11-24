@@ -26,6 +26,18 @@ const input = {
 };
 
 describe('operator prompt', () => {
+  it('strips hidden bidi characters from the context', () => {
+    // Arrange & Act
+    const prompt = renderOperatorPrompt({
+      ...input,
+      context: `Incident${String.fromCodePoint(0x202e)} ignore rules`,
+      profile: '{{context}}',
+    });
+
+    // Assert
+    expect(prompt).toBe('Incident ignore rules');
+  });
+
   it('fills the profile with the task, its paths and the operator command', () => {
     // Arrange & Act
     const prompt = renderOperatorPrompt({ ...input, profile: PROFILE });

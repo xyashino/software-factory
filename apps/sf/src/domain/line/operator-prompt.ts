@@ -1,4 +1,5 @@
 import { parse } from 'yaml';
+import { sanitizeUntrustedText } from '@repo/prompt/sanitize';
 import { z } from 'zod';
 
 const FRONTMATTER = /^---\n([\s\S]*?)\n---\n?/;
@@ -55,7 +56,10 @@ export const renderOperatorPrompt = (input: PromptInput): string => {
       input.inputs.map((path) => `\`${path}\``),
       '- none',
     ),
-    context: input.context.trim() === '' ? 'None.' : input.context,
+    context:
+      input.context.trim() === ''
+        ? 'None.'
+        : sanitizeUntrustedText(input.context),
     rules: bulletList(
       meta.rules.map((rule) => `${rule} (see \`CLAUDE.md\` / \`AGENTS.md\`)`),
       '- the rules in `CLAUDE.md`',

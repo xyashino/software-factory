@@ -21,6 +21,7 @@
       "dependencies": {
         "@repo/bun-sqlite-kit": "workspace:*",
         "@repo/hq-contracts": "workspace:*",
+        "@repo/prompt": "workspace:*",
         "@repo/zod-contract-kit": "workspace:*",
         "drizzle-orm": "catalog:",
         "hono": "catalog:",
@@ -46,6 +47,7 @@
       },
       "dependencies": {
         "@repo/hq-contracts": "workspace:*",
+        "@repo/prompt": "workspace:*",
         "@repo/zod-contract-kit": "workspace:*",
         "citty": "catalog:",
         "picocolors": "catalog:",
