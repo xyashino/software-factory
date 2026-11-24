@@ -118,7 +118,7 @@ describe('work orders supervisor module', () => {
 
     expect(await screen.findByText('Add dark mode toggle')).toBeInTheDocument();
     expect(screen.getByText('Fix SSE reconnect backoff')).toBeInTheDocument();
-  });
+  }, 15_000);
 
   it('opens the work order detail view with steps, jobs, and incidents', async () => {
     const user = userEvent.setup();

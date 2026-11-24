@@ -13,3 +13,4 @@ date: 2026-11-24
 - Label is the token's human name, never its secret or hash. A black-box test mints a supervisor token, imports the queue, and checks the streamed transition has `actorLabel: "admin"` with no token or hash in the event data.
 - Not in this change: a label on the `Actor` type or on cell-level identity. The label is per caller token, not per cell or mechanic.
 - Spec paths `apps/hq/drizzle/` do not exist; the migrations live in `apps/hq/src/db/migrations/`.
+- `apps/web` test `loads and displays work orders from the BFF` timed out at 5s under full turbo load (cold jsdom start). Passes alone in ~7s. Gave that one test a 15s timeout so `ci:verify` is green. No web source change.
