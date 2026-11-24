@@ -13,3 +13,4 @@ tags: [security, prompt]
 - SF operator prompt strips them from the rendered context (incident JSON and handover text).
 - `apps/hq` and `apps/sf` now depend on `@repo/prompt` (workspace link, `bun.lock` updated).
 - Tests: bidi override, null and zero-width cases, preserved text, and one per boundary (prompt, hq todo, sf operator prompt).
+- `apps/web` vitest `testTimeout` raised to 30s (same as other packages): blackbox tests timed out at 5s under turbo parallel load in `ci:verify`.
