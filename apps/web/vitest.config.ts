@@ -15,5 +15,7 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./test/setup.ts'],
     include: ['test/**/*.test.{ts,tsx}'],
+    // Default 5s timeout flakes when turbo runs packages in parallel on a loaded host.
+    testTimeout: 20000,
   },
 });

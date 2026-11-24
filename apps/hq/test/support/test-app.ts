@@ -1,6 +1,10 @@
 import { createApp } from '../../src/app';
 import { createSafeTokenAuth } from '../../src/adapters/auth/safe-token-auth.adapter';
 import { createClaimWaiters } from '../../src/adapters/memory/claim-waiters.adapter';
+import {
+  createRateLimiter,
+  type RateLimitSettings,
+} from '../../src/adapters/memory/rate-limit.adapter';
 import { createTransitionBus } from '../../src/adapters/memory/transition-bus.adapter';
 import { createSqliteStorageAdapter } from '../../src/adapters/storage/sqlite-storage.adapter';
 import type {
@@ -33,6 +37,7 @@ type TestAppOptions = {
   auth?: AuthPort;
   safeTokenAuth?: boolean;
   transitionBus?: TransitionBusPort;
+  rateLimit?: RateLimitSettings;
 };
 
 export type TestApp = ReturnType<typeof createApp>;
@@ -61,6 +66,7 @@ export const createTestApp = (
       claimWaiters: createClaimWaiters(),
       transitionBus,
     }),
+    createRateLimiter(clock, options.rateLimit),
   );
   return { app, clock, db, storage, transitionBus };
 };
