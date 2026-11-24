@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@repo/hq-contracts": "workspace:*",
+    "@repo/prompt": "workspace:*",
     "@repo/zod-contract-kit": "workspace:*",
     "citty": "catalog:",
     "picocolors": "catalog:",

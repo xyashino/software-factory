@@ -1,6 +1,7 @@
 import Handlebars from 'handlebars';
 import { parseDocument } from 'yaml';
 import { z } from 'zod';
+import { sanitizeUntrustedText } from './sanitize';
 
 const FRONTMATTER = /^---\n([\s\S]*?)\n---\n?([\s\S]*)$/;
 const STAGES = ['sync', 'runtime'] as const;
@@ -57,6 +58,16 @@ const inputSchema = (declared: Record<string, InputType>) =>
     ),
   );
 
+const sanitizeDeep = (value: unknown): unknown => {
+  if (typeof value === 'string') return sanitizeUntrustedText(value);
+  if (Array.isArray(value)) return value.map(sanitizeDeep);
+  if (typeof value === 'object' && value !== null)
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key, sanitizeDeep(item)]),
+    );
+  return value;
+};
+
 export const parsePrompt = (source: string): Prompt => {
   const match = FRONTMATTER.exec(source.replaceAll('\r\n', '\n'));
   if (match === null) {
@@ -92,7 +103,7 @@ export const renderPrompt = (
   }
   try {
     const template = env.compile(prompt.body, { noEscape: true, strict: true });
-    return template(inputs.data);
+    return template(sanitizeDeep(inputs.data));
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
     throw new Error(`${prompt.id}: ${reason}`);

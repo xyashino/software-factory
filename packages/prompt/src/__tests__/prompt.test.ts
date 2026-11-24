@@ -52,6 +52,19 @@ describe('rendering a prompt', () => {
     expect(text).toBe('# Rules & <b>\n\n- one\n- two\n');
   });
 
+  it('strips hidden control characters from inputs before filling them', () => {
+    const prompt = parsePrompt(SYNC);
+
+    const text = renderPrompt(prompt, {
+      inputs: {
+        title: `Plan${String.fromCodePoint(0x202e)}`,
+        rules: [`ok${String.fromCodePoint(0)}`],
+      },
+    });
+
+    expect(text).toBe('# Plan\n\n- ok\n');
+  });
+
   it('calls a helper and includes a partial', () => {
     const prompt = parsePrompt(
       file(

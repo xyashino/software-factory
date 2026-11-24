@@ -1,5 +1,6 @@
 import { parse } from 'yaml';
 import { ORDER_TYPES, PRIORITIES } from '@repo/hq-contracts/enums/orders';
+import { sanitizeUntrustedText } from '@repo/prompt/sanitize';
 import type { OrderType, Priority } from '../orders/order-state';
 
 export const TODO_STATUSES = ['queued', 'paused', 'cancelled'] as const;
@@ -100,7 +101,10 @@ const readHeading = (
   const [, headingSlug = '', title = ''] = match;
   if (headingSlug !== slug)
     return fail(`heading slug ${headingSlug} does not match file ${slug}`);
-  return { title: title.trim(), description: rest.join('\n').trim() };
+  return {
+    title: sanitizeUntrustedText(title).trim(),
+    description: sanitizeUntrustedText(rest.join('\n')).trim(),
+  };
 };
 
 const parseTodo = (filename: string, markdown: string): TodoFile => {
