@@ -1,0 +1,16 @@
+---
+import '@/core/style/index.css';
+import { Main as AppRouter } from '@/core/app-router/main';
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Software Factory</title>
+  </head>
+  <body>
+    <AppRouter client:only="react" />
+  </body>
+</html>
