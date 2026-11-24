@@ -36,7 +36,7 @@ export interface ScalerDeps {
   baseName: string;
   start: (input: StartCellInput) => Promise<CellStart>;
   gate: () => string | null;
-  onStopped: (cellId: string) => Promise<void>;
+  onStopped: (cell: CellRecord) => Promise<void>;
 }
 
 export interface Scaler {
@@ -148,7 +148,7 @@ export const createScaler = (deps: ScalerDeps): Scaler => {
     for (const cell of ordered.slice(0, Math.max(0, ordered.length - keep))) {
       owned.delete(cell.cellId);
       await deps.supervisor.kill(cell.cellId);
-      await deps.onStopped(cell.cellId);
+      await deps.onStopped(cell);
     }
   };
 

@@ -1,4 +1,5 @@
 import { hostname } from 'node:os';
+import { closeCellWorkspace } from '../adapters/runners/herdr';
 import { buildContext } from '../bootstrap/context';
 import {
   CELL_ID_ENV,
@@ -66,7 +67,11 @@ const scaler = createScaler({
   }),
   gate: () => gateOf(hq.state()),
   // HQ failure is not reported: the HQ reaper requeues the Cell's job after its lease expires.
-  onStopped: async (cellId) => {
+  onStopped: async (cell) => {
+    // Herdr may be down; the workspace is reused by name on the next start, so a miss is harmless.
+    await closeCellWorkspace(ports.process, cell.name, process.cwd()).catch(
+      () => undefined,
+    );
     const current = ports.factoryCredential.read();
     if (current === null) {
       return;
@@ -74,7 +79,7 @@ const scaler = createScaler({
     await ports.hqLink.goneCell({
       url: current.url,
       sessionToken: current.sessionToken,
-      cellId,
+      cellId: cell.cellId,
     });
   },
 });

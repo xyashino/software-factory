@@ -76,8 +76,8 @@ const sceneOf = (options: { gate?: string | null } = {}) => {
       env: {},
     }),
     gate: () => options.gate ?? null,
-    onStopped: async (cellId) => {
-      stopped.push(cellId);
+    onStopped: async (cell) => {
+      stopped.push(cell.cellId);
     },
   });
   return { host, supervisor, scaler, stopped };

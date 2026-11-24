@@ -28,7 +28,6 @@ import { cellNameOf } from '../domain/cell/cell-name';
 import { resolveConnection } from '../domain/connection/connection-config';
 import { hqTokenEnv, hqUrlEnv } from './hq-env';
 import {
-  CELL_ID_ENV,
   DEFAULT_FACTORY_URL,
   FACTORY_CREDENTIAL_PATH,
   FACTORY_DAEMON_URL,
@@ -53,7 +52,6 @@ const readOptional = (path: string): string | undefined =>
 
 export const buildContext = (cellName?: string): Ports => {
   const name = cellNameOf(cellName ?? hostname());
-  const cellId = process.env[CELL_ID_ENV] ?? name;
   const connections = createConnectionStore(GLOBAL_CONFIG_PATH);
   const repoTokenPath = resolve(process.cwd(), SUPERVISOR_TOKEN_PATH);
   const connection = resolveConnection({
@@ -82,7 +80,7 @@ export const buildContext = (cellName?: string): Ports => {
     operator: createLoopbackEndpoint(),
     runner: createRoutingRunner(
       createHeadlessRunner(),
-      createHerdrRunner(processPort, () => Promise.resolve(cellId), {
+      createHerdrRunner(processPort, () => Promise.resolve(name), {
         home: process.cwd(),
         logPath: resolve(process.cwd(), cellLogPathOf(name)),
       }),

@@ -208,19 +208,26 @@ const herdrOk = async (
   return result.stdout;
 };
 
+const workspaceIdOf = async (
+  processPort: ProcessPort,
+  label: string,
+  cwd: string,
+): Promise<string | undefined> => {
+  const listed = workspaceListSchema.parse(
+    JSON.parse(await herdrOk(processPort, ['workspace', 'list'], cwd)),
+  );
+  return listed.result.workspaces.find((workspace) => workspace.label === label)
+    ?.workspace_id;
+};
+
 const cellWorkspaceOf = async (
   processPort: ProcessPort,
   cellName: string,
   cwd: string,
 ): Promise<string> => {
   const label = `${WORKSPACE_LABEL_PREFIX}${cellName}`;
-  const listed = workspaceListSchema.parse(
-    JSON.parse(await herdrOk(processPort, ['workspace', 'list'], cwd)),
-  );
-  const existing = listed.result.workspaces.find(
-    (workspace) => workspace.label === label,
-  );
-  if (existing !== undefined) return existing.workspace_id;
+  const existing = await workspaceIdOf(processPort, label, cwd);
+  if (existing !== undefined) return existing;
   const created = await herdrOk(
     processPort,
     ['workspace', 'create', '--label', label, '--cwd', cwd, '--no-focus'],
@@ -417,4 +424,18 @@ export const createHerdrRunner = (
       }
     },
   };
+};
+
+export const closeCellWorkspace = async (
+  processPort: ProcessPort,
+  cellName: string,
+  cwd: string,
+): Promise<void> => {
+  const existing = await workspaceIdOf(
+    processPort,
+    `${WORKSPACE_LABEL_PREFIX}${cellName}`,
+    cwd,
+  );
+  if (existing === undefined) return;
+  await herdrOk(processPort, ['workspace', 'close', existing], cwd);
 };

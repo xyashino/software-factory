@@ -2,7 +2,10 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
-import { createHerdrRunner } from '../../../src/adapters/runners/herdr';
+import {
+  closeCellWorkspace,
+  createHerdrRunner,
+} from '../../../src/adapters/runners/herdr';
 import type {
   ProcessPort,
   ProcessResult,
@@ -510,5 +513,29 @@ describe('herdr pane runner abort', () => {
 
     // Assert
     expect(gone).toBe(true);
+  });
+});
+
+describe('closing a cell workspace', () => {
+  it('closes the workspace labelled with the cell name', async () => {
+    // Arrange
+    const { port, calls } = fakeHerdr(0, CELL_WORKSPACE('w4'));
+
+    // Act
+    await closeCellWorkspace(port, 'omarchy', '/repo');
+
+    // Assert
+    expect(calls).toContainEqual(['herdr', 'workspace', 'close', 'w4']);
+  });
+
+  it('does nothing when the cell has no workspace', async () => {
+    // Arrange
+    const { port, calls } = fakeHerdr(0, NO_WORKSPACES);
+
+    // Act
+    await closeCellWorkspace(port, 'omarchy', '/repo');
+
+    // Assert
+    expect(calls.some((call) => call[2] === 'close')).toBe(false);
   });
 });
