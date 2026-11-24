@@ -21,3 +21,4 @@ date: 2026-11-24
 - Not done: no proxy-trust setting for `X-Forwarded-For`.
 - Limits are per process: multiple HQ instances each keep their own counts.
 - The brake also counts scope-denied 403s from valid tokens.
+- `apps/web` vitest `testTimeout` raised 5 s to 20 s. Parallel turbo runs on a loaded host made unrelated web tests time out at 5 s and failed `ci:verify`.
