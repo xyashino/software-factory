@@ -10,7 +10,7 @@ The system is modeled as an automated software factory:
 - **HQ** (external server) is the single control point holding blueprints (Lines, Stations, Operators), the schedule, **Traveler** records (append-only event logs), and the board.
 - **Factory** (local daemon, one per PC) is the only holder of the HQ credential. It spawns, supervises and kills Cells (`sf factory start`, `sf cell scale N`).
 - **Cells** are disposable workers. They talk only to their Factory, which relays to HQ. A Cell claims a **Job** for a **Station** and executes it; only the builder station commits. A killed Cell loses no committed work.
-- **Lines** are declarative production workflows composed of **Stations**—either an **Operator** (an AI specialist such as `planner`, `builder`, `reviewer`, `auditor`) or an **Inspection** (a deterministic command gate).
+- **Lines** are declarative production workflows composed of **Stations**—either an **Operator** (an AI specialist such as `planner`, `plan-reviewer`, `builder`, `doctor`, `mechanic`) or an **Inspection** (a deterministic command gate).
 - **Work orders** (`todos/*.md`) travel down a Line from station to station. If an Operator or Inspection hits a blocker, it raises an **Andon** (releasing the Cell immediately) with a **Handover** so a human supervisor can resolve it and resume on any available Cell.
 
 | Package                      | Purpose                                                                     |

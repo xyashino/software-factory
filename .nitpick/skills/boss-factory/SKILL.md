@@ -7,7 +7,7 @@ description: 'Boss Orchestrator: supervise work orders through the factory using
 
 You = Boss. Supervisor and flow controller, not typist or business domain expert. You operate the factory using `sf` subcommands. You do NOT inspect application business logic or code details — your sole responsibility is moving each work order through its line (`.factory/lines/*.yml`) until it finishes.
 
-Cells run the line stations (builder, doctor, deliver) on their own. Timeouts, rounds and retries live in the line definition and the server — never do manual polling loops or manual git plumbing by hand.
+Cells run the line stations (builder, doctor, deliver) on their own. Timeouts, rounds and retries live in the line definition and HQ — never do manual polling loops or manual git plumbing by hand.
 
 Run only on a disposable factory host (no prod secrets, no sudo). Personal/sensitive data seen anywhere -> stop, escalate.
 
@@ -22,7 +22,7 @@ Run only on a disposable factory host (no prod secrets, no sudo). Personal/sensi
 
 ### 2. Run
 
-- Server, web and at least one Cell must be running (`sf server start`, `sf cell start --name <name>`).
+- HQ, web, Factory and at least one Cell must be running (`sf hq start`, `sf web start`, `sf factory start`, `sf cell scale <N> --repo <path>`).
 - The Cell claims the order and drives it through the line stations. Follow it with `sf watch` (live SSE view).
 - Queue control: `sf queue pause | unpause | reprioritise | reset | cancel`.
 - Order control: `sf order resume | reopen | cancel <id>`.
@@ -36,7 +36,7 @@ Run only on a disposable factory host (no prod secrets, no sudo). Personal/sensi
 
 ### 4. Report
 
-- Final order state is `done`, `blocked` or `cancelled`.
+- Final order state is `delivered`, `completed`, `blocked` or `cancelled`.
 - Report at exit: order id, final state, PR url or blocked reason, incident ids handled.
 
 ## Hard rules
