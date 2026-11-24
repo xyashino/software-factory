@@ -10,7 +10,7 @@ export const dispatchInternal = async (
     return true;
   }
   if (marker === FACTORY_DAEMON_MARKER) {
-    await import('../factory/index');
+    await import('../../../factory/src/index');
     return true;
   }
   const [entry] = rest;

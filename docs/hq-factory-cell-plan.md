@@ -125,17 +125,17 @@ Kill is immediate. Cleanup as above. No capacity cap. HQ shows count per Factory
 
 - Removed: drain and force signals, `leaveCell`, handover, per-Cell token, `revoked` status, `sf cell revoke`, `pinned_cell_id`.
 - DB: `jobs.claimed_by_cell_id` plain text, no foreign key. `work_orders.pinned_factory_id`. No Cell table; migration `0006_cell_identity_drop` rebuilt `safe_tokens` without Cell token kinds.
-- Code renames: `apps/hq`, `@repo/hq-contracts`, `HQ_*` env (`FACTORY_*` fallback), `hq.db` (`factory.db` fallback), `apps/sf/src/factory/`.
+- Code renames: `apps/hq`, `@repo/hq-contracts`, `HQ_*` env (`FACTORY_*` fallback), `hq.db` (`factory.db` fallback), `apps/factory/src/` (Factory daemon, formerly `apps/sf/src/factory/`).
 
 ## Gaps
 
 | Gap | Where |
 | --- | --- |
-| One long-poll per idle Cell, not one per Factory. HQ caps waiters at 5 globally (`MAX_CLAIM_WAITERS`); a 6th idle Cell gets an empty reply at once and spins | `apps/hq/src/adapters/memory/claim-waiters.adapter.ts`, `apps/sf/src/factory/relay.ts` |
+| One long-poll per idle Cell, not one per Factory. HQ caps waiters at 5 globally (`MAX_CLAIM_WAITERS`); a 6th idle Cell gets an empty reply at once and spins | `apps/hq/src/adapters/memory/claim-waiters.adapter.ts`, `apps/factory/src/relay.ts` |
 | Claim wait hardcoded 25 s, not configurable for proxy timeouts | `CLAIM_WAIT_MS` in `apps/hq/src/config.ts`, `apps/sf/src/config.ts` |
-| Relay 401 kills only the calling Cell; others die at next HQ heartbeat (up to 10 s) | `apps/sf/src/factory/relay.ts` |
-| Factory does not watch Cell worktrees; a deleted worktree is seen only at next resume | `apps/sf/src/factory/` |
-| Scale-down "newest" sorts by Cell start, not step start (`activity.since` is sent but unused) | `killOrder` in `apps/sf/src/factory/scaler.ts` |
+| Relay 401 kills only the calling Cell; others die at next HQ heartbeat (up to 10 s) | `apps/factory/src/relay.ts` |
+| Factory does not watch Cell worktrees; a deleted worktree is seen only at next resume | `apps/factory/src/` |
+| Scale-down "newest" sorts by Cell start, not step start (`activity.since` is sent but unused) | `killOrder` in `apps/factory/src/scaler.ts` |
 | `sf service install --cell` writes a unit running `sf cell start --project`; Cells refuse without the Factory and `--project` is gone. Needs a Factory daemon unit | `apps/sf/src/adapters/cli/service.command.ts` |
 | Worktrees of cancelled orders are never removed | `apps/sf` (only deliver and discard remove) |
 | `.factory/templates/pr/blocked.md` unused; no draft PR for blocked work | `.factory/templates/pr/` |

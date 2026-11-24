@@ -6,7 +6,8 @@ Terms: [glossary](./README.md#glossary).
 
 | Path                          | Role                                                                             |
 | :---------------------------- | :------------------------------------------------------------------------------- |
-| `apps/sf`                     | `sf` CLI: Supervisor commands, Cell daemon, Factory daemon, `sf operator` client |
+| `apps/sf`                     | `sf` CLI: Supervisor commands, Cell daemon, `sf operator` client                 |
+| `apps/factory`                | Factory daemon (`@repo/factory`): supervises Cell daemons, relays Cell traffic to HQ |
 | `apps/hq`                | HQ: HTTP server and SQLite storage                                               |
 | `apps/web-demo`               | Web UI served by `sf web start`                                                  |
 | `packages/hq-contracts`  | HQ wire contracts (Zod), shared by HQ, `sf` and web                              |

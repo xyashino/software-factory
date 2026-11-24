@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import type { Ports } from '../../../src/application/core/procedure';
-import { Refused } from '../../../src/application/core/errors';
-import { createScaler } from '../../../src/factory/scaler';
-import { createSupervisor } from '../../../src/factory/supervisor';
+import { Refused } from '../../src/errors';
+import type { FactoryPorts } from '../../src/ports';
+import { createScaler } from '../../src/scaler';
+import { createSupervisor } from '../../src/supervisor';
 
 const REPO = '/repos/alpha';
 const OTHER_REPO = '/repos/beta';
@@ -11,12 +11,8 @@ const BASE_NAME = 'dev-box';
 const RESPAWN_MS = 1_000;
 const EXIT_DETECT_MS = 100;
 
-const unused = (): never => {
-  throw new Error('port not used by this test');
-};
-
 interface Host {
-  ports: Pick<Ports, 'process' | 'clock'>;
+  ports: Pick<FactoryPorts, 'process' | 'clock'>;
   crash: (pid: number) => void;
   advance: (ms: number) => void;
 }
@@ -26,17 +22,14 @@ const hostOf = (): Host => {
   let nextPid = 100;
   const exited = new Set<number>();
   const alive = new Set<number>();
-  const ports: Pick<Ports, 'process' | 'clock'> = {
+  const ports: Pick<FactoryPorts, 'process' | 'clock'> = {
     process: {
-      run: unused,
-      probeUrl: unused,
       spawnDetached: async () => {
         nextPid += 1;
         alive.add(nextPid);
         return nextPid;
       },
       isAlive: (pid) => alive.has(pid) && !exited.has(pid),
-      parentPid: () => 1,
       terminate: (pid) => {
         alive.delete(pid);
       },

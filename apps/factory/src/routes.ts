@@ -5,14 +5,9 @@ import {
 } from '@repo/factory-contracts/scale.contract';
 import type { DaemonStatus } from '@repo/factory-contracts/status.contract';
 import { RELAY_PATH, type Relay } from './relay';
-import {
-  ArgumentError,
-  Refused,
-  Unreachable,
-} from '../application/core/errors';
-import type { Ports } from '../application/core/procedure';
-import { resolveCellTarget } from '../application/procedures/cell/resolve-project-target';
+import { ArgumentError, Refused, Unreachable } from './errors';
 import type { HqLink } from './hq-link';
+import type { RepoConfigPort } from './ports';
 import type { Scaler } from './scaler';
 import type { Supervisor } from './supervisor';
 
@@ -25,7 +20,7 @@ const INTERNAL = 500;
 const ACTIVITY_ROUTE = /^\/cells\/([^/]+)\/activity$/;
 
 export interface RouteDeps {
-  ports: Ports;
+  repoConfig: RepoConfigPort;
   supervisor: Supervisor;
   scaler: Scaler;
   hq: HqLink;
@@ -77,14 +72,14 @@ const scaleOf = async (
   request: Request,
 ): Promise<Response> => {
   const input = parseOr(ScaleRequestBodySchema, await readJson(request));
-  const target = await resolveCellTarget(deps.ports, input.repoRoot);
+  const projectId = await deps.repoConfig.projectIdOf(input.repoRoot);
   await deps.scaler.set({
-    repoRoot: target.repoRoot,
-    projectId: target.projectId,
+    repoRoot: input.repoRoot,
+    projectId,
     count: input.count,
     lines: input.lines,
   });
-  return reply(OK, { projectId: target.projectId });
+  return reply(OK, { projectId });
 };
 
 const activityOf = async (

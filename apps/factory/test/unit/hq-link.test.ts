@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { LEASE_TTL_MS, SELF_FENCE_MS } from '../../../src/config';
-import { createHqLink, HQ_TICK_MS } from '../../../src/factory/hq-link';
-import type { HqReply } from '../../../src/application/ports/hq-link.port';
+import { LEASE_TTL_MS, SELF_FENCE_MS } from '../../src/config';
+import { createHqLink, HQ_TICK_MS } from '../../src/hq-link';
+import type { HqReply } from '../../src/ports';
 
 type Outcome = 'ok' | 'unreachable' | 'rejected';
 
@@ -28,7 +28,6 @@ const setup = (initial: Outcome = 'ok', connected = true) => {
         }
       : null,
     hqLink: {
-      enroll: () => Promise.reject(new Error('not used by the link')),
       heartbeat: () => {
         heartbeats.push(now);
         return Promise.resolve(replyOf(outcome));
