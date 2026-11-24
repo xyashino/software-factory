@@ -53,6 +53,12 @@ const HEARTBEATS_ROUTE = '/api/v1/cells/heartbeats';
 const LINE_SUFFIX = '.yml';
 const CYCLE_TOKEN_BYTES = 16;
 const UNKNOWN_LINE = 'unknown';
+const LINE_JOB_KINDS: readonly string[] = [
+  'run_operator',
+  'run_inspection',
+  'deliver',
+  'mechanic',
+];
 const FAILED_VERDICT_DETAIL = 'verdict fail';
 const PROMPT_FILE = 'prompt.md';
 const STEP_LOG = 'step.log';
@@ -1665,6 +1671,9 @@ export const runJob = async (
   job: ClaimedJob,
 ): Promise<ClaimedJob | null> => {
   if (job.kind === 'plan_branch') return runPlanBranch(runtime, job);
+  if (!LINE_JOB_KINDS.includes(job.kind)) {
+    return finishWithFail(runtime, job, `unknown job kind: ${job.kind}`);
+  }
   const line = await loadLine(runtime, job);
   const claimDetail = `job=${job.jobId} kind=${job.kind} epoch=${job.epoch}`;
   if (line.kind === 'unavailable') {

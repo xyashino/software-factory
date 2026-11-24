@@ -58,7 +58,7 @@ interface Scenario {
 
 const job = (overrides: Partial<ClaimedJob> = {}): ClaimedJob => ({
   jobId: 'job-1',
-  kind: 'operator',
+  kind: 'run_operator',
   orderId: 'software-factory:cli-08',
   planId: null,
   stepId: 'build',
