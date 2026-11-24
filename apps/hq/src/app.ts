@@ -12,6 +12,7 @@ import { cellsRoute } from './adapters/hono/routes/cells.route';
 import { factoriesRoute } from './adapters/hono/routes/factories.route';
 import { incidentsRoute } from './adapters/hono/routes/incidents.route';
 import { jobsRoute } from './adapters/hono/routes/jobs.route';
+import { mcpRoute } from './adapters/hono/routes/mcp.route';
 import { orderPlansRoute } from './adapters/hono/routes/order-plans.route';
 import { projectsRoute } from './adapters/hono/routes/projects.route';
 import { queueRoute } from './adapters/hono/routes/queue.route';
@@ -38,6 +39,7 @@ export const createApp = (createTransport: CreateTransport) => {
   app.route('/api/v1/jobs', jobsRoute);
   app.route('/api/v1/incidents', incidentsRoute);
   app.route('/api/v1/stream', streamRoute);
+  app.route('/api/v1/mcp', mcpRoute);
   app.onError(errorHandler);
   app.notFound(notFoundHandler);
   return app;
