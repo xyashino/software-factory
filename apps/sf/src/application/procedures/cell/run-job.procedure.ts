@@ -25,7 +25,11 @@ import {
 } from '../../../domain/cell/step-lock';
 import { toJobId } from '../../../domain/common/brand';
 import { joinPath } from '../../../domain/common/path';
-import { factoryBranchOf, slugOf } from '../../../domain/git/branch-names';
+import {
+  baseRefOf,
+  factoryBranchOf,
+  slugOf,
+} from '../../../domain/git/branch-names';
 import {
   profileArtifacts,
   renderOperatorPrompt,
@@ -950,14 +954,27 @@ const readIfPresent = async (
     ? (await runtime.ports.fs.readText(path)).trim()
     : '';
 
+const baseRefIn = async (
+  runtime: CellRuntime,
+  job: ClaimedJob,
+): Promise<string> => {
+  const local = await runtime.ports.process.run(
+    'git',
+    ['rev-parse', '--verify', '--quiet', `refs/heads/${job.baseBranch}`],
+    worktreeOf(runtime, job),
+  );
+  return baseRefOf(job.baseBranch, local.exitCode === 0);
+};
+
 const diffOf = async (
   runtime: CellRuntime,
   job: ClaimedJob,
 ): Promise<string> => {
   try {
+    const base = await baseRefIn(runtime, job);
     const result = await runtime.ports.process.run(
       'git',
-      ['diff', `${job.baseBranch}...HEAD`],
+      ['diff', `${base}...HEAD`],
       worktreeOf(runtime, job),
     );
     return result.exitCode === 0 ? result.stdout.slice(0, MAX_DIFF_CHARS) : '';
@@ -1089,13 +1106,14 @@ const deliverStation = async (
     action: 'start',
     lineSnapshot: wireSnapshotOf(snapshot),
   });
+  const base = await baseRefIn(runtime, job);
   const added = await runtime.ports.process.run(
     'git',
     [
       'diff',
       '--name-only',
       '--diff-filter=A',
-      `${job.baseBranch}...HEAD`,
+      `${base}...HEAD`,
       '--',
       DECISIONS_DIR,
     ],

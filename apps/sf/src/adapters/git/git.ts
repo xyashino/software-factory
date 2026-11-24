@@ -2,6 +2,7 @@ import { mkdir, rm } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import type { GitPort } from '../../application/ports/git.port';
 import type { ProcessPort } from '../../application/ports/process.port';
+import { baseRefOf } from '../../domain/git/branch-names';
 import { addInfoExclude } from './exclude';
 
 const GIT = 'git';
@@ -32,7 +33,7 @@ export const createGitAdapter = (process: ProcessPort): GitPort => {
       ['rev-parse', '--verify', '--quiet', `refs/heads/${baseBranch}`],
       cwd,
     );
-    return local.exitCode === 0 ? baseBranch : `${REMOTE}/${baseBranch}`;
+    return baseRefOf(baseBranch, local.exitCode === 0);
   };
   return {
     currentBranch: async (cwd) =>

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  baseRefOf,
   factoryBranchOf,
   planBranchOf,
   slugOf,
@@ -36,5 +37,17 @@ describe('work order branch names', () => {
 
     // Assert
     expect(slug).toBe('');
+  });
+});
+
+describe('base ref', () => {
+  it('uses the local branch when it exists', () => {
+    expect(baseRefOf('main', true)).toBe('main');
+  });
+
+  it('uses the origin branch when the base exists only on origin', () => {
+    expect(baseRefOf('feat/standalone-factory', false)).toBe(
+      'origin/feat/standalone-factory',
+    );
   });
 });
