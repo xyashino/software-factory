@@ -52,7 +52,7 @@ especially §3 (Cell lifecycle) and §11 (agent reporting). Operator CLI spec:
 | factory | `sf factory connect <url> --token <join\|->` | Supervisor, once per PC | `POST /api/v1/factories/enroll` |
 | factory | `sf factory start \| stop \| status` | Supervisor, on a Cell machine | Factory daemon `127.0.0.1:7072` |
 | web | `sf web start \| stop \| status` | Supervisor | none (runs the installed web UI, pid in `web.pid`) |
-| cell | `sf cell scale N [--repo <path>]` | Supervisor, on a Cell machine | Factory daemon `PUT /scale` (converges Cells to N) |
+| cell | `sf cell scale N [--repo <path>] [--lines <names>]` | Supervisor, on a Cell machine | Factory daemon `PUT /scale` (converges Cells to N) |
 | cell | `sf cell start [--name <slug>]` | Factory daemon child only | `claims`, `heartbeats`, `jobs/{id}/transitions` through the relay |
 | cell | `sf cell list` | Supervisor | Factory daemon `GET /scale` (local only) |
 | cell | `sf cell create\|stop\|rm` | removed | exit 2, `use "sf cell scale N"` |
@@ -184,6 +184,22 @@ Only the Factory daemon talks to HQ. The Cell talks to the Factory relay. Agents
   Cell is gone. HQ requeues its Job at once, or when the lease expires if HQ is unreachable.
 - There is no revoke. A stopped Cell leaves no row in HQ.
 
+### Production lines
+
+Line definitions (`.factory/lines/<line>.yml`) define the stations, operators, and delivery rules for work orders. Tasks specify their line in work order frontmatter (`line: <name>` in `todos/*.md`). Cells claim jobs matching their available runners and allowed lines (`sf cell scale N --lines <names>` or `CELL_LINES`).
+
+| Line | Runner / Model | Stations | Description |
+| :--- | :------------- | :------- | :---------- |
+| `gemini` | `antigravity` (`gemini-3.8-flash-medium`) | `build` → `quality-gate` → `deliver` (mechanic: `antigravity`) | Production line running with the Gemini runner (`antigravity`). Direct builder with quality gate inspection and delivery. Requires `antigravity` CLI available in `$PATH`. |
+| `fast` | `claude` (`haiku`) | `build` → `quality-gate` → `deliver` (mechanic: `antigravity`) | Fast direct builder build with quality gate and direct delivery (for chores, docs, style). |
+| `feature` | `claude` (`sonnet`) | `plan` → `build` → `quality-gate` → `audit` → `deliver` (mechanic: `claude`) | Full feature line: upfront plan, build, quality-gate, audit, and delivery. |
+| `standard` | `claude` (`haiku`), `antigravity` (`gemini-3.8-flash-medium`) | `build` → `quality-gate` → `audit` (`doctor`) → `deliver` (mechanic: `antigravity`) | Direct builder build with quality gate and doctor audit (bypasses planning). |
+
+To run tasks on the `gemini` line:
+1. Ensure the Gemini runner (`antigravity`) is installed on the worker host.
+2. Set `line: gemini` in the task work order (`todos/<name>.md`).
+3. Scale Cells for the project: `sf cell scale 1 --lines gemini` (or allow all lines by omitting `--lines`).
+
 ## 4. Operator endpoint
 
 - The Cell opens `127.0.0.1` on an OS-assigned port when a Job starts, and closes it when the Job
@@ -235,7 +251,7 @@ Decided:
    starts Cells again.
 4. **No Cell token.** Cells hold only a local bearer from their Factory. The Factory credential is
    the only HQ credential on a PC (`$XDG_CONFIG_HOME/sf/factory.json`, `0600`).
-5. **Runners.** Six ship: `claude`, `codex`, `cursor`, `antigravity`, `opencode`, `copilot`.
+5. **Runners.** Six ship: `claude`, `codex`, `cursor`, `antigravity`, `opencode`, `copilot`. The `antigravity` runner drives the `gemini` line and the doctor station in `standard`.
 
 Open:
 
