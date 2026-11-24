@@ -7,7 +7,7 @@ export const issueTokenProcedure = scopedProcedure(['admin:tokens'])(
 )(async (input, ctx) => {
   const { kind, name, expiresAt } = input.body;
   const scopes = DEFAULT_SCOPES[kind];
-  const issued = await ctx.storage.write((tx) =>
+  const issued = await ctx.storage.write(async (tx) =>
     insertSafeToken(tx, {
       kind,
       name,

@@ -88,21 +88,21 @@ const toResolution = (body: ResolveBody): Resolution => {
   }
 };
 
-const requireIncident = (
+const requireIncident = async (
   tx: StorageWriteTx,
   incidentId: string,
-): IncidentRow => {
-  const row = tx.incidents.find(asIncidentId(incidentId));
+): Promise<IncidentRow> => {
+  const row = await tx.incidents.find(asIncidentId(incidentId));
   if (row === undefined) throw new NotFound(`Incident ${incidentId} not found`);
   return row;
 };
 
-const requireMechanicLease = (
+const requireMechanicLease = async (
   tx: StorageWriteTx,
   incidentId: IncidentId,
   resolver: MechanicResolver,
-): void => {
-  const job = tx.jobs.findActiveMechanic(incidentId);
+): Promise<void> => {
+  const job = await tx.jobs.findActiveMechanic(incidentId);
   if (job === undefined || job.claimedByCellId !== resolver.cellId)
     throw new Forbidden(
       `Cell ${resolver.cellId} holds no mechanic lease for incident ${incidentId}`,
@@ -113,16 +113,16 @@ const requireMechanicLease = (
     );
 };
 
-const closeMechanicJobs = (
+const closeMechanicJobs = async (
   tx: StorageWriteTx,
   incidentId: IncidentId,
   status: 'passed' | 'cancelled',
   actor: Actor,
   now: number,
   log: TransitionLog,
-): void => {
-  for (const job of tx.jobs.listOpenMechanic(incidentId)) {
-    tx.jobs.update(job.jobId, { status, finishedAt: now });
+): Promise<void> => {
+  for (const job of await tx.jobs.listOpenMechanic(incidentId)) {
+    await tx.jobs.update(job.jobId, { status, finishedAt: now });
     log.push(
       orderTransition({
         projectId: job.projectId,
@@ -137,15 +137,15 @@ const closeMechanicJobs = (
   }
 };
 
-const persistOrder = (
+const persistOrder = async (
   tx: StorageWriteTx,
   order: WorkOrderRow,
   next: WorkOrderSnapshot,
   actor: Actor,
   now: number,
   log: TransitionLog,
-): WorkOrderRow => {
-  const updated = updateWorkOrder(
+): Promise<WorkOrderRow> => {
+  const updated = await updateWorkOrder(
     tx,
     order,
     {
@@ -176,12 +176,12 @@ const persistOrder = (
   return updated;
 };
 
-const persistSteps = (
+const persistSteps = async (
   tx: StorageWriteTx,
   steps: readonly OrderStepRow[],
   next: WorkOrderSnapshot,
   now: number,
-): void => {
+): Promise<void> => {
   for (const row of steps) {
     const step = next.steps.find(
       (candidate) => candidate.stepIndex === row.stepIndex,
@@ -189,7 +189,7 @@ const persistSteps = (
     if (step === undefined) continue;
     const rerun =
       next.state === 'queued' && row.stepIndex >= next.currentStepIndex;
-    tx.steps.update(row.stepId, {
+    await tx.steps.update(row.stepId, {
       state: rerun ? 'pending' : row.state,
       attemptsUsed: step.attemptsUsed,
       maxAttempts: step.maxAttempts,
@@ -198,16 +198,16 @@ const persistSteps = (
   }
 };
 
-const persistIncident = (
+const persistIncident = async (
   tx: StorageWriteTx,
   incident: IncidentRow,
   next: IncidentSnapshot,
   actor: Actor,
   now: number,
   log: TransitionLog,
-): IncidentRow => {
+): Promise<IncidentRow> => {
   const closed = next.status === 'resolved' || next.status === 'cancelled';
-  const updated = tx.incidents.update(incident.incidentId, {
+  const updated = await tx.incidents.update(incident.incidentId, {
     status: next.status,
     triageOwner: next.triageOwner,
     resolutionAction: next.resolutionAction,
@@ -236,21 +236,21 @@ export const resolveIncidentProcedure = anyScopedProcedure([
   const resolver = resolverOf(ctx, input.body);
   const actor = actorOf(resolver);
   const outcome = await settle(() =>
-    ctx.storage.write((tx) => {
+    ctx.storage.write(async (tx) => {
       if (resolver.kind === 'mechanic')
-        touchFactory(tx, resolver.factoryId, now);
-      const incident = requireIncident(tx, input.params.id);
-      const order = requireOrder(tx, incident.orderId);
-      const steps = tx.steps.listByOrder(order.orderId);
+        await touchFactory(tx, resolver.factoryId, now);
+      const incident = await requireIncident(tx, input.params.id);
+      const order = await requireOrder(tx, incident.orderId);
+      const steps = await tx.steps.listByOrder(order.orderId);
       if (resolver.kind === 'mechanic')
-        requireMechanicLease(tx, incident.incidentId, resolver);
+        await requireMechanicLease(tx, incident.incidentId, resolver);
       const result = resolveIncident(
         toIncidentSnapshot(incident, steps),
         toWorkOrderSnapshot(order, steps),
         toResolution(input.body),
       );
       const log: TransitionLog = [];
-      closeMechanicJobs(
+      await closeMechanicJobs(
         tx,
         incident.incidentId,
         resolver.kind === 'mechanic' ? 'passed' : 'cancelled',
@@ -258,7 +258,7 @@ export const resolveIncidentProcedure = anyScopedProcedure([
         now,
         log,
       );
-      const updatedOrder = persistOrder(
+      const updatedOrder = await persistOrder(
         tx,
         order,
         result.workOrder,
@@ -266,8 +266,8 @@ export const resolveIncidentProcedure = anyScopedProcedure([
         now,
         log,
       );
-      persistSteps(tx, steps, result.workOrder, now);
-      const updatedIncident = persistIncident(
+      await persistSteps(tx, steps, result.workOrder, now);
+      const updatedIncident = await persistIncident(
         tx,
         incident,
         result.incident,
@@ -281,7 +281,7 @@ export const resolveIncidentProcedure = anyScopedProcedure([
           incident: toIncidentDto(updatedIncident),
           workOrder: toWorkOrderDto(updatedOrder),
         },
-        records: flushTransitions(tx, log),
+        records: await flushTransitions(tx, log),
       };
     }),
   );

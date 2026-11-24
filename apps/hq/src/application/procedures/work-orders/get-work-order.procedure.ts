@@ -7,13 +7,13 @@ export const getWorkOrderProcedure = scopedProcedure(['supervisor:read'])(
   getWorkOrderContract,
 )(async (input, ctx) => {
   const { order, steps, orderJobs, orderIncidents } = await ctx.storage.read(
-    (tx) => {
-      const order = requireOrder(tx, input.params.id);
+    async (tx) => {
+      const order = await requireOrder(tx, input.params.id);
       return {
         order,
-        steps: tx.steps.listByOrder(order.orderId),
-        orderJobs: tx.jobs.listByOrder(order.orderId),
-        orderIncidents: tx.incidents.list({
+        steps: await tx.steps.listByOrder(order.orderId),
+        orderJobs: await tx.jobs.listByOrder(order.orderId),
+        orderIncidents: await tx.incidents.list({
           projectId: order.projectId,
           orderId: order.orderId,
         }),

@@ -22,16 +22,16 @@ export const joinTokenProcedure = publicProcedure(joinTokenContract)(async (
   if (!isLoopback(ctx.remoteAddress))
     throw new Forbidden('Join is only allowed from loopback');
   const now = ctx.clock.now();
-  const issued = await ctx.storage.write((tx) => {
-    const join = tx.tokens.findActiveJoin();
+  const issued = await ctx.storage.write(async (tx) => {
+    const join = await tx.tokens.findActiveJoin();
     if (
       join === undefined ||
       !matchesJoinSecret(join.tokenHash, input.body.joinSecret)
     )
       throw new Unauthorized('Invalid join secret');
-    tx.tokens.update(join.tokenId, { revokedAt: now });
+    await tx.tokens.update(join.tokenId, { revokedAt: now });
     const expiresAt = now + WEB_SESSION_TTL_MS;
-    const session = insertSafeToken(tx, {
+    const session = await insertSafeToken(tx, {
       kind: 'web_session',
       name: 'web demo session',
       scopes: WEB_SESSION_SCOPES,

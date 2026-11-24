@@ -68,14 +68,14 @@ export const toIncidentSnapshot = (
   resolutionAction: incident.resolutionAction,
 });
 
-export const openIncident = (
+export const openIncident = async (
   tx: StorageWriteTx,
   input: OpenIncident,
   now: number,
-): IncidentId => {
+): Promise<IncidentId> => {
   const { triage, ...row } = input;
   const incidentId = asIncidentId(`inc-${crypto.randomUUID()}`);
-  tx.incidents.insert({
+  await tx.incidents.insert({
     ...row,
     incidentId,
     status: triage.status,
@@ -85,7 +85,7 @@ export const openIncident = (
   return incidentId;
 };
 
-export const insertMechanicJob = (
+export const insertMechanicJob = async (
   tx: StorageWriteTx,
   order: WorkOrderRow,
   input: {
@@ -96,8 +96,8 @@ export const insertMechanicJob = (
     detail: string;
   },
   now: number,
-): void => {
-  tx.jobs.insert({
+): Promise<void> => {
+  await tx.jobs.insert({
     jobId: asJobId(`job-${crypto.randomUUID()}`),
     projectId: order.projectId,
     orderId: order.orderId,

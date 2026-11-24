@@ -117,6 +117,12 @@ The server stores structured relational state in SQLite (WAL mode, `BEGIN IMMEDI
 - **Execution**: `jobs` (one attempt per step, with lease fencing; `claimed_by_cell_id` is plain text, no Cell table), `factories` (enrolled Factories, last seen, projects).
 - **Triage and audit**: `incidents`, and `state_transitions` as history for the SSE stream. Retries never read history.
 
+#### Storage engines (`HQ_DATABASE_URL`)
+
+- **Default: SQLite.** `HQ_DB_PATH` (or `FACTORY_DB_PATH`) picks the file; `HQ_DATA_DIR` holds the file and `web-demo.join`.
+- **Postgres.** Set `HQ_DATABASE_URL` (or `FACTORY_DATABASE_URL`) to `postgres://...` and HQ connects with Bun SQL. Embedded migrations (`apps/hq/src/db/pg/migrations`) apply on connect under an advisory lock, so parallel starts are safe. `HQ_DB_PATH` is ignored. The three partial unique indexes match SQLite (`idx_jobs_one_active_per_order`, `idx_jobs_one_active_per_cell`, `idx_work_orders_one_active_per_cell`), and claims lock rows with `FOR UPDATE`.
+- Both adapters implement the same `StoragePort` and run one contract suite (`apps/hq/test/db/storage-port.contract.ts`). Postgres tests run when `TEST_POSTGRES_URL` is set.
+
 ### 2.3 Cell Worktree State (`./.cell/<step-id>/`) & Post-Deliver Cleanup
 
 Inside the target repository, the Cell creates an isolated git worktree per `WorkOrder`, reads `.factory/` definitions from the worktree, stores all step-level state under `.cell/` (excluded via `.git/info/exclude`), and **deletes the entire `<repo>/.worktrees/<order-slug>/` directory once `deliver` pushes the branch and publishes the PR**:

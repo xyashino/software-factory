@@ -26,10 +26,10 @@ export const createWorkOrderProcedure = scopedProcedure(['supervisor:write'])(
   const now = ctx.clock.now();
   const actor: Actor = { kind: 'supervisor', id: ctx.principal.tokenId };
 
-  const { row, records } = await ctx.storage.write((tx) => {
-    const project = requireProject(tx, body.projectId);
+  const { row, records } = await ctx.storage.write(async (tx) => {
+    const project = await requireProject(tx, body.projectId);
     const orderId = asOrderId(scopedId(project.projectId, body.slug));
-    if (findOrder(tx, orderId) !== undefined)
+    if ((await findOrder(tx, orderId)) !== undefined)
       throw new Conflict(`Work order ${body.slug} already exists`);
     if (body.parentSlug === body.slug)
       throw new UnprocessableEntity('A work order cannot depend on itself');
@@ -37,11 +37,11 @@ export const createWorkOrderProcedure = scopedProcedure(['supervisor:write'])(
     const plan =
       body.planSlug == null
         ? null
-        : requirePlan(tx, scopedId(project.projectId, body.planSlug));
+        : await requirePlan(tx, scopedId(project.projectId, body.planSlug));
     const parent =
       body.parentSlug == null
         ? null
-        : requireOrder(tx, scopedId(project.projectId, body.parentSlug));
+        : await requireOrder(tx, scopedId(project.projectId, body.parentSlug));
     const branch = orderBranchOf(body.slug);
     const resolved = resolveFor(
       { baseBranch: project.defaultBaseBranch, branch },
@@ -49,7 +49,7 @@ export const createWorkOrderProcedure = scopedProcedure(['supervisor:write'])(
       parent,
     );
 
-    const row = insertWorkOrder(tx, {
+    const row = await insertWorkOrder(tx, {
       orderId,
       projectId: project.projectId,
       planId: plan?.planId ?? null,
@@ -80,7 +80,7 @@ export const createWorkOrderProcedure = scopedProcedure(['supervisor:write'])(
         at: now,
       }),
     ];
-    return { row, records: flushTransitions(tx, log) };
+    return { row, records: await flushTransitions(tx, log) };
   });
 
   publishCommitted(ctx, records);

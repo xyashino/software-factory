@@ -22,12 +22,12 @@ export const transitionOrderPlanProcedure = scopedProcedure([
   const now = ctx.clock.now();
   const actor: Actor = { kind: 'supervisor', id: ctx.principal.tokenId };
 
-  const { row, records } = await ctx.storage.write((tx) => {
-    const plan = requirePlan(tx, input.params.id);
+  const { row, records } = await ctx.storage.write(async (tx) => {
+    const plan = await requirePlan(tx, input.params.id);
     const next = nextPlanState(plan.state, action);
     if (next === null)
       throw new Conflict(`Order plan cannot ${action} from ${plan.state}`);
-    const row = updateOrderPlan(tx, plan, next, now);
+    const row = await updateOrderPlan(tx, plan, next, now);
     const log: TransitionLog = [
       orderTransition({
         projectId: plan.projectId,
@@ -40,13 +40,13 @@ export const transitionOrderPlanProcedure = scopedProcedure([
       }),
     ];
     if (next === 'branching')
-      insertPlanBranchJob(
+      await insertPlanBranchJob(
         tx,
         row,
-        requireProject(tx, plan.projectId).repoUrl,
+        (await requireProject(tx, plan.projectId)).repoUrl,
         now,
       );
-    return { row, records: flushTransitions(tx, log) };
+    return { row, records: await flushTransitions(tx, log) };
   });
 
   publishCommitted(ctx, records);

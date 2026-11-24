@@ -1,4 +1,5 @@
-export type HqSetting = 'PORT' | 'HOST' | 'DB_PATH' | 'DATA_DIR';
+export type HqSetting =
+  'PORT' | 'HOST' | 'DB_PATH' | 'DATA_DIR' | 'DATABASE_URL';
 
 type Env = Readonly<Record<string, string | undefined>>;
 

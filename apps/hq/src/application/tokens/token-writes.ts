@@ -38,13 +38,13 @@ export type NewSafeToken = {
 
 export type IssuedSafeToken = { tokenId: TokenId; token: string };
 
-export const insertSafeToken = (
+export const insertSafeToken = async (
   tx: StorageWriteTx,
   input: NewSafeToken,
-): IssuedSafeToken => {
+): Promise<IssuedSafeToken> => {
   const token = mintToken(PREFIX_BY_KIND[input.kind]);
   const tokenId = asTokenId(crypto.randomUUID());
-  tx.tokens.insert({
+  await tx.tokens.insert({
     tokenId,
     tokenHash: hashToken(token),
     prefix: PREFIX_BY_KIND[input.kind],

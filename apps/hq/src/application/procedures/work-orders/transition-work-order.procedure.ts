@@ -20,18 +20,18 @@ export const transitionWorkOrderProcedure = scopedProcedure([
   const now = ctx.clock.now();
   const actor: Actor = { kind: 'supervisor', id: ctx.principal.tokenId };
 
-  const { row, records } = await ctx.storage.write((tx) => {
-    const order = requireOrder(tx, input.params.id);
+  const { row, records } = await ctx.storage.write(async (tx) => {
+    const order = await requireOrder(tx, input.params.id);
     const next = nextWorkOrderState(
       order.state,
       action,
-      readinessOf(tx, order).isReady,
+      (await readinessOf(tx, order)).isReady,
     );
     if (next === null)
       throw new Conflict(`Work order cannot ${action} from ${order.state}`);
     const log: TransitionLog = [];
-    const row = moveOrder(tx, order, next, action, actor, now, log);
-    return { row, records: flushTransitions(tx, log) };
+    const row = await moveOrder(tx, order, next, action, actor, now, log);
+    return { row, records: await flushTransitions(tx, log) };
   });
 
   publishCommitted(ctx, records);

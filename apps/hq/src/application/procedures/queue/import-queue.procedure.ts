@@ -19,6 +19,7 @@ import {
 } from '../../../domain/topology/branch-names';
 import { InternalServer } from '../../core/error-handling';
 import { scopedProcedure } from '../../core/procedure';
+import type { StateTransitionRecord } from '../../../domain/common/events';
 import type {
   ProjectRow,
   StorageWriteTx,
@@ -69,7 +70,7 @@ type ImportResult =
   | {
       kind: 'applied';
       counts: ImportCounts;
-      records: ReturnType<typeof flushTransitions>;
+      records: StateTransitionRecord[];
     };
 
 const parseFiles = (
@@ -173,21 +174,21 @@ const storedCounts = (meta: Record<string, unknown> | null): ImportCounts => {
   return parsed.data;
 };
 
-const ensurePlans = (
+const ensurePlans = async (
   tx: StorageWriteTx,
   project: ProjectRow,
   todos: readonly ParsedFile[],
   actor: Actor,
   now: number,
   log: TransitionLog,
-): void => {
+): Promise<void> => {
   const planSlugs = new Set(
     todos.flatMap((item) => (item.todo.plan === null ? [] : [item.todo.plan])),
   );
   for (const slug of planSlugs) {
     const planId = scopedId(project.projectId, slug);
-    if (findPlan(tx, planId) !== undefined) continue;
-    insertOrderPlan(tx, {
+    if ((await findPlan(tx, planId)) !== undefined) continue;
+    await insertOrderPlan(tx, {
       planId: asPlanId(planId),
       projectId: project.projectId,
       slug,
@@ -215,7 +216,7 @@ const ensurePlans = (
   }
 };
 
-const applyFile = (
+const applyFile = async (
   tx: StorageWriteTx,
   project: ProjectRow,
   item: ParsedFile,
@@ -223,13 +224,13 @@ const applyFile = (
   actor: Actor,
   now: number,
   log: TransitionLog,
-): FileOutcome => {
+): Promise<FileOutcome> => {
   const { todo } = item;
   const current = orders.get(todo.slug);
   const plan =
     todo.plan === null
       ? null
-      : requirePlan(tx, scopedId(project.projectId, todo.plan));
+      : await requirePlan(tx, scopedId(project.projectId, todo.plan));
   const parent =
     todo.dependsOn === null ? null : (orders.get(todo.dependsOn) ?? null);
   const resolved = resolveFor(
@@ -244,7 +245,7 @@ const applyFile = (
     const orderId = asOrderId(scopedId(project.projectId, todo.slug));
     const state =
       todo.status === 'queued' ? resolved.initialState : todo.status;
-    const row = insertWorkOrder(tx, {
+    const row = await insertWorkOrder(tx, {
       orderId,
       projectId: project.projectId,
       planId,
@@ -289,13 +290,18 @@ const applyFile = (
       if (next !== null) {
         orders.set(
           todo.slug,
-          moveOrder(tx, current, next, 'cancel', actor, now, log),
+          await moveOrder(tx, current, next, 'cancel', actor, now, log),
         );
         return 'updated';
       }
     }
     if (current.priority === todo.priority) return 'skipped';
-    const row = updateWorkOrder(tx, current, { priority: todo.priority }, now);
+    const row = await updateWorkOrder(
+      tx,
+      current,
+      { priority: todo.priority },
+      now,
+    );
     log.push(
       orderTransition({
         projectId: project.projectId,
@@ -326,7 +332,7 @@ const applyFile = (
   };
   if (todo.line !== current.lineName) patch.unavailableLineFactoriesJson = [];
   if (!differs(current, patch)) return 'skipped';
-  const row = updateWorkOrder(tx, current, patch, now);
+  const row = await updateWorkOrder(tx, current, patch, now);
   orders.set(todo.slug, row);
   log.push(
     orderTransition({
@@ -342,12 +348,15 @@ const applyFile = (
   return 'updated';
 };
 
-const importInTx = (tx: StorageWriteTx, args: ImportArgs): ImportResult => {
-  const project = requireProject(tx, args.projectId);
+const importInTx = async (
+  tx: StorageWriteTx,
+  args: ImportArgs,
+): Promise<ImportResult> => {
+  const project = await requireProject(tx, args.projectId);
   const commandId =
     args.commandId === undefined ? undefined : asCommandId(args.commandId);
   if (commandId !== undefined && !args.dryRun) {
-    const prior = tx.transitions.findByCommand(commandId);
+    const prior = await tx.transitions.findByCommand(commandId);
     if (prior !== undefined)
       return {
         kind: 'applied',
@@ -356,7 +365,7 @@ const importInTx = (tx: StorageWriteTx, args: ImportArgs): ImportResult => {
       };
   }
 
-  const rows = tx.orders.list({ projectId: project.projectId });
+  const rows = await tx.orders.list({ projectId: project.projectId });
   const orders = new Map(rows.map((row) => [row.slug, row]));
   const slugById = new Map(rows.map((row) => [row.orderId, row.slug]));
   const existingParents = new Map(
@@ -371,17 +380,26 @@ const importInTx = (tx: StorageWriteTx, args: ImportArgs): ImportResult => {
   if (problems.length > 0) return { kind: 'rejected', errors: problems };
 
   const log: TransitionLog = [];
-  ensurePlans(tx, project, args.todos, args.actor, args.now, log);
+  await ensurePlans(tx, project, args.todos, args.actor, args.now, log);
   const counts: ImportCounts = { created: 0, updated: 0, skipped: 0 };
-  for (const item of topoOrder(args.todos))
-    counts[applyFile(tx, project, item, orders, args.actor, args.now, log)] +=
-      1;
+  for (const item of topoOrder(args.todos)) {
+    const outcome = await applyFile(
+      tx,
+      project,
+      item,
+      orders,
+      args.actor,
+      args.now,
+      log,
+    );
+    counts[outcome] += 1;
+  }
 
   if (args.dryRun) return { kind: 'applied', counts, records: [] };
   return {
     kind: 'applied',
     counts,
-    records: flushTransitions(
+    records: await flushTransitions(
       tx,
       log,
       commandId === undefined

@@ -8,8 +8,8 @@ export const heartbeatFactoryProcedure = scopedProcedure(['factory:worker'])(
   const factoryId = factoryIdOf(ctx);
   const now = ctx.clock.now();
 
-  await ctx.storage.write((tx) => {
-    tx.factories.update(factoryId, {
+  await ctx.storage.write(async (tx) => {
+    await tx.factories.update(factoryId, {
       lastSeenAt: now,
       projectsJson: input.body.projects,
     });

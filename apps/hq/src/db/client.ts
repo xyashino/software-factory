@@ -1,9 +1,7 @@
 import {
   type BunSqliteDb,
-  type BunSqliteTx,
   createDb as createKitDb,
 } from '@repo/bun-sqlite-kit/create-db';
-import { immediateTx as kitImmediateTx } from '@repo/bun-sqlite-kit/immediate-tx';
 import { factories } from './schema/factories';
 import { incidents } from './schema/incidents';
 import { jobs } from './schema/jobs';
@@ -28,10 +26,5 @@ const schema = {
 
 export type Db = BunSqliteDb<typeof schema>;
 
-export type DbTx = BunSqliteTx<typeof schema>;
-
 export const createDb = (sqlitePath: string): Db =>
   createKitDb(sqlitePath, { schema, migrations: embeddedMigrationsOf() });
-
-export const immediateTx = <T>(db: Db, fn: (tx: DbTx) => T): T =>
-  kitImmediateTx(db, fn);

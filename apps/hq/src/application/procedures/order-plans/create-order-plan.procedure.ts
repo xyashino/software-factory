@@ -26,12 +26,12 @@ export const createOrderPlanProcedure = scopedProcedure(['supervisor:write'])(
   const actor: Actor = { kind: 'supervisor', id: ctx.principal.tokenId };
   const planId = asPlanId(scopedId(projectId, slug));
 
-  const { row, records } = await ctx.storage.write((tx) => {
-    const project = requireProject(tx, projectId);
-    if (findPlan(tx, planId) !== undefined)
+  const { row, records } = await ctx.storage.write(async (tx) => {
+    const project = await requireProject(tx, projectId);
+    if ((await findPlan(tx, planId)) !== undefined)
       throw new Conflict(`Order plan ${slug} already exists`);
     const state: PlanState = activate ? 'branching' : 'draft';
-    const row = insertOrderPlan(tx, {
+    const row = await insertOrderPlan(tx, {
       planId,
       projectId: project.projectId,
       slug,
@@ -56,8 +56,8 @@ export const createOrderPlanProcedure = scopedProcedure(['supervisor:write'])(
         at: now,
       }),
     ];
-    if (activate) insertPlanBranchJob(tx, row, project.repoUrl, now);
-    return { row, records: flushTransitions(tx, log) };
+    if (activate) await insertPlanBranchJob(tx, row, project.repoUrl, now);
+    return { row, records: await flushTransitions(tx, log) };
   });
 
   publishCommitted(ctx, records);
