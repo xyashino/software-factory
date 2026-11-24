@@ -30,7 +30,7 @@ Defined once here. Other docs link to this section.
 | **Mechanic**   | The LLM agent that triages an Incident when a Line is blocked                                    |
 | **Job**        | One execution attempt of one Station, claimed by a Cell. Also a Mechanic run                     |
 | **Incident**   | An Andon: a block that normal retries could not fix. Releases the Cell                           |
-| **Work order** | One `todos/*.md` item travelling down a Line                                                     |
+| **Work order** | One `orders/*.md` item travelling down a Line (`todos/*.md` still read as fallback)              |
 | **Supervisor** | The human who runs HQ and resolves Incidents                                                     |
 
 Code paths: `apps/hq` is HQ, `apps/sf` holds the Cell and Factory daemons. Docs use the terms above. Old command and env names are listed in [sf.md](./sf.md#deprecated-names).

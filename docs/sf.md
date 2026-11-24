@@ -30,7 +30,7 @@ sf project add my-project --repo <url>
 sf web start                              # http://127.0.0.1:4321
 sf factory connect <hq-url> --token <factory_join>        # once per PC
 sf cell scale 2 --repo ~/code/my-project                  # Cells start under the Factory daemon
-sf todos import && sf queue
+sf order import && sf queue
 sf web stop && sf hq stop
 ```
 
@@ -56,8 +56,6 @@ especially §3 (Cell lifecycle) and §11 (agent reporting). Operator CLI spec:
 | cell     | `sf cell start [--name <slug>]`                                | Factory daemon child only     | `claims`, `heartbeats`, `jobs/{id}/transitions` through the relay           |
 | cell     | `sf cell list`                                                 | Supervisor                    | Factory daemon `GET /scale` (local only)                                    |
 | cell     | `sf cell create\|stop\|rm`                                     | removed                       | exit 2, `use "sf cell scale N"`                                             |
-| todos    | `sf todos import`                                              | Supervisor                    | `POST /api/v1/queue/import`                                                 |
-| todos    | `sf todos export`                                              | Supervisor                    | `GET /api/v1/queue/export`                                                  |
 | queue    | `sf queue`                                                     | Supervisor                    | `GET /api/v1/work-orders`, `GET /api/v1/order-plans`                        |
 | queue    | `sf queue pause \| unpause \| reprioritise \| reset \| cancel` | Supervisor                    | `POST /api/v1/queue/actions`                                                |
 | plan     | `sf plan list`                                                 | Supervisor                    | `GET /api/v1/order-plans`                                                   |
@@ -65,6 +63,8 @@ especially §3 (Cell lifecycle) and §11 (agent reporting). Operator CLI spec:
 | plan     | `sf plan activate \| retry <slug>`                             | Supervisor                    | `GET /api/v1/order-plans`, then `POST /api/v1/order-plans/{id}/transitions` |
 | incident | `sf incident list`                                             | Supervisor                    | `GET /api/v1/incidents`                                                     |
 | incident | `sf incident resolve <id> --action ...`                        | Supervisor                    | `POST /api/v1/incidents/{id}/resolve`                                       |
+| order    | `sf order import [--dir <path>]`                               | Supervisor                    | `POST /api/v1/queue/import` (reads `orders/*.md`, else `todos/*.md`)        |
+| order    | `sf order export [--dir <path>]`                               | Supervisor                    | `GET /api/v1/queue/export` (writes `orders/*.md`, else `todos/*.md`)        |
 | order    | `sf order show <id>`                                           | Supervisor                    | `GET /api/v1/work-orders/{id}`                                              |
 | order    | `sf order resume \| reopen \| cancel <id>`                     | Supervisor                    | `POST /api/v1/work-orders/{id}/transitions`                                 |
 | order    | `sf order test [--line <name>] [--slug <slug>]`                | Supervisor                    | `POST /api/v1/work-orders` (smoke-test chore, no `todos/` file)             |
@@ -87,8 +87,10 @@ The old top-level names still work. Each prints one line to stderr and then beha
 | `sf connect <url>`          | `sf hq connect <url>`          |
 | `sf target ls \| use \| rm` | `sf hq target ls \| use \| rm` |
 | `sf token create`           | `sf hq token create`           |
+| `sf todos import`           | `sf order import`              |
+| `sf todos export`           | `sf order export`              |
 
-Message: `deprecated: use "sf hq <sub>"`.
+Message: `deprecated: use "sf hq <sub>"` (`sf order <sub>` for `todos`).
 
 ## HQ connection
 

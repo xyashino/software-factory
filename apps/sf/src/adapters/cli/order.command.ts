@@ -17,6 +17,7 @@ import {
 } from '../../application/procedures/work-orders/test.procedure';
 import { EXIT } from '../../domain/exit-codes';
 import { printJson, printLine, printTable, reportFailure } from './output';
+import { exportCommand, importCommand } from './todos.command';
 import { requiredPositional } from './validate';
 
 type TransitionAction = (typeof TRANSITION_ACTIONS)[number];
@@ -198,6 +199,8 @@ export const orderCommand = defineCommand({
       'Show and change one work order. Needs scope supervisor:write for changes',
   },
   subCommands: {
+    import: importCommand,
+    export: exportCommand,
     show: showCommand,
     test: testCommand,
     resume: transitionCommand('resume', 'Resume a blocked work order'),

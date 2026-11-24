@@ -4,6 +4,7 @@ import {
   mkdtempSync,
   readdirSync,
   readFileSync,
+  rmSync,
   writeFileSync,
 } from 'node:fs';
 import { type AddressInfo } from 'node:net';
@@ -137,13 +138,13 @@ afterAll(() => {
   fixture.current?.server.close();
 });
 
-describe('todos and queue commands', () => {
-  it('lists files on todos import --dry-run without sending a request', async () => {
+describe('order import and queue commands', () => {
+  it('lists todos/ files on order import --dry-run when orders/ is absent', async () => {
     // Arrange
     const hitsBefore = fixture.current?.hits.count ?? 0;
 
     // Act
-    const result = await runCli(['todos', 'import', '--dry-run']);
+    const result = await runCli(['order', 'import', '--dry-run']);
 
     // Assert
     expect(result.code).toBe(0);
@@ -152,13 +153,13 @@ describe('todos and queue commands', () => {
     expect(fixture.current?.hits.count).toBe(hitsBefore);
   });
 
-  it('counts paused work orders on todos import --paused --dry-run and leaves files unchanged', async () => {
+  it('counts paused work orders on order import --paused --dry-run and leaves files unchanged', async () => {
     // Arrange
     const cwd = fixture.current?.cwd ?? '';
     const hitsBefore = fixture.current?.hits.count ?? 0;
 
     // Act
-    const result = await runCli(['todos', 'import', '--paused', '--dry-run']);
+    const result = await runCli(['order', 'import', '--paused', '--dry-run']);
 
     // Assert
     expect(result.code).toBe(0);
@@ -209,5 +210,28 @@ describe('todos and queue commands', () => {
       'cli-05.md',
       'cli-06.md',
     ]);
+  });
+
+  it('reads orders/ instead of todos/ on order import once orders/ exists', async () => {
+    // Arrange
+    const cwd = fixture.current?.cwd ?? '';
+    mkdirSync(join(cwd, 'orders'));
+    writeFileSync(
+      join(cwd, 'orders', 'cli-07.md'),
+      READY_TODO.replaceAll('cli-05', 'cli-07'),
+    );
+
+    try {
+      // Act
+      const result = await runCli(['order', 'import', '--dry-run']);
+
+      // Assert
+      expect(result.code).toBe(0);
+      expect(result.stdout).toContain('dry run: would send 1 file(s)');
+      expect(result.stdout).toContain('send cli-07.md');
+      expect(result.stdout).not.toContain('send cli-05.md');
+    } finally {
+      rmSync(join(cwd, 'orders'), { recursive: true, force: true });
+    }
   });
 });
