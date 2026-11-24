@@ -64,6 +64,17 @@ const TRANSITIONED = {
   order: { orderId: 'wo-1', state: 'cancelled' },
 };
 
+const CREATED = {
+  code: 201,
+  order: {
+    orderId: 'wo-2',
+    slug: 'smoke-test-1',
+    state: 'queued',
+    lineName: 'fast',
+    priority: 'high',
+  },
+};
+
 interface Hit {
   method: string;
   url: string;
@@ -100,6 +111,9 @@ const replyFor = (
   }
   if (method === 'POST' && path === '/api/v1/work-orders/wo-1/transitions') {
     return { status: 200, body: TRANSITIONED };
+  }
+  if (method === 'POST' && path === '/api/v1/work-orders') {
+    return { status: 201, body: CREATED };
   }
   return {
     status: 404,
@@ -334,6 +348,51 @@ describe('incident and order commands', () => {
         body: JSON.stringify({ action: 'cancel' }),
       },
     ]);
+  });
+
+  it('queues a smoke-test order on the fast line by default', async () => {
+    // Arrange
+    const args = ['order', 'test'];
+
+    // Act
+    const result = await runCli(args);
+
+    // Assert
+    expect(result.code).toBe(0);
+    expect(result.stdout).toBe('wo-2 queued line=fast priority=high\n');
+    expect(hitsNow()).toHaveLength(1);
+    expect(hitsNow()[0]?.url).toBe('/api/v1/work-orders');
+    expect(JSON.parse(hitsNow()[0]?.body ?? '')).toMatchObject({
+      projectId: 'software-factory',
+      type: 'chore',
+      lineName: 'fast',
+      priority: 'high',
+      slug: expect.stringMatching(/^smoke-test-\d+$/),
+    });
+  });
+
+  it('forwards --line and --slug and prints the created order as JSON', async () => {
+    // Arrange
+    const args = [
+      'order',
+      'test',
+      '--line',
+      'feature',
+      '--slug',
+      'my-smoke',
+      '--json',
+    ];
+
+    // Act
+    const result = await runCli(args);
+
+    // Assert
+    expect(result.code).toBe(0);
+    expect(JSON.parse(result.stdout)).toEqual({ order: CREATED.order });
+    expect(JSON.parse(hitsNow()[0]?.body ?? '')).toMatchObject({
+      lineName: 'feature',
+      slug: 'my-smoke',
+    });
   });
 
   it('resumes a work order without needing --yes', async () => {
