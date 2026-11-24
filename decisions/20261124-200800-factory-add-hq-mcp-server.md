@@ -16,8 +16,9 @@ tags: [hq, mcp, api]
 - `tools/list` shows only tools the token may call.
 - Errors:
   - Bearer missing/invalid 401, missing scope 403, `Origin` header 403, non-JSON content type 400, body over 1 MiB 413; standard `{code,type,message}` envelope.
-  - Invalid JSON -32700, bad envelope -32600, unknown method or tool -32601/-32602, bad args -32602, all HTTP 200.
+  - Invalid JSON -32700, bad envelope -32600, unknown method -32601, unknown tool or bad args -32602, all HTTP 200.
   - Procedure failure (BaseError or code >= 400) returns result `isError: true`.
 - Response header `Cache-Control: private, no-store`.
 - Contract `packages/hq-contracts/src/mcp.contract.ts`: envelope schema, protocol version, JSON-RPC error codes.
 - Tests: `apps/hq/test/blackbox/mcp.test.ts` (real in-memory SQLite); route index lists 27 endpoints.
+- `apps/web/vitest.config.ts`: `testTimeout` 15s. Work-order web tests hit the 5s default under turbo load (passes standalone); keeps `ci:verify` green.
