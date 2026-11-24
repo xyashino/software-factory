@@ -40,36 +40,37 @@ especially §3 (Cell lifecycle) and §11 (agent reporting). Operator CLI spec:
 
 ## 1. Command tree
 
-| Group | Command | Who runs it | Server endpoint |
-| :---- | :------ | :---------- | :-------------- |
-| init | `sf init` | Supervisor, in a repo | none (writes `.factory/`, `.gitignore`) |
-| project | `sf project add <id> --repo <url>` | Supervisor | `POST /api/v1/projects` |
-| project | `sf project ls` | Supervisor | `GET /api/v1/projects` |
-| hq | `sf hq start` | Supervisor | none (spawns the embedded HQ server) |
-| hq | `sf hq stop` | Supervisor | none (signals the pid file) |
-| hq | `sf hq token admin create [--save] [--global]` | Supervisor | none (admin path in HQ) |
-| hq | `sf hq token create --kind factory_join --name <n>` | Supervisor | `POST /api/v1/tokens` |
-| factory | `sf factory connect <url> --token <join\|->` | Supervisor, once per PC | `POST /api/v1/factories/enroll` |
-| factory | `sf factory start \| stop \| status` | Supervisor, on a Cell machine | Factory daemon `127.0.0.1:7072` |
-| web | `sf web start \| stop \| status` | Supervisor | none (runs the installed web UI, pid in `web.pid`) |
-| cell | `sf cell scale N [--repo <path>] [--lines <names>]` | Supervisor, on a Cell machine | Factory daemon `PUT /scale` (converges Cells to N) |
-| cell | `sf cell start [--name <slug>]` | Factory daemon child only | `claims`, `heartbeats`, `jobs/{id}/transitions` through the relay |
-| cell | `sf cell list` | Supervisor | Factory daemon `GET /scale` (local only) |
-| cell | `sf cell create\|stop\|rm` | removed | exit 2, `use "sf cell scale N"` |
-| todos | `sf todos import` | Supervisor | `POST /api/v1/queue/import` |
-| todos | `sf todos export` | Supervisor | `GET /api/v1/queue/export` |
-| queue | `sf queue` | Supervisor | `GET /api/v1/work-orders`, `GET /api/v1/order-plans` |
-| queue | `sf queue pause \| unpause \| reprioritise \| reset \| cancel` | Supervisor | `POST /api/v1/queue/actions` |
-| plan | `sf plan list` | Supervisor | `GET /api/v1/order-plans` |
-| plan | `sf plan show <slug>` | Supervisor | `GET /api/v1/order-plans` |
-| plan | `sf plan activate \| retry <slug>` | Supervisor | `GET /api/v1/order-plans`, then `POST /api/v1/order-plans/{id}/transitions` |
-| incident | `sf incident list` | Supervisor | `GET /api/v1/incidents` |
-| incident | `sf incident resolve <id> --action ...` | Supervisor | `POST /api/v1/incidents/{id}/resolve` |
-| order | `sf order show <id>` | Supervisor | `GET /api/v1/work-orders/{id}` |
-| order | `sf order resume \| reopen \| cancel <id>` | Supervisor | `POST /api/v1/work-orders/{id}/transitions` |
-| watch | `sf watch` | Supervisor | `GET /api/v1/stream` (SSE) |
-| operator | `sf operator done \| verdict \| block \| context` | Agent in a station job | none (talks to its own Cell, §5) |
-| operator | `sf operator read \| incident` | Agent in a Mechanic job | `incidents/{id}/resolve` through its Cell |
+| Group    | Command                                                        | Who runs it                   | Server endpoint                                                             |
+| :------- | :------------------------------------------------------------- | :---------------------------- | :-------------------------------------------------------------------------- |
+| init     | `sf init`                                                      | Supervisor, in a repo         | none (writes `.factory/`, `.gitignore`)                                     |
+| project  | `sf project add <id> --repo <url>`                             | Supervisor                    | `POST /api/v1/projects`                                                     |
+| project  | `sf project ls`                                                | Supervisor                    | `GET /api/v1/projects`                                                      |
+| hq       | `sf hq start`                                                  | Supervisor                    | none (spawns the embedded HQ server)                                        |
+| hq       | `sf hq stop`                                                   | Supervisor                    | none (signals the pid file)                                                 |
+| hq       | `sf hq token admin create [--save] [--global]`                 | Supervisor                    | none (admin path in HQ)                                                     |
+| hq       | `sf hq token create --kind factory_join --name <n>`            | Supervisor                    | `POST /api/v1/tokens`                                                       |
+| factory  | `sf factory connect <url> --token <join\|->`                   | Supervisor, once per PC       | `POST /api/v1/factories/enroll`                                             |
+| factory  | `sf factory start \| stop \| status`                           | Supervisor, on a Cell machine | Factory daemon `127.0.0.1:7072`                                             |
+| web      | `sf web start \| stop \| status`                               | Supervisor                    | none (runs the installed web UI, pid in `web.pid`)                          |
+| cell     | `sf cell scale N [--repo <path>] [--lines <names>]`            | Supervisor, on a Cell machine | Factory daemon `PUT /scale` (converges Cells to N)                          |
+| cell     | `sf cell start [--name <slug>]`                                | Factory daemon child only     | `claims`, `heartbeats`, `jobs/{id}/transitions` through the relay           |
+| cell     | `sf cell list`                                                 | Supervisor                    | Factory daemon `GET /scale` (local only)                                    |
+| cell     | `sf cell create\|stop\|rm`                                     | removed                       | exit 2, `use "sf cell scale N"`                                             |
+| todos    | `sf todos import`                                              | Supervisor                    | `POST /api/v1/queue/import`                                                 |
+| todos    | `sf todos export`                                              | Supervisor                    | `GET /api/v1/queue/export`                                                  |
+| queue    | `sf queue`                                                     | Supervisor                    | `GET /api/v1/work-orders`, `GET /api/v1/order-plans`                        |
+| queue    | `sf queue pause \| unpause \| reprioritise \| reset \| cancel` | Supervisor                    | `POST /api/v1/queue/actions`                                                |
+| plan     | `sf plan list`                                                 | Supervisor                    | `GET /api/v1/order-plans`                                                   |
+| plan     | `sf plan show <slug>`                                          | Supervisor                    | `GET /api/v1/order-plans`                                                   |
+| plan     | `sf plan activate \| retry <slug>`                             | Supervisor                    | `GET /api/v1/order-plans`, then `POST /api/v1/order-plans/{id}/transitions` |
+| incident | `sf incident list`                                             | Supervisor                    | `GET /api/v1/incidents`                                                     |
+| incident | `sf incident resolve <id> --action ...`                        | Supervisor                    | `POST /api/v1/incidents/{id}/resolve`                                       |
+| order    | `sf order show <id>`                                           | Supervisor                    | `GET /api/v1/work-orders/{id}`                                              |
+| order    | `sf order resume \| reopen \| cancel <id>`                     | Supervisor                    | `POST /api/v1/work-orders/{id}/transitions`                                 |
+| order    | `sf order test [--line <name>] [--slug <slug>]`                | Supervisor                    | `POST /api/v1/work-orders` (smoke-test chore, no `todos/` file)             |
+| watch    | `sf watch`                                                     | Supervisor                    | `GET /api/v1/stream` (SSE)                                                  |
+| operator | `sf operator done \| verdict \| block \| context`              | Agent in a station job        | none (talks to its own Cell, §5)                                            |
+| operator | `sf operator read \| incident`                                 | Agent in a Mechanic job       | `incidents/{id}/resolve` through its Cell                                   |
 
 Open verbs (`answer`, `context` for the Operator, `tell`) follow the decisions in
 [`hq.md` §11.6](./hq.md).
@@ -78,14 +79,14 @@ Open verbs (`answer`, `context` for the Operator, `tell`) follow the decisions i
 
 The old top-level names still work. Each prints one line to stderr and then behaves exactly as before (same stdout, same exit code):
 
-| Old | New |
-| :--- | :--- |
-| `sf server start` | `sf hq start` |
-| `sf server stop` | `sf hq stop` |
-| `sf server token create` | `sf hq token admin create` |
-| `sf connect <url>` | `sf hq connect <url>` |
+| Old                         | New                            |
+| :-------------------------- | :----------------------------- |
+| `sf server start`           | `sf hq start`                  |
+| `sf server stop`            | `sf hq stop`                   |
+| `sf server token create`    | `sf hq token admin create`     |
+| `sf connect <url>`          | `sf hq connect <url>`          |
 | `sf target ls \| use \| rm` | `sf hq target ls \| use \| rm` |
-| `sf token create` | `sf hq token create` |
+| `sf token create`           | `sf hq token create`           |
 
 Message: `deprecated: use "sf hq <sub>"`.
 
@@ -93,10 +94,10 @@ Message: `deprecated: use "sf hq <sub>"`.
 
 `sf` reads the HQ address and the supervisor token from one resolver, in this order:
 
-| Setting | Order (first set wins) | Old name (fallback) |
-| :--- | :--- | :--- |
-| URL | `HQ_URL`, then the active saved target, then `http://127.0.0.1:7070` | `FACTORY_URL` |
-| Token | `HQ_TOKEN`, then `.factory-local/supervisor.token`, then the active saved target, then `~/.config/factory/token` | `FACTORY_TOKEN` |
+| Setting | Order (first set wins)                                                                                           | Old name (fallback) |
+| :------ | :--------------------------------------------------------------------------------------------------------------- | :------------------ |
+| URL     | `HQ_URL`, then the active saved target, then `http://127.0.0.1:7070`                                             | `FACTORY_URL`       |
+| Token   | `HQ_TOKEN`, then `.factory-local/supervisor.token`, then the active saved target, then `~/.config/factory/token` | `FACTORY_TOKEN`     |
 
 Old names are read silently when the `HQ_*` name is unset. `HQ_*` wins when both are set. Token values are never printed.
 
@@ -158,7 +159,7 @@ Only the Factory daemon talks to HQ. The Cell talks to the Factory relay. Agents
 2. **Project and lines.** `sf cell start` reads `.factory/config.json` for `project` and
    `.factory/lines/` for `allowedLines` (filtered by `CELL_LINES`).
 3. **Claim loop.** `POST {relay}/api/v1/cells/claims` with `{ waitMs: 25000, projectId,
-   allowedLines, runners }`. The relay adds the Factory credential and `x-cell-id`. An empty reply
+allowedLines, runners }`. The relay adds the Factory credential and `x-cell-id`. An empty reply
    means no work; loop again.
 4. **Check the Line.** If `.factory/lines/<line>.yml` is missing or invalid, send
    `transitions { action: line_unavailable }`. The reply may carry the next Job.
@@ -191,14 +192,15 @@ Only the Factory daemon talks to HQ. The Cell talks to the Factory relay. Agents
 
 Line definitions (`.factory/lines/<line>.yml`) define the stations, operators, and delivery rules for work orders. Tasks specify their line in work order frontmatter (`line: <name>` in `todos/*.md`). Cells claim jobs matching their available runners and allowed lines (`sf cell scale N --lines <names>` or `CELL_LINES`).
 
-| Line | Runner / Model | Stations | Description |
-| :--- | :------------- | :------- | :---------- |
-| `gemini` | `antigravity` (`gemini-3.8-flash-medium`) | `build` → `quality-gate` → `deliver` (mechanic: `antigravity`) | Production line running with the Gemini runner (`antigravity`). Direct builder with quality gate inspection and delivery. Requires `antigravity` CLI available in `$PATH`. |
-| `fast` | `claude` (`haiku`) | `build` → `quality-gate` → `deliver` (mechanic: `antigravity`) | Fast direct builder build with quality gate and direct delivery (for chores, docs, style). |
-| `feature` | `claude` (`sonnet`) | `plan` → `build` → `quality-gate` → `audit` → `deliver` (mechanic: `claude`) | Full feature line: upfront plan, build, quality-gate, audit, and delivery. |
-| `standard` | `claude` (`haiku`), `antigravity` (`gemini-3.8-flash-medium`) | `build` → `quality-gate` → `audit` (`doctor`) → `deliver` (mechanic: `antigravity`) | Direct builder build with quality gate and doctor audit (bypasses planning). |
+| Line       | Runner / Model                                                | Stations                                                                            | Description                                                                                                                                                                |
+| :--------- | :------------------------------------------------------------ | :---------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `gemini`   | `antigravity` (`gemini-3.8-flash-medium`)                     | `build` → `quality-gate` → `deliver` (mechanic: `antigravity`)                      | Production line running with the Gemini runner (`antigravity`). Direct builder with quality gate inspection and delivery. Requires `antigravity` CLI available in `$PATH`. |
+| `fast`     | `claude` (`haiku`)                                            | `build` → `quality-gate` → `deliver` (mechanic: `antigravity`)                      | Fast direct builder build with quality gate and direct delivery (for chores, docs, style).                                                                                 |
+| `feature`  | `claude` (`sonnet`)                                           | `plan` → `build` → `quality-gate` → `audit` → `deliver` (mechanic: `claude`)        | Full feature line: upfront plan, build, quality-gate, audit, and delivery.                                                                                                 |
+| `standard` | `claude` (`haiku`), `antigravity` (`gemini-3.8-flash-medium`) | `build` → `quality-gate` → `audit` (`doctor`) → `deliver` (mechanic: `antigravity`) | Direct builder build with quality gate and doctor audit (bypasses planning).                                                                                               |
 
 To run tasks on the `gemini` line:
+
 1. Ensure the Gemini runner (`antigravity`) is installed on the worker host.
 2. Set `line: gemini` in the task work order (`todos/<name>.md`).
 3. Scale Cells for the project: `sf cell scale 1 --lines gemini` (or allow all lines by omitting `--lines`).
@@ -225,12 +227,12 @@ To run tasks on the `gemini` line:
 
 ## 6. Exit codes
 
-| Code | Meaning |
-| :--- | :------ |
-| `0` | Success |
-| `1` | HQ refused (`400`, `401`, `403`, `409`, `500`) |
-| `2` | Bad arguments, missing environment variable, or unreadable file. Nothing is sent |
-| `3` | HQ or Cell unreachable |
+| Code | Meaning                                                                          |
+| :--- | :------------------------------------------------------------------------------- |
+| `0`  | Success                                                                          |
+| `1`  | HQ refused (`400`, `401`, `403`, `409`, `500`)                                   |
+| `2`  | Bad arguments, missing environment variable, or unreadable file. Nothing is sent |
+| `3`  | HQ or Cell unreachable                                                           |
 
 ## 7. Shared contracts
 

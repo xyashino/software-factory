@@ -1,5 +1,7 @@
+import { resolve } from 'node:path';
 import { defineCommand } from 'citty';
 import { run } from '../../bootstrap/run';
+import { REPO_CONFIG_PATH } from '../../config';
 import {
   type WorkOrderDetail,
   showWorkOrder,
@@ -9,6 +11,10 @@ import {
   type TransitionResult,
   transitionWorkOrder,
 } from '../../application/procedures/work-orders/transition.procedure';
+import {
+  createTestWorkOrder,
+  type TestOrderResult,
+} from '../../application/procedures/work-orders/test.procedure';
 import { EXIT } from '../../domain/exit-codes';
 import { printJson, printLine, printTable, reportFailure } from './output';
 import { requiredPositional } from './validate';
@@ -63,6 +69,16 @@ const printTransition = (result: TransitionResult, json: boolean): void => {
   printLine(`${result.order.orderId} ${result.order.state}`);
 };
 
+const printTest = (result: TestOrderResult, json: boolean): void => {
+  if (json) {
+    printJson(result);
+    return;
+  }
+  printLine(
+    `${result.order.orderId} ${result.order.state} line=${result.order.lineName} priority=${result.order.priority}`,
+  );
+};
+
 const runShow = async (orderId: string, json: boolean): Promise<number> => {
   const result = await run(showWorkOrder, { orderId }, 'supervisor');
   if (result.kind === 'ok') {
@@ -84,6 +100,27 @@ const runTransition = async (
   );
   if (result.kind === 'ok') {
     printTransition(result.value, options.json);
+    return EXIT.ok;
+  }
+  return reportFailure(result);
+};
+
+const runTest = async (options: {
+  line?: string;
+  slug?: string;
+  json: boolean;
+}): Promise<number> => {
+  const result = await run(
+    createTestWorkOrder,
+    {
+      configPath: resolve(process.cwd(), REPO_CONFIG_PATH),
+      lineName: options.line,
+      slug: options.slug,
+    },
+    'supervisor',
+  );
+  if (result.kind === 'ok') {
+    printTest(result.value, options.json);
     return EXIT.ok;
   }
   return reportFailure(result);
@@ -128,6 +165,32 @@ const transitionCommand = (action: TransitionAction, description: string) =>
     },
   });
 
+const testCommand = defineCommand({
+  meta: {
+    name: 'test',
+    description:
+      'Queue a smoke-test chore order for this repo without a todos file. Needs scope supervisor:write',
+  },
+  args: {
+    line: {
+      type: 'string',
+      description: 'Line to queue on (default fast)',
+    },
+    slug: {
+      type: 'string',
+      description: 'Order slug (default smoke-test-<epoch seconds>)',
+    },
+    json: { type: 'boolean', default: false },
+  },
+  run: async ({ args }) => {
+    process.exitCode = await runTest({
+      line: args.line,
+      slug: args.slug,
+      json: args.json,
+    });
+  },
+});
+
 export const orderCommand = defineCommand({
   meta: {
     name: 'order',
@@ -136,6 +199,7 @@ export const orderCommand = defineCommand({
   },
   subCommands: {
     show: showCommand,
+    test: testCommand,
     resume: transitionCommand('resume', 'Resume a blocked work order'),
     reopen: transitionCommand('reopen', 'Reopen a completed work order'),
     cancel: transitionCommand('cancel', 'Cancel a work order (needs --yes)'),
