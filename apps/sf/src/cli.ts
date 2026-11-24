@@ -11,6 +11,7 @@ import { legacyCommands } from './adapters/cli/legacy.command';
 import { operatorCommand } from './adapters/cli/operator.command';
 import { orderCommand } from './adapters/cli/order.command';
 import { printError } from './adapters/cli/output';
+import { planCommand } from './adapters/cli/plan.command';
 import { projectCommand } from './adapters/cli/project.command';
 import { queueCommand } from './adapters/cli/queue.command';
 import { argsOf, resolveCommand } from './adapters/cli/resolve-command';
@@ -39,6 +40,7 @@ const main = defineCommand({
     factory: factoryCommand,
     todos: todosCommand,
     queue: queueCommand,
+    plan: planCommand,
     incident: incidentCommand,
     order: orderCommand,
     watch: watchCommand,

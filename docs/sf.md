@@ -60,6 +60,9 @@ especially §3 (Cell lifecycle) and §11 (agent reporting). Operator CLI spec:
 | todos | `sf todos export` | Supervisor | `GET /api/v1/queue/export` |
 | queue | `sf queue` | Supervisor | `GET /api/v1/work-orders`, `GET /api/v1/order-plans` |
 | queue | `sf queue pause \| unpause \| reprioritise \| reset \| cancel` | Supervisor | `POST /api/v1/queue/actions` |
+| plan | `sf plan list` | Supervisor | `GET /api/v1/order-plans` |
+| plan | `sf plan show <slug>` | Supervisor | `GET /api/v1/order-plans` |
+| plan | `sf plan activate \| retry <slug>` | Supervisor | `GET /api/v1/order-plans`, then `POST /api/v1/order-plans/{id}/transitions` |
 | incident | `sf incident list` | Supervisor | `GET /api/v1/incidents` |
 | incident | `sf incident resolve <id> --action ...` | Supervisor | `POST /api/v1/incidents/{id}/resolve` |
 | order | `sf order show <id>` | Supervisor | `GET /api/v1/work-orders/{id}` |
@@ -118,7 +121,7 @@ apps/sf/
 │   │   ├── ports/                  # hq, hq-link, factory, factory-credential, git, pr,
 │   │   │                           # process, runner, operator-endpoint, fs, clock, ...
 │   │   └── procedures/             # one folder per command group: cell, connection, doctor, factory,
-│   │                               # hq, incidents, init, operator, projects, queue, setup,
+│   │                               # hq, incidents, init, operator, plans, projects, queue, setup,
 │   │                               # todos, tokens, watch, web, work-orders
 │   ├── adapters/
 │   │   ├── cli/                    # citty commands; hq.command.ts mounts HQ, legacy.command.ts holds deprecated names
