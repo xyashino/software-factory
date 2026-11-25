@@ -1,6 +1,7 @@
 import { Outlet } from '@tanstack/react-router';
 import { Factory, Moon, Radio, Sun } from 'lucide-react';
 import { useState, useSyncExternalStore } from 'react';
+import { AppUpdateBanner } from '@/shared/app-update/app-update-banner';
 import {
   getStreamStatus,
   watchStreamStatus,
@@ -73,6 +74,7 @@ export const AppShell = () => {
         <Outlet />
       </main>
 
+      <AppUpdateBanner />
       <ToastViewport />
     </div>
   );

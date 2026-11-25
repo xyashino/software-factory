@@ -16,6 +16,7 @@ const DB_PATH = '/data/sf/factory.db';
 const PROJECT = 'software-factory';
 const SECRET = 'top-secret-token';
 const SUPERVISOR: Access = { kind: 'supervisor' };
+const CLI_VERSION = '1.2.0';
 
 const INPUT = {
   repoRoot: REPO,
@@ -23,6 +24,7 @@ const INPUT = {
   linesDir: LINES_DIR,
   dataDir: DATA_DIR,
   dbPath: DB_PATH,
+  cliVersion: CLI_VERSION,
 };
 
 interface Machine {
@@ -34,6 +36,7 @@ interface Machine {
   secret: string | null;
   projects: string[];
   rejectToken: boolean;
+  serverVersion: string | null;
 }
 
 const lineYaml = (name: string, runner: string, headless = true): string =>
@@ -60,13 +63,24 @@ const healthy = (overrides: Partial<Machine> = {}): Machine => ({
   secret: SECRET,
   projects: [PROJECT],
   rejectToken: false,
+  serverVersion: CLI_VERSION,
   ...overrides,
 });
 
 const doctorOn = (machine: Machine): Promise<DoctorResult> => {
   const fake = createFakePorts({
     secret: machine.secret,
-    reply: () => {
+    reply: (call) => {
+      if (call.route === '/api/v1/version') {
+        if (machine.serverVersion === null) {
+          throw new Error('404 not found');
+        }
+        return {
+          code: 200,
+          version: machine.serverVersion,
+          protocolVersion: 1,
+        };
+      }
       if (machine.rejectToken) {
         throw new Error('401 unauthorized');
       }
@@ -249,6 +263,45 @@ describe('sf doctor', () => {
       status: 'missing',
       fix: `sf project add ${PROJECT} --repo <repo url>`,
     });
+  });
+
+  it('warns with both versions when sf and the server differ', async () => {
+    // Arrange
+    const machine = healthy({ serverVersion: '1.1.0' });
+
+    // Act
+    const result = await doctorOn(machine);
+
+    // Assert
+    expect(findCheck(result, 'version')).toMatchObject({
+      status: 'warn',
+      detail: expect.stringContaining('1.2.0'),
+    });
+    expect(findCheck(result, 'version').detail).toContain('1.1.0');
+    expect(result.ok).toBe(true);
+  });
+
+  it('confirms the versions match when sf and the server agree', async () => {
+    // Arrange
+    const machine = healthy();
+
+    // Act
+    const result = await doctorOn(machine);
+
+    // Assert
+    expect(findCheck(result, 'version').status).toBe('ok');
+  });
+
+  it('warns when the server predates the version endpoint', async () => {
+    // Arrange
+    const machine = healthy({ serverVersion: null });
+
+    // Act
+    const result = await doctorOn(machine);
+
+    // Assert
+    expect(findCheck(result, 'version').status).toBe('warn');
+    expect(result.ok).toBe(true);
   });
 
   it('treats a missing gh login as a warning that does not fail the check', async () => {

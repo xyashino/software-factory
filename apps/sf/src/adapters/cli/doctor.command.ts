@@ -14,6 +14,7 @@ import {
 } from '../../application/procedures/doctor/doctor.procedure';
 import { hqSettingOf } from '../../bootstrap/hq-env';
 import { EXIT } from '../../domain/exit-codes';
+import { SF_VERSION } from '../../version';
 import { printJson, printLine, reportFailure } from './output';
 
 const formatCheck = (item: DoctorCheck): string =>
@@ -31,6 +32,7 @@ const runDiagnose = async (json: boolean): Promise<number> => {
       linesDir: resolve(cwd, LINES_DIR),
       dataDir: hqSettingOf('DATA_DIR') ?? DEFAULT_DATA_DIR,
       dbPath: hqSettingOf('DB_PATH') ?? DEFAULT_DB_PATH,
+      cliVersion: SF_VERSION,
     },
     () => buildContext(),
   );

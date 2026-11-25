@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { Access } from '../../../domain/access';
+import { SF_VERSION } from '../../../version';
 import { ArgumentError, Refused } from '../../core/errors';
 import { define, type Context, type Ports } from '../../core/procedure';
 import { readProjectId } from '../../core/repo-access';
@@ -75,6 +76,7 @@ export const runSetup = define({ kind: 'supervisor' })(
       linesDir: input.linesDir,
       dataDir: input.dataDir,
       dbPath: input.dbPath,
+      cliVersion: SF_VERSION,
     },
     ctx,
   );

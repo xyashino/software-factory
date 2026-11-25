@@ -11,6 +11,7 @@ import { listProjects } from '../projects/list-projects.procedure';
 const BINARY_NOT_FOUND = 127;
 const LINE_FILE = /\.ya?ml$/;
 const SUPERVISOR: Access = { kind: 'supervisor' };
+const VERSION_ROUTE = '/api/v1/version';
 
 const DoctorSchema = z
   .object({
@@ -19,8 +20,11 @@ const DoctorSchema = z
     linesDir: z.string().min(1),
     dataDir: z.string().min(1),
     dbPath: z.string().min(1),
+    cliVersion: z.string().min(1),
   })
   .strict();
+
+const versionReplySchema = z.object({ version: z.string() });
 
 export type CheckStatus = 'ok' | 'warn' | 'missing';
 
@@ -169,9 +173,41 @@ const repoProjectOf = async (
   }
 };
 
+const versionCheck = async (
+  ctx: Ports,
+  cliVersion: string,
+): Promise<DoctorCheck> => {
+  const url = ctx.connection.url;
+  let hqVersion: string;
+  try {
+    // The version route is public, so the bearer is not sent.
+    const reply = versionReplySchema.parse(
+      await ctx.hq.get(VERSION_ROUTE, {}, ''),
+    );
+    hqVersion = reply.version;
+  } catch {
+    return check(
+      'version',
+      'warn',
+      `server at ${url} does not report a version, sf is ${cliVersion}`,
+      'restart the server with the same sf build',
+    );
+  }
+  if (hqVersion === cliVersion) {
+    return check('version', 'ok', `sf and server both at ${cliVersion}`);
+  }
+  return check(
+    'version',
+    'warn',
+    `sf ${cliVersion} differs from server ${hqVersion} at ${url}`,
+    'install the matching sf build or restart the server on it',
+  );
+};
+
 const accessChecks = async (
   ctx: Ports,
   projectId: string | null,
+  cliVersion: string,
 ): Promise<DoctorCheck[]> => {
   const url = ctx.connection.url;
   if (!(await ctx.hq.probe())) {
@@ -187,9 +223,11 @@ const accessChecks = async (
     ];
   }
   const server = check('server', 'ok', `server answers at ${url}`);
+  const version = await versionCheck(ctx, cliVersion);
   if ((await ctx.tokens.secret()) === null) {
     return [
       server,
+      version,
       check('token', 'missing', 'no token stored', recoveryCommandOf(url)),
       check('project', 'warn', 'project not checked, no token'),
     ];
@@ -204,6 +242,7 @@ const accessChecks = async (
   } catch {
     return [
       server,
+      version,
       check(
         'token',
         'missing',
@@ -217,6 +256,7 @@ const accessChecks = async (
   if (projectId === null) {
     return [
       server,
+      version,
       token,
       check('project', 'warn', 'project not checked, repo config missing'),
     ];
@@ -229,7 +269,7 @@ const accessChecks = async (
         `project ${projectId} not registered on ${url}`,
         `sf project add ${projectId} --repo <repo url>`,
       );
-  return [server, token, project];
+  return [server, version, token, project];
 };
 
 const storageChecks = async (
@@ -296,7 +336,7 @@ export const runDoctor = define({ kind: 'supervisor' })(
           'run sf init in the repo',
         )
       : check('repo-config', 'ok', `repo config names project ${projectId}`),
-    ...(await accessChecks(ctx, projectId)),
+    ...(await accessChecks(ctx, projectId, input.cliVersion)),
     ...(await storageChecks(ctx, input)),
     ...invalid.map((file) =>
       check(
