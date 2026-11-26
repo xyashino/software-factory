@@ -7,21 +7,21 @@ plan: standalone-factory
 depends_on: factory-queue-import-endpoint
 ---
 
-# sf-local-mode-cli: add --local flag to sf todos, queue, order, incident, and watch commands
+# sf-local-mode-cli: target local apps/factory by default in sf CLI commands
 
 ## Objective
 
-Update `apps/sf` so `sf todos import|export`, `sf queue`, `sf order`, `sf incident`, and `sf watch` accept `--local` to execute against the local `apps/factory` server (`127.0.0.1:7072`) without an HQ server or supervisor token file.
+Update `apps/sf` so `sf todos import|export`, `sf queue`, `sf order`, `sf incident`, and `sf watch` target local `apps/factory` (`127.0.0.1:7072`) by default without HQ server or supervisor token file, while allowing optional `--hq` flag to target remote HQ explicitly.
 
 ## Context
 
-Part of [`docs/standalone-factory-plan.md`](../docs/standalone-factory-plan.md).
+Part of [`docs/plans/standalone-factory-plan.md`](../docs/plans/standalone-factory-plan.md). Local Factory is default execution engine; no `--local` ceremony needed on every CLI command.
 
 Verified current behavior:
 
 - `apps/sf/src/adapters/cli/todos.command.ts` runs `importTodos` and `exportTodos` against `ctx.hq` (`apps/sf/src/application/procedures/todos/{import,export}.procedure.ts`).
-- `apps/sf/src/adapters/cli/{queue,order,incident,watch}.command.ts` call `readSecret(ctx)` (`apps/sf/src/application/core/repo-access.ts`), which requires a supervisor token file (`.factory-local/supervisor.token` or `$XDG_CONFIG_HOME/sf/config.json`) and targets `ctx.hq`.
-- With `factory-local-engine` and `factory-queue-import-endpoint`, `apps/factory` exposes `POST /queue/import` and `/api/v1/*` on loopback (`127.0.0.1:7072`) when not connected to HQ, and refuses `--local` with `409 Conflict` when connected to HQ.
+- `apps/sf/src/adapters/cli/{queue,order,incident,watch}.command.ts` call `readSecret(ctx)` (`apps/sf/src/application/core/repo-access.ts`), which requires `.factory-local/supervisor.token` or `$XDG_CONFIG_HOME/sf/config.json` and targets `ctx.hq`.
+- With `factory-local-engine` and `factory-queue-import-endpoint`, `apps/factory` exposes `POST /queue/import` and `/api/v1/*` on loopback `127.0.0.1:7072`.
 
 ## Scope
 
@@ -32,33 +32,28 @@ Verified current behavior:
 
 ## Implementation Plan
 
-1. **`sf todos import [--local]` (`apps/sf/src/adapters/cli/todos.command.ts`, `import.procedure.ts`)**:
-   - Add `local: { type: 'boolean', default: false }` flag to `sf todos import` and `sf todos export`.
-   - When `local: true`, `importTodos` calls `ctx.factory.post('/queue/import', { repoRoot, dir, dryRun, paused, local: true })` (no supervisor token required).
-   - When `local: false` and `apps/factory` is running and connected to HQ, forward via `ctx.factory.post('/queue/import', { repoRoot, dir, dryRun, paused, local: false })` (or fallback to `ctx.hq` when targeting remote HQ directly).
-2. **`--local` targeting for `sf queue`, `sf order`, `sf incident`, `sf watch`**:
-   - Add `--local` boolean flag to:
-     - `sf queue list|pause|unpause|reset|cancel|reprioritise` (`apps/sf/src/adapters/cli/queue.command.ts`)
-     - `sf order show|resume|reopen|cancel` (`apps/sf/src/adapters/cli/order.command.ts`)
-     - `sf incident list|show|resolve` (`apps/sf/src/adapters/cli/incident.command.ts`)
-     - `sf watch` (`apps/sf/src/adapters/cli/watch.command.ts`)
-   - In procedures (`queue/{list,actions}.procedure.ts`, `work-orders/{show,transition}.procedure.ts`, `incidents/{list,resolve}.procedure.ts`, `watch/stream.procedure.ts`, `todos/export.procedure.ts`), when `local: true`:
-     - Target `FACTORY_DAEMON_URL` (`http://127.0.0.1:7072`) instead of `ctx.hq` (`connection.url`) and skip `readSecret(ctx)` (use loopback bearer `'local'`).
-     - If `apps/factory` is not running, surface `factory not running: run "sf factory start"`.
-     - If `apps/factory` is connected to HQ, `apps/factory` returns `409` (`factory is connected to HQ; disconnect or omit --local`), which `sf` reports with `EXIT.refused`.
-3. **Update docs**:
-   - Document `--local` workflow (`sf factory start` -> `sf todos import --local` -> `sf cell scale 1` -> `sf queue list --local`) in `docs/sf.md`, `docs/cell.md`, and `docs/architecture.md`.
+1. **Default Local Factory Routing (`apps/sf/src/adapters/cli/` and `procedures/`)**:
+   - Route `sf todos import|export`, `sf queue list|pause|unpause|reset|cancel|reprioritise`, `sf order show|resume|reopen|cancel`, `sf incident list|show|resolve`, and `sf watch` to `FACTORY_DAEMON_URL` (`http://127.0.0.1:7072`) by default with loopback bearer `'local'` (skip `readSecret(ctx)`).
+   - For `sf todos import`, call `ctx.factory.post('/queue/import', { repoRoot, dir, dryRun, paused })`.
+   - If `apps/factory` is unreachable, surface clear actionable error: `factory not running: run "sf factory start"`.
+2. **Optional `--hq` Explicit Target**:
+   - Add `hq: { type: 'boolean', default: false }` flag to the commands above.
+   - When `--hq` is passed, resolve `connection.url` and `readSecret(ctx)` and call HQ directly (preserving existing remote HQ supervisor behavior).
+3. **Update Docs**:
+   - Update `docs/apps/sf.md` and `docs/features/cells-and-factory.md` for local-first workflow (`sf factory start` -> `sf todos import` -> `sf cell scale 1` -> `sf queue`) and optional `--hq` override.
 4. **Tests**:
    - Black-box CLI/procedure tests in `apps/sf/test/`:
-     - `sf todos import --local` and `sf queue list --local` succeed against a standalone Factory without `.factory-local/supervisor.token`.
-     - Passing `--local` when Factory is connected to HQ exits with `EXIT.refused` (`409`).
+     - Default `sf todos import`, `sf queue`, `sf order`, `sf incident` succeed against local Factory without `.factory-local/supervisor.token` or HQ.
+     - Passing `--hq` targets configured HQ URL and uses supervisor token.
+     - Stopped Factory prints `factory not running: run "sf factory start"`.
 
 ## Acceptance Criteria
 
-- [ ] `sf todos import --local`, `sf todos export --local`, `sf queue * --local`, `sf order * --local`, `sf incident * --local`, and `sf watch --local` talk to local `apps/factory` without requiring an HQ server or supervisor token.
-- [ ] Running any `--local` command while `apps/factory` is connected to HQ fails with `EXIT.refused` (`factory is connected to HQ; disconnect or omit --local`).
-- [ ] Docs (`docs/sf.md`, `docs/cell.md`, `docs/architecture.md`) cover standalone `--local` mode and `HQ <-> Factory <-> Cells` connected mode.
+- [ ] `sf todos`, `sf queue`, `sf order`, `sf incident`, and `sf watch` target local `apps/factory` by default without HQ or supervisor token.
+- [ ] `--hq` flag routes commands to configured HQ server with supervisor token.
+- [ ] Stopped Factory surfaces clear startup hint.
+- [ ] Docs reflect local-first default workflow.
 - [ ] Tests follow `testing` rules: black box, Arrange/Act/Assert, story-style names, public behavior only.
 - [ ] One new ADR in `decisions/` (`decision-log` rule).
 - [ ] Strict TypeScript, no `any`, no loose assertions.
-- [ ] `bun run ci:verify` passes.
+- [ ] `bun run ci:verify` passes. Package-scoped `bun --filter <pkg> test|lint|check-types` allowed while working.

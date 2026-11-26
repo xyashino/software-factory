@@ -1,6 +1,6 @@
 ---
-status: queued
-priority: medium
+status: paused
+priority: low
 line: feature
 type: feat
 plan: web-eda
@@ -11,7 +11,7 @@ depends_on: web-incidents-module
 
 ## Objective
 
-Notify supervisors via Web Push and an in-app notification center in `apps/web` when an incident escalates or a work order is delivered.
+Notify supervisors via Web Push and an in-app notification center in `apps/web` when an incident escalates or a work order is delivered. Paused while forge-native `sf:andon` Issues (`sf-forge-andon-issue-and-draft-pr`) provide native GitHub/GitLab notifications first.
 
 ## Context
 
@@ -40,6 +40,7 @@ Autonomous runs stall silently until a human checks the CLI or dashboard. Parka 
 - [ ] Escalated incidents and delivered work orders create deduplicated notifications.
 - [ ] Supervisors can view, mark read, and toggle Web Push from `AppShell`.
 - [ ] Missing VAPID keys disable push cleanly without failing HQ startup.
-- [ ] HQ and web tests pass.
-- [ ] One new ADR in `decisions/`.
-- [ ] `bun run ci:verify` passes.
+- [ ] Tests follow `testing` rules: black box, Arrange/Act/Assert, story-style names, public behavior only.
+- [ ] One new ADR in `decisions/` (`decision-log` rule).
+- [ ] Strict TypeScript, no `any`, no loose assertions.
+- [ ] `bun run ci:verify` passes. Package-scoped `bun --filter <pkg> test|lint|check-types` allowed while working.

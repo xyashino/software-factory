@@ -1,6 +1,6 @@
 ---
-status: queued
-priority: medium
+status: paused
+priority: low
 line: standard
 type: feat
 plan: web-eda
@@ -11,7 +11,7 @@ depends_on: web-navigation-and-overview
 
 ## Objective
 
-Implement `src/modules/tokens/` in `apps/web` so supervisors with `admin:tokens` scope can create, rotate, and revoke HQ tokens with show-once secret UX.
+Implement `src/modules/tokens/` in `apps/web` so supervisors with `admin:tokens` scope can create, rotate, and revoke HQ tokens with show-once secret UX. Paused while CLI `sf hq token` covers thin-HQ token setup.
 
 ## Context
 
@@ -40,6 +40,7 @@ Implement `src/modules/tokens/` in `apps/web` so supervisors with `admin:tokens`
 - [ ] Supervisors can create and revoke tokens via `/tokens` with show-once secret display.
 - [ ] `403` from HQ renders an actionable permission notice instead of a crash.
 - [ ] Plaintext secrets are never stored in `localStorage`, URLs, or logs.
-- [ ] MSW black-box tests pass.
-- [ ] One new ADR in `decisions/`.
-- [ ] `bun run ci:verify` passes.
+- [ ] Tests follow `testing` rules: black box, Arrange/Act/Assert, story-style names, public behavior only.
+- [ ] One new ADR in `decisions/` (`decision-log` rule).
+- [ ] Strict TypeScript, no `any`, no loose assertions.
+- [ ] `bun run ci:verify` passes. Package-scoped `bun --filter <pkg> test|lint|check-types` allowed while working.

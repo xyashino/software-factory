@@ -1,5 +1,5 @@
 ---
-status: queued
+status: paused
 priority: low
 line: standard
 type: feat
@@ -11,11 +11,11 @@ depends_on: web-navigation-and-overview
 
 ## Objective
 
-Add a lightweight in-flight deduplicating TTL `RequestCache` with a generation counter to `apps/web/src/shared/request-cache/` so rapid tab switching does not fire duplicate BFF requests or apply stale responses after mutations.
+Add a lightweight in-flight deduplicating TTL `RequestCache` with a generation counter to `apps/web/src/shared/request-cache/` so rapid tab switching does not fire duplicate BFF requests or apply stale responses after mutations. Paused until thin-HQ Web UI contracts settle.
 
 ## Context
 
-Inspired by `gon-stack/apps/parka/src/shared/request-cache/request-cache.ts` (30s TTL + generation invalidation). As `apps/web` grows to 6 EDA modules (Overview, Work Orders, Incidents, Plans, Factories, Tokens), navigating back and forth or receiving bursts of SSE events should deduplicate concurrent reads and invalidate cleanly on writes.
+Inspired by `gon-stack/apps/parka/src/shared/request-cache/request-cache.ts` (30s TTL + generation invalidation). As `apps/web` grows across EDA modules, navigating back and forth or receiving bursts of SSE events should deduplicate concurrent reads and invalidate cleanly on writes.
 
 ## Scope
 
@@ -35,6 +35,7 @@ Inspired by `gon-stack/apps/parka/src/shared/request-cache/request-cache.ts` (30
 
 - [ ] Concurrent calls with the same key share one in-flight promise.
 - [ ] Mutations invalidate cached entries and prevent stale in-flight responses from overwriting fresh state.
-- [ ] Unit and MSW black-box tests pass.
-- [ ] One new ADR in `decisions/`.
-- [ ] `bun run ci:verify` passes.
+- [ ] Tests follow `testing` rules: black box, Arrange/Act/Assert, story-style names, public behavior only.
+- [ ] One new ADR in `decisions/` (`decision-log` rule).
+- [ ] Strict TypeScript, no `any`, no loose assertions.
+- [ ] `bun run ci:verify` passes. Package-scoped `bun --filter <pkg> test|lint|check-types` allowed while working.
