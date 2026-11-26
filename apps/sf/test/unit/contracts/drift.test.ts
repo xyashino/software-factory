@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 const CLI_CONTRACTS = new URL('../../../src/contracts/', import.meta.url);
 const OPERATOR_DOCS = new URL(
-  '../../../../../docs/operator.md',
+  '../../../../../docs/apps/operator.md',
   import.meta.url,
 );
 

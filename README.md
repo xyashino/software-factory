@@ -1,6 +1,6 @@
 # software-factory
 
-Monorepo hosting **SoftwareFactory** ([docs](docs/README.md): [architecture](docs/architecture.md), [sf](docs/sf.md), [factory](docs/hq.md)), an autonomous AI harness that turns
+Monorepo hosting **SoftwareFactory** ([docs](docs/README.md): [architecture](docs/architecture/overview.md), [boundaries](docs/architecture/boundaries.md), [features](docs/features/README.md), [sf](docs/apps/sf.md), [hq](docs/apps/hq.md)), an autonomous AI harness that turns
 `todos/*.md` work orders into verified Pull Requests via declarative production lines.
 
 ## Main idea
@@ -17,6 +17,7 @@ The system is modeled as an automated software factory:
 | ---------------------------- | --------------------------------------------------------------------------- |
 | `apps/sf`                    | `sf`: the single CLI binary (HQ, Factory daemon, Cell, Supervisor commands) |
 | `apps/hq`                    | HQ HTTP server and storage                                                  |
+| `apps/web`                   | Reference EDA Supervisor SPA + Astro SSR BFF                                |
 | `apps/web-demo`              | Web UI served by `sf web start`                                             |
 | `packages/hq-contracts`      | HQ wire contracts shared by HQ, `sf` and web                                |
 | `packages/nitpick`           | Rules/skills engine; generates `.agents/` from `.nitpick/`                  |
@@ -149,7 +150,7 @@ sf order import && sf queue                # push orders/*.md, see the queue
 sf hq stop
 ```
 
-Run `sf init`, `sf project add` and `sf cell scale N` in each repository to share one server across repositories. Command reference: [docs/sf.md](docs/sf.md). The flow is proved end to end by `apps/sf/test/blackbox/standalone-external-repo.test.ts` (runs after `bun run build:sf`, skipped without build output).
+Run `sf init`, `sf project add` and `sf cell scale N` in each repository to share one server across repositories. Command reference: [docs/apps/sf.md](docs/apps/sf.md). The flow is proved end to end by `apps/sf/test/blackbox/standalone-external-repo.test.ts` (runs after `bun run build:sf`, skipped without build output).
 
 ## Credits
 

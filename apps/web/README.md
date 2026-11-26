@@ -1,6 +1,6 @@
 # `@repo/web`
 
-Reference Event-Driven Architecture (EDA) frontend for Software Factory, living alongside `apps/web-demo`.
+Reference Event-Driven Architecture (EDA) frontend for Software Factory, living alongside `apps/web-demo`. Docs: [docs/apps/web.md](../../docs/apps/web.md), [docs/README.md](../../docs/README.md).
 
 ## Stack
 
