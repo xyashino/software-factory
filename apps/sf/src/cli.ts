@@ -17,7 +17,6 @@ import { queueCommand } from './adapters/cli/queue.command';
 import { argsOf, resolveCommand } from './adapters/cli/resolve-command';
 import { serviceCommand } from './adapters/cli/service.command';
 import { setupCommand } from './adapters/cli/setup.command';
-import { todosCommand } from './adapters/cli/todos.command';
 import { assertValidArgs } from './adapters/cli/validate';
 import { watchCommand } from './adapters/cli/watch.command';
 import { webCommand } from './adapters/cli/web.command';
@@ -38,7 +37,6 @@ const main = defineCommand({
     setup: setupCommand,
     doctor: doctorCommand,
     factory: factoryCommand,
-    todos: todosCommand,
     queue: queueCommand,
     plan: planCommand,
     incident: incidentCommand,

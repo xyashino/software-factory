@@ -12,6 +12,7 @@ import {
   hqTargetUseCommand,
 } from './target.command';
 import { hqTokenCreateCommand } from './token.command';
+import { exportCommand, importCommand } from './todos.command';
 
 const deprecatedAlias = <T extends ArgsDef>(
   cmd: CommandDef<T>,
@@ -55,6 +56,13 @@ export const legacyCommands = {
     meta: { name: 'token', description: 'Deprecated: use sf hq token' },
     subCommands: {
       create: deprecatedAlias(hqTokenCreateCommand, 'sf hq token create'),
+    },
+  }),
+  todos: defineCommand({
+    meta: { name: 'todos', description: 'Deprecated: use sf order' },
+    subCommands: {
+      import: deprecatedAlias(importCommand, 'sf order import'),
+      export: deprecatedAlias(exportCommand, 'sf order export'),
     },
   }),
 };

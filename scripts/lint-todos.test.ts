@@ -137,8 +137,27 @@ describe('todo lint', () => {
 
     expect(exitCode).toBe(1);
     expect(output).toContain(
-      'todos/child.md: depends_on missing is not a todo in todos/',
+      'todos/child.md: depends_on missing is not a todo in orders/ or todos/',
     );
+  });
+
+  it('validates work orders in orders/ and accepts a parent in todos/', async () => {
+    const root = makeRepo({
+      ...LINE_FILES,
+      'todos/parent.md': todoFile('parent', ['line: standard']),
+      'orders/child.md': todoFile('child', [
+        'line: ghost',
+        'depends_on: parent',
+      ]),
+    });
+
+    const { exitCode, output } = await runLint(root);
+
+    expect(exitCode).toBe(1);
+    expect(output).toContain(
+      'orders/child.md: line ghost has no .factory/lines/ghost.yml',
+    );
+    expect(output).not.toContain('todos/parent.md');
   });
 
   it('fails when the depends_on chain loops back on itself', async () => {

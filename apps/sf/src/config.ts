@@ -57,6 +57,7 @@ export const SUPERVISOR_TOKEN_PATH = '.factory-local/supervisor.token';
 export const JOIN_TOKEN_ENV = 'FACTORY_JOIN_TOKEN';
 export const CELL_ID_ENV = 'FACTORY_CELL_ID';
 export const CELL_LINES_ENV = 'CELL_LINES';
+export const DEFAULT_ORDER_DIR = 'orders';
 export const DEFAULT_TODO_DIR = 'todos';
 export const DEFAULT_WEB_HOST = '127.0.0.1';
 export const DEFAULT_WEB_PORT = 4321;

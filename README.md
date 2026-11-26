@@ -94,7 +94,7 @@ Set up the repo the factory will work on:
 cd path/to/your-repo
 sf doctor                 # read-only check: git, gh, runners, server, token, project
 sf setup                  # doctor, init, hq start, project add (idempotent)
-sf todos import --dry-run # preview todos/*.md before pushing
+sf order import --dry-run # preview orders/*.md (or todos/*.md) before pushing
 ```
 
 `sf setup` refuses until every runner is installed. The repo needs a git `origin` for the project step; setup fails there, after init and server start.
@@ -124,11 +124,11 @@ sf cell scale 1                                       # in the repo
 
 Troubleshooting:
 
-| Symptom | Check | Fix |
-| --- | --- | --- |
-| Port 7070 in use: `sf hq start` prints `server started`, or `sf doctor` shows `token rejected` on an HQ you did not start | `ss -ltnp 'sport = :7070'`: owner is not your HQ server | Stop the owner: `kill <pid>`. `sf hq stop` only stops the process in the pid file, not a leaked one. Then `sf hq start` |
-| 401 after `sf hq token admin create`: `401: Missing or invalid bearer token` | Read `token source:` in the error. | `repo:.factory-local/supervisor.token`: `sf hq token admin create --save` (the repo file wins over global). `env:HQ_TOKEN` (or `env:HQ_TOKEN`): unset it or set the new token. `config:<name>`: `sf hq token admin create --save --global` |
-| Missing runner: `missing: runner <name> not installed` in `sf doctor`; `sf setup` refuses | `command -v <name>` prints nothing | Install the CLI, put it on `PATH` for non-login shells too, sign in (see above), then `sf doctor` |
+| Symptom                                                                                                                   | Check                                                   | Fix                                                                                                                                                                                                                                        |
+| ------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Port 7070 in use: `sf hq start` prints `server started`, or `sf doctor` shows `token rejected` on an HQ you did not start | `ss -ltnp 'sport = :7070'`: owner is not your HQ server | Stop the owner: `kill <pid>`. `sf hq stop` only stops the process in the pid file, not a leaked one. Then `sf hq start`                                                                                                                    |
+| 401 after `sf hq token admin create`: `401: Missing or invalid bearer token`                                              | Read `token source:` in the error.                      | `repo:.factory-local/supervisor.token`: `sf hq token admin create --save` (the repo file wins over global). `env:HQ_TOKEN` (or `env:HQ_TOKEN`): unset it or set the new token. `config:<name>`: `sf hq token admin create --save --global` |
+| Missing runner: `missing: runner <name> not installed` in `sf doctor`; `sf setup` refuses                                 | `command -v <name>` prints nothing                      | Install the CLI, put it on `PATH` for non-login shells too, sign in (see above), then `sf doctor`                                                                                                                                          |
 
 Test runs on the same VPS: set `HQ_PORT` and `HQ_URL` together, or the probe and the doctor check still hit port 7070.
 
@@ -145,7 +145,7 @@ sf project add my-project --repo <url>
 sf web start                               # dashboard at http://127.0.0.1:4321; sf web stop to end
 sf factory connect <hq-url> --token <factory_join>         # once per PC
 sf cell scale 2 --repo ~/code/my-project                   # Cells start under the Factory daemon
-sf todos import && sf queue                # push todos/*.md, see the queue
+sf order import && sf queue                # push orders/*.md, see the queue
 sf hq stop
 ```
 

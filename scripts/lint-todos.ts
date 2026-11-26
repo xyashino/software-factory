@@ -1,12 +1,12 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { basename, join, resolve } from 'node:path';
 import { findDependencyCycle } from '../apps/hq/src/domain/queue/dag';
 import {
   parseTodoMarkdown,
   type TodoFile,
 } from '../apps/hq/src/domain/queue/todo-markdown';
 
-const TODOS_DIR = 'todos';
+const TODO_DIRS = ['orders', 'todos'];
 const LINES_DIR = '.factory/lines';
 const TODO_EXTENSION = '.md';
 
@@ -14,12 +14,13 @@ type LintError = { file: string; message: string };
 
 type ParsedTodo = { file: string; todo: TodoFile };
 
-const listTodoFiles = (root: string): string[] => {
-  const dir = join(root, TODOS_DIR);
-  if (!existsSync(dir)) return [];
-  return readdirSync(dir)
+const listTodoFiles = (root: string, dir: string): string[] => {
+  const path = join(root, dir);
+  if (!existsSync(path)) return [];
+  return readdirSync(path)
     .filter((name) => name.endsWith(TODO_EXTENSION))
-    .sort();
+    .sort()
+    .map((name) => `${dir}/${name}`);
 };
 
 const lineErrors = (root: string, { file, todo }: ParsedTodo): LintError[] =>
@@ -39,7 +40,10 @@ const parentErrors = (
   const parent = todo.dependsOn;
   if (parent === null || known.has(parent)) return [];
   return [
-    { file, message: `depends_on ${parent} is not a todo in ${TODOS_DIR}/` },
+    {
+      file,
+      message: `depends_on ${parent} is not a todo in orders/ or todos/`,
+    },
   ];
 };
 
@@ -47,28 +51,26 @@ const cycleErrors = (parsed: readonly ParsedTodo[]): LintError[] => {
   const parentOf = new Map(
     parsed.map(({ todo }) => [todo.slug, todo.dependsOn] as const),
   );
+  const fileOf = new Map(parsed.map(({ file, todo }) => [todo.slug, file]));
   const cycle = findDependencyCycle(parentOf);
   return cycle === null
     ? []
     : [
         {
-          file: `${TODOS_DIR}/${cycle}${TODO_EXTENSION}`,
+          file: fileOf.get(cycle) ?? cycle,
           message: 'depends_on forms a cycle',
         },
       ];
 };
 
 const lintRoot = (root: string): LintError[] => {
-  const filenames = listTodoFiles(root);
-  const known = new Set(
-    filenames.map((name) => name.slice(0, -TODO_EXTENSION.length)),
-  );
+  const files = TODO_DIRS.flatMap((dir) => listTodoFiles(root, dir));
+  const known = new Set(files.map((file) => basename(file, TODO_EXTENSION)));
   const parseErrors: LintError[] = [];
   const parsed: ParsedTodo[] = [];
-  for (const filename of filenames) {
-    const file = `${TODOS_DIR}/${filename}`;
+  for (const file of files) {
     const result = parseTodoMarkdown(
-      filename,
+      basename(file),
       readFileSync(join(root, file), 'utf8'),
     );
     if (result.ok) parsed.push({ file, todo: result.todo });

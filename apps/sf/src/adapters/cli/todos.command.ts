@@ -1,7 +1,12 @@
+import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { defineCommand } from 'citty';
 import { run } from '../../bootstrap/run';
-import { DEFAULT_TODO_DIR, REPO_CONFIG_PATH } from '../../config';
+import {
+  DEFAULT_ORDER_DIR,
+  DEFAULT_TODO_DIR,
+  REPO_CONFIG_PATH,
+} from '../../config';
 import {
   type ExportResult,
   exportTodos,
@@ -14,6 +19,13 @@ import { EXIT } from '../../domain/exit-codes';
 import { printJson, printLine, reportFailure } from './output';
 
 const cwd = (): string => process.cwd();
+
+const resolveOrderDir = (dir: string | undefined): string => {
+  if (dir !== undefined) return dir;
+  const hasOrders = existsSync(resolve(cwd(), DEFAULT_ORDER_DIR));
+  const hasTodos = existsSync(resolve(cwd(), DEFAULT_TODO_DIR));
+  return !hasOrders && hasTodos ? DEFAULT_TODO_DIR : DEFAULT_ORDER_DIR;
+};
 
 const printImport = (result: ImportResult, json: boolean): void => {
   if (json) {
@@ -94,50 +106,53 @@ const runExport = async (dir: string, force: boolean, json: boolean) => {
   return reportFailure(result);
 };
 
-export const todosCommand = defineCommand({
+export const importCommand = defineCommand({
   meta: {
-    name: 'todos',
-    description: 'Move todos/*.md between files and HQ',
+    name: 'import',
+    description: 'Push orders/*.md to HQ',
   },
-  subCommands: {
-    import: defineCommand({
-      meta: {
-        name: 'import',
-        description: 'Push todos/*.md to HQ',
-      },
-      args: {
-        dir: { type: 'string', default: DEFAULT_TODO_DIR },
-        'dry-run': { type: 'boolean', default: false },
-        paused: {
-          type: 'boolean',
-          default: false,
-          description:
-            'Import every todo as paused, except cancelled. Files on disk are not changed',
-        },
-        json: { type: 'boolean', default: false },
-      },
-      run: async ({ args }) => {
-        process.exitCode = await runImport(
-          args.dir,
-          args['dry-run'],
-          args.paused,
-          args.json,
-        );
-      },
-    }),
-    export: defineCommand({
-      meta: {
-        name: 'export',
-        description: 'Write the server queue to todos/*.md files',
-      },
-      args: {
-        dir: { type: 'string', default: DEFAULT_TODO_DIR },
-        force: { type: 'boolean', default: false },
-        json: { type: 'boolean', default: false },
-      },
-      run: async ({ args }) => {
-        process.exitCode = await runExport(args.dir, args.force, args.json);
-      },
-    }),
+  args: {
+    dir: {
+      type: 'string',
+      description: 'Work order folder (default orders/, else todos/)',
+    },
+    'dry-run': { type: 'boolean', default: false },
+    paused: {
+      type: 'boolean',
+      default: false,
+      description:
+        'Import every todo as paused, except cancelled. Files on disk are not changed',
+    },
+    json: { type: 'boolean', default: false },
+  },
+  run: async ({ args }) => {
+    process.exitCode = await runImport(
+      resolveOrderDir(args.dir),
+      args['dry-run'],
+      args.paused,
+      args.json,
+    );
+  },
+});
+
+export const exportCommand = defineCommand({
+  meta: {
+    name: 'export',
+    description: 'Write the server queue to orders/*.md files',
+  },
+  args: {
+    dir: {
+      type: 'string',
+      description: 'Work order folder (default orders/, else todos/)',
+    },
+    force: { type: 'boolean', default: false },
+    json: { type: 'boolean', default: false },
+  },
+  run: async ({ args }) => {
+    process.exitCode = await runExport(
+      resolveOrderDir(args.dir),
+      args.force,
+      args.json,
+    );
   },
 });

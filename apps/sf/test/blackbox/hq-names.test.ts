@@ -180,6 +180,40 @@ describe('sf hq', () => {
   });
 });
 
+describe('sf todos', () => {
+  it('keeps todos import working as order import and says so once', async () => {
+    // Arrange
+    const sandbox = createSandbox();
+
+    // Act
+    const todos = await runCli(sandbox, ['todos', 'import', '--dry-run']);
+    const order = await runCli(sandbox, ['order', 'import', '--dry-run']);
+
+    // Assert
+    expect(todos.status).toBe(order.status);
+    expect(todos.stdout).toBe(order.stdout);
+    expect(todos.stderr).toBe(
+      `deprecated: use "sf order import"\n${order.stderr}`,
+    );
+  });
+
+  it('keeps todos export working as order export and says so once', async () => {
+    // Arrange
+    const sandbox = createSandbox();
+
+    // Act
+    const todos = await runCli(sandbox, ['todos', 'export']);
+    const order = await runCli(sandbox, ['order', 'export']);
+
+    // Assert
+    expect(todos.status).toBe(order.status);
+    expect(todos.stdout).toBe(order.stdout);
+    expect(todos.stderr).toBe(
+      `deprecated: use "sf order export"\n${order.stderr}`,
+    );
+  });
+});
+
 describe('HQ environment names', () => {
   it('reads HQ_URL and HQ_TOKEN without warning', async () => {
     // Arrange

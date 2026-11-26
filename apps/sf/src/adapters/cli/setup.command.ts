@@ -20,7 +20,7 @@ import { EXIT } from '../../domain/exit-codes';
 import { printJson, printLine, reportFailure } from './output';
 import { parsePort } from './validate';
 
-const NEXT_STEP = 'next: sf todos import --dry-run';
+const NEXT_STEP = 'next: sf order import --dry-run';
 
 const printSteps = (result: SetupResult): void => {
   for (const step of result.steps) {
