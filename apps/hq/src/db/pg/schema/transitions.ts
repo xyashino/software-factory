@@ -18,6 +18,7 @@ export const stateTransitions = pgTable('state_transitions', {
   toState: text('to_state').notNull(),
   actorKind: text('actor_kind', { enum: ACTOR_KINDS }).notNull(),
   actorId: text('actor_id'),
+  actorLabel: text('actor_label'),
   commandId: text('command_id').unique(),
   metaJson: jsonColumn<Record<string, unknown>>('meta_json'),
   at: epochMs('at').notNull(),

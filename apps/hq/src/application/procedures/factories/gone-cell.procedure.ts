@@ -27,7 +27,7 @@ export const goneCellProcedure = scopedProcedure(['factory:worker'])(
       { kind: 'system', id: factoryId },
       log,
     );
-    return flushTransitions(tx, log);
+    return flushTransitions(tx, log, { actorLabel: ctx.principal.name });
   });
   publishCommitted(ctx, records);
 

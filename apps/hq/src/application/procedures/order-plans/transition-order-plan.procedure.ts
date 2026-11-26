@@ -46,7 +46,12 @@ export const transitionOrderPlanProcedure = scopedProcedure([
         (await requireProject(tx, plan.projectId)).repoUrl,
         now,
       );
-    return { row, records: await flushTransitions(tx, log) };
+    return {
+      row,
+      records: await flushTransitions(tx, log, {
+        actorLabel: ctx.principal.name,
+      }),
+    };
   });
 
   publishCommitted(ctx, records);

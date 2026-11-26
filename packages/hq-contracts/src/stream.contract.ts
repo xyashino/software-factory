@@ -16,6 +16,7 @@ export const transitionDto = z.object({
   toState: z.string(),
   actorKind: z.enum(ACTOR_KINDS),
   actorId: z.string().nullable(),
+  actorLabel: z.string().nullable(),
   commandId: z.string().nullable(),
   meta: z.record(z.string(), z.unknown()).nullable(),
   at: z.number().int(),

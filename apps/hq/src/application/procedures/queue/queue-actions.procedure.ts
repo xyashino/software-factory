@@ -105,7 +105,12 @@ export const queueActionsProcedure = scopedProcedure(['supervisor:write'])(
           log,
         ),
       );
-    return { orders: updated, records: await flushTransitions(tx, log) };
+    return {
+      orders: updated,
+      records: await flushTransitions(tx, log, {
+        actorLabel: ctx.principal.name,
+      }),
+    };
   });
 
   publishCommitted(ctx, records);

@@ -24,7 +24,12 @@ export const grantingAuth = (scopes: readonly TokenScope[]): AuthPort => ({
   verify: (bearer) =>
     Promise.resolve(
       bearer === VALID_TOKEN
-        ? { tokenId: asTokenId('token-1'), factoryId: null, scopes }
+        ? {
+            tokenId: asTokenId('token-1'),
+            name: 'test-token',
+            factoryId: null,
+            scopes,
+          }
         : null,
     ),
 });

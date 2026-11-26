@@ -19,6 +19,7 @@ const toRecord = (row: StateTransitionRow): StateTransitionRecord => ({
   toState: row.toState,
   actorKind: row.actorKind,
   actorId: row.actorId,
+  actorLabel: row.actorLabel,
   commandId: row.commandId === null ? null : asCommandId(row.commandId),
   meta: row.metaJson,
   at: row.at,

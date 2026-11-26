@@ -281,7 +281,9 @@ export const resolveIncidentProcedure = anyScopedProcedure([
           incident: toIncidentDto(updatedIncident),
           workOrder: toWorkOrderDto(updatedOrder),
         },
-        records: await flushTransitions(tx, log),
+        records: await flushTransitions(tx, log, {
+          actorLabel: ctx.principal.name,
+        }),
       };
     }),
   );

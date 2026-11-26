@@ -1077,8 +1077,8 @@ export const transitionJobProcedure = scopedProcedure(['factory:worker'])(
       return {
         response,
         records: await flushTransitions(tx, log, {
-          commandId,
-          meta: { result: response },
+          actorLabel: ctx.principal.name,
+          command: { commandId, meta: { result: response } },
         }),
       };
     }),

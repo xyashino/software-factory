@@ -26,6 +26,7 @@ export const createSafeTokenAuth = (
       return null;
     const principal: Principal = {
       tokenId: asTokenId(row.tokenId),
+      name: row.name,
       factoryId: row.factoryId === null ? null : asFactoryId(row.factoryId),
       scopes: row.scopesJson.filter(isTokenScope),
     };

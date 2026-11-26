@@ -296,7 +296,9 @@ const attemptClaim = async (ctx: AuthenticatedContext, cell: ClaimCell) => {
               leaseExpiresAt,
               await headCommitOfJob(tx, claimed),
             ),
-      records: await flushTransitions(tx, log),
+      records: await flushTransitions(tx, log, {
+        actorLabel: ctx.principal.name,
+      }),
     };
   });
   publishCommitted(ctx, outcome.records);

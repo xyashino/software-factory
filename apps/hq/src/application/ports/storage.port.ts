@@ -265,6 +265,7 @@ export type StateTransitionRow = {
   toState: string;
   actorKind: ActorKind;
   actorId: string | null;
+  actorLabel: string | null;
   commandId: string | null;
   metaJson: Record<string, unknown> | null;
   at: number;

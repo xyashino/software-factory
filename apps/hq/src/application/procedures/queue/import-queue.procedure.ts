@@ -62,6 +62,7 @@ type ImportArgs = {
   dryRun: boolean;
   todos: readonly ParsedFile[];
   actor: Actor;
+  actorLabel: string;
   now: number;
 };
 
@@ -399,13 +400,13 @@ const importInTx = async (
   return {
     kind: 'applied',
     counts,
-    records: await flushTransitions(
-      tx,
-      log,
-      commandId === undefined
-        ? undefined
-        : { commandId, meta: { result: counts } },
-    ),
+    records: await flushTransitions(tx, log, {
+      actorLabel: args.actorLabel,
+      command:
+        commandId === undefined
+          ? undefined
+          : { commandId, meta: { result: counts } },
+    }),
   };
 };
 
@@ -435,6 +436,7 @@ export const importQueueProcedure = scopedProcedure(['supervisor:write'])(
         dryRun,
         todos: parsed.todos,
         actor,
+        actorLabel: ctx.principal.name,
         now,
       }),
     { dryRun },
