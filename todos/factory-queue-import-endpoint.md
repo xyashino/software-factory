@@ -11,23 +11,23 @@ depends_on: factory-local-engine
 
 ## Objective
 
-Add `POST /queue/import` to `apps/factory` (`@repo/factory`) and `@repo/factory-contracts` so the Factory server reads `<repo>/.factory/config.json` and `<dir>/*.md`, importing to its local execution DB when `local: true` or forwarding to HQ when connected.
+Add `POST /queue/import` to `apps/factory` (`@repo/factory`) and `@repo/factory-contracts` so Factory reads `<repo>/.factory/config.json` and `<dir>/*.md` and imports directly into its local execution DB with no local-vs-HQ split-brain flag.
 
 ## Context
 
-Part of [`docs/standalone-factory-plan.md`](../docs/standalone-factory-plan.md).
+Part of [`docs/plans/standalone-factory-plan.md`](../docs/plans/standalone-factory-plan.md). Factory owns repo execution locally; HQ receives synced projections asynchronously when connected.
 
 Verified current behavior:
 
-- `apps/sf/src/application/procedures/todos/import.procedure.ts` reads `.factory/config.json` and `todos/*.md` in the CLI, parses frontmatter with `parseTodo` / `renderTodo`, and sends `{ commandId, projectId, mode: 'apply', files }` to `POST /api/v1/queue/import` on HQ.
-- Under `HQ <-> Factory <-> Cells`, `apps/factory` sits on the local machine with filesystem access to `<repo>/todos/*.md` and `.factory/config.json`.
+- `apps/sf/src/application/procedures/todos/import.procedure.ts` reads `.factory/config.json` and `todos/*.md` in CLI, parses frontmatter with `parseTodo` / `renderTodo`, and posts `{ commandId, projectId, mode: 'apply', files }` to `POST /api/v1/queue/import`.
+- `apps/factory` runs on local host with direct filesystem access to `<repo>/todos/*.md` and `.factory/config.json`.
 
 ## Scope
 
 - **Target**: `packages/factory-contracts`, `apps/factory`
 - **Classification**: `Domain Core`, `Integration`
 - **Dependencies**: `@repo/factory-contracts: workspace:*`, `@repo/hq-contracts: workspace:*`
-- **Out of scope**: Updating `apps/sf` CLI commands to pass `--local` (handled in `sf-local-mode-cli`).
+- **Out of scope**: Updating `apps/sf` CLI default targeting (`sf-local-mode-cli`) and syncing imported projections to HQ (`hq-thin-bridge-sync-and-outbox`).
 
 ## Implementation Plan
 
@@ -39,32 +39,27 @@ Verified current behavior:
        dir: z.string().min(1).optional(),
        dryRun: z.boolean().default(false),
        paused: z.boolean().default(false),
-       local: z.boolean().default(false),
      }).strict();
      ```
    - `FactoryImportReplySchema`: `{ mode: 'dry_run' | 'apply', projectId, sent: string[], skipped: { filename, reason }[], created, updated, unchanged, paused, errors: { filename, message }[] }`.
-2. **Mode Gate in `apps/factory` (`POST /queue/import`)**:
-   - If `input.local === true` and `credential !== null`: refuse with `409 Conflict` (`factory is connected to HQ; disconnect or omit --local`).
-   - If `input.local === false` and `credential === null`: refuse with `409 Conflict` (`factory not connected to HQ: pass --local or run "sf factory connect"`).
-   - If `input.local === false` and `hq.state().kind !== 'ok'`: refuse with `503` (`HQ unreachable`) or `409` (`HQ rejected credential`).
-3. **Server-Side File Reading & Dispatch**:
+2. **Server-Side File Reading & Local Import (`POST /queue/import`)**:
    - Read `<repoRoot>/.factory/config.json` to resolve `projectId` (refuse `400` if missing or invalid).
-   - Read markdown files from `dir ?? join(repoRoot, 'todos')`, apply `paused` frontmatter override in memory (without modifying disk files), and collect `sent` and `skipped` (`no line` or frontmatter parse errors).
-   - If `dryRun === true`, return the preview counts without writing.
-   - If `local === true`: auto-upsert `projectId` in the local SQLite engine if not present, then invoke `POST /api/v1/queue/import` on `localEngine`.
-   - If `local === false`: forward `{ commandId, projectId, mode: 'apply', files: sent }` to HQ `POST /api/v1/queue/import` (using the supervisor token passed in `authorization` header or Factory HQ link).
-4. **Tests**:
+   - Read markdown files from `dir ?? join(repoRoot, 'todos')`, apply `paused` frontmatter override in memory without modifying disk files, collect `sent` and `skipped` (`no line` or parse errors).
+   - If `dryRun === true`, return preview counts without DB writes.
+   - Auto-upsert `projectId` in local SQLite engine if absent, then invoke `POST /api/v1/queue/import` on `localEngine`.
+   - Succeeds identically whether HQ credential exists or not (no `409` mode refusal).
+3. **Tests**:
    - Black-box tests in `apps/factory/test/blackbox/queue-import.test.ts`:
-     - Standalone Factory imports `todos/*.md` with `local: true` and creates queued work orders in local DB.
-     - Standalone Factory rejects `local: false` with `409`.
-     - Connected Factory rejects `local: true` with `409` and forwards `local: false` to HQ.
+     - Factory imports `todos/*.md` into local SQLite engine and creates queued work orders.
+     - `dryRun: true` reports counts and errors without mutating DB.
+     - Missing `.factory/config.json` returns `400`.
 
 ## Acceptance Criteria
 
-- [ ] `POST /queue/import` on `apps/factory` reads `<repo>/todos/*.md`, validates frontmatter, and imports into local SQLite when `local: true`.
-- [ ] Connected Factory refuses `local: true` (`409`) and forwards `local: false` to HQ.
-- [ ] Disconnected Factory refuses `local: false` (`409`).
+- [ ] `POST /queue/import` on `apps/factory` reads `<repo>/todos/*.md`, validates frontmatter, and imports into local SQLite.
+- [ ] Works identically whether Factory is connected to HQ or standalone (no `local` flag, no `409` split-brain).
+- [ ] `dryRun: true` previews without writing to DB.
 - [ ] Tests follow `testing` rules: black box, Arrange/Act/Assert, story-style names, public behavior only.
 - [ ] One new ADR in `decisions/` (`decision-log` rule).
 - [ ] Strict TypeScript, no `any`, no loose assertions.
-- [ ] `bun run ci:verify` passes.
+- [ ] `bun run ci:verify` passes. Package-scoped `bun --filter <pkg> test|lint|check-types` allowed while working.

@@ -7,15 +7,15 @@ plan: standalone-factory
 depends_on: factory-app-extract
 ---
 
-# factory-local-engine: run local SQLite execution engine in apps/factory when disconnected from HQ
+# factory-local-engine: run local SQLite execution engine as default in apps/factory
 
 ## Objective
 
-Equip `apps/factory` with an embedded local SQLite execution engine (`$XDG_DATA_HOME/sf/factory-local.db`) so Cells can start, claim jobs, send heartbeats, transition jobs, and resolve incidents locally when Factory is not connected to HQ.
+Equip `apps/factory` with an embedded local SQLite execution engine (`$XDG_DATA_HOME/sf/factory-local.db`) so Factory always owns execution locally (claims, heartbeats, job transitions, retries, Mechanic triage, incidents) whether connected to HQ or standalone.
 
 ## Context
 
-Part of [`docs/standalone-factory-plan.md`](../docs/standalone-factory-plan.md).
+Part of [`docs/plans/standalone-factory-plan.md`](../docs/plans/standalone-factory-plan.md). Execution decisions live in local Factory around the repo; HQ acts as optional Web UI bridge and fleet observatory.
 
 Verified current behavior:
 
@@ -28,33 +28,33 @@ Verified current behavior:
 - **Target**: `apps/factory`, `apps/hq`
 - **Classification**: `Domain Core`, `Infrastructure`
 - **Dependencies**: `@repo/hq: workspace:*`, `@repo/bun-sqlite-kit: workspace:*`, `@repo/hq-contracts: workspace:*`
-- **Out of scope**: `POST /queue/import` server-side file loading (`factory-queue-import-endpoint`) and CLI `--local` flags (`sf-local-mode-cli`).
+- **Out of scope**: `POST /queue/import` server-side file loading (`factory-queue-import-endpoint`), CLI default local routing (`sf-local-mode-cli`), and HQ projection sync + command outbox (`hq-thin-bridge-sync-and-outbox`).
 
 ## Implementation Plan
 
-1. **Local SQLite & Loopback Engine in `apps/factory`**:
-   - Open `$XDG_DATA_HOME/sf/factory-local.db` (or in-memory `:memory:` in tests) using `createDb`.
-   - Instantiate a local execution Hono app (`createApp(createTransport({ db, clock, auth: loopbackAuth, claimWaiters, transitionBus }))`) where `loopbackAuth` grants local principal (`tokenId: asTokenId('tok_local')`, `factoryId: asFactoryId('fac_local')`, `scopes: ['supervisor:read', 'supervisor:write', 'factory:worker']`).
-   - Seed or upsert the local Factory row `fac_local` in `factories` table on startup so `/api/v1/cells/*` and `/api/v1/factories/cells/:id/gone` recognize `fac_local`.
-2. **Gate & Relay Switching (`not_connected` vs `connected`)**:
-   - Update `gateOf`: when `state.kind === 'not_connected'`, return `null` (allow Cells to scale in standalone local mode). When `state.kind === 'unreachable'` or `'rejected'` (i.e. a Factory credential exists in `factory.json` but HQ is down or rejected it), continue to block Cell startup.
-   - Update `relay.ts`: when `deps.credential() === null`, validate the Cell's local bearer grant as usual, attach `x-cell-id: live.grant.cellId`, and dispatch the request directly to `localEngine.fetch(request)` instead of returning `503`.
-   - Update `onStopped(cellId)`: when `credential === null`, invoke `POST /api/v1/factories/cells/:cellId/gone` on `localEngine` so a killed local Cell immediately requeues its active job and bumps `epoch`.
-3. **Expose Local `/api/v1/*` on Loopback Only When Standalone**:
-   - In `apps/factory/src/routes.ts`, forward `/api/v1/*` requests to `localEngine.fetch(request)` when `credential === null`.
-   - When `credential !== null` (Factory is connected to HQ), reject direct `/api/v1/*` requests on `apps/factory` with `409 Conflict` (`{ code: 409, type: 'refused', message: 'factory is connected to HQ; disconnect or omit --local' }`).
-   - Also auto-upsert the repo project in `localEngine` during `PUT /scale` when `credential === null` so Cells can immediately claim for that `projectId`.
+1. **Always-On Local SQLite Execution Engine in `apps/factory`**:
+   - Open `$XDG_DATA_HOME/sf/factory-local.db` (or `:memory:` in tests) using `createDb`.
+   - Instantiate local execution Hono app (`createApp(createTransport({ db, clock, auth: loopbackAuth, claimWaiters, transitionBus }))`) with loopback principal (`tokenId: asTokenId('tok_local')`, `factoryId: asFactoryId('fac_local')`, `scopes: ['supervisor:read', 'supervisor:write', 'factory:worker']`).
+   - Upsert local Factory row `fac_local` in `factories` table on startup so `/api/v1/cells/*` and `/api/v1/factories/cells/:id/gone` recognize `fac_local`.
+   - Auto-upsert repo project in `localEngine` on `PUT /scale` so Cells claim immediately without manual HQ registration.
+2. **Unify Cell Execution Locally (No HQ Gate on Cell Startup)**:
+   - Update `gateOf`: allow Cells to scale regardless of HQ connection state (`not_connected` or `unreachable` never blocks local execution).
+   - Update `relay.ts`: validate Cell local bearer grant, attach `x-cell-id: live.grant.cellId`, and dispatch Cell `/relay/api/v1/*` requests directly to `localEngine.fetch(request)`.
+   - Update `onStopped(cellId)`: invoke `POST /api/v1/factories/cells/:cellId/gone` on `localEngine` so killed Cells requeue active job and bump `epoch`.
+   - Keep optional outbound HQ heartbeat loop running when `credential !== null` without blocking local Cell traffic.
+3. **Expose Local `/api/v1/*` on Loopback**:
+   - In `apps/factory/src/routes.ts`, forward loopback `/api/v1/*` requests to `localEngine.fetch(request)` unconditionally (no `409` local-vs-HQ split-brain).
 4. **Tests**:
    - Black-box tests in `apps/factory/test/blackbox/`:
-     - Disconnected Factory (`credential === null`) allows `PUT /scale`, spawns a Cell, serves Cell claim and job transition via `/relay/api/v1/*` against the local DB, and requeues the job when the Cell is killed.
-     - Connected Factory (`credential !== null`) relays Cell traffic to HQ and refuses direct `/api/v1/*` local engine calls with `409`.
+     - Factory with no HQ credential allows `PUT /scale`, spawns Cell, serves Cell claim/heartbeat/transition/incident-resolve locally, and requeues on Cell kill.
+     - Factory with HQ credential still executes Cell jobs locally even when HQ is unreachable.
 
 ## Acceptance Criteria
 
-- [ ] Disconnected Factory (`hq.kind === 'not_connected'`) allows scaling Cells and processes `/relay/api/v1/cells/claims`, `/relay/api/v1/cells/heartbeats`, `/relay/api/v1/jobs/:id/transitions`, and `/relay/api/v1/incidents/:id/resolve` locally.
-- [ ] Killing a Cell in standalone mode triggers gone-Cell cleanup in the local DB.
-- [ ] Connected Factory refuses local `/api/v1/*` supervisor calls with `409` and continues relaying Cell traffic to HQ.
+- [ ] `apps/factory` runs local SQLite execution engine by default and serves Cell claims, heartbeats, transitions, and incident resolutions without HQ.
+- [ ] Killing a Cell triggers local gone-Cell cleanup and epoch bump.
+- [ ] Loopback `/api/v1/*` works whether HQ is connected, unreachable, or unconfigured.
 - [ ] Tests follow `testing` rules: black box, Arrange/Act/Assert, story-style names, public behavior only.
 - [ ] One new ADR in `decisions/` (`decision-log` rule).
 - [ ] Strict TypeScript, no `any`, no loose assertions.
-- [ ] `bun run ci:verify` passes.
+- [ ] `bun run ci:verify` passes. Package-scoped `bun --filter <pkg> test|lint|check-types` allowed while working.
