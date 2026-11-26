@@ -30,11 +30,12 @@ const ENDPOINTS: Endpoint[] = [
   { method: 'POST', path: '/api/v1/factories/heartbeat' },
   { method: 'POST', path: '/api/v1/factories/cells/cell-1/gone' },
   { method: 'GET', path: '/api/v1/factories' },
+  { method: 'POST', path: '/api/v1/mcp' },
 ];
 
 describe('route index', () => {
-  it('lists all 26 endpoints of the plan', () => {
-    expect(ENDPOINTS).toHaveLength(26);
+  it('lists all 27 endpoints of the plan', () => {
+    expect(ENDPOINTS).toHaveLength(27);
   });
 
   it.each(ENDPOINTS)(
