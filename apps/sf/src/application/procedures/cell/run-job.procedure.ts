@@ -1623,16 +1623,35 @@ const gitOrThrow = async (
   return result.stdout.trim();
 };
 
+const remoteShaOf = async (
+  runtime: CellRuntime,
+  branch: string,
+): Promise<string> => {
+  const listing = await gitOrThrow(runtime, [
+    'ls-remote',
+    REMOTE,
+    `refs/heads/${branch}`,
+  ]);
+  return listing.split(/\s+/)[0] ?? '';
+};
+
 const createPlanBranch = async (
   runtime: CellRuntime,
   job: ClaimedJob,
 ): Promise<string> => {
   await gitOrThrow(runtime, ['fetch', REMOTE, job.baseBranch]);
   const commitSha = await gitOrThrow(runtime, ['rev-parse', 'FETCH_HEAD']);
+  const refspec = `${commitSha}:refs/heads/${job.targetBranch}`;
+  if (job.payload.fresh !== true) {
+    await gitOrThrow(runtime, ['push', REMOTE, refspec]);
+    return commitSha;
+  }
+  const remoteSha = await remoteShaOf(runtime, job.targetBranch);
   await gitOrThrow(runtime, [
     'push',
+    `--force-with-lease=refs/heads/${job.targetBranch}:${remoteSha}`,
     REMOTE,
-    `${commitSha}:refs/heads/${job.targetBranch}`,
+    refspec,
   ]);
   return commitSha;
 };

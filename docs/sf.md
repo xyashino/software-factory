@@ -63,6 +63,7 @@ especially §3 (Cell lifecycle) and §11 (agent reporting). Operator CLI spec:
 | plan     | `sf plan list`                                                 | Supervisor                    | `GET /api/v1/order-plans`                                                   |
 | plan     | `sf plan show <slug>`                                          | Supervisor                    | `GET /api/v1/order-plans`                                                   |
 | plan     | `sf plan activate \| retry <slug>`                             | Supervisor                    | `GET /api/v1/order-plans`, then `POST /api/v1/order-plans/{id}/transitions` |
+| plan     | `sf plan reset <slug> --yes`                                   | Supervisor                    | `GET /api/v1/order-plans`, then `POST /api/v1/order-plans/{id}/transitions` |
 | incident | `sf incident list`                                             | Supervisor                    | `GET /api/v1/incidents`                                                     |
 | incident | `sf incident resolve <id> --action ...`                        | Supervisor                    | `POST /api/v1/incidents/{id}/resolve`                                       |
 | order    | `sf order show <id>`                                           | Supervisor                    | `GET /api/v1/work-orders/{id}`                                              |

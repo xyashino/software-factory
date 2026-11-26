@@ -4,7 +4,7 @@ import { jobs } from '../../src/db/schema/jobs';
 import { orderPlans } from '../../src/db/schema/plans';
 import { workOrders } from '../../src/db/schema/orders';
 import { projects } from '../../src/db/schema/projects';
-import { asProjectId } from '../../src/domain/common/brand';
+import { asJobId, asOrderId, asProjectId } from '../../src/domain/common/brand';
 import {
   VALID_TOKEN,
   createTestApp,
@@ -470,5 +470,142 @@ describe('work order transitions and queue actions', () => {
       jobs: [],
       incidents: [],
     });
+  });
+});
+
+describe('order plan reset', () => {
+  const PLAN_SLUG = 'payment-v2';
+
+  const importPlanMembers = (app: TestApp, slugs: string[]) =>
+    importQueue(
+      app,
+      `import-${slugs.join('-')}`,
+      slugs.map((slug) =>
+        file(slug, ['line: feature', `plan: ${PLAN_SLUG}`], `Task ${slug}`),
+      ),
+    );
+
+  const setPlanState = (db: Db, state: 'draft' | 'completed') =>
+    db
+      .update(orderPlans)
+      .set({ state, branchCommitSha: 'plan-sha' })
+      .where(eq(orderPlans.slug, PLAN_SLUG))
+      .run();
+
+  const resetPlan = (app: TestApp) =>
+    postJson(
+      app,
+      `/api/v1/order-plans/${PROJECT_ID}:${PLAN_SLUG}/transitions`,
+      { action: 'reset' },
+      AUTH,
+    );
+
+  const planBranchJobs = (db: Db) =>
+    db.select().from(jobs).where(eq(jobs.kind, 'plan_branch')).all();
+
+  it('moves a completed plan to branching and queues one fresh plan branch job', async () => {
+    const { app, db } = setup();
+    await importPlanMembers(app, ['pay-schema']);
+    setPlanState(db, 'completed');
+
+    const response = await resetPlan(app);
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      plan: { state: 'branching' },
+    });
+    const branchJobs = planBranchJobs(db);
+    expect(branchJobs).toHaveLength(1);
+    expect(branchJobs[0]).toMatchObject({
+      status: 'ready',
+      payloadJson: { planId: `${PROJECT_ID}:${PLAN_SLUG}`, fresh: true },
+    });
+  });
+
+  it('cancels the in-flight job of a child and returns the child to step 0', async () => {
+    const { app, db } = setup();
+    await importPlanMembers(app, ['pay-schema']);
+    setPlanState(db, 'completed');
+    db.insert(jobs)
+      .values({
+        jobId: asJobId('job-live'),
+        projectId: asProjectId(PROJECT_ID),
+        orderId: asOrderId(`${PROJECT_ID}:pay-schema`),
+        kind: 'run_operator',
+        workspaceMode: 'reuse',
+        status: 'running',
+        repoUrl: 'git@example.test:acme/software-factory.git',
+        baseBranch: 'main',
+        targetBranch: 'factory/pay-schema',
+        expectedPriorStepsJson: [],
+        payloadJson: {},
+        epoch: 1,
+        createdAt: 1,
+      })
+      .run();
+    db.update(workOrders)
+      .set({ state: 'running', currentStepIndex: 2, activeJobId: 'job-live' })
+      .where(eq(workOrders.slug, 'pay-schema'))
+      .run();
+
+    const response = await resetPlan(app);
+
+    expect(await response.json()).toMatchObject({
+      reset: [{ slug: 'pay-schema', state: 'waiting_parent' }],
+      skipped: [],
+    });
+    const [order] = db
+      .select()
+      .from(workOrders)
+      .where(eq(workOrders.slug, 'pay-schema'))
+      .all();
+    expect(order).toMatchObject({
+      state: 'waiting_parent',
+      currentStepIndex: 0,
+      activeJobId: null,
+    });
+    const [job] = db
+      .select()
+      .from(jobs)
+      .where(eq(jobs.jobId, asJobId('job-live')))
+      .all();
+    expect(job).toMatchObject({ status: 'cancelled' });
+  });
+
+  it('leaves a delivered child unchanged and lists it as skipped', async () => {
+    const { app, db } = setup();
+    await importPlanMembers(app, ['pay-done', 'pay-schema']);
+    setPlanState(db, 'completed');
+    db.update(workOrders)
+      .set({ state: 'delivered', headCommitSha: 'done-sha' })
+      .where(eq(workOrders.slug, 'pay-done'))
+      .run();
+
+    const response = await resetPlan(app);
+
+    expect(await response.json()).toMatchObject({
+      reset: [{ slug: 'pay-schema' }],
+      skipped: [{ slug: 'pay-done', state: 'delivered' }],
+    });
+    const [done] = db
+      .select()
+      .from(workOrders)
+      .where(eq(workOrders.slug, 'pay-done'))
+      .all();
+    expect(done).toMatchObject({
+      state: 'delivered',
+      headCommitSha: 'done-sha',
+    });
+  });
+
+  it('refuses to reset a draft plan and queues no plan branch job', async () => {
+    const { app, db } = setup();
+    await importPlanMembers(app, ['pay-schema']);
+    setPlanState(db, 'draft');
+
+    const response = await resetPlan(app);
+
+    expect(response.status).toBe(409);
+    expect(planBranchJobs(db)).toHaveLength(0);
   });
 });

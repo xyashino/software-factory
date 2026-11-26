@@ -35,7 +35,22 @@ const FAILED_PLAN = {
   failureDetail: 'plan branch failed: push rejected',
 };
 
-const PLANS = { code: 200, items: [DRAFT_PLAN, FAILED_PLAN] };
+const COMPLETED_PLAN = {
+  ...DRAFT_PLAN,
+  planId: 'plan-9',
+  slug: 'shipped-plan',
+  state: 'completed',
+  branchCommitSha: 'def456',
+};
+
+const PLANS = { code: 200, items: [DRAFT_PLAN, FAILED_PLAN, COMPLETED_PLAN] };
+
+const RESET_REPLY = {
+  code: 200,
+  plan: { ...COMPLETED_PLAN, state: 'branching' },
+  reset: [{ slug: 'pay-api', state: 'waiting_parent' }],
+  skipped: [{ slug: 'pay-done', state: 'delivered' }],
+};
 
 const transitioned = (plan: typeof DRAFT_PLAN, state: string) => ({
   code: 200,
@@ -75,6 +90,9 @@ const replyFor = (
   }
   if (method === 'POST' && path === '/api/v1/order-plans/plan-8/transitions') {
     return { status: 200, body: transitioned(FAILED_PLAN, 'branching') };
+  }
+  if (method === 'POST' && path === '/api/v1/order-plans/plan-9/transitions') {
+    return { status: 200, body: RESET_REPLY };
   }
   return {
     status: 404,
@@ -213,6 +231,37 @@ describe('plan commands', () => {
     const transition = hitsNow().find((hit) => hit.method === 'POST');
     expect(transition?.url).toBe('/api/v1/order-plans/plan-8/transitions');
     expect(JSON.parse(transition?.body ?? '{}')).toEqual({ action: 'retry' });
+  });
+
+  it('refuses plan reset without --yes and sends no request', async () => {
+    // Arrange
+    const slug = 'shipped-plan';
+    const hitsBefore = hitsNow().length;
+
+    // Act
+    const result = await runCli(['plan', 'reset', slug]);
+
+    // Assert
+    expect(result.code).toBe(EXIT_ARGUMENT);
+    expect(result.stderr).toContain('Re-run with --yes');
+    expect(hitsNow().length - hitsBefore).toBe(0);
+  });
+
+  it('resets a plan with --yes and lists the reset and skipped children', async () => {
+    // Arrange
+    const slug = 'shipped-plan';
+
+    // Act
+    const result = await runCli(['plan', 'reset', slug, '--yes']);
+
+    // Assert
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain('plan shipped-plan branching');
+    expect(result.stdout).toContain('reset pay-api waiting_parent');
+    expect(result.stdout).toContain('skipped pay-done delivered');
+    const transition = hitsNow().find((hit) => hit.method === 'POST');
+    expect(transition?.url).toBe('/api/v1/order-plans/plan-9/transitions');
+    expect(JSON.parse(transition?.body ?? '{}')).toEqual({ action: 'reset' });
   });
 
   it('fails with an argument error for an unknown plan slug', async () => {

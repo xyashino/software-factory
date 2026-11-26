@@ -12,6 +12,11 @@ import {
   listPlans,
 } from '../../application/procedures/plans/list.procedure';
 import { type OrderPlan } from '../../application/procedures/plans/lookup';
+import {
+  type PlanResetResult,
+  type ResetChild,
+  resetPlan,
+} from '../../application/procedures/plans/reset.procedure';
 import { showPlan } from '../../application/procedures/plans/show.procedure';
 import { EXIT } from '../../domain/exit-codes';
 import { printJson, printLine, printTable, reportFailure } from './output';
@@ -54,6 +59,18 @@ const printTransition = (result: PlanTransitionResult, json: boolean): void => {
   printLine(`plan ${result.plan.slug} ${result.plan.state}`);
 };
 
+const printReset = (result: PlanResetResult, json: boolean): void => {
+  if (json) {
+    printJson(result);
+    return;
+  }
+  printLine(`plan ${result.plan.slug} ${result.plan.state}`);
+  const printChild = (label: string, child: ResetChild): void =>
+    printLine(`${label} ${child.slug} ${child.state}`);
+  result.reset.forEach((child) => printChild('reset', child));
+  result.skipped.forEach((child) => printChild('skipped', child));
+};
+
 const runList = async (json: boolean): Promise<number> => {
   const result = await run(
     listPlans,
@@ -62,6 +79,23 @@ const runList = async (json: boolean): Promise<number> => {
   );
   if (result.kind === 'ok') {
     printList(result.value, json);
+    return EXIT.ok;
+  }
+  return reportFailure(result);
+};
+
+const runReset = async (
+  slug: string,
+  yes: boolean,
+  json: boolean,
+): Promise<number> => {
+  const result = await run(
+    resetPlan,
+    { configPath: repoConfigPath(), slug, yes },
+    'supervisor',
+  );
+  if (result.kind === 'ok') {
+    printReset(result.value, json);
     return EXIT.ok;
   }
   return reportFailure(result);
@@ -144,15 +178,39 @@ const transitionCommand = (action: PlanAction, description: string) =>
     },
   });
 
+const resetCommand = defineCommand({
+  meta: {
+    name: 'reset',
+    description:
+      'Restart a plan from scratch: children to step 0, branch rebuilt (needs --yes)',
+  },
+  args: {
+    ...slugArg,
+    yes: {
+      type: 'boolean' as const,
+      default: false,
+      description: 'Confirm the reset (required)',
+    },
+  },
+  run: async ({ args }) => {
+    process.exitCode = await runReset(
+      requiredPositional(args.slug, 'plan slug'),
+      args.yes,
+      args.json,
+    );
+  },
+});
+
 export const planCommand = defineCommand({
   meta: {
     name: 'plan',
-    description: 'List, show, activate and retry order plans',
+    description: 'List, show, activate, retry and reset order plans',
   },
   subCommands: {
     list: listCommand,
     show: showCommand,
     activate: transitionCommand('activate', 'Move a draft plan to branching'),
     retry: transitionCommand('retry', 'Retry a failed plan from branching'),
+    reset: resetCommand,
   },
 });

@@ -35,7 +35,7 @@ const reply = (body: unknown) => {
   return { code: 200, action: 'start', status: 'running' };
 };
 
-const harness = (pushExit: number) => {
+const harness = (pushExit: number, remoteSha = '') => {
   const git: string[][] = [];
   const fake = createFakePorts({
     reply: (call) =>
@@ -48,7 +48,12 @@ const harness = (pushExit: number) => {
       run: async (command, args) => {
         git.push([command, ...args]);
         const exitCode = args[0] === 'push' ? pushExit : 0;
-        const stdout = args[0] === 'rev-parse' ? `${PLAN_BASE_SHA}\n` : '';
+        const stdout =
+          args[0] === 'rev-parse'
+            ? `${PLAN_BASE_SHA}\n`
+            : args[0] === 'ls-remote' && remoteSha !== ''
+              ? `${remoteSha}\trefs/heads/feat/standalone-factory\n`
+              : '';
         return { exitCode, stdout, stderr: exitCode === 0 ? '' : 'rejected' };
       },
     },
@@ -91,6 +96,27 @@ describe('plan branch job', () => {
         commitSha: PLAN_BASE_SHA,
       }),
     ]);
+  });
+
+  it('force-updates an existing plan branch under a lease on the remote commit when reset', async () => {
+    const h = harness(0, 'old-plan-sha');
+
+    await runJob(h.runtime, {
+      ...JOB,
+      payload: { planId: JOB.payload.planId, fresh: true },
+    });
+
+    expect(h.git).toContainEqual([
+      'git',
+      'push',
+      '--force-with-lease=refs/heads/feat/standalone-factory:old-plan-sha',
+      'origin',
+      `${PLAN_BASE_SHA}:refs/heads/feat/standalone-factory`,
+    ]);
+    expect(transitionsOf(h.calls).at(-1)).toMatchObject({
+      action: 'complete',
+      commitSha: PLAN_BASE_SHA,
+    });
   });
 
   it('fails the job with the git error when the push is rejected', async () => {
