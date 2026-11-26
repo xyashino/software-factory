@@ -1,5 +1,5 @@
 ---
-status: queued
+status: delivered
 priority: medium
 line: standard
 type: feat
