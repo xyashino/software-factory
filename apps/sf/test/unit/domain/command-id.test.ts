@@ -3,6 +3,7 @@ import { commandIdOf } from '../../../src/domain/cell/command-id';
 
 const SAMPLE = {
   cellId: 'software-factory-dev',
+  jobId: 'job-1',
   orderId: 'software-factory:cli-08',
   epoch: 3,
   command: 'complete',
@@ -29,6 +30,17 @@ describe('command id', () => {
 
     // Assert
     expect(nextEpoch).not.toBe(first);
+  });
+
+  it('gives a new id for a retried job on the same order and epoch', () => {
+    // Arrange
+    const first = commandIdOf(SAMPLE);
+
+    // Act
+    const retried = commandIdOf({ ...SAMPLE, jobId: 'job-2' });
+
+    // Assert
+    expect(retried).not.toBe(first);
   });
 
   it('gives a new id for another command on the same job', () => {

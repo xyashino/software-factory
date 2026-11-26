@@ -275,6 +275,7 @@ describe('cell lifecycle', () => {
     expect(bodyOf(transitionCalls(calls)[1] as ServerCall).commandId).toBe(
       commandIdOf({
         cellId: CELL_ID,
+        jobId: 'job-1',
         orderId: 'software-factory:cli-08',
         epoch: 7,
         command: 'complete',

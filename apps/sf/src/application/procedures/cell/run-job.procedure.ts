@@ -234,6 +234,7 @@ const transition = async (
   }
   const commandId = commandIdOf({
     cellId: runtime.session.cellId,
+    jobId: job.jobId,
     orderId: job.orderId ?? job.jobId,
     epoch: job.epoch,
     command: body.action,
